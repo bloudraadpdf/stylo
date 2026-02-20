@@ -595,7 +595,6 @@ pub mod vertical_align {
     }
 }
 
-#[cfg(feature = "gecko")]
 pub mod page_break_before {
     use super::*;
     pub use crate::properties::shorthands_generated::page_break_before::*;
@@ -621,7 +620,6 @@ pub mod page_break_before {
     }
 }
 
-#[cfg(feature = "gecko")]
 pub mod page_break_after {
     pub use crate::properties::shorthands_generated::page_break_after::*;
 
@@ -647,7 +645,6 @@ pub mod page_break_after {
     }
 }
 
-#[cfg(feature = "gecko")]
 pub mod page_break_inside {
     use super::*;
     pub use crate::properties::shorthands_generated::page_break_inside::*;
