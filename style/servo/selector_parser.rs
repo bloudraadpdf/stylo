@@ -45,11 +45,11 @@ pub enum PseudoElement {
     After = 0,
     Before,
     Selection,
-    // If/when :first-letter is added, update is_first_letter accordingly.
+    FirstLetter,
 
     // If/when :first-line is added, update is_first_line accordingly.
 
-    // If/when ::first-letter, ::first-line, or ::placeholder are added, adjust
+    // If/when ::first-line or ::placeholder are added, adjust
     // our property_restriction implementation to do property filtering for
     // them.  Also, make sure the UA sheet has the !important rules some of the
     // APPLIES_TO_PLACEHOLDER properties expect!
@@ -92,6 +92,7 @@ impl ToCss for PseudoElement {
             After => "::after",
             Before => "::before",
             Selection => "::selection",
+            FirstLetter => "::first-letter",
             Backdrop => "::backdrop",
             DetailsSummary => "::-servo-details-summary",
             DetailsContent => "::details-content",
@@ -115,7 +116,7 @@ impl ::selectors::parser::PseudoElement for PseudoElement {
 }
 
 /// The number of eager pseudo-elements. Keep this in sync with cascade_type.
-pub const EAGER_PSEUDO_COUNT: usize = 3;
+pub const EAGER_PSEUDO_COUNT: usize = 4;
 
 impl PseudoElement {
     /// Gets the canonical index of this eagerly-cascaded pseudo-element.
@@ -184,7 +185,7 @@ impl PseudoElement {
     /// Whether the current pseudo element is :first-letter
     #[inline]
     pub fn is_first_letter(&self) -> bool {
-        false
+        *self == PseudoElement::FirstLetter
     }
 
     /// Whether the current pseudo element is :first-line
@@ -240,9 +241,10 @@ impl PseudoElement {
     #[inline]
     pub fn cascade_type(&self) -> PseudoElementCascadeType {
         match *self {
-            PseudoElement::After | PseudoElement::Before | PseudoElement::Selection => {
-                PseudoElementCascadeType::Eager
-            },
+            PseudoElement::After
+            | PseudoElement::Before
+            | PseudoElement::Selection
+            | PseudoElement::FirstLetter => PseudoElementCascadeType::Eager,
             PseudoElement::Backdrop
             | PseudoElement::ColorSwatch
             | PseudoElement::DetailsSummary
@@ -274,7 +276,10 @@ impl PseudoElement {
     /// Property flag that properties must have to apply to this pseudo-element.
     #[inline]
     pub fn property_restriction(&self) -> Option<PropertyFlags> {
-        None
+        match *self {
+            PseudoElement::FirstLetter => Some(PropertyFlags::APPLIES_TO_FIRST_LETTER),
+            _ => None,
+        }
     }
 
     /// Whether this pseudo-element should actually exist if it has
@@ -636,6 +641,7 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             "after" => After,
             "backdrop" => Backdrop,
             "selection" => Selection,
+            "first-letter" => FirstLetter,
             "marker" => Marker,
             "-servo-details-summary" => {
                 if !self.in_user_agent_stylesheet() {
