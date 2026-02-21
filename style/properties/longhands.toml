@@ -2809,6 +2809,20 @@ gecko_pref = "layout.css.initial-letter.enabled"
 spec = "https://drafts.csswg.org/css-inline/#sizing-drop-initials"
 affects = "layout"
 
+[initial-letter-align]
+struct = "text"
+spec = "https://drafts.csswg.org/css-inline/#propdef-initial-letter-align"
+animation_type = "discrete"
+affects = "layout"
+keyword = { values = ["auto", "alphabetic", "ideographic", "hanging", "leading", "border-box"] }
+
+[initial-letter-wrap]
+struct = "text"
+spec = "https://drafts.csswg.org/css-inline/#propdef-initial-letter-wrap"
+animation_type = "discrete"
+affects = "layout"
+keyword = { values = ["none", "first", "all", "grid"] }
+
 [text-decoration-thickness]
 type = "TextDecorationLength"
 initial = "generics::text::GenericTextDecorationLength::Auto"
