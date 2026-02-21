@@ -2483,16 +2483,14 @@ pub mod font {
     pub use crate::properties::shorthands_generated::font::*;
 
     use super::*;
+    use crate::properties::longhands::{
+        font_feature_settings, font_kerning, font_optical_sizing, font_size_adjust,
+        font_stretch, font_style, font_variant_alternates, font_variant_caps,
+        font_variant_east_asian, font_variant_emoji, font_variant_ligatures,
+        font_variant_numeric, font_variant_position, font_variation_settings, font_weight,
+    };
     #[cfg(feature = "gecko")]
-    use crate::properties::longhands::{
-        font_family, font_feature_settings, font_kerning, font_language_override, font_size,
-        font_size_adjust, font_variant_alternates, font_variant_east_asian, font_variant_emoji,
-        font_variant_ligatures, font_variant_numeric, font_variant_position,
-    };
-    use crate::properties::longhands::{
-        font_optical_sizing, font_stretch, font_style, font_variant_caps, font_variation_settings,
-        font_weight,
-    };
+    use crate::properties::longhands::{font_family, font_language_override, font_size};
     #[cfg(feature = "gecko")]
     use crate::values::specified::font::SystemFont;
     use crate::values::specified::font::{
@@ -2591,25 +2589,16 @@ pub mod font {
             font_family: family,
             font_optical_sizing: font_optical_sizing::get_initial_specified_value(),
             font_variation_settings: font_variation_settings::get_initial_specified_value(),
-            #[cfg(feature = "gecko")]
             font_kerning: font_kerning::get_initial_specified_value(),
             #[cfg(feature = "gecko")]
             font_language_override: font_language_override::get_initial_specified_value(),
-            #[cfg(feature = "gecko")]
             font_size_adjust: font_size_adjust::get_initial_specified_value(),
-            #[cfg(feature = "gecko")]
             font_variant_alternates: font_variant_alternates::get_initial_specified_value(),
-            #[cfg(feature = "gecko")]
             font_variant_east_asian: font_variant_east_asian::get_initial_specified_value(),
-            #[cfg(feature = "gecko")]
             font_variant_emoji: font_variant_emoji::get_initial_specified_value(),
-            #[cfg(feature = "gecko")]
             font_variant_ligatures: font_variant_ligatures::get_initial_specified_value(),
-            #[cfg(feature = "gecko")]
             font_variant_numeric: font_variant_numeric::get_initial_specified_value(),
-            #[cfg(feature = "gecko")]
             font_variant_position: font_variant_position::get_initial_specified_value(),
-            #[cfg(feature = "gecko")]
             font_feature_settings: font_feature_settings::get_initial_specified_value(),
         })
     }
@@ -2643,14 +2632,10 @@ pub mod font {
                     return Ok(());
                 }
             }
-            #[cfg(feature = "gecko")]
-            if let Some(v) = self.font_variant_emoji {
-                if v != &font_variant_emoji::get_initial_specified_value() {
-                    return Ok(());
-                }
+            if self.font_variant_emoji != &font_variant_emoji::get_initial_specified_value() {
+                return Ok(());
             }
 
-            #[cfg(feature = "gecko")]
             if self.font_kerning != &font_kerning::get_initial_specified_value() {
                 return Ok(());
             }
@@ -2659,36 +2644,29 @@ pub mod font {
             {
                 return Ok(());
             }
-            #[cfg(feature = "gecko")]
             if self.font_size_adjust != &font_size_adjust::get_initial_specified_value() {
                 return Ok(());
             }
-            #[cfg(feature = "gecko")]
             if self.font_variant_alternates
                 != &font_variant_alternates::get_initial_specified_value()
             {
                 return Ok(());
             }
-            #[cfg(feature = "gecko")]
             if self.font_variant_east_asian
                 != &font_variant_east_asian::get_initial_specified_value()
             {
                 return Ok(());
             }
-            #[cfg(feature = "gecko")]
             if self.font_variant_ligatures != &font_variant_ligatures::get_initial_specified_value()
             {
                 return Ok(());
             }
-            #[cfg(feature = "gecko")]
             if self.font_variant_numeric != &font_variant_numeric::get_initial_specified_value() {
                 return Ok(());
             }
-            #[cfg(feature = "gecko")]
             if self.font_variant_position != &font_variant_position::get_initial_specified_value() {
                 return Ok(());
             }
-            #[cfg(feature = "gecko")]
             if self.font_feature_settings != &font_feature_settings::get_initial_specified_value() {
                 return Ok(());
             }
@@ -2813,31 +2791,22 @@ pub mod font_variant {
     pub use crate::properties::shorthands_generated::font_variant::*;
 
     use super::*;
-    use crate::properties::longhands::font_variant_caps;
-    #[cfg(feature = "gecko")]
     use crate::properties::longhands::{
-        font_variant_alternates, font_variant_east_asian, font_variant_emoji,
+        font_variant_alternates, font_variant_caps, font_variant_east_asian, font_variant_emoji,
         font_variant_ligatures, font_variant_numeric, font_variant_position,
     };
-    #[allow(unused_imports)]
     use crate::values::specified::FontVariantLigatures;
 
     pub fn parse_value<'i, 't>(
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Longhands, ParseError<'i>> {
-        #[cfg(feature = "gecko")]
         let mut ligatures = None;
         let mut caps = None;
-        #[cfg(feature = "gecko")]
         let mut alternates = None;
-        #[cfg(feature = "gecko")]
         let mut numeric = None;
-        #[cfg(feature = "gecko")]
         let mut east_asian = None;
-        #[cfg(feature = "gecko")]
         let mut position = None;
-        #[cfg(feature = "gecko")]
         let mut emoji = None;
 
         if input
@@ -2848,10 +2817,7 @@ pub mod font_variant {
             .try_parse(|input| input.expect_ident_matching("none"))
             .is_ok()
         {
-            #[cfg(feature = "gecko")]
-            {
-                ligatures = Some(FontVariantLigatures::NONE);
-            }
+            ligatures = Some(FontVariantLigatures::NONE);
         } else {
             let mut parsed = 0;
             loop {
@@ -2865,18 +2831,12 @@ pub mod font_variant {
                 {
                     return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
                 }
-                #[cfg(feature = "gecko")]
                 try_parse_one!(context, input, ligatures, font_variant_ligatures::parse);
                 try_parse_one!(context, input, caps, font_variant_caps::parse);
-                #[cfg(feature = "gecko")]
                 try_parse_one!(context, input, alternates, font_variant_alternates::parse);
-                #[cfg(feature = "gecko")]
                 try_parse_one!(context, input, numeric, font_variant_numeric::parse);
-                #[cfg(feature = "gecko")]
                 try_parse_one!(context, input, east_asian, font_variant_east_asian::parse);
-                #[cfg(feature = "gecko")]
                 try_parse_one!(context, input, position, font_variant_position::parse);
-                #[cfg(feature = "gecko")]
                 try_parse_one!(context, input, emoji, font_variant_emoji::parse);
                 parsed -= 1;
                 break;
@@ -2887,8 +2847,7 @@ pub mod font_variant {
             }
         }
 
-        #[cfg(feature = "gecko")]
-        return Ok(expanded! {
+        Ok(expanded! {
             font_variant_ligatures: unwrap_or_initial!(font_variant_ligatures, ligatures),
             font_variant_caps: unwrap_or_initial!(font_variant_caps, caps),
             font_variant_alternates: unwrap_or_initial!(font_variant_alternates, alternates),
@@ -2896,11 +2855,7 @@ pub mod font_variant {
             font_variant_east_asian: unwrap_or_initial!(font_variant_east_asian, east_asian),
             font_variant_position: unwrap_or_initial!(font_variant_position, position),
             font_variant_emoji: unwrap_or_initial!(font_variant_emoji, emoji),
-        });
-        #[cfg(feature = "servo")]
-        return Ok(expanded! {
-            font_variant_caps: unwrap_or_initial!(font_variant_caps, caps),
-        });
+        })
     }
 
     impl<'a> ToCss for LonghandsToSerialize<'a> {
@@ -2909,15 +2864,9 @@ pub mod font_variant {
         where
             W: fmt::Write,
         {
-            #[cfg(feature = "gecko")]
             let has_none_ligatures = self.font_variant_ligatures == &FontVariantLigatures::NONE;
-            #[cfg(feature = "servo")]
-            let has_none_ligatures = false;
 
-            #[cfg(feature = "gecko")]
             const TOTAL_SUBPROPS: usize = 7;
-            #[cfg(feature = "servo")]
-            const TOTAL_SUBPROPS: usize = 1;
             let mut nb_normals = 0;
             macro_rules! count_normal {
                 ($e: expr, $p: ident) => {
@@ -2929,25 +2878,13 @@ pub mod font_variant {
                     count_normal!(self.$v, $v);
                 };
             }
-            #[cfg(feature = "gecko")]
             count_normal!(font_variant_ligatures);
             count_normal!(font_variant_caps);
-            #[cfg(feature = "gecko")]
             count_normal!(font_variant_alternates);
-            #[cfg(feature = "gecko")]
             count_normal!(font_variant_numeric);
-            #[cfg(feature = "gecko")]
             count_normal!(font_variant_east_asian);
-            #[cfg(feature = "gecko")]
             count_normal!(font_variant_position);
-            #[cfg(feature = "gecko")]
-            if let Some(value) = self.font_variant_emoji {
-                if value == &font_variant_emoji::get_initial_specified_value() {
-                    nb_normals += 1;
-                }
-            } else {
-                nb_normals += 1;
-            }
+            count_normal!(font_variant_emoji);
 
             if nb_normals == TOTAL_SUBPROPS {
                 return dest.write_str("normal");
@@ -2971,21 +2908,13 @@ pub mod font_variant {
                 };
             }
 
-            #[cfg(feature = "gecko")]
             write!(font_variant_ligatures);
             write!(font_variant_caps);
-            #[cfg(feature = "gecko")]
             write!(font_variant_alternates);
-            #[cfg(feature = "gecko")]
             write!(font_variant_numeric);
-            #[cfg(feature = "gecko")]
             write!(font_variant_east_asian);
-            #[cfg(feature = "gecko")]
             write!(font_variant_position);
-            #[cfg(feature = "gecko")]
-            if let Some(v) = self.font_variant_emoji {
-                write!(v, font_variant_emoji);
-            }
+            write!(font_variant_emoji);
             Ok(())
         }
     }
@@ -3134,10 +3063,9 @@ pub mod text_decoration {
     pub use crate::properties::shorthands_generated::text_decoration::*;
 
     use super::*;
-    #[cfg(feature = "gecko")]
-    use crate::properties::longhands::text_decoration_thickness;
     use crate::properties::longhands::{
         text_decoration_color, text_decoration_line, text_decoration_style,
+        text_decoration_thickness,
     };
 
     pub fn parse_value<'i, 't>(
@@ -3147,7 +3075,6 @@ pub mod text_decoration {
         let mut line = None;
         let mut style = None;
         let mut color = None;
-        #[cfg(feature = "gecko")]
         let mut thickness = None;
 
         let mut parsed = 0;
@@ -3156,7 +3083,6 @@ pub mod text_decoration {
             try_parse_one!(context, input, line, text_decoration_line::parse);
             try_parse_one!(context, input, style, text_decoration_style::parse);
             try_parse_one!(context, input, color, text_decoration_color::parse);
-            #[cfg(feature = "gecko")]
             try_parse_one!(context, input, thickness, text_decoration_thickness::parse);
             parsed -= 1;
             break;
@@ -3166,19 +3092,12 @@ pub mod text_decoration {
             return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
         }
 
-        #[cfg(feature = "gecko")]
-        return Ok(expanded! {
+        Ok(expanded! {
             text_decoration_line: unwrap_or_initial!(text_decoration_line, line),
             text_decoration_style: unwrap_or_initial!(text_decoration_style, style),
             text_decoration_color: unwrap_or_initial!(text_decoration_color, color),
             text_decoration_thickness: unwrap_or_initial!(text_decoration_thickness, thickness),
-        });
-        #[cfg(feature = "servo")]
-        return Ok(expanded! {
-            text_decoration_line: unwrap_or_initial!(text_decoration_line, line),
-            text_decoration_style: unwrap_or_initial!(text_decoration_style, style),
-            text_decoration_color: unwrap_or_initial!(text_decoration_color, color),
-        });
+        })
     }
 
     impl<'a> ToCss for LonghandsToSerialize<'a> {
@@ -3193,17 +3112,13 @@ pub mod text_decoration {
             let is_solid_style =
                 *self.text_decoration_style == text_decoration_style::SpecifiedValue::Solid;
             let is_current_color = *self.text_decoration_color == Color::CurrentColor;
-            #[cfg(feature = "gecko")]
             let is_auto_thickness = self.text_decoration_thickness.is_auto();
-            #[cfg(feature = "servo")]
-            let is_auto_thickness = true;
             let is_none = *self.text_decoration_line == TextDecorationLine::none();
 
             let mut writer = SequenceWriter::new(dest, " ");
             if (is_solid_style && is_current_color && is_auto_thickness) || !is_none {
                 writer.item(self.text_decoration_line)?;
             }
-            #[cfg(feature = "gecko")]
             if !is_auto_thickness {
                 writer.item(self.text_decoration_thickness)?;
             }

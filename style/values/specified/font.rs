@@ -1105,6 +1105,7 @@ bitflags! {
     ToResolvedValue,
     ToShmem,
 )]
+#[cfg_attr(feature = "servo", derive(serde::Deserialize, serde::Serialize))]
 #[repr(C, u8)]
 /// Set of variant alternates
 pub enum VariantAlternates {
@@ -1143,6 +1144,7 @@ pub enum VariantAlternates {
     ToShmem,
     ToTyped,
 )]
+#[cfg_attr(feature = "servo", derive(serde::Deserialize, serde::Serialize))]
 #[repr(transparent)]
 /// List of Variant Alternates
 pub struct FontVariantAlternates(
@@ -1307,6 +1309,7 @@ impl Parse for FontVariantAlternates {
     ToShmem,
     ToTyped,
 )]
+#[cfg_attr(feature = "servo", derive(serde::Deserialize, serde::Serialize))]
 #[css(bitflags(
     single = "normal",
     mixed = "jis78,jis83,jis90,jis04,simplified,traditional,full-width,proportional-width,ruby",
@@ -1376,6 +1379,7 @@ impl FontVariantEastAsian {
     ToShmem,
     ToTyped,
 )]
+#[cfg_attr(feature = "servo", derive(serde::Deserialize, serde::Serialize))]
 #[css(bitflags(
     single = "normal,none",
     mixed = "common-ligatures,no-common-ligatures,discretionary-ligatures,no-discretionary-ligatures,historical-ligatures,no-historical-ligatures,contextual,no-contextual",
@@ -1442,6 +1446,7 @@ impl FontVariantLigatures {
     ToShmem,
     ToTyped,
 )]
+#[cfg_attr(feature = "servo", derive(serde::Deserialize, serde::Serialize))]
 #[css(bitflags(
     single = "normal",
     mixed = "lining-nums,oldstyle-nums,proportional-nums,tabular-nums,diagonal-fractions,stacked-fractions,ordinal,slashed-zero",

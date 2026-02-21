@@ -532,6 +532,7 @@ impl<A: Debug, B: Debug> Debug for Either<A, B> {
     ToResolvedValue,
     ToShmem,
 )]
+#[cfg_attr(feature = "servo", derive(serde::Deserialize, serde::Serialize))]
 #[repr(C)]
 pub struct CustomIdent(pub Atom);
 

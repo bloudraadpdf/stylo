@@ -35,6 +35,7 @@ pub trait TaggedFontValue {
     ToResolvedValue,
     ToShmem,
 )]
+#[cfg_attr(feature = "servo", derive(serde::Deserialize, serde::Serialize))]
 pub struct FeatureTagValue<Integer> {
     /// A four-character tag, packed into a u32 (one byte per character).
     pub tag: FontTag,
@@ -260,6 +261,7 @@ impl<Angle: Zero> FontStyle<Angle> {
     ToShmem,
     ToTyped,
 )]
+#[cfg_attr(feature = "servo", derive(serde::Deserialize, serde::Serialize))]
 pub enum GenericFontSizeAdjust<Factor> {
     #[animation(error)]
     None,

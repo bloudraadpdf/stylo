@@ -415,8 +415,7 @@ spec = "https://drafts.csswg.org/css-multicol/#propdef-column-rule"
 derive_serialize = true
 
 [text-decoration]
-sub_properties = ["text-decoration-color", "text-decoration-line", "text-decoration-style"]
-extra_gecko_sub_properties = ["text-decoration-thickness"]
+sub_properties = ["text-decoration-color", "text-decoration-line", "text-decoration-style", "text-decoration-thickness"]
 spec = "https://drafts.csswg.org/css-text-decor/#propdef-text-decoration"
 
 [font]
@@ -429,9 +428,7 @@ sub_properties = [
   "line-height",
   "font-family",
   "font-optical-sizing",
-  "font-variation-settings"
-]
-extra_gecko_sub_properties = [
+  "font-variation-settings",
   "font-size-adjust",
   "font-kerning",
   "font-variant-alternates",
@@ -440,15 +437,16 @@ extra_gecko_sub_properties = [
   "font-variant-ligatures",
   "font-variant-numeric",
   "font-variant-position",
-  "font-language-override",
   "font-feature-settings"
+]
+extra_gecko_sub_properties = [
+  "font-language-override"
 ]
 spec = "https://drafts.csswg.org/css-fonts-3/#propdef-font"
 derive_value_info = false
 
 [font-variant]
-sub_properties = ["font-variant-caps"]
-extra_gecko_sub_properties = ["font-variant-alternates", "font-variant-east-asian", "font-variant-emoji", "font-variant-ligatures", "font-variant-numeric", "font-variant-position"]
+sub_properties = ["font-variant-caps", "font-variant-alternates", "font-variant-east-asian", "font-variant-emoji", "font-variant-ligatures", "font-variant-numeric", "font-variant-position"]
 spec = "https://drafts.csswg.org/css-fonts-3/#propdef-font-variant"
 
 [font-synthesis]
