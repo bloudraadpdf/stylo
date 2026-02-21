@@ -868,7 +868,6 @@ impl<'b> Cascade<'b> {
         apply!(FontWeight);
         apply!(FontStretch);
         apply!(FontStyle);
-        #[cfg(feature = "gecko")]
         apply!(FontSizeAdjust);
 
         #[cfg(feature = "gecko")]
