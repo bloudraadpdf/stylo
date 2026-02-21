@@ -1152,6 +1152,11 @@ pub struct FontVariantAlternates(
 );
 
 impl FontVariantAlternates {
+    /// Returns an iterator over the variant alternates.
+    pub fn iter(&self) -> std::slice::Iter<'_, VariantAlternates> {
+        self.0.iter()
+    }
+
     /// Returns the length of all variant alternates.
     pub fn len(&self) -> usize {
         self.0.iter().fold(0, |acc, alternate| match *alternate {
