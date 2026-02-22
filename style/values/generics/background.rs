@@ -43,7 +43,10 @@ pub enum GenericBackgroundSize<LengthPercent> {
 }
 
 #[inline]
-fn width_and_height_are_auto<LengthPercent>(width: &GenericLengthPercentageOrAuto<LengthPercent>, height: &GenericLengthPercentageOrAuto<LengthPercent>) -> bool {
+fn width_and_height_are_auto<LengthPercent>(
+    width: &GenericLengthPercentageOrAuto<LengthPercent>,
+    height: &GenericLengthPercentageOrAuto<LengthPercent>,
+) -> bool {
     width.is_auto() && height.is_auto()
 }
 

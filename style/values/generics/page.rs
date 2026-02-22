@@ -7,6 +7,8 @@
 use crate::derives::*;
 use crate::values::generics::NonNegative;
 use crate::values::specified::length::AbsoluteLength;
+use std::fmt::{self, Write};
+use style_traits::{CssWriter, ToCss};
 
 /// Page size names.
 ///
@@ -97,6 +99,69 @@ pub enum PageOrientation {
     RotateLeft,
     /// rotate-right (clockwise)
     RotateRight,
+}
+
+/// Page marks descriptor value.
+///
+/// https://drafts.csswg.org/css-page-3/#marks
+#[derive(
+    Clone,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(C)]
+pub struct GenericPageMarks {
+    /// Whether crop marks are enabled.
+    pub crop: bool,
+    /// Whether cross marks are enabled.
+    pub cross: bool,
+}
+
+pub use self::GenericPageMarks as PageMarks;
+
+impl PageMarks {
+    /// `none` value.
+    #[inline]
+    pub fn none() -> Self {
+        Self {
+            crop: false,
+            cross: false,
+        }
+    }
+
+    /// Whether this value is `none`.
+    #[inline]
+    pub fn is_none(&self) -> bool {
+        !self.crop && !self.cross
+    }
+}
+
+impl ToCss for PageMarks {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        if self.is_none() {
+            return dest.write_str("none");
+        }
+        if self.crop {
+            dest.write_str("crop")?;
+            if self.cross {
+                dest.write_str(" ")?;
+            }
+        }
+        if self.cross {
+            dest.write_str("cross")?;
+        }
+        Ok(())
+    }
 }
 
 /// Paper orientation

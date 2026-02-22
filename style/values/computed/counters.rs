@@ -9,6 +9,7 @@ use crate::values::generics::counters as generics;
 use crate::values::generics::counters::CounterIncrement as GenericCounterIncrement;
 use crate::values::generics::counters::CounterReset as GenericCounterReset;
 use crate::values::generics::counters::CounterSet as GenericCounterSet;
+use crate::values::generics::counters::StringSet as GenericStringSet;
 
 /// A computed value for the `counter-increment` property.
 pub type CounterIncrement = GenericCounterIncrement<i32>;
@@ -24,3 +25,6 @@ pub type Content = generics::GenericContent<Image>;
 
 /// A computed content item.
 pub type ContentItem = generics::GenericContentItem<Image>;
+
+/// A computed value for the `string-set` property.
+pub type StringSet = GenericStringSet<Image>;

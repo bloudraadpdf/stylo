@@ -541,6 +541,7 @@ initial = "crate::color::AbsoluteColor::BLACK"
 struct = "inherited_text"
 ignored_when_colors_disabled = true
 spec = "https://drafts.csswg.org/css-color/#color"
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "repaint"
 affects = "paint"
 
@@ -684,6 +685,7 @@ struct = "counters"
 initial_specified_value = "specified::Content::normal()"
 animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-content/#propdef-content"
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -702,6 +704,7 @@ struct = "counters"
 servo_pref = "layout.unimplemented"
 animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-lists/#propdef-counter-increment"
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -712,6 +715,7 @@ struct = "counters"
 servo_pref = "layout.unimplemented"
 animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-lists-3/#propdef-counter-reset"
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -722,6 +726,17 @@ struct = "counters"
 engine = "gecko"
 animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-lists-3/#propdef-counter-set"
+servo_restyle_damage = "rebuild_box"
+affects = "layout"
+
+[string-set]
+type = "StringSet"
+initial = "computed::StringSet::none()"
+struct = "counters"
+initial_specified_value = "specified::StringSet::none()"
+servo_pref = "layout.unimplemented"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-gcpm/#propdef-string-set"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -848,6 +863,7 @@ initial = "computed::FontFamily::serif()"
 struct = "font"
 animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-fonts/#propdef-font-family"
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 gecko_ffi_name = "mFont.family"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
@@ -892,6 +908,7 @@ struct = "font"
 initial_specified_value = "specified::FontSize::medium()"
 allow_quirks = true
 spec = "https://drafts.csswg.org/css-fonts/#propdef-font-size"
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -920,6 +937,7 @@ initial = "computed::FontStyle::normal()"
 struct = "font"
 initial_specified_value = "specified::FontStyle::normal()"
 spec = "https://drafts.csswg.org/css-fonts/#propdef-font-style"
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 gecko_ffi_name = "mFont.style"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
@@ -1025,6 +1043,7 @@ struct = "font"
 initial_specified_value = "specified::FontWeight::normal()"
 gecko_ffi_name = "mFont.weight"
 spec = "https://drafts.csswg.org/css-fonts/#propdef-font-weight"
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -1250,6 +1269,7 @@ type = "LineHeight"
 initial = "computed::LineHeight::normal()"
 struct = "font"
 spec = "https://drafts.csswg.org/css2/visudet.html#propdef-line-height"
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -1578,6 +1598,7 @@ struct = "box"
 logical_group = "overflow"
 animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-overflow-3/#propdef-overflow-x"
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -1588,6 +1609,7 @@ struct = "box"
 logical_group = "overflow"
 animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-overflow-3/#propdef-overflow-y"
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -1656,6 +1678,26 @@ initial = "computed::PageOrientation::Upright"
 struct = "page"
 initial_specified_value = "specified::PageOrientation::Upright"
 spec = "https://drafts.csswg.org/css-page-3/#page-orientation-prop"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "layout"
+
+[marks]
+type = "PageMarks"
+initial = "computed::PageMarks::none()"
+struct = "page"
+initial_specified_value = "specified::PageMarks::none()"
+spec = "https://drafts.csswg.org/css-page-3/#marks"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "layout"
+
+[bleed]
+type = "length::NonNegativeLengthOrAuto"
+initial = "computed::length::NonNegativeLengthOrAuto::auto()"
+struct = "page"
+initial_specified_value = "specified::length::NonNegativeLengthOrAuto::auto()"
+spec = "https://drafts.csswg.org/css-page-3/#bleed"
 animation_type = "none"
 rule_types_allowed = ["page"]
 affects = "layout"
@@ -2029,6 +2071,7 @@ initial = "computed::TextAlign::Start"
 struct = "inherited_text"
 animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-text/#propdef-text-align"
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -2775,6 +2818,7 @@ struct = "text"
 initial_specified_value = "specified::TextDecorationLine::none()"
 animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-text-decor/#propdef-text-decoration-line"
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "recalculate_overflow"
 affects = "overflow"
 
@@ -2785,6 +2829,7 @@ struct = "text"
 initial_specified_value = "specified::Color::currentcolor()"
 ignored_when_colors_disabled = true
 spec = "https://drafts.csswg.org/css-text-decor/#propdef-text-decoration-color"
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "recalculate_overflow"
 affects = "paint"
 
@@ -2829,6 +2874,7 @@ initial = "generics::text::GenericTextDecorationLength::Auto"
 struct = "text"
 initial_specified_value = "generics::text::GenericTextDecorationLength::Auto"
 spec = "https://drafts.csswg.org/css-text-decor-4/#text-decoration-width-property"
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 affects = "overflow"
 
 [-x-span]
@@ -3777,6 +3823,7 @@ spec = "https://drafts.csswg.org/css-writing-modes/#propdef-direction"
 animation_type = "none"
 affects = "layout"
 servo_restyle_damage = "rebuild_box"
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 keyword = { values = ["ltr", "rtl"] }
 
 [-moz-box-collapse]
@@ -4038,6 +4085,7 @@ spec = "https://drafts.csswg.org/css-writing-modes/#propdef-unicode-bidi"
 animation_type = "none"
 affects = "layout"
 servo_restyle_damage = "rebuild_box"
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 keyword = { values = ["normal", "embed", "isolate", "bidi-override", "isolate-override", "plaintext"] }
 
 [text-decoration-style]
@@ -4046,6 +4094,7 @@ spec = "https://drafts.csswg.org/css-text-decor/#propdef-text-decoration-style"
 animation_type = "discrete"
 affects = "overflow"
 servo_restyle_damage = "recalculate_overflow"
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 keyword = { values = ["solid", "double", "dotted", "dashed", "wavy", "-moz-none"] }
 
 [ime-mode]

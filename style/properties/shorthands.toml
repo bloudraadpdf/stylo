@@ -38,6 +38,7 @@ kind = "two_properties"
 [padding]
 sub_properties = ["padding-top", "padding-right", "padding-bottom", "padding-left"]
 spec = "https://drafts.csswg.org/css-box/#propdef-padding"
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 kind = "four_sides"
 allow_quirks = true
 
@@ -195,11 +196,13 @@ sub_properties = [
 ]
 spec = "https://drafts.csswg.org/css-backgrounds-3/#border"
 derive_value_info = false
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 
 [overflow]
 sub_properties = ["overflow-x", "overflow-y"]
 spec="https://drafts.csswg.org/css-overflow/#propdef-overflow"
 kind = "two_properties"
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 
 [overscroll-behavior]
 engine = "gecko"
@@ -215,6 +218,7 @@ spec = "https://drafts.csswg.org/css-contain-3/#container-shorthand"
 [vertical-align]
 sub_properties = ["alignment-baseline", "baseline-shift", "baseline-source"]
 spec = "https://drafts.csswg.org/css-inline-3/#transverse-alignment"
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 
 [page-break-before]
 flags = "IS_LEGACY_SHORTHAND"
@@ -261,6 +265,7 @@ sub_properties = [
   "background-clip"
 ]
 spec = "https://drafts.csswg.org/css-backgrounds/#the-background"
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 
 [inset]
 sub_properties = ["top", "right", "bottom", "left"]

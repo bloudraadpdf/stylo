@@ -30,9 +30,9 @@ use crate::stylist::{CascadeData, Stylist};
 use dom::ElementState;
 use rustc_hash::FxHashMap;
 use selectors::matching::{
-    early_reject_by_local_name, matches_selector, ElementSelectorFlags,
-    IncludeStartingStyle, MatchingContext, MatchingForInvalidation, MatchingMode,
-    NeedsSelectorFlags, QuirksMode, SelectorCaches, VisitedHandlingMode,
+    early_reject_by_local_name, matches_selector, ElementSelectorFlags, IncludeStartingStyle,
+    MatchingContext, MatchingForInvalidation, MatchingMode, NeedsSelectorFlags, QuirksMode,
+    SelectorCaches, VisitedHandlingMode,
 };
 use selectors::parser::SelectorKey;
 use selectors::OpaqueElement;

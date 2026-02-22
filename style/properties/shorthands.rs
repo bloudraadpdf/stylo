@@ -2483,14 +2483,14 @@ pub mod font {
     pub use crate::properties::shorthands_generated::font::*;
 
     use super::*;
-    use crate::properties::longhands::{
-        font_feature_settings, font_kerning, font_optical_sizing, font_size_adjust,
-        font_stretch, font_style, font_variant_alternates, font_variant_caps,
-        font_variant_east_asian, font_variant_emoji, font_variant_ligatures,
-        font_variant_numeric, font_variant_position, font_variation_settings, font_weight,
-    };
     #[cfg(feature = "gecko")]
     use crate::properties::longhands::{font_family, font_language_override, font_size};
+    use crate::properties::longhands::{
+        font_feature_settings, font_kerning, font_optical_sizing, font_size_adjust, font_stretch,
+        font_style, font_variant_alternates, font_variant_caps, font_variant_east_asian,
+        font_variant_emoji, font_variant_ligatures, font_variant_numeric, font_variant_position,
+        font_variation_settings, font_weight,
+    };
     #[cfg(feature = "gecko")]
     use crate::values::specified::font::SystemFont;
     use crate::values::specified::font::{

@@ -12,6 +12,7 @@ use crate::values::{generics, CustomIdent};
 use cssparser::{match_ignore_ascii_case, Parser};
 use style_traits::ParseError;
 
+pub use generics::page::PageMarks;
 pub use generics::page::PageOrientation;
 pub use generics::page::PageSizeOrientation;
 pub use generics::page::PaperSize;
@@ -46,6 +47,43 @@ impl Parse for PageSize {
         // auto value
         input.expect_ident_matching("auto")?;
         Ok(PageSize::Auto)
+    }
+}
+
+impl Parse for PageMarks {
+    fn parse<'i, 't>(
+        _context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if input
+            .try_parse(|input| input.expect_ident_matching("none"))
+            .is_ok()
+        {
+            input.expect_exhausted()?;
+            return Ok(PageMarks::none());
+        }
+
+        let mut crop = false;
+        let mut cross = false;
+        while !input.is_exhausted() {
+            let ident = input.expect_ident()?;
+            match_ignore_ascii_case! { ident,
+                "crop" => crop = true,
+                "cross" => cross = true,
+                _ => {
+                    let ident = ident.clone();
+                    return Err(input.new_custom_error(
+                        style_traits::StyleParseErrorKind::UnexpectedIdent(ident)
+                    ));
+                }
+            }
+        }
+
+        if !crop && !cross {
+            return Err(input.new_custom_error(style_traits::StyleParseErrorKind::UnspecifiedError));
+        }
+
+        Ok(PageMarks { crop, cross })
     }
 }
 

@@ -207,6 +207,67 @@ fn is_decimal(counter_type: &CounterStyleType) -> bool {
     *counter_type == CounterStyle::decimal()
 }
 
+/// Lookup keyword used by GCPM string()/element() functions.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(u8)]
+pub enum StringLookupKeyword {
+    /// `first`
+    First,
+    /// `start`
+    Start,
+    /// `last`
+    Last,
+    /// `first-except`
+    FirstExcept,
+}
+
+#[inline]
+fn is_first_lookup(keyword: &StringLookupKeyword) -> bool {
+    *keyword == StringLookupKeyword::First
+}
+
+/// Selector for content() in `string-set`.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(u8)]
+pub enum StringSetContentKeyword {
+    /// `text`
+    Text,
+    /// `before`
+    Before,
+    /// `after`
+    After,
+    /// `first-letter`
+    FirstLetter,
+}
+
 /// The non-normal, non-none values of the content property.
 #[derive(
     Clone, Debug, Eq, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToComputedValue, ToShmem,
@@ -310,6 +371,21 @@ pub enum GenericContentItem<I> {
         crate::OwnedStr,
         #[css(skip_if = "is_decimal")] CounterStyleType,
     ),
+    /// `string(name[, keyword])`.
+    #[css(comma, function = "string")]
+    StringFunction(
+        CustomIdent,
+        #[css(skip_if = "is_first_lookup")] StringLookupKeyword,
+    ),
+    /// `element(name[, keyword])`.
+    #[css(comma, function = "element")]
+    ElementFunction(
+        CustomIdent,
+        #[css(skip_if = "is_first_lookup")] StringLookupKeyword,
+    ),
+    /// `content([text|before|after|first-letter])`.
+    #[css(function = "content")]
+    ContentFunction(StringSetContentKeyword),
     /// `open-quote`.
     OpenQuote,
     /// `close-quote`.
@@ -333,3 +409,95 @@ pub enum GenericContentItem<I> {
 }
 
 pub use self::GenericContentItem as ContentItem;
+
+/// A single named string assignment in `string-set`.
+#[derive(
+    Clone,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+)]
+#[repr(C)]
+pub struct GenericStringSetAssignment<I> {
+    /// Named string identifier.
+    pub name: CustomIdent,
+    /// Content list used to compute the string value.
+    #[css(field_bound)]
+    pub value: crate::OwnedSlice<GenericContentItem<I>>,
+}
+
+impl<I: ToCss> ToCss for GenericStringSetAssignment<I> {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        self.name.to_css(dest)?;
+        for item in &*self.value {
+            dest.write_str(" ")?;
+            item.to_css(dest)?;
+        }
+        Ok(())
+    }
+}
+
+/// Value of the `string-set` property.
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    Eq,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(transparent)]
+pub struct GenericStringSet<I>(
+    #[css(field_bound)] pub crate::OwnedSlice<GenericStringSetAssignment<I>>,
+);
+
+impl<I> GenericStringSet<I> {
+    /// `none` value.
+    #[inline]
+    pub fn none() -> Self {
+        Self(Default::default())
+    }
+
+    /// Whether this is the `none` value.
+    #[inline]
+    pub fn is_none(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+impl<I: ToCss> ToCss for GenericStringSet<I> {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        if self.0.is_empty() {
+            return dest.write_str("none");
+        }
+
+        let mut first = true;
+        for assignment in &*self.0 {
+            if !first {
+                dest.write_str(", ")?;
+            }
+            assignment.to_css(dest)?;
+            first = false;
+        }
+        Ok(())
+    }
+}
+
+pub use self::GenericStringSet as StringSet;
+pub use self::GenericStringSetAssignment as StringSetAssignment;

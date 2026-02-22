@@ -567,3 +567,59 @@ impl Clone for Stylesheet {
         }
     }
 }
+
+#[cfg(all(test, feature = "servo"))]
+mod tests {
+    use super::*;
+    use crate::stylesheets::CssRule;
+    use servo_arc::Arc;
+
+    fn parse_stylesheet(css: &str) -> Stylesheet {
+        let shared_lock = SharedRwLock::new();
+        let media = Arc::new(shared_lock.wrap(MediaList::empty()));
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        Stylesheet::from_str(
+            css,
+            url_data,
+            Origin::Author,
+            media,
+            shared_lock,
+            None,
+            None,
+            QuirksMode::NoQuirks,
+            AllowImportRules::Yes,
+        )
+    }
+
+    #[test]
+    fn servo_parses_page_rules() {
+        let stylesheet = parse_stylesheet("@page { size: A4; margin: 1cm; }");
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        assert!(rules.iter().any(|rule| matches!(rule, CssRule::Page(..))));
+    }
+
+    #[test]
+    fn servo_parses_margin_rules_inside_page() {
+        let stylesheet = parse_stylesheet(r#"@page { @top-center { content: "x"; } }"#);
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let page = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Page(page) => Some(page.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected @page rule");
+        let nested = page.rules.read_with(&guard);
+        assert!(
+            nested
+                .0
+                .iter()
+                .any(|rule| matches!(rule, CssRule::Margin(..))),
+            "expected nested @margin rule in @page"
+        );
+    }
+}

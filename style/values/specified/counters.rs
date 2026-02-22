@@ -148,6 +148,145 @@ pub type Content = generics::GenericContent<Image>;
 /// The specified value for a content item in the `content` property.
 pub type ContentItem = generics::GenericContentItem<Image>;
 
+/// The specified value for the `string-set` property.
+pub type StringSet = generics::GenericStringSet<Image>;
+
+fn parse_string_lookup_keyword<'i, 't>(
+    input: &mut Parser<'i, 't>,
+) -> Result<generics::StringLookupKeyword, ParseError<'i>> {
+    let ident = input.expect_ident()?;
+    Ok(match_ignore_ascii_case! { ident,
+        "first" => generics::StringLookupKeyword::First,
+        "start" => generics::StringLookupKeyword::Start,
+        "last" => generics::StringLookupKeyword::Last,
+        "first-except" => generics::StringLookupKeyword::FirstExcept,
+        _ => {
+            let ident = ident.clone();
+            return Err(input.new_custom_error(
+                SelectorParseErrorKind::UnexpectedIdent(ident)
+            ));
+        }
+    })
+}
+
+fn parse_content_function_keyword<'i, 't>(
+    input: &mut Parser<'i, 't>,
+) -> Result<generics::StringSetContentKeyword, ParseError<'i>> {
+    if input.is_exhausted() {
+        return Ok(generics::StringSetContentKeyword::Text);
+    }
+
+    let ident = input.expect_ident()?;
+    let keyword = match_ignore_ascii_case! { ident,
+        "text" => generics::StringSetContentKeyword::Text,
+        "before" => generics::StringSetContentKeyword::Before,
+        "after" => generics::StringSetContentKeyword::After,
+        "first-letter" => generics::StringSetContentKeyword::FirstLetter,
+        _ => {
+            let ident = ident.clone();
+            return Err(input.new_custom_error(
+                SelectorParseErrorKind::UnexpectedIdent(ident)
+            ));
+        }
+    };
+
+    input.expect_exhausted()?;
+    Ok(keyword)
+}
+
+fn parse_content_item<'i, 't>(
+    context: &ParserContext,
+    input: &mut Parser<'i, 't>,
+    allow_images: bool,
+    allow_counter_functions: bool,
+    allow_string_functions: bool,
+    allow_element_functions: bool,
+    allow_content_function: bool,
+    allow_quote_idents: bool,
+) -> Result<ContentItem, ParseError<'i>> {
+    if allow_images {
+        if let Ok(image) = input.try_parse(|i| Image::parse_forbid_none(context, i)) {
+            return Ok(generics::ContentItem::Image(image));
+        }
+    }
+
+    let token = input.next()?.clone();
+    match token {
+        Token::QuotedString(ref value) => Ok(generics::ContentItem::String(
+            value.as_ref().to_owned().into(),
+        )),
+        Token::Function(ref name) => {
+            match_ignore_ascii_case! { &name,
+                "counter" if allow_counter_functions => input.parse_nested_block(|input| {
+                    let name = CustomIdent::parse(input, &[])?;
+                    let style = Content::parse_counter_style(context, input);
+                    Ok(generics::ContentItem::Counter(name, style))
+                }),
+                "counters" if allow_counter_functions => input.parse_nested_block(|input| {
+                    let name = CustomIdent::parse(input, &[])?;
+                    input.expect_comma()?;
+                    let separator = input.expect_string()?.as_ref().to_owned().into();
+                    let style = Content::parse_counter_style(context, input);
+                    Ok(generics::ContentItem::Counters(name, separator, style))
+                }),
+                "string" if allow_string_functions => input.parse_nested_block(|input| {
+                    let name = CustomIdent::parse(input, &[])?;
+                    let keyword = input
+                        .try_parse(|input| {
+                            input.expect_comma()?;
+                            parse_string_lookup_keyword(input)
+                        })
+                        .unwrap_or(generics::StringLookupKeyword::First);
+                    Ok(generics::ContentItem::StringFunction(name, keyword))
+                }),
+                "element" if allow_element_functions => input.parse_nested_block(|input| {
+                    let name = CustomIdent::parse(input, &[])?;
+                    let keyword = input
+                        .try_parse(|input| {
+                            input.expect_comma()?;
+                            parse_string_lookup_keyword(input)
+                        })
+                        .unwrap_or(generics::StringLookupKeyword::First);
+                    Ok(generics::ContentItem::ElementFunction(name, keyword))
+                }),
+                "content" if allow_content_function => input.parse_nested_block(|input| {
+                    Ok(generics::ContentItem::ContentFunction(
+                        parse_content_function_keyword(input)?,
+                    ))
+                }),
+                "attr" if !static_prefs::pref!("layout.css.attr.enabled") => input.parse_nested_block(|input| {
+                    Ok(generics::ContentItem::Attr(Attr::parse_function(context, input)?))
+                }),
+                _ => {
+                    let name = name.clone();
+                    Err(input.new_custom_error(StyleParseErrorKind::UnexpectedFunction(name)))
+                }
+            }
+        },
+        Token::Ident(ref ident) if allow_quote_idents => Ok(match_ignore_ascii_case! { &ident,
+            "open-quote" => generics::ContentItem::OpenQuote,
+            "close-quote" => generics::ContentItem::CloseQuote,
+            "no-open-quote" => generics::ContentItem::NoOpenQuote,
+            "no-close-quote" => generics::ContentItem::NoCloseQuote,
+            #[cfg(feature = "gecko")]
+            "-moz-alt-content" if context.in_ua_sheet() => {
+                generics::ContentItem::MozAltContent
+            },
+            #[cfg(feature = "gecko")]
+            "-moz-label-content" if context.chrome_rules_enabled() => {
+                generics::ContentItem::MozLabelContent
+            },
+            _ =>{
+                let ident = ident.clone();
+                return Err(input.new_custom_error(
+                    SelectorParseErrorKind::UnexpectedIdent(ident)
+                ));
+            }
+        }),
+        token => Err(input.new_unexpected_token_error(token)),
+    }
+}
+
 impl Content {
     #[cfg(feature = "servo")]
     fn parse_counter_style(_: &ParserContext, input: &mut Parser) -> ListStyleType {
@@ -196,83 +335,29 @@ impl Parse for Content {
         let mut items = thin_vec::ThinVec::new();
         let mut alt_start = None;
         loop {
-            if alt_start.is_none() {
-                if let Ok(image) = input.try_parse(|i| Image::parse_forbid_none(context, i)) {
-                    items.push(generics::ContentItem::Image(image));
-                    continue;
-                }
+            if input.is_exhausted() {
+                break;
             }
-            let Ok(t) = input.next() else { break };
-            match *t {
-                Token::QuotedString(ref value) => {
-                    items.push(generics::ContentItem::String(
-                        value.as_ref().to_owned().into(),
-                    ));
-                },
-                Token::Function(ref name) => {
-                    // FIXME(emilio): counter() / counters() should be valid per spec past
-                    // the alt marker, but it's likely non-trivial to support and other
-                    // browsers don't support it either, so restricting it for now.
-                    let result = match_ignore_ascii_case! { &name,
-                        "counter" if alt_start.is_none() => input.parse_nested_block(|input| {
-                            let name = CustomIdent::parse(input, &[])?;
-                            let style = Content::parse_counter_style(context, input);
-                            Ok(generics::ContentItem::Counter(name, style))
-                        }),
-                        "counters" if alt_start.is_none() => input.parse_nested_block(|input| {
-                            let name = CustomIdent::parse(input, &[])?;
-                            input.expect_comma()?;
-                            let separator = input.expect_string()?.as_ref().to_owned().into();
-                            let style = Content::parse_counter_style(context, input);
-                            Ok(generics::ContentItem::Counters(name, separator, style))
-                        }),
-                        "attr" if !static_prefs::pref!("layout.css.attr.enabled") => input.parse_nested_block(|input| {
-                            Ok(generics::ContentItem::Attr(Attr::parse_function(context, input)?))
-                        }),
-                        _ => {
-                            use style_traits::StyleParseErrorKind;
-                            let name = name.clone();
-                            return Err(input.new_custom_error(
-                                StyleParseErrorKind::UnexpectedFunction(name),
-                            ))
-                        }
-                    }?;
-                    items.push(result);
-                },
-                Token::Ident(ref ident) if alt_start.is_none() => {
-                    items.push(match_ignore_ascii_case! { &ident,
-                        "open-quote" => generics::ContentItem::OpenQuote,
-                        "close-quote" => generics::ContentItem::CloseQuote,
-                        "no-open-quote" => generics::ContentItem::NoOpenQuote,
-                        "no-close-quote" => generics::ContentItem::NoCloseQuote,
-                        #[cfg(feature = "gecko")]
-                        "-moz-alt-content" if context.in_ua_sheet() => {
-                            generics::ContentItem::MozAltContent
-                        },
-                        #[cfg(feature = "gecko")]
-                        "-moz-label-content" if context.chrome_rules_enabled() => {
-                            generics::ContentItem::MozLabelContent
-                        },
-                        _ =>{
-                            let ident = ident.clone();
-                            return Err(input.new_custom_error(
-                                SelectorParseErrorKind::UnexpectedIdent(ident)
-                            ));
-                        }
-                    });
-                },
-                Token::Delim('/')
-                    if alt_start.is_none()
-                        && !items.is_empty()
-                        && static_prefs::pref!("layout.css.content.alt-text.enabled") =>
-                {
-                    alt_start = Some(items.len());
-                },
-                ref t => {
-                    let t = t.clone();
-                    return Err(input.new_unexpected_token_error(t));
-                },
+            if alt_start.is_none()
+                && !items.is_empty()
+                && static_prefs::pref!("layout.css.content.alt-text.enabled")
+                && input.try_parse(|input| input.expect_delim('/')).is_ok()
+            {
+                alt_start = Some(items.len());
+                continue;
             }
+
+            let item = parse_content_item(
+                context,
+                input,
+                alt_start.is_none(),
+                alt_start.is_none(),
+                alt_start.is_none(),
+                alt_start.is_none(),
+                false,
+                alt_start.is_none(),
+            )?;
+            items.push(item);
         }
         if items.is_empty() {
             return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
@@ -282,5 +367,42 @@ impl Parse for Content {
             items,
             alt_start,
         }))
+    }
+}
+
+impl Parse for StringSet {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if input
+            .try_parse(|input| input.expect_ident_matching("none"))
+            .is_ok()
+        {
+            input.expect_exhausted()?;
+            return Ok(StringSet::none());
+        }
+
+        let entries = input.parse_comma_separated(|input| {
+            let name = CustomIdent::parse(input, &["none"])?;
+            let mut value = Vec::new();
+
+            while !input.is_exhausted() {
+                value.push(parse_content_item(
+                    context, input, false, true, false, false, true, true,
+                )?);
+            }
+
+            if value.is_empty() {
+                return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+            }
+
+            Ok(generics::StringSetAssignment {
+                name,
+                value: value.into(),
+            })
+        })?;
+
+        Ok(generics::StringSet(entries.into()))
     }
 }
