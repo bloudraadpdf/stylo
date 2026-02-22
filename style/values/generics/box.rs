@@ -5,6 +5,7 @@
 //! Generic types for box properties.
 
 use crate::derives::*;
+use crate::values::CustomIdent;
 use crate::values::animated::ToAnimatedZero;
 use crate::Zero;
 use std::fmt::{self, Write};
@@ -26,6 +27,7 @@ use style_traits::{CssWriter, ToCss};
     ToCss,
     ToResolvedValue,
     ToShmem,
+    ToTyped,
 )]
 #[repr(u8)]
 #[allow(missing_docs)]
@@ -226,10 +228,8 @@ impl<L> Perspective<L> {
 
 #[derive(
     Clone,
-    Copy,
     Debug,
     MallocSizeOf,
-    Parse,
     PartialEq,
     SpecifiedValueInfo,
     ToComputedValue,
@@ -238,20 +238,29 @@ impl<L> Perspective<L> {
     ToShmem,
     ToTyped,
 )]
-#[repr(u8)]
 #[allow(missing_docs)]
 pub enum PositionProperty {
-    Static = 0,
+    Static,
     Relative,
     Absolute,
     Fixed,
     Sticky,
+    #[css(function = "running")]
+    Running(CustomIdent),
 }
 
 impl PositionProperty {
     /// Is the box absolutely positioned?
     pub fn is_absolutely_positioned(self) -> bool {
         matches!(self, Self::Absolute | Self::Fixed)
+    }
+
+    /// Returns the `running(name)` identifier when present.
+    pub fn running_name(&self) -> Option<&CustomIdent> {
+        match self {
+            Self::Running(name) => Some(name),
+            _ => None,
+        }
     }
 }
 

@@ -1988,3 +1988,32 @@ impl Zoom {
 }
 
 pub use crate::values::generics::box_::PositionProperty;
+
+impl Parse for PositionProperty {
+    fn parse<'i, 't>(
+        _context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if let Ok(name) = input.try_parse(|i| {
+            i.expect_function_matching("running")?;
+            i.parse_nested_block(|i| CustomIdent::parse(i, &["static", "relative", "absolute", "fixed", "sticky"]))
+        }) {
+            return Ok(Self::Running(name));
+        }
+
+        let ident = input.expect_ident()?;
+        if ident.eq_ignore_ascii_case("static") {
+            Ok(Self::Static)
+        } else if ident.eq_ignore_ascii_case("relative") {
+            Ok(Self::Relative)
+        } else if ident.eq_ignore_ascii_case("absolute") {
+            Ok(Self::Absolute)
+        } else if ident.eq_ignore_ascii_case("fixed") {
+            Ok(Self::Fixed)
+        } else if ident.eq_ignore_ascii_case("sticky") {
+            Ok(Self::Sticky)
+        } else {
+            Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
+        }
+    }
+}
