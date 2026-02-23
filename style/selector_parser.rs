@@ -278,29 +278,29 @@ mod tests {
         map.set(&PseudoElement::After, 3);
         assert_eq!(map.get(&PseudoElement::After), Some(3).as_ref());
 
-        assert_eq!(map.get(&PseudoElement::RubyText), None);
-        map.set(&PseudoElement::RubyText, 8);
-        assert_eq!(map.get(&PseudoElement::RubyText), Some(8).as_ref());
+        assert_eq!(map.get(&PseudoElement::Backdrop), None);
+        map.set(&PseudoElement::Backdrop, 8);
+        assert_eq!(map.get(&PseudoElement::Backdrop), Some(8).as_ref());
 
         assert_eq!(
-            map.get_or_insert_with(&PseudoElement::RubyText, || { 10 }),
+            map.get_or_insert_with(&PseudoElement::Backdrop, || { 10 }),
             &8
         );
-        map.set(&PseudoElement::RubyText, 9);
-        assert_eq!(map.get(&PseudoElement::RubyText), Some(9).as_ref());
+        map.set(&PseudoElement::Backdrop, 9);
+        assert_eq!(map.get(&PseudoElement::Backdrop), Some(9).as_ref());
 
         assert_eq!(
-            map.get_or_insert_with(&PseudoElement::FirstLine, || { 10 }),
+            map.get_or_insert_with(&PseudoElement::Marker, || { 10 }),
             &10
         );
-        assert_eq!(map.get(&PseudoElement::FirstLine), Some(10).as_ref());
+        assert_eq!(map.get(&PseudoElement::Marker), Some(10).as_ref());
     }
 
     #[test]
     fn can_iter() {
         let mut map = <PerPseudoElementMap<i32>>::default();
         map.set(&PseudoElement::After, 3);
-        map.set(&PseudoElement::RubyText, 8);
+        map.set(&PseudoElement::Backdrop, 8);
         assert_eq!(map.iter().cloned().collect::<Vec<_>>(), vec![3, 8]);
     }
 }

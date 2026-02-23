@@ -622,4 +622,78 @@ mod tests {
             "expected nested @margin rule in @page"
         );
     }
+
+    #[test]
+    fn servo_parses_background_properties_in_page() {
+        let stylesheet =
+            parse_stylesheet("@page { background-color: red; background-image: none; }");
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let page = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Page(p) => Some(p.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected @page rule");
+        assert_eq!(
+            page.block.read_with(&guard).len(),
+            2,
+            "background-color and background-image should parse in @page"
+        );
+    }
+
+    #[test]
+    fn servo_parses_box_model_properties_in_page() {
+        let stylesheet = parse_stylesheet(
+            "@page { padding-top: 1cm; border-top-width: 1px; \
+             border-top-style: solid; border-top-color: black; }",
+        );
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let page = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Page(p) => Some(p.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected @page rule");
+        assert_eq!(
+            page.block.read_with(&guard).len(),
+            4,
+            "padding and border longhands should parse in @page"
+        );
+    }
+
+    #[test]
+    fn servo_parses_sizing_properties_in_margin_box() {
+        let stylesheet =
+            parse_stylesheet("@page { @top-center { width: 100px; height: 50px; } }");
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let page = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Page(p) => Some(p.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected @page rule");
+        let nested = page.rules.read_with(&guard);
+        let margin = nested
+            .0
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Margin(m) => Some(m),
+                _ => None,
+            })
+            .expect("expected @margin rule");
+        assert_eq!(
+            margin.block.read_with(&guard).len(),
+            2,
+            "width and height should parse in margin box"
+        );
+    }
 }

@@ -343,6 +343,7 @@ allow_quirks = true
 flags = "CAN_ANIMATE_ON_COMPOSITOR"
 servo_restyle_damage = "repaint"
 affects = "paint"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [background-image]
 type = "Image"
@@ -355,6 +356,7 @@ animation_type = "discrete"
 ignored_when_colors_disabled = true
 servo_restyle_damage = "repaint"
 affects = "paint"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [background-position-x]
 type = "position::HorizontalPosition"
@@ -365,6 +367,7 @@ spec = "https://drafts.csswg.org/css-backgrounds-4/#propdef-background-position-
 vector = { animation_type = "repeatable_list" }
 servo_restyle_damage = "repaint"
 affects = "paint"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [background-position-y]
 type = "position::VerticalPosition"
@@ -375,6 +378,7 @@ spec = "https://drafts.csswg.org/css-backgrounds-4/#propdef-background-position-
 vector = { animation_type = "repeatable_list" }
 servo_restyle_damage = "repaint"
 affects = "paint"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [background-repeat]
 type = "BackgroundRepeat"
@@ -386,6 +390,7 @@ vector = {}
 spec = "https://drafts.csswg.org/css-backgrounds/#the-background-repeat"
 servo_restyle_damage = "repaint"
 affects = "paint"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [background-size]
 type = "BackgroundSize"
@@ -397,6 +402,7 @@ vector = { animation_type = "repeatable_list" }
 extra_prefixes = ["webkit"]
 servo_restyle_damage = "repaint"
 affects = "paint"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [baseline-shift]
 type = "BaselineShift"
@@ -423,7 +429,7 @@ logical = true
 logical_group = "size"
 parse_method = "parse_size_for_width_or_height"
 spec = "https://drafts.csswg.org/css-logical-props/#propdef-block-size"
-rule_types_allowed = ["style", "keyframe", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -1143,7 +1149,7 @@ logical_group = "size"
 allow_quirks = true
 parse_method = "parse_size_for_width_or_height"
 spec = "https://drafts.csswg.org/css-box/#propdef-height"
-rule_types_allowed = ["style", "keyframe", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -1163,7 +1169,7 @@ logical = true
 logical_group = "size"
 parse_method = "parse_size_for_width_or_height"
 spec = "https://drafts.csswg.org/css-logical-props/#propdef-inline-size"
-rule_types_allowed = ["style", "keyframe", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -1345,7 +1351,7 @@ struct = "position"
 logical = true
 logical_group = "max-size"
 spec = "https://drafts.csswg.org/css-logical-props/#propdef-block-size"
-rule_types_allowed = ["style", "keyframe", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -1356,7 +1362,7 @@ struct = "position"
 logical_group = "max-size"
 allow_quirks = true
 spec = "https://drafts.csswg.org/css-box/#propdef-height"
-rule_types_allowed = ["style", "keyframe", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -1367,7 +1373,7 @@ struct = "position"
 logical = true
 logical_group = "max-size"
 spec = "https://drafts.csswg.org/css-logical-props/#propdef-inline-size"
-rule_types_allowed = ["style", "keyframe", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -1378,7 +1384,7 @@ struct = "position"
 logical_group = "max-size"
 allow_quirks = true
 spec = "https://drafts.csswg.org/css-box/#propdef-width"
-rule_types_allowed = ["style", "keyframe", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -1389,7 +1395,7 @@ struct = "position"
 logical = true
 logical_group = "min-size"
 spec = "https://drafts.csswg.org/css-logical-props/#propdef-block-size"
-rule_types_allowed = ["style", "keyframe", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -1400,7 +1406,7 @@ struct = "position"
 logical_group = "min-size"
 allow_quirks = true
 spec = "https://drafts.csswg.org/css-box/#propdef-height"
-rule_types_allowed = ["style", "keyframe", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -1411,7 +1417,7 @@ struct = "position"
 logical = true
 logical_group = "min-size"
 spec = "https://drafts.csswg.org/css-logical-props/#propdef-inline-size"
-rule_types_allowed = ["style", "keyframe", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -1422,7 +1428,7 @@ struct = "position"
 logical_group = "min-size"
 allow_quirks = true
 spec = "https://drafts.csswg.org/css-box/#propdef-width"
-rule_types_allowed = ["style", "keyframe", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -1494,6 +1500,7 @@ flags = "CAN_ANIMATE_ON_COMPOSITOR"
 spec = "https://drafts.csswg.org/css-color/#transparency"
 servo_restyle_damage = "repaint"
 affects = "paint"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [order]
 type = "Integer"
@@ -1621,6 +1628,7 @@ struct = "inherited_text"
 spec = "https://drafts.csswg.org/css-break/#propdef-orphans"
 animation_type = "discrete"
 affects = "layout"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [overscroll-behavior-block]
 type = "OverscrollBehavior"
@@ -2525,7 +2533,7 @@ logical_group = "size"
 allow_quirks = true
 parse_method = "parse_size_for_width_or_height"
 spec = "https://drafts.csswg.org/css-box/#propdef-width"
-rule_types_allowed = ["style", "keyframe", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -2537,6 +2545,7 @@ struct = "inherited_text"
 spec = "https://drafts.csswg.org/css-break/#propdef-widows"
 animation_type = "discrete"
 affects = "layout"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [will-change]
 type = "WillChange"
@@ -2896,6 +2905,7 @@ logical_group = "border-color"
 allow_quirks = true
 ignored_when_colors_disabled = true
 affects = "paint"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [border-right-color]
 type = "Color"
@@ -2906,6 +2916,7 @@ logical_group = "border-color"
 allow_quirks = true
 ignored_when_colors_disabled = true
 affects = "paint"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [border-bottom-color]
 type = "Color"
@@ -2916,6 +2927,7 @@ logical_group = "border-color"
 allow_quirks = true
 ignored_when_colors_disabled = true
 affects = "paint"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [border-left-color]
 type = "Color"
@@ -2926,6 +2938,7 @@ logical_group = "border-color"
 allow_quirks = true
 ignored_when_colors_disabled = true
 affects = "paint"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [border-block-start-color]
 type = "Color"
@@ -2936,6 +2949,7 @@ logical = true
 logical_group = "border-color"
 ignored_when_colors_disabled = true
 affects = "paint"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [border-block-end-color]
 type = "Color"
@@ -2946,6 +2960,7 @@ logical = true
 logical_group = "border-color"
 ignored_when_colors_disabled = true
 affects = "paint"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [border-inline-start-color]
 type = "Color"
@@ -2957,6 +2972,7 @@ logical = true
 logical_group = "border-color"
 ignored_when_colors_disabled = true
 affects = "paint"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [border-inline-end-color]
 type = "Color"
@@ -2968,6 +2984,7 @@ logical = true
 logical_group = "border-color"
 ignored_when_colors_disabled = true
 affects = "paint"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [border-top-style]
 type = "BorderStyle"
@@ -2978,6 +2995,7 @@ animation_type = "discrete"
 gecko_ffi_name = "mBorderStyle.0"
 logical_group = "border-style"
 affects = "layout"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [border-right-style]
 type = "BorderStyle"
@@ -2988,6 +3006,7 @@ animation_type = "discrete"
 gecko_ffi_name = "mBorderStyle.1"
 logical_group = "border-style"
 affects = "layout"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [border-bottom-style]
 type = "BorderStyle"
@@ -2998,6 +3017,7 @@ animation_type = "discrete"
 gecko_ffi_name = "mBorderStyle.2"
 logical_group = "border-style"
 affects = "layout"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [border-left-style]
 type = "BorderStyle"
@@ -3008,6 +3028,7 @@ animation_type = "discrete"
 gecko_ffi_name = "mBorderStyle.3"
 logical_group = "border-style"
 affects = "layout"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [border-block-start-style]
 type = "BorderStyle"
@@ -3019,6 +3040,7 @@ gecko_ffi_name = "mBorderStyle.4"
 logical = true
 logical_group = "border-style"
 affects = "layout"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [border-block-end-style]
 type = "BorderStyle"
@@ -3030,6 +3052,7 @@ gecko_ffi_name = "mBorderStyle.5"
 logical = true
 logical_group = "border-style"
 affects = "layout"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [border-inline-start-style]
 type = "BorderStyle"
@@ -3042,6 +3065,7 @@ gecko_ffi_name = "mBorderStyle.6"
 logical = true
 logical_group = "border-style"
 affects = "layout"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [border-inline-end-style]
 type = "BorderStyle"
@@ -3054,6 +3078,7 @@ gecko_ffi_name = "mBorderStyle.7"
 logical = true
 logical_group = "border-style"
 affects = "layout"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [border-top-width]
 type = "BorderSideWidth"
@@ -3065,6 +3090,7 @@ allow_quirks = true
 gecko_ffi_name = "mBorder.0"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [border-right-width]
 type = "BorderSideWidth"
@@ -3076,6 +3102,7 @@ allow_quirks = true
 gecko_ffi_name = "mBorder.1"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [border-bottom-width]
 type = "BorderSideWidth"
@@ -3087,6 +3114,7 @@ allow_quirks = true
 gecko_ffi_name = "mBorder.2"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [border-left-width]
 type = "BorderSideWidth"
@@ -3098,6 +3126,7 @@ allow_quirks = true
 gecko_ffi_name = "mBorder.3"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [border-block-start-width]
 type = "BorderSideWidth"
@@ -3109,6 +3138,7 @@ logical_group = "border-width"
 gecko_ffi_name = "mBorder.4"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [border-block-end-width]
 type = "BorderSideWidth"
@@ -3120,6 +3150,7 @@ logical_group = "border-width"
 gecko_ffi_name = "mBorder.5"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [border-inline-start-width]
 type = "BorderSideWidth"
@@ -3132,6 +3163,7 @@ logical_group = "border-width"
 gecko_ffi_name = "mBorder.6"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [border-inline-end-width]
 type = "BorderSideWidth"
@@ -3144,6 +3176,7 @@ logical_group = "border-width"
 gecko_ffi_name = "mBorder.7"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [border-top-left-radius]
 type = "BorderCornerRadius"
@@ -3289,7 +3322,7 @@ logical = true
 logical_group = "margin"
 gecko_ffi_name = "mMargin.4"
 spec = "https://drafts.csswg.org/css-logical-props/#propdef-margin-block-start"
-rule_types_allowed = ["style", "keyframe", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -3301,7 +3334,7 @@ logical = true
 logical_group = "margin"
 gecko_ffi_name = "mMargin.5"
 spec = "https://drafts.csswg.org/css-logical-props/#propdef-margin-block-end"
-rule_types_allowed = ["style", "keyframe", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -3314,7 +3347,7 @@ logical = true
 logical_group = "margin"
 gecko_ffi_name = "mMargin.6"
 spec = "https://drafts.csswg.org/css-logical-props/#propdef-margin-inline-start"
-rule_types_allowed = ["style", "keyframe", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -3327,7 +3360,7 @@ logical = true
 logical_group = "margin"
 gecko_ffi_name = "mMargin.7"
 spec = "https://drafts.csswg.org/css-logical-props/#propdef-margin-inline-end"
-rule_types_allowed = ["style", "keyframe", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -3425,6 +3458,7 @@ gecko_ffi_name = "mPadding.0"
 allow_quirks = true
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [padding-right]
 type = "NonNegativeLengthPercentage"
@@ -3436,6 +3470,7 @@ gecko_ffi_name = "mPadding.1"
 allow_quirks = true
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [padding-bottom]
 type = "NonNegativeLengthPercentage"
@@ -3447,6 +3482,7 @@ gecko_ffi_name = "mPadding.2"
 allow_quirks = true
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [padding-left]
 type = "NonNegativeLengthPercentage"
@@ -3458,6 +3494,7 @@ gecko_ffi_name = "mPadding.3"
 allow_quirks = true
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [padding-block-start]
 type = "NonNegativeLengthPercentage"
@@ -3469,6 +3506,7 @@ spec = "https://drafts.csswg.org/css-logical-props/#propdef-padding-block-start"
 gecko_ffi_name = "mPadding.4"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [padding-block-end]
 type = "NonNegativeLengthPercentage"
@@ -3480,6 +3518,7 @@ spec = "https://drafts.csswg.org/css-logical-props/#propdef-padding-block-end"
 gecko_ffi_name = "mPadding.5"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [padding-inline-start]
 type = "NonNegativeLengthPercentage"
@@ -3492,6 +3531,7 @@ spec = "https://drafts.csswg.org/css-logical-props/#propdef-padding-inline-start
 gecko_ffi_name = "mPadding.6"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [padding-inline-end]
 type = "NonNegativeLengthPercentage"
@@ -3504,6 +3544,7 @@ spec = "https://drafts.csswg.org/css-logical-props/#propdef-padding-inline-end"
 gecko_ffi_name = "mPadding.7"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [scroll-padding-top]
 type = "NonNegativeLengthPercentageOrAuto"
@@ -3597,6 +3638,7 @@ affects = "paint"
 servo_restyle_damage = "repaint"
 vector = {}
 keyword = { values = ["scroll", "fixed"], extra_gecko_values = ["local"], gecko_enum_prefix = "StyleImageLayerAttachment" }
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [background-clip]
 struct = "background"
@@ -3607,6 +3649,7 @@ extra_prefixes = ["webkit"]
 servo_restyle_damage = "repaint"
 vector = {}
 keyword = { values = ["border-box", "padding-box", "content-box"], extra_gecko_values = ["text"], gecko_enum_prefix = "StyleGeometryBox", gecko_inexhaustive = true }
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [background-origin]
 struct = "background"
@@ -3617,6 +3660,7 @@ extra_prefixes = ["webkit"]
 servo_restyle_damage = "repaint"
 vector = {}
 keyword = { values = ["padding-box", "border-box", "content-box"], gecko_enum_prefix = "StyleGeometryBox", gecko_inexhaustive = true }
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [background-blend-mode]
 struct = "background"
@@ -3816,6 +3860,7 @@ spec = "https://drafts.csswg.org/css-box/#propdef-visibility"
 affects = "paint"
 gecko_ffi_name = "mVisible"
 keyword = { values = ["visible", "hidden", "collapse"] }
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [direction]
 struct = "inherited_box"
