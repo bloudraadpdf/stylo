@@ -696,4 +696,97 @@ mod tests {
             "width and height should parse in margin box"
         );
     }
+
+    #[test]
+    fn servo_parses_counter_with_lower_roman() {
+        let stylesheet = parse_stylesheet(
+            r#"@page { @top-center { content: counter(page, lower-roman); } }"#,
+        );
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let page = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Page(p) => Some(p.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected @page rule");
+        let nested = page.rules.read_with(&guard);
+        let margin = nested
+            .0
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Margin(m) => Some(m),
+                _ => None,
+            })
+            .expect("expected @margin rule");
+        assert_eq!(
+            margin.block.read_with(&guard).len(),
+            1,
+            "content with counter(page, lower-roman) should parse in margin box"
+        );
+    }
+
+    #[test]
+    fn servo_parses_counter_with_upper_roman() {
+        let stylesheet = parse_stylesheet(
+            r#"@page { @top-center { content: counter(page, upper-roman); } }"#,
+        );
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let page = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Page(p) => Some(p.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected @page rule");
+        let nested = page.rules.read_with(&guard);
+        let margin = nested
+            .0
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Margin(m) => Some(m),
+                _ => None,
+            })
+            .expect("expected @margin rule");
+        assert_eq!(
+            margin.block.read_with(&guard).len(),
+            1,
+            "content with counter(page, upper-roman) should parse in margin box"
+        );
+    }
+
+    #[test]
+    fn servo_parses_counter_with_decimal_leading_zero() {
+        let stylesheet = parse_stylesheet(
+            r#"@page { @top-center { content: counter(page, decimal-leading-zero); } }"#,
+        );
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let page = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Page(p) => Some(p.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected @page rule");
+        let nested = page.rules.read_with(&guard);
+        let margin = nested
+            .0
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Margin(m) => Some(m),
+                _ => None,
+            })
+            .expect("expected @margin rule");
+        assert_eq!(
+            margin.block.read_with(&guard).len(),
+            1,
+            "content with counter(page, decimal-leading-zero) should parse in margin box"
+        );
+    }
 }

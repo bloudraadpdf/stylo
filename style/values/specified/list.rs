@@ -130,6 +130,21 @@ pub enum ListStyleType {
     /// Uppercase ASCII letters (e.g., A, B, C, ..., Z, AA, AB).
     /// <https://www.w3.org/TR/css-counter-styles-3/#upper-alpha>
     UpperAlpha,
+    /// Lowercase Roman numerals (e.g., i, ii, iii, iv, ..., xcviii, xcix, c).
+    /// <https://www.w3.org/TR/css-counter-styles-3/#lower-roman>
+    LowerRoman,
+    /// Uppercase Roman numerals (e.g., I, II, III, IV, ..., XCVIII, XCIX, C).
+    /// <https://www.w3.org/TR/css-counter-styles-3/#upper-roman>
+    UpperRoman,
+    /// Decimal numbers padded with leading zeroes (e.g., 01, 02, 03, ..., 98, 99, 100).
+    /// <https://www.w3.org/TR/css-counter-styles-3/#decimal-leading-zero>
+    DecimalLeadingZero,
+    /// Lowercase Latin letters (alias for lower-alpha).
+    /// <https://www.w3.org/TR/css-counter-styles-3/#lower-latin>
+    LowerLatin,
+    /// Uppercase Latin letters (alias for upper-alpha).
+    /// <https://www.w3.org/TR/css-counter-styles-3/#upper-latin>
+    UpperLatin,
     /// Arabic-indic numbering (e.g.، ١، ٢، ٣، ٤، ...، ٩٨، ٩٩، ١٠٠).
     /// <https://www.w3.org/TR/css-counter-styles-3/#valdef-counter-style-name-arabic-indic>
     ArabicIndic,
