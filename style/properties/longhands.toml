@@ -729,7 +729,6 @@ affects = "layout"
 type = "CounterSet"
 initial = "Default::default()"
 struct = "counters"
-engine = "gecko"
 animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-lists-3/#propdef-counter-set"
 servo_restyle_damage = "rebuild_box"
@@ -4020,7 +4019,6 @@ keyword = { values = ["wrap", "nowrap"] }
 
 [text-wrap-style]
 struct = "inherited_text"
-engine = "gecko"
 spec = "https://drafts.csswg.org/css-text-4/#text-wrap-style"
 animation_type = "discrete"
 affects = "layout"
