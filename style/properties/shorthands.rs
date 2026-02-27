@@ -3028,7 +3028,6 @@ pub mod font_synthesis {
     }
 }
 
-#[cfg(feature = "gecko")]
 pub mod text_emphasis {
     pub use crate::properties::shorthands_generated::text_emphasis::*;
 
