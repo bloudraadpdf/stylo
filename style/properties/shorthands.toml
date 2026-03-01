@@ -386,6 +386,7 @@ spec = "https://drafts.csswg.org/css-lists/#propdef-list-style"
 [background-position]
 sub_properties = ["background-position-x", "background-position-y"]
 spec = "https://drafts.csswg.org/css-backgrounds-4/#the-background-position"
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 
 [mask]
 engine = "gecko"
