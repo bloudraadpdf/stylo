@@ -900,7 +900,6 @@ initial = "computed::FontPalette::normal()"
 struct = "font"
 initial_specified_value = "specified::FontPalette::normal()"
 animation_type = "discrete"
-has_effect_on_gecko_scrollbars = false
 spec = "https://drafts.csswg.org/css-fonts/#font-palette-prop"
 affects = "layout"
 
