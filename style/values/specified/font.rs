@@ -1606,6 +1606,7 @@ pub enum FontSynthesisStyle {
     ToShmem,
     ToTyped,
 )]
+#[cfg_attr(feature = "servo", derive(Deserialize, Serialize))]
 #[repr(C)]
 /// Allows authors to choose a palette from those supported by a color font
 /// (and potentially @font-palette-values overrides).
