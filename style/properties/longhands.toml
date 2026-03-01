@@ -104,13 +104,8 @@ engine = "gecko"
 spec = "https://drafts.csswg.org/css-overflow-3/#line-clamp"
 affects = "layout"
 
-[-x-lang]
-type = "XLang"
-initial = "computed::XLang::get_initial_value()"
-struct = "font"
-animation_type = "none"
-enabled_in = ""
-spec = "Internal (not web-exposed)"
+has_effect_on_gecko_scrollbars = false
+
 affects = "layout"
 
 [-x-text-scale]
