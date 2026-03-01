@@ -487,6 +487,14 @@ spec = "https://drafts.csswg.org/css-break/#propdef-break-inside"
 animation_type = "discrete"
 affects = "layout"
 
+[margin-break]
+type = "MarginBreak"
+initial = "computed::MarginBreak::Auto"
+struct = "box"
+spec = "https://drafts.csswg.org/css-break/#propdef-margin-break"
+animation_type = "discrete"
+affects = "layout"
+
 [caption-side]
 type = "table::CaptionSide"
 initial = "computed::table::CaptionSide::Top"

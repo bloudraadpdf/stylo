@@ -50,7 +50,7 @@ pub use self::box_::{
     LineClamp, Overflow, OverflowAnchor, OverflowClipMargin, OverscrollBehavior, Perspective,
     PositionProperty, Resize, ScrollSnapAlign, ScrollSnapAxis, ScrollSnapStop,
     ScrollSnapStrictness, ScrollSnapType, ScrollbarGutter, TouchAction, WillChange, WillChangeBits,
-    WritingModeProperty, Zoom,
+    WritingModeProperty, Zoom, MarginBreak,
 };
 pub use self::color::{
     Color, ColorOrAuto, ColorPropertyValue, ColorScheme, ForcedColorAdjust, PrintColorAdjust,

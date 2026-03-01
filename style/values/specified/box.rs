@@ -1858,6 +1858,33 @@ impl BreakWithin {
     }
 }
 
+/// Margin handling at a fragmentation break edge.
+///
+/// https://drafts.csswg.org/css-break/#propdef-margin-break
+#[allow(missing_docs)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(u8)]
+pub enum MarginBreak {
+    Auto,
+    Keep,
+    Discard,
+}
+
 /// The value for the `overflow-x` / `overflow-y` properties.
 #[allow(missing_docs)]
 #[derive(

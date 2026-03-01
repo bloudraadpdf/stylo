@@ -21,7 +21,7 @@ pub use crate::values::specified::box_::{
     ContainerName, ContainerType, ContentVisibility, Display, Float, Overflow, OverflowAnchor,
     OverscrollBehavior, PositionProperty, ScrollSnapAlign, ScrollSnapAxis, ScrollSnapStop,
     ScrollSnapStrictness, ScrollSnapType, ScrollbarGutter, TouchAction, WillChange,
-    WritingModeProperty,
+    WritingModeProperty, MarginBreak,
 };
 
 /// A computed value for the `baseline-shift` property.
