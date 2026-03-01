@@ -110,7 +110,6 @@ initial = "computed::XLang::get_initial_value()"
 struct = "font"
 animation_type = "none"
 enabled_in = ""
-has_effect_on_gecko_scrollbars = false
 spec = "Internal (not web-exposed)"
 affects = "layout"
 
