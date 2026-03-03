@@ -415,7 +415,7 @@ spec = "https://drafts.csswg.org/css-multicol/#propdef-columns"
 servo_pref = "layout.columns.enabled"
 
 [column-rule]
-engine = "gecko"
+servo_pref = "layout.columns.enabled"
 sub_properties = ["column-rule-width", "column-rule-style", "column-rule-color"]
 spec = "https://drafts.csswg.org/css-multicol/#propdef-column-rule"
 derive_serialize = true
