@@ -268,6 +268,87 @@ pub enum StringSetContentKeyword {
     FirstLetter,
 }
 
+/// Keyword for `target-text()` second argument.
+///
+/// https://www.w3.org/TR/css-gcpm-3/#funcdef-target-text
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(u8)]
+pub enum TargetTextKeyword {
+    /// `content`
+    Content,
+    /// `before`
+    Before,
+    /// `after`
+    After,
+    /// `first-letter`
+    FirstLetter,
+}
+
+impl Default for TargetTextKeyword {
+    fn default() -> Self {
+        Self::Content
+    }
+}
+
+#[inline]
+fn is_content_keyword(keyword: &TargetTextKeyword) -> bool {
+    *keyword == TargetTextKeyword::Content
+}
+
+/// Type of leader pattern for `leader()` function.
+///
+/// https://www.w3.org/TR/css-gcpm-3/#funcdef-leader
+#[derive(
+    Clone,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+)]
+pub enum LeaderType {
+    /// `dotted`
+    Dotted,
+    /// `solid`
+    Solid,
+    /// `space`
+    Space,
+    /// A custom string pattern.
+    String(crate::OwnedStr),
+}
+
+impl ToCss for LeaderType {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        match self {
+            Self::Dotted => dest.write_str("dotted"),
+            Self::Solid => dest.write_str("solid"),
+            Self::Space => dest.write_str("space"),
+            Self::String(s) => s.to_css(dest),
+        }
+    }
+}
+
 /// The non-normal, non-none values of the content property.
 #[derive(
     Clone, Debug, Eq, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToComputedValue, ToShmem,
@@ -406,6 +487,21 @@ pub enum GenericContentItem<I> {
     Attr(Attr),
     /// image-set(url) | url(url)
     Image(I),
+    /// `target-counter(<url>, <ident>, <counter-style>?)`
+    ///
+    /// https://www.w3.org/TR/css-gcpm-3/#funcdef-target-counter
+    #[css(comma, function = "target-counter")]
+    TargetCounter(crate::OwnedStr, CustomIdent, #[css(skip_if = "is_decimal")] CounterStyleType),
+    /// `target-text(<url>, <keyword>?)`
+    ///
+    /// https://www.w3.org/TR/css-gcpm-3/#funcdef-target-text
+    #[css(comma, function = "target-text")]
+    TargetText(crate::OwnedStr, #[css(skip_if = "is_content_keyword")] TargetTextKeyword),
+    /// `leader(dotted | solid | space | <string>)`
+    ///
+    /// https://www.w3.org/TR/css-gcpm-3/#funcdef-leader
+    #[css(function)]
+    Leader(LeaderType),
 }
 
 pub use self::GenericContentItem as ContentItem;

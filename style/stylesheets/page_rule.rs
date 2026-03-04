@@ -15,6 +15,7 @@ use crate::shared_lock::{
 use crate::stylesheets::{style_or_page_rule_to_css, CssRules};
 use crate::values::{AtomIdent, CustomIdent};
 use cssparser::{match_ignore_ascii_case, Parser, SourceLocation, Token};
+use cssparser::parse_nth;
 #[cfg(feature = "gecko")]
 use malloc_size_of::{MallocSizeOf, MallocSizeOfOps, MallocUnconditionalShallowSizeOf};
 use servo_arc::Arc;
@@ -98,6 +99,8 @@ bitflags! {
         const LEFT = 1 << 2;
         /// Flag for PagePseudoClass::Right
         const RIGHT = 1 << 3;
+        /// Flag for `:nth(An+B)` presence
+        const NTH = 1 << 4;
     }
 }
 
@@ -134,6 +137,10 @@ pub struct PageSelector {
     ///
     /// [page-selectors]: https://drafts.csswg.org/css2/page.html#page-selectors
     pub pseudos: PagePseudoClasses,
+    /// `:nth(An+B)` coefficients, if present.
+    ///
+    /// https://drafts.csswg.org/css-page-4/#nth-page-pseudo-class
+    pub nth: Option<(i32, i32)>,
 }
 
 /// Computes the [specificity] given the g, h, and f values as in the spec.
@@ -166,20 +173,34 @@ impl PageSelector {
     /// Checks that this selector matches the ident and all pseudo classes are
     /// present in the provided flags.
     #[inline]
-    pub fn matches(&self, name: &CustomIdent, flags: PagePseudoClassFlags) -> bool {
-        self.ident_matches(name) && self.flags_match(flags)
+    pub fn matches(&self, name: &CustomIdent, flags: PagePseudoClassFlags, page_number: usize) -> bool {
+        self.ident_matches(name) && self.flags_match(flags, page_number)
     }
 
     /// Checks that all pseudo classes in this selector are present in the
-    /// provided flags.
+    /// provided flags, and that `:nth()` matches the given page number.
     ///
     /// Equivalent to, but may be more efficient than:
     ///
     /// ```
-    /// match_specificity(flags).is_some()
+    /// match_specificity(flags, page_number).is_some()
     /// ```
-    pub fn flags_match(&self, flags: PagePseudoClassFlags) -> bool {
-        self.pseudos.iter().all(|pc| flags.contains_class(pc))
+    pub fn flags_match(&self, flags: PagePseudoClassFlags, page_number: usize) -> bool {
+        if !self.pseudos.iter().all(|pc| flags.contains_class(pc)) {
+            return false;
+        }
+        if let Some((a, b)) = self.nth {
+            let n = page_number as i32;
+            let diff = n - b;
+            if a == 0 {
+                if diff != 0 {
+                    return false;
+                }
+            } else if diff % a != 0 || diff / a < 0 {
+                return false;
+            }
+        }
+        true
     }
 
     /// Implements specificity calculation for a page selector given a set of
@@ -192,7 +213,7 @@ impl PageSelector {
     /// :left and :right to 65535.
     ///
     /// https://drafts.csswg.org/css-page-3/#cascading-and-page-context
-    pub fn match_specificity(&self, flags: PagePseudoClassFlags) -> Option<u32> {
+    pub fn match_specificity(&self, flags: PagePseudoClassFlags, page_number: usize) -> Option<u32> {
         let mut g: usize = 0;
         let mut h: usize = 0;
         for pc in self.pseudos.iter() {
@@ -203,6 +224,20 @@ impl PageSelector {
                 PagePseudoClass::First | PagePseudoClass::Blank => g += 1,
                 PagePseudoClass::Left | PagePseudoClass::Right => h += 1,
             }
+        }
+        // Check :nth() match
+        if let Some((a, b)) = self.nth {
+            let n = page_number as i32;
+            let diff = n - b;
+            if a == 0 {
+                if diff != 0 {
+                    return None;
+                }
+            } else if diff % a != 0 || diff / a < 0 {
+                return None;
+            }
+            // :nth() contributes +1 pseudo-class specificity (same bucket as :left/:right)
+            h += 1;
         }
         Some(selector_specificity(g, h, !self.name.0.is_empty()))
     }
@@ -216,6 +251,22 @@ impl ToCss for PageSelector {
         self.name.to_css(dest)?;
         for pc in self.pseudos.iter() {
             dest.write_str(pc.to_str())?;
+        }
+        if let Some((a, b)) = self.nth {
+            dest.write_str(":nth(")?;
+            match (a, b) {
+                (0, val) => write!(dest, "{}", val)?,
+                (1, 0) => dest.write_str("n")?,
+                (-1, 0) => dest.write_str("-n")?,
+                (val, 0) => write!(dest, "{}n", val)?,
+                (1, val) if val > 0 => write!(dest, "n+{}", val)?,
+                (1, val) => write!(dest, "n{}", val)?,
+                (-1, val) if val > 0 => write!(dest, "-n+{}", val)?,
+                (-1, val) => write!(dest, "-n{}", val)?,
+                (a_val, val) if val > 0 => write!(dest, "{}n+{}", a_val, val)?,
+                (a_val, val) => write!(dest, "{}n{}", a_val, val)?,
+            }
+            dest.write_char(')')?;
         }
         Ok(())
     }
@@ -233,16 +284,40 @@ impl Parse for PageSelector {
     ) -> Result<Self, ParseError<'i>> {
         let name = input.try_parse(parse_page_name);
         let mut pseudos = PagePseudoClasses::default();
-        while let Ok(pc) = input.try_parse(PagePseudoClass::parse) {
-            pseudos.push(pc);
+        let mut nth = None;
+        loop {
+            // Try functional pseudo-class :nth(...) first.
+            // We use a state variable since try_parse borrows input mutably.
+            let parsed_nth = input.try_parse(|i| -> Result<(i32, i32), ParseError<'i>> {
+                let loc = i.current_source_location();
+                let colon = i.next_including_whitespace()?;
+                if *colon != Token::Colon {
+                    return Err(loc.new_custom_error(
+                        style_traits::StyleParseErrorKind::UnspecifiedError,
+                    ));
+                }
+                i.expect_function_matching("nth")?;
+                i.parse_nested_block(|i| parse_nth(i).map_err(|e| e.into()))
+            });
+            if let Ok((a, b)) = parsed_nth {
+                nth = Some((a, b));
+                continue;
+            }
+            // Then try keyword pseudo-class
+            if let Ok(pc) = input.try_parse(PagePseudoClass::parse) {
+                pseudos.push(pc);
+                continue;
+            }
+            break;
         }
         // If the result was empty, then we didn't get a selector.
+        let has_content = !pseudos.is_empty() || nth.is_some();
         let name = match name {
             Ok(name) => name,
-            Err(..) if !pseudos.is_empty() => AtomIdent::new(atom!("")),
+            Err(..) if has_content => AtomIdent::new(atom!("")),
             Err(err) => return Err(err),
         };
-        Ok(PageSelector { name, pseudos })
+        Ok(PageSelector { name, pseudos, nth })
     }
 }
 
@@ -321,14 +396,14 @@ impl PageRule {
     /// Returns None if the flags do not match this page rule.
     ///
     /// The return type is ordered by page-rule specificity.
-    pub fn match_specificity(&self, flags: PagePseudoClassFlags) -> Option<u32> {
+    pub fn match_specificity(&self, flags: PagePseudoClassFlags, page_number: usize) -> Option<u32> {
         if self.selectors.is_empty() {
             // A page-rule with no selectors matches all pages, but with the
             // lowest possible specificity.
             return Some(selector_specificity(0, 0, false));
         }
         let mut specificity = None;
-        for s in self.selectors.0.iter().map(|s| s.match_specificity(flags)) {
+        for s in self.selectors.0.iter().map(|s| s.match_specificity(flags, page_number)) {
             specificity = s.max(specificity);
         }
         specificity

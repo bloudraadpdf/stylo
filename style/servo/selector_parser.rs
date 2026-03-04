@@ -59,6 +59,8 @@ pub enum PseudoElement {
     DetailsSummary,
     DetailsContent,
     Marker,
+    FootnoteCall,
+    FootnoteMarker,
 
     // Implemented pseudos. These pseudo elements are representing the
     // elements within an UA shadow DOM, and matching the elements with
@@ -97,6 +99,8 @@ impl ToCss for PseudoElement {
             DetailsSummary => "::-servo-details-summary",
             DetailsContent => "::details-content",
             Marker => "::marker",
+            FootnoteCall => "::footnote-call",
+            FootnoteMarker => "::footnote-marker",
             ColorSwatch => "::color-swatch",
             Placeholder => "::placeholder",
             ServoTextControlInnerContainer => "::-servo-text-control-inner-container",
@@ -249,6 +253,8 @@ impl PseudoElement {
             | PseudoElement::ColorSwatch
             | PseudoElement::DetailsSummary
             | PseudoElement::Marker
+            | PseudoElement::FootnoteCall
+            | PseudoElement::FootnoteMarker
             | PseudoElement::Placeholder
             | PseudoElement::DetailsContent
             | PseudoElement::ServoTextControlInnerContainer
@@ -643,6 +649,8 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             "selection" => Selection,
             "first-letter" => FirstLetter,
             "marker" => Marker,
+            "footnote-call" => FootnoteCall,
+            "footnote-marker" => FootnoteMarker,
             "-servo-details-summary" => {
                 if !self.in_user_agent_stylesheet() {
                     return Err(location.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(name.clone())))

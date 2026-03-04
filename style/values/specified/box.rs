@@ -15,7 +15,7 @@ use crate::values::generics::box_::{
 use crate::values::specified::length::{LengthPercentage, NonNegativeLength};
 use crate::values::specified::{AllowQuirks, Integer, NonNegativeNumberOrPercentage};
 use crate::values::CustomIdent;
-use cssparser::Parser;
+use cssparser::{match_ignore_ascii_case, Parser};
 use num_traits::FromPrimitive;
 use std::fmt::{self, Write};
 use style_traits::{CssWriter, KeywordsCollectFn, ParseError};
@@ -1491,11 +1491,9 @@ pub type Perspective = GenericPerspective<NonNegativeLength>;
     FromPrimitive,
     Hash,
     MallocSizeOf,
-    Parse,
     PartialEq,
     SpecifiedValueInfo,
     ToComputedValue,
-    ToCss,
     ToResolvedValue,
     ToShmem,
     ToTyped,
@@ -1508,12 +1506,235 @@ pub enum Float {
     // https://drafts.csswg.org/css-logical-props/#float-clear
     InlineStart,
     InlineEnd,
+    // https://www.w3.org/TR/css-gcpm-3/#propdef-float
+    Footnote,
+    // https://www.w3.org/TR/css-page-floats-3/#valdef-float-top
+    Top,
+    // https://www.w3.org/TR/css-page-floats-3/#valdef-float-bottom
+    Bottom,
+    // https://www.w3.org/TR/css-page-floats-3/#valdef-float-top-unless-room
+    TopUnlessRoom,
+    // https://www.w3.org/TR/css-page-floats-3/#valdef-float-bottom-unless-room
+    BottomUnlessRoom,
+    // https://www.w3.org/TR/css-page-floats-3/#valdef-float-snap-block
+    SnapBlock,
 }
 
 impl Float {
     /// Returns true if `self` is not `None`.
     pub fn is_floating(self) -> bool {
         self != Self::None
+    }
+
+    /// Returns true if this is a page float (top, bottom, snap-block variants)
+    /// or footnote — these should NOT trigger CSS 2.1 blockification.
+    pub fn is_page_or_footnote_float(self) -> bool {
+        matches!(
+            self,
+            Self::Footnote
+                | Self::Top
+                | Self::Bottom
+                | Self::TopUnlessRoom
+                | Self::BottomUnlessRoom
+                | Self::SnapBlock
+        )
+    }
+}
+
+impl Parse for Float {
+    fn parse<'i, 't>(
+        _context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        // Try functional syntax: snap-block(...)
+        if input
+            .try_parse(|i| i.expect_function_matching("snap-block"))
+            .is_ok()
+        {
+            input.parse_nested_block(|input| {
+                // Parse and discard arguments — threshold/alignment stored in
+                // companion longhands (future work).
+                while input.next().is_ok() {}
+                Ok(())
+            })?;
+            return Ok(Float::SnapBlock);
+        }
+        let location = input.current_source_location();
+        let ident = input.expect_ident()?;
+        Ok(match_ignore_ascii_case! { &ident,
+            "left" => Float::Left,
+            "right" => Float::Right,
+            "none" => Float::None,
+            "inline-start" => Float::InlineStart,
+            "inline-end" => Float::InlineEnd,
+            "footnote" => Float::Footnote,
+            "top" => Float::Top,
+            "bottom" => Float::Bottom,
+            "top-unless-room" => Float::TopUnlessRoom,
+            "bottom-unless-room" => Float::BottomUnlessRoom,
+            "snap-block" => Float::SnapBlock,
+            _ => {
+                let ident = ident.clone();
+                return Err(location.new_custom_error(
+                    StyleParseErrorKind::UnexpectedIdent(ident)
+                ));
+            }
+        })
+    }
+}
+
+impl ToCss for Float {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: fmt::Write,
+    {
+        dest.write_str(match *self {
+            Float::Left => "left",
+            Float::Right => "right",
+            Float::None => "none",
+            Float::InlineStart => "inline-start",
+            Float::InlineEnd => "inline-end",
+            Float::Footnote => "footnote",
+            Float::Top => "top",
+            Float::Bottom => "bottom",
+            Float::TopUnlessRoom => "top-unless-room",
+            Float::BottomUnlessRoom => "bottom-unless-room",
+            Float::SnapBlock => "snap-block",
+        })
+    }
+}
+
+/// https://www.w3.org/TR/css-gcpm-3/#propdef-footnote-display
+#[allow(missing_docs)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(u8)]
+pub enum FootnoteDisplay {
+    Block,
+    Inline,
+    Compact,
+}
+
+/// https://www.w3.org/TR/css-gcpm-3/#propdef-footnote-policy
+#[allow(missing_docs)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(u8)]
+pub enum FootnotePolicy {
+    Auto,
+    Line,
+    Block,
+}
+
+/// https://www.w3.org/TR/css-page-floats-3/#propdef-float-reference
+#[allow(missing_docs)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(u8)]
+pub enum FloatReference {
+    Inline,
+    Column,
+    Region,
+    Page,
+}
+
+/// https://www.w3.org/TR/css-page-floats-3/#propdef-float-defer
+#[allow(missing_docs)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+)]
+pub enum FloatDefer {
+    None,
+    Last,
+    Integer(i32),
+}
+
+impl style_traits::ToTyped for FloatDefer {}
+
+impl Parse for FloatDefer {
+    fn parse<'i, 't>(
+        _context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if input
+            .try_parse(|i| i.expect_ident_matching("none"))
+            .is_ok()
+        {
+            return Ok(FloatDefer::None);
+        }
+        if input
+            .try_parse(|i| i.expect_ident_matching("last"))
+            .is_ok()
+        {
+            return Ok(FloatDefer::Last);
+        }
+        let value = input.expect_integer()?;
+        Ok(FloatDefer::Integer(value))
+    }
+}
+
+impl ToCss for FloatDefer {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: fmt::Write,
+    {
+        match self {
+            Self::None => dest.write_str("none"),
+            Self::Last => dest.write_str("last"),
+            Self::Integer(v) => v.to_css(dest),
+        }
     }
 }
 

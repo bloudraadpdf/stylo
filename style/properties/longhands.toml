@@ -495,6 +495,42 @@ spec = "https://drafts.csswg.org/css-break/#propdef-margin-break"
 animation_type = "discrete"
 affects = "layout"
 
+[footnote-display]
+type = "FootnoteDisplay"
+initial = "computed::FootnoteDisplay::Block"
+struct = "box"
+spec = "https://www.w3.org/TR/css-gcpm-3/#propdef-footnote-display"
+animation_type = "discrete"
+affects = "layout"
+servo_restyle_damage = "rebuild_box"
+
+[footnote-policy]
+type = "FootnotePolicy"
+initial = "computed::FootnotePolicy::Auto"
+struct = "box"
+spec = "https://www.w3.org/TR/css-gcpm-3/#propdef-footnote-policy"
+animation_type = "discrete"
+affects = "layout"
+servo_restyle_damage = "rebuild_box"
+
+[float-reference]
+type = "FloatReference"
+initial = "computed::FloatReference::Inline"
+struct = "box"
+spec = "https://www.w3.org/TR/css-page-floats-3/#propdef-float-reference"
+animation_type = "discrete"
+affects = "layout"
+servo_restyle_damage = "rebuild_box"
+
+[float-defer]
+type = "FloatDefer"
+initial = "computed::FloatDefer::None"
+struct = "box"
+spec = "https://www.w3.org/TR/css-page-floats-3/#propdef-float-defer"
+animation_type = "discrete"
+affects = "layout"
+servo_restyle_damage = "rebuild_box"
+
 [caption-side]
 type = "table::CaptionSide"
 initial = "computed::table::CaptionSide::Top"

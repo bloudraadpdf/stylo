@@ -254,6 +254,39 @@ fn parse_content_item<'i, 't>(
                         parse_content_function_keyword(input)?,
                     ))
                 }),
+                "target-counter" if allow_counter_functions => input.parse_nested_block(|input| {
+                    let url = input.expect_url()?.as_ref().to_owned().into();
+                    input.expect_comma()?;
+                    let name = CustomIdent::parse(input, &[])?;
+                    let style = Content::parse_counter_style(context, input);
+                    Ok(generics::ContentItem::TargetCounter(url, name, style))
+                }),
+                "target-text" if allow_counter_functions => input.parse_nested_block(|input| {
+                    let url = input.expect_url()?.as_ref().to_owned().into();
+                    let keyword = input.try_parse(|i| {
+                        i.expect_comma()?;
+                        generics::TargetTextKeyword::parse(i)
+                    }).unwrap_or_default();
+                    Ok(generics::ContentItem::TargetText(url, keyword))
+                }),
+                "leader" if allow_counter_functions => input.parse_nested_block(|input| {
+                    let leader_type = if let Ok(ident) = input.try_parse(|i| i.expect_ident().map(|s| s.clone())) {
+                        match_ignore_ascii_case! { &ident,
+                            "dotted" => generics::LeaderType::Dotted,
+                            "solid" => generics::LeaderType::Solid,
+                            "space" => generics::LeaderType::Space,
+                            _ => {
+                                return Err(input.new_custom_error(
+                                    StyleParseErrorKind::UnexpectedIdent(ident)
+                                ));
+                            }
+                        }
+                    } else {
+                        let s = input.expect_string()?.as_ref().to_owned();
+                        generics::LeaderType::String(s.into())
+                    };
+                    Ok(generics::ContentItem::Leader(leader_type))
+                }),
                 "attr" if !static_prefs::pref!("layout.css.attr.enabled") => input.parse_nested_block(|input| {
                     Ok(generics::ContentItem::Attr(Attr::parse_function(context, input)?))
                 }),

@@ -2140,6 +2140,7 @@ impl PageRuleMap {
         cascade_data: &DocumentCascadeData,
         name: &Option<Atom>,
         pseudos: PagePseudoClassFlags,
+        page_number: usize,
     ) {
         let level = match origin {
             Origin::UserAgent => CascadeLevel::UANormal,
@@ -2156,9 +2157,10 @@ impl PageRuleMap {
             cascade_data,
             &atom!(""),
             pseudos,
+            page_number,
         );
         if let Some(name) = name {
-            self.match_and_add_rules(matched_rules, level, guards, cascade_data, name, pseudos);
+            self.match_and_add_rules(matched_rules, level, guards, cascade_data, name, pseudos, page_number);
         }
 
         // Because page-rules do not have source location information stored,
@@ -2174,6 +2176,7 @@ impl PageRuleMap {
         cascade_data: &CascadeData,
         name: &Atom,
         pseudos: PagePseudoClassFlags,
+        page_number: usize,
     ) {
         let rules = match self.rules.get(name) {
             Some(rules) => rules,
@@ -2181,7 +2184,7 @@ impl PageRuleMap {
         };
         for data in rules.iter() {
             let rule = data.rule.read_with(level.guard(&guards));
-            let specificity = match rule.match_specificity(pseudos) {
+            let specificity = match rule.match_specificity(pseudos, page_number) {
                 Some(specificity) => specificity,
                 None => continue,
             };
