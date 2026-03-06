@@ -28,3 +28,8 @@ pub type ContentItem = generics::GenericContentItem<Image>;
 
 /// A computed value for the `string-set` property.
 pub type StringSet = GenericStringSet<Image>;
+
+use crate::values::generics::counters::BookmarkLabel as GenericBookmarkLabel;
+
+/// A computed value for the `bookmark-label` property.
+pub type BookmarkLabel = GenericBookmarkLabel<Image>;

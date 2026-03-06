@@ -531,6 +531,34 @@ animation_type = "discrete"
 affects = "layout"
 servo_restyle_damage = "rebuild_box"
 
+[bookmark-level]
+type = "BookmarkLevel"
+initial = "computed::BookmarkLevel::None"
+struct = "box"
+spec = "https://drafts.csswg.org/css-content-3/#propdef-bookmark-level"
+animation_type = "discrete"
+affects = "layout"
+servo_restyle_damage = "rebuild_box"
+
+[bookmark-state]
+type = "BookmarkState"
+initial = "computed::BookmarkState::Open"
+struct = "box"
+spec = "https://drafts.csswg.org/css-content-3/#propdef-bookmark-state"
+animation_type = "discrete"
+affects = "layout"
+servo_restyle_damage = "rebuild_box"
+
+[bookmark-label]
+type = "BookmarkLabel"
+initial = "computed::BookmarkLabel::content_text()"
+initial_specified_value = "specified::BookmarkLabel::content_text()"
+struct = "counters"
+spec = "https://drafts.csswg.org/css-content-3/#propdef-bookmark-label"
+animation_type = "discrete"
+affects = "layout"
+servo_restyle_damage = "rebuild_box"
+
 [caption-side]
 type = "table::CaptionSide"
 initial = "computed::table::CaptionSide::Top"
@@ -775,6 +803,7 @@ initial = "Default::default()"
 struct = "counters"
 animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-lists-3/#propdef-counter-set"
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 

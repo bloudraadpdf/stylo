@@ -561,6 +561,8 @@ class Longhand(Property):
                 "AnimationPlayState",
                 "AspectRatio",
                 "BaselineSource",
+                "BookmarkLevel",
+                "BookmarkState",
                 "BreakBetween",
                 "BreakWithin",
                 "MarginBreak",

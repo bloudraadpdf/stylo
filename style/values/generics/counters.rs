@@ -597,3 +597,54 @@ impl<I: ToCss> ToCss for GenericStringSet<I> {
 
 pub use self::GenericStringSet as StringSet;
 pub use self::GenericStringSetAssignment as StringSetAssignment;
+
+/// Value of the `bookmark-label` property.
+///
+/// https://drafts.csswg.org/css-content-3/#propdef-bookmark-label
+#[derive(
+    Clone,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(transparent)]
+pub struct GenericBookmarkLabel<I>(
+    #[css(field_bound)] pub crate::OwnedSlice<GenericContentItem<I>>,
+);
+
+impl<I> GenericBookmarkLabel<I> {
+    /// The initial value `content(text)`.
+    pub fn content_text() -> Self {
+        Self(
+            vec![GenericContentItem::ContentFunction(
+                StringSetContentKeyword::Text,
+            )]
+            .into(),
+        )
+    }
+}
+
+impl<I: ToCss> ToCss for GenericBookmarkLabel<I> {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        let mut first = true;
+        for item in &*self.0 {
+            if !first {
+                dest.write_char(' ')?;
+            }
+            item.to_css(dest)?;
+            first = false;
+        }
+        Ok(())
+    }
+}
+
+pub use self::GenericBookmarkLabel as BookmarkLabel;

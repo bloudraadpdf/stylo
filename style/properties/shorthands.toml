@@ -1,7 +1,7 @@
 [margin]
 sub_properties = ["margin-top", "margin-right", "margin-bottom", "margin-left"]
 spec = "https://drafts.csswg.org/css-box/#propdef-margin"
-rule_types_allowed = ["style", "keyframe", "page", "scope", "page", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 kind = "four_sides"
 allow_quirks = true
 

@@ -60,14 +60,15 @@ pub use self::box_::{
     FloatDefer, FloatReference, FootnoteDisplay, FootnotePolicy, LineClamp, Overflow,
     OverflowAnchor, OverflowClipMargin, OverscrollBehavior, Perspective, PositionProperty, Resize,
     ScrollSnapAlign, ScrollSnapAxis, ScrollSnapStop, ScrollSnapStrictness, ScrollSnapType,
-    ScrollbarGutter, TouchAction, WillChange, WritingModeProperty, Zoom, MarginBreak,
+    ScrollbarGutter, TouchAction, WillChange, WritingModeProperty, Zoom,
+    BookmarkLevel, BookmarkState, MarginBreak,
 };
 pub use self::color::{
     Color, ColorOrAuto, ColorPropertyValue, ColorScheme, ForcedColorAdjust, PrintColorAdjust,
 };
 pub use self::column::ColumnCount;
 pub use self::counters::{
-    Content, ContentItem, CounterIncrement, CounterReset, CounterSet, StringSet,
+    BookmarkLabel, Content, ContentItem, CounterIncrement, CounterReset, CounterSet, StringSet,
 };
 pub use self::easing::TimingFunction;
 pub use self::effects::{BoxShadow, Filter, SimpleShadow};

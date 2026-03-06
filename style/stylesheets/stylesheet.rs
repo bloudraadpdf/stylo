@@ -789,4 +789,123 @@ mod tests {
             "content with counter(page, decimal-leading-zero) should parse in margin box"
         );
     }
+
+    #[test]
+    fn servo_parses_break_recto_verso() {
+        let stylesheet =
+            parse_stylesheet("div { break-before: recto; break-after: verso; }");
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let style = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Style(s) => Some(s.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected style rule");
+        assert_eq!(
+            style.block.read_with(&guard).len(),
+            2,
+            "break-before: recto and break-after: verso should parse"
+        );
+    }
+
+    #[test]
+    fn servo_parses_bookmark_level() {
+        let stylesheet = parse_stylesheet(
+            "h1 { bookmark-level: 1; } h2 { bookmark-level: none; }",
+        );
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let styles: Vec<_> = rules
+            .iter()
+            .filter_map(|rule| match rule {
+                CssRule::Style(s) => Some(s.read_with(&guard)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(styles.len(), 2, "expected two style rules");
+        assert_eq!(
+            styles[0].block.read_with(&guard).len(),
+            1,
+            "bookmark-level: 1 should parse"
+        );
+        assert_eq!(
+            styles[1].block.read_with(&guard).len(),
+            1,
+            "bookmark-level: none should parse"
+        );
+    }
+
+    #[test]
+    fn servo_parses_bookmark_label() {
+        let stylesheet = parse_stylesheet(
+            r#"h1 { bookmark-label: "Chapter " counter(chapter); }"#,
+        );
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let style = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Style(s) => Some(s.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected style rule");
+        assert_eq!(
+            style.block.read_with(&guard).len(),
+            1,
+            "bookmark-label with string + counter() should parse"
+        );
+    }
+
+    #[test]
+    fn servo_parses_bookmark_state() {
+        let stylesheet = parse_stylesheet(
+            "h1 { bookmark-state: open; } h2 { bookmark-state: closed; }",
+        );
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let styles: Vec<_> = rules
+            .iter()
+            .filter_map(|rule| match rule {
+                CssRule::Style(s) => Some(s.read_with(&guard)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(styles.len(), 2, "expected two style rules");
+        assert_eq!(
+            styles[0].block.read_with(&guard).len(),
+            1,
+            "bookmark-state: open should parse"
+        );
+        assert_eq!(
+            styles[1].block.read_with(&guard).len(),
+            1,
+            "bookmark-state: closed should parse"
+        );
+    }
+
+    #[test]
+    fn servo_parses_counter_set_in_page() {
+        let stylesheet = parse_stylesheet("@page { counter-set: page 1; }");
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let page = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Page(p) => Some(p.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected @page rule");
+        assert_eq!(
+            page.block.read_with(&guard).len(),
+            1,
+            "counter-set should parse in @page context"
+        );
+    }
 }

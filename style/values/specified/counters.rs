@@ -151,6 +151,39 @@ pub type ContentItem = generics::GenericContentItem<Image>;
 /// The specified value for the `string-set` property.
 pub type StringSet = generics::GenericStringSet<Image>;
 
+/// The specified value for the `bookmark-label` property.
+pub type BookmarkLabel = generics::GenericBookmarkLabel<Image>;
+
+impl Parse for BookmarkLabel {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        let mut items = Vec::new();
+        loop {
+            let result = parse_content_item(
+                context, input,
+                false, // allow_images
+                true,  // allow_counter_functions
+                false, // allow_string_functions
+                false, // allow_element_functions
+                true,  // allow_content_function
+                false, // allow_quote_idents
+            );
+            match result {
+                Ok(item) => items.push(item),
+                Err(_) => break,
+            }
+        }
+        if items.is_empty() {
+            return Err(
+                input.new_custom_error(StyleParseErrorKind::UnspecifiedError),
+            );
+        }
+        Ok(generics::BookmarkLabel(items.into()))
+    }
+}
+
 fn parse_string_lookup_keyword<'i, 't>(
     input: &mut Parser<'i, 't>,
 ) -> Result<generics::StringLookupKeyword, ParseError<'i>> {

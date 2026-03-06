@@ -1975,6 +1975,8 @@ pub enum BreakBetween {
     Avoid,
     Left,
     Right,
+    Recto,
+    Verso,
 }
 
 impl BreakBetween {
@@ -1993,7 +1995,7 @@ impl BreakBetween {
             BreakBetween::Auto | BreakBetween::Avoid | BreakBetween::Left | BreakBetween::Right => {
                 Ok(break_value)
             },
-            BreakBetween::Page => {
+            BreakBetween::Page | BreakBetween::Recto | BreakBetween::Verso => {
                 Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
             },
         }
@@ -2012,7 +2014,7 @@ impl BreakBetween {
                 self.to_css(dest)
             },
             BreakBetween::Page => dest.write_str("always"),
-            BreakBetween::Always => Ok(()),
+            BreakBetween::Always | BreakBetween::Recto | BreakBetween::Verso => Ok(()),
         }
     }
 }
@@ -2104,6 +2106,85 @@ pub enum MarginBreak {
     Auto,
     Keep,
     Discard,
+}
+
+/// https://drafts.csswg.org/css-content-3/#propdef-bookmark-state
+#[allow(missing_docs)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(u8)]
+pub enum BookmarkState {
+    Open,
+    Closed,
+}
+
+/// https://drafts.csswg.org/css-content-3/#propdef-bookmark-level
+#[allow(missing_docs)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+)]
+pub enum BookmarkLevel {
+    None,
+    Level(i32),
+}
+
+impl style_traits::ToTyped for BookmarkLevel {}
+
+impl Parse for BookmarkLevel {
+    fn parse<'i, 't>(
+        _context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if input
+            .try_parse(|i| i.expect_ident_matching("none"))
+            .is_ok()
+        {
+            return Ok(BookmarkLevel::None);
+        }
+        let value = input.expect_integer()?;
+        if value < 1 {
+            return Err(
+                input.new_custom_error(StyleParseErrorKind::UnspecifiedError)
+            );
+        }
+        Ok(BookmarkLevel::Level(value))
+    }
+}
+
+impl ToCss for BookmarkLevel {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        match self {
+            Self::None => dest.write_str("none"),
+            Self::Level(v) => v.to_css(dest),
+        }
+    }
 }
 
 /// The value for the `overflow-x` / `overflow-y` properties.
