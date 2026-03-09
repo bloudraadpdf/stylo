@@ -227,6 +227,15 @@ fn parse_content_function_keyword<'i, 't>(
     Ok(keyword)
 }
 
+fn parse_target_reference<'i, 't>(
+    input: &mut Parser<'i, 't>,
+) -> Result<crate::OwnedStr, ParseError<'i>> {
+    if let Ok(url) = input.try_parse(|input| input.expect_url()) {
+        return Ok(url.as_ref().to_owned().into());
+    }
+    Ok(input.expect_string()?.as_ref().to_owned().into())
+}
+
 fn parse_content_item<'i, 't>(
     context: &ParserContext,
     input: &mut Parser<'i, 't>,
@@ -288,14 +297,28 @@ fn parse_content_item<'i, 't>(
                     ))
                 }),
                 "target-counter" if allow_counter_functions => input.parse_nested_block(|input| {
-                    let url = input.expect_url()?.as_ref().to_owned().into();
+                    let url = parse_target_reference(input)?;
                     input.expect_comma()?;
                     let name = CustomIdent::parse(input, &[])?;
                     let style = Content::parse_counter_style(context, input);
                     Ok(generics::ContentItem::TargetCounter(url, name, style))
                 }),
+                "target-counters" if allow_counter_functions => input.parse_nested_block(|input| {
+                    let url = parse_target_reference(input)?;
+                    input.expect_comma()?;
+                    let name = CustomIdent::parse(input, &[])?;
+                    input.expect_comma()?;
+                    let separator = input.expect_string()?.as_ref().to_owned().into();
+                    let style = Content::parse_counter_style(context, input);
+                    Ok(generics::ContentItem::TargetCounters(
+                        url,
+                        name,
+                        separator,
+                        style,
+                    ))
+                }),
                 "target-text" if allow_counter_functions => input.parse_nested_block(|input| {
-                    let url = input.expect_url()?.as_ref().to_owned().into();
+                    let url = parse_target_reference(input)?;
                     let keyword = input.try_parse(|i| {
                         i.expect_comma()?;
                         generics::TargetTextKeyword::parse(i)
@@ -470,5 +493,77 @@ impl Parse for StringSet {
         })?;
 
         Ok(generics::StringSet(entries.into()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::context::QuirksMode;
+    use crate::parser::{Parse, ParserContext};
+    use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
+    use cssparser::{Parser, ParserInput};
+    use style_traits::{ParsingMode, ToCss};
+
+    fn parse_content_value(css: &str) -> Content {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input = ParserInput::new(css);
+        let mut parser = Parser::new(&mut input);
+        parser
+            .parse_entirely(|input| Content::parse(&context, input))
+            .expect("content value should parse")
+    }
+
+    #[test]
+    fn target_counters_parses_url_targets() {
+        let content =
+            parse_content_value(r##"target-counters(url("#sec"), section, ".", upper-roman)"##);
+        let Content::Items(items) = content else {
+            panic!("expected content items");
+        };
+        match &items.items[0] {
+            generics::ContentItem::TargetCounters(url, name, separator, style) => {
+                assert_eq!(&**url, "#sec");
+                assert_eq!(name.0.as_ref(), "section");
+                assert_eq!(&**separator, ".");
+                assert_eq!(style.to_css_string(), "upper-roman");
+            }
+            other => panic!("expected target-counters item, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn target_counter_and_target_text_accept_string_targets() {
+        let content = parse_content_value(
+            r##"target-counter("#sec", section) " / " target-text("#sec", before)"##,
+        );
+        let Content::Items(items) = content else {
+            panic!("expected content items");
+        };
+        match &items.items[0] {
+            generics::ContentItem::TargetCounter(url, name, style) => {
+                assert_eq!(&**url, "#sec");
+                assert_eq!(name.0.as_ref(), "section");
+                assert_eq!(style.to_css_string(), "decimal");
+            }
+            other => panic!("expected target-counter item, got {other:?}"),
+        }
+        match &items.items[2] {
+            generics::ContentItem::TargetText(url, keyword) => {
+                assert_eq!(&**url, "#sec");
+                assert_eq!(*keyword, generics::TargetTextKeyword::Before);
+            }
+            other => panic!("expected target-text item, got {other:?}"),
+        }
     }
 }

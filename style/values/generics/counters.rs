@@ -487,12 +487,22 @@ pub enum GenericContentItem<I> {
     Attr(Attr),
     /// image-set(url) | url(url)
     Image(I),
-    /// `target-counter(<url>, <ident>, <counter-style>?)`
+    /// `target-counter([ <string> | <url> ], <ident>, <counter-style>?)`
     ///
     /// https://www.w3.org/TR/css-gcpm-3/#funcdef-target-counter
     #[css(comma, function = "target-counter")]
     TargetCounter(crate::OwnedStr, CustomIdent, #[css(skip_if = "is_decimal")] CounterStyleType),
-    /// `target-text(<url>, <keyword>?)`
+    /// `target-counters([ <string> | <url> ], <ident>, <string>, <counter-style>?)`
+    ///
+    /// https://www.w3.org/TR/css-content-3/#funcdef-target-counters
+    #[css(comma, function = "target-counters")]
+    TargetCounters(
+        crate::OwnedStr,
+        CustomIdent,
+        crate::OwnedStr,
+        #[css(skip_if = "is_decimal")] CounterStyleType,
+    ),
+    /// `target-text([ <string> | <url> ], <keyword>?)`
     ///
     /// https://www.w3.org/TR/css-gcpm-3/#funcdef-target-text
     #[css(comma, function = "target-text")]
