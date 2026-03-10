@@ -152,7 +152,7 @@ impl From<&PathCommand> for ShapeCommand {
             &PathCommand::Move { ref point } => Self::Move {
                 point: point.into(),
             },
-            &PathCommand::Line { ref point } => Self::Move {
+            &PathCommand::Line { ref point } => Self::Line {
                 point: point.into(),
             },
             &PathCommand::HLine { ref x } => Self::HLine { x: x.into() },
@@ -275,4 +275,18 @@ impl From<&generic::ArcRadii<CSSFloat>> for generic::ArcRadii<LengthPercentage> 
                 .map(|v| LengthPercentage::new_length(CSSPixelLength::new(v))),
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ShapeCommand;
+    use crate::values::specified::svg_path::{CoordPair, PathCommand};
+
+    #[test]
+    fn path_command_line_preserves_line_variant() {
+        let path = PathCommand::Line { point: CoordPair::new(20.0, 10.0).into() };
+
+        assert!(matches!(ShapeCommand::from(&path), ShapeCommand::Line { .. }));
+    }
+
 }
