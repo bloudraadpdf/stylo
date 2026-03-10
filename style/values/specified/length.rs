@@ -1235,22 +1235,22 @@ impl NoCalcLength {
             },
             // Container query lengths. Inherit the limitation from viewport units since
             // we may fall back to them.
-            "cqw" if !context.in_page_rule() && cfg!(feature = "gecko") => {
+            "cqw" if !context.in_page_rule() && (cfg!(feature = "gecko") || cfg!(feature = "servo")) => {
                 Self::ContainerRelative(ContainerRelativeLength::Cqw(value))
             },
-            "cqh" if !context.in_page_rule() && cfg!(feature = "gecko") => {
+            "cqh" if !context.in_page_rule() && (cfg!(feature = "gecko") || cfg!(feature = "servo")) => {
                 Self::ContainerRelative(ContainerRelativeLength::Cqh(value))
             },
-            "cqi" if !context.in_page_rule() && cfg!(feature = "gecko") => {
+            "cqi" if !context.in_page_rule() && (cfg!(feature = "gecko") || cfg!(feature = "servo")) => {
                 Self::ContainerRelative(ContainerRelativeLength::Cqi(value))
             },
-            "cqb" if !context.in_page_rule() && cfg!(feature = "gecko") => {
+            "cqb" if !context.in_page_rule() && (cfg!(feature = "gecko") || cfg!(feature = "servo")) => {
                 Self::ContainerRelative(ContainerRelativeLength::Cqb(value))
             },
-            "cqmin" if !context.in_page_rule() && cfg!(feature = "gecko") => {
+            "cqmin" if !context.in_page_rule() && (cfg!(feature = "gecko") || cfg!(feature = "servo")) => {
                 Self::ContainerRelative(ContainerRelativeLength::Cqmin(value))
             },
-            "cqmax" if !context.in_page_rule() && cfg!(feature = "gecko") => {
+            "cqmax" if !context.in_page_rule() && (cfg!(feature = "gecko") || cfg!(feature = "servo")) => {
                 Self::ContainerRelative(ContainerRelativeLength::Cqmax(value))
             },
             _ => return Err(()),

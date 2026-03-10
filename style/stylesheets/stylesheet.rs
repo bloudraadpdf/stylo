@@ -908,4 +908,46 @@ mod tests {
             "counter-set should parse in @page context"
         );
     }
+
+    #[test]
+    fn servo_parses_container_rules() {
+        let stylesheet = parse_stylesheet(
+            "@container card (width > 10px) { .target { color: red; } }",
+        );
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let container = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Container(rule) => Some(rule),
+                _ => None,
+            })
+            .expect("expected @container rule");
+        let nested = container.rules.read_with(&guard);
+        assert!(
+            nested.0.iter().any(|rule| matches!(rule, CssRule::Style(..))),
+            "expected nested style rule inside @container"
+        );
+    }
+
+    #[test]
+    fn servo_parses_container_relative_units() {
+        let stylesheet = parse_stylesheet("div { width: 10cqw; height: 5cqh; }");
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let style = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Style(s) => Some(s.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected style rule");
+        assert_eq!(
+            style.block.read_with(&guard).len(),
+            2,
+            "container-relative lengths should parse in Servo mode"
+        );
+    }
 }
