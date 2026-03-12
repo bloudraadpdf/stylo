@@ -284,9 +284,13 @@ mod tests {
 
     #[test]
     fn path_command_line_preserves_line_variant() {
-        let path = PathCommand::Line { point: CoordPair::new(20.0, 10.0).into() };
+        let path = PathCommand::Line {
+            point: CoordPair::new(20.0, 10.0).into(),
+        };
 
-        assert!(matches!(ShapeCommand::from(&path), ShapeCommand::Line { .. }));
+        assert!(matches!(
+            ShapeCommand::from(&path),
+            ShapeCommand::Line { .. }
+        ));
     }
-
 }

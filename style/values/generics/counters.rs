@@ -491,7 +491,11 @@ pub enum GenericContentItem<I> {
     ///
     /// https://www.w3.org/TR/css-gcpm-3/#funcdef-target-counter
     #[css(comma, function = "target-counter")]
-    TargetCounter(crate::OwnedStr, CustomIdent, #[css(skip_if = "is_decimal")] CounterStyleType),
+    TargetCounter(
+        crate::OwnedStr,
+        CustomIdent,
+        #[css(skip_if = "is_decimal")] CounterStyleType,
+    ),
     /// `target-counters([ <string> | <url> ], <ident>, <string>, <counter-style>?)`
     ///
     /// https://www.w3.org/TR/css-content-3/#funcdef-target-counters
@@ -506,7 +510,10 @@ pub enum GenericContentItem<I> {
     ///
     /// https://www.w3.org/TR/css-gcpm-3/#funcdef-target-text
     #[css(comma, function = "target-text")]
-    TargetText(crate::OwnedStr, #[css(skip_if = "is_content_keyword")] TargetTextKeyword),
+    TargetText(
+        crate::OwnedStr,
+        #[css(skip_if = "is_content_keyword")] TargetTextKeyword,
+    ),
     /// `leader(dotted | solid | space | <string>)`
     ///
     /// https://www.w3.org/TR/css-gcpm-3/#funcdef-leader

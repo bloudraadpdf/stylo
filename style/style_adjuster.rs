@@ -197,7 +197,11 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
     fn adjust_for_position(&mut self) {
         if self.style.is_absolutely_positioned()
             && self.style.is_floating()
-            && !self.style.get_box().clone_float().is_page_or_footnote_float()
+            && !self
+                .style
+                .get_box()
+                .clone_float()
+                .is_page_or_footnote_float()
         {
             self.style.mutate_box().set_float(Float::None);
         }
@@ -243,7 +247,14 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
 
         let is_item_or_root = blockify;
 
-        blockify_if!(self.style.is_floating() && !self.style.get_box().clone_float().is_page_or_footnote_float());
+        blockify_if!(
+            self.style.is_floating()
+                && !self
+                    .style
+                    .get_box()
+                    .clone_float()
+                    .is_page_or_footnote_float()
+        );
         blockify_if!(self.style.is_absolutely_positioned());
 
         if !blockify {

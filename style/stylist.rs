@@ -2160,7 +2160,15 @@ impl PageRuleMap {
             page_number,
         );
         if let Some(name) = name {
-            self.match_and_add_rules(matched_rules, level, guards, cascade_data, name, pseudos, page_number);
+            self.match_and_add_rules(
+                matched_rules,
+                level,
+                guards,
+                cascade_data,
+                name,
+                pseudos,
+                page_number,
+            );
         }
 
         // Because page-rules do not have source location information stored,

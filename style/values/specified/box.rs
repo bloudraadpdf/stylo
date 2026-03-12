@@ -1708,16 +1708,10 @@ impl Parse for FloatDefer {
         _context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(FloatDefer::None);
         }
-        if input
-            .try_parse(|i| i.expect_ident_matching("last"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("last")).is_ok() {
             return Ok(FloatDefer::Last);
         }
         let value = input.expect_integer()?;
@@ -1971,6 +1965,7 @@ pub enum Appearance {
 pub enum BreakBetween {
     Always,
     Auto,
+    Column,
     Page,
     Avoid,
     Left,
@@ -1992,10 +1987,16 @@ impl BreakBetween {
         let break_value = BreakBetween::parse(input)?;
         match break_value {
             BreakBetween::Always => Ok(BreakBetween::Page),
-            BreakBetween::Auto | BreakBetween::Avoid | BreakBetween::Left | BreakBetween::Right => {
+            BreakBetween::Auto
+            | BreakBetween::Avoid
+            | BreakBetween::Left
+            | BreakBetween::Right => {
                 Ok(break_value)
             },
-            BreakBetween::Page | BreakBetween::Recto | BreakBetween::Verso => {
+            BreakBetween::Column
+            | BreakBetween::Page
+            | BreakBetween::Recto
+            | BreakBetween::Verso => {
                 Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
             },
         }
@@ -2010,11 +2011,17 @@ impl BreakBetween {
         W: Write,
     {
         match *self {
-            BreakBetween::Auto | BreakBetween::Avoid | BreakBetween::Left | BreakBetween::Right => {
+            BreakBetween::Auto
+            | BreakBetween::Avoid
+            | BreakBetween::Left
+            | BreakBetween::Right => {
                 self.to_css(dest)
             },
             BreakBetween::Page => dest.write_str("always"),
-            BreakBetween::Always | BreakBetween::Recto | BreakBetween::Verso => Ok(()),
+            BreakBetween::Always
+            | BreakBetween::Column
+            | BreakBetween::Recto
+            | BreakBetween::Verso => Ok(()),
         }
     }
 }
@@ -2159,17 +2166,12 @@ impl Parse for BookmarkLevel {
         _context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(BookmarkLevel::None);
         }
         let value = input.expect_integer()?;
         if value < 1 {
-            return Err(
-                input.new_custom_error(StyleParseErrorKind::UnspecifiedError)
-            );
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
         }
         Ok(BookmarkLevel::Level(value))
     }
@@ -2325,7 +2327,9 @@ impl Parse for PositionProperty {
     ) -> Result<Self, ParseError<'i>> {
         if let Ok(name) = input.try_parse(|i| {
             i.expect_function_matching("running")?;
-            i.parse_nested_block(|i| CustomIdent::parse(i, &["static", "relative", "absolute", "fixed", "sticky"]))
+            i.parse_nested_block(|i| {
+                CustomIdent::parse(i, &["static", "relative", "absolute", "fixed", "sticky"])
+            })
         }) {
             return Ok(Self::Running(name));
         }

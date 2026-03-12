@@ -5,8 +5,8 @@
 //! Generic types for box properties.
 
 use crate::derives::*;
-use crate::values::CustomIdent;
 use crate::values::animated::ToAnimatedZero;
+use crate::values::CustomIdent;
 use crate::Zero;
 use std::fmt::{self, Write};
 use style_traits::{CssWriter, ToCss};

@@ -669,8 +669,7 @@ mod tests {
 
     #[test]
     fn servo_parses_sizing_properties_in_margin_box() {
-        let stylesheet =
-            parse_stylesheet("@page { @top-center { width: 100px; height: 50px; } }");
+        let stylesheet = parse_stylesheet("@page { @top-center { width: 100px; height: 50px; } }");
         let guard = stylesheet.shared_lock.read();
         let contents = stylesheet.contents.read_with(&guard);
         let rules = contents.rules(&guard);
@@ -699,9 +698,8 @@ mod tests {
 
     #[test]
     fn servo_parses_counter_with_lower_roman() {
-        let stylesheet = parse_stylesheet(
-            r#"@page { @top-center { content: counter(page, lower-roman); } }"#,
-        );
+        let stylesheet =
+            parse_stylesheet(r#"@page { @top-center { content: counter(page, lower-roman); } }"#);
         let guard = stylesheet.shared_lock.read();
         let contents = stylesheet.contents.read_with(&guard);
         let rules = contents.rules(&guard);
@@ -730,9 +728,8 @@ mod tests {
 
     #[test]
     fn servo_parses_counter_with_upper_roman() {
-        let stylesheet = parse_stylesheet(
-            r#"@page { @top-center { content: counter(page, upper-roman); } }"#,
-        );
+        let stylesheet =
+            parse_stylesheet(r#"@page { @top-center { content: counter(page, upper-roman); } }"#);
         let guard = stylesheet.shared_lock.read();
         let contents = stylesheet.contents.read_with(&guard);
         let rules = contents.rules(&guard);
@@ -792,8 +789,7 @@ mod tests {
 
     #[test]
     fn servo_parses_break_recto_verso() {
-        let stylesheet =
-            parse_stylesheet("div { break-before: recto; break-after: verso; }");
+        let stylesheet = parse_stylesheet("div { break-before: recto; break-after: verso; }");
         let guard = stylesheet.shared_lock.read();
         let contents = stylesheet.contents.read_with(&guard);
         let rules = contents.rules(&guard);
@@ -812,10 +808,28 @@ mod tests {
     }
 
     #[test]
-    fn servo_parses_bookmark_level() {
-        let stylesheet = parse_stylesheet(
-            "h1 { bookmark-level: 1; } h2 { bookmark-level: none; }",
+    fn servo_parses_break_column() {
+        let stylesheet = parse_stylesheet("div { break-before: column; break-after: column; }");
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let style = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Style(s) => Some(s.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected style rule");
+        assert_eq!(
+            style.block.read_with(&guard).len(),
+            2,
+            "break-before: column and break-after: column should parse",
         );
+    }
+
+    #[test]
+    fn servo_parses_bookmark_level() {
+        let stylesheet = parse_stylesheet("h1 { bookmark-level: 1; } h2 { bookmark-level: none; }");
         let guard = stylesheet.shared_lock.read();
         let contents = stylesheet.contents.read_with(&guard);
         let rules = contents.rules(&guard);
@@ -841,9 +855,7 @@ mod tests {
 
     #[test]
     fn servo_parses_bookmark_label() {
-        let stylesheet = parse_stylesheet(
-            r#"h1 { bookmark-label: "Chapter " counter(chapter); }"#,
-        );
+        let stylesheet = parse_stylesheet(r#"h1 { bookmark-label: "Chapter " counter(chapter); }"#);
         let guard = stylesheet.shared_lock.read();
         let contents = stylesheet.contents.read_with(&guard);
         let rules = contents.rules(&guard);
@@ -863,9 +875,8 @@ mod tests {
 
     #[test]
     fn servo_parses_bookmark_state() {
-        let stylesheet = parse_stylesheet(
-            "h1 { bookmark-state: open; } h2 { bookmark-state: closed; }",
-        );
+        let stylesheet =
+            parse_stylesheet("h1 { bookmark-state: open; } h2 { bookmark-state: closed; }");
         let guard = stylesheet.shared_lock.read();
         let contents = stylesheet.contents.read_with(&guard);
         let rules = contents.rules(&guard);
@@ -911,9 +922,8 @@ mod tests {
 
     #[test]
     fn servo_parses_container_rules() {
-        let stylesheet = parse_stylesheet(
-            "@container card (width > 10px) { .target { color: red; } }",
-        );
+        let stylesheet =
+            parse_stylesheet("@container card (width > 10px) { .target { color: red; } }");
         let guard = stylesheet.shared_lock.read();
         let contents = stylesheet.contents.read_with(&guard);
         let rules = contents.rules(&guard);
@@ -926,7 +936,10 @@ mod tests {
             .expect("expected @container rule");
         let nested = container.rules.read_with(&guard);
         assert!(
-            nested.0.iter().any(|rule| matches!(rule, CssRule::Style(..))),
+            nested
+                .0
+                .iter()
+                .any(|rule| matches!(rule, CssRule::Style(..))),
             "expected nested style rule inside @container"
         );
     }

@@ -55,13 +55,13 @@ pub use self::border::{
     BorderImageWidth, BorderRadius, BorderSideOffset, BorderSideWidth, BorderSpacing, LineWidth,
 };
 pub use self::box_::{
-    AlignmentBaseline, Appearance, BaselineShift, BaselineSource, BreakBetween, BreakWithin, Clear,
-    Contain, ContainIntrinsicSize, ContainerName, ContainerType, ContentVisibility, Display, Float,
-    FloatDefer, FloatReference, FootnoteDisplay, FootnotePolicy, LineClamp, Overflow,
-    OverflowAnchor, OverflowClipMargin, OverscrollBehavior, Perspective, PositionProperty, Resize,
-    ScrollSnapAlign, ScrollSnapAxis, ScrollSnapStop, ScrollSnapStrictness, ScrollSnapType,
-    ScrollbarGutter, TouchAction, WillChange, WritingModeProperty, Zoom,
-    BookmarkLevel, BookmarkState, MarginBreak,
+    AlignmentBaseline, Appearance, BaselineShift, BaselineSource, BookmarkLevel, BookmarkState,
+    BreakBetween, BreakWithin, Clear, Contain, ContainIntrinsicSize, ContainerName, ContainerType,
+    ContentVisibility, Display, Float, FloatDefer, FloatReference, FootnoteDisplay, FootnotePolicy,
+    LineClamp, MarginBreak, Overflow, OverflowAnchor, OverflowClipMargin, OverscrollBehavior,
+    Perspective, PositionProperty, Resize, ScrollSnapAlign, ScrollSnapAxis, ScrollSnapStop,
+    ScrollSnapStrictness, ScrollSnapType, ScrollbarGutter, TouchAction, WillChange,
+    WritingModeProperty, Zoom,
 };
 pub use self::color::{
     Color, ColorOrAuto, ColorPropertyValue, ColorScheme, ForcedColorAdjust, PrintColorAdjust,

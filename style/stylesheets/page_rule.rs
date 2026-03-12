@@ -14,8 +14,8 @@ use crate::shared_lock::{
 };
 use crate::stylesheets::{style_or_page_rule_to_css, CssRules};
 use crate::values::{AtomIdent, CustomIdent};
-use cssparser::{match_ignore_ascii_case, Parser, SourceLocation, Token};
 use cssparser::parse_nth;
+use cssparser::{match_ignore_ascii_case, Parser, SourceLocation, Token};
 #[cfg(feature = "gecko")]
 use malloc_size_of::{MallocSizeOf, MallocSizeOfOps, MallocUnconditionalShallowSizeOf};
 use servo_arc::Arc;
@@ -173,7 +173,12 @@ impl PageSelector {
     /// Checks that this selector matches the ident and all pseudo classes are
     /// present in the provided flags.
     #[inline]
-    pub fn matches(&self, name: &CustomIdent, flags: PagePseudoClassFlags, page_number: usize) -> bool {
+    pub fn matches(
+        &self,
+        name: &CustomIdent,
+        flags: PagePseudoClassFlags,
+        page_number: usize,
+    ) -> bool {
         self.ident_matches(name) && self.flags_match(flags, page_number)
     }
 
@@ -213,7 +218,11 @@ impl PageSelector {
     /// :left and :right to 65535.
     ///
     /// https://drafts.csswg.org/css-page-3/#cascading-and-page-context
-    pub fn match_specificity(&self, flags: PagePseudoClassFlags, page_number: usize) -> Option<u32> {
+    pub fn match_specificity(
+        &self,
+        flags: PagePseudoClassFlags,
+        page_number: usize,
+    ) -> Option<u32> {
         let mut g: usize = 0;
         let mut h: usize = 0;
         for pc in self.pseudos.iter() {
@@ -292,9 +301,9 @@ impl Parse for PageSelector {
                 let loc = i.current_source_location();
                 let colon = i.next_including_whitespace()?;
                 if *colon != Token::Colon {
-                    return Err(loc.new_custom_error(
-                        style_traits::StyleParseErrorKind::UnspecifiedError,
-                    ));
+                    return Err(
+                        loc.new_custom_error(style_traits::StyleParseErrorKind::UnspecifiedError)
+                    );
                 }
                 i.expect_function_matching("nth")?;
                 i.parse_nested_block(|i| parse_nth(i).map_err(|e| e.into()))
@@ -396,14 +405,23 @@ impl PageRule {
     /// Returns None if the flags do not match this page rule.
     ///
     /// The return type is ordered by page-rule specificity.
-    pub fn match_specificity(&self, flags: PagePseudoClassFlags, page_number: usize) -> Option<u32> {
+    pub fn match_specificity(
+        &self,
+        flags: PagePseudoClassFlags,
+        page_number: usize,
+    ) -> Option<u32> {
         if self.selectors.is_empty() {
             // A page-rule with no selectors matches all pages, but with the
             // lowest possible specificity.
             return Some(selector_specificity(0, 0, false));
         }
         let mut specificity = None;
-        for s in self.selectors.0.iter().map(|s| s.match_specificity(flags, page_number)) {
+        for s in self
+            .selectors
+            .0
+            .iter()
+            .map(|s| s.match_specificity(flags, page_number))
+        {
             specificity = s.max(specificity);
         }
         specificity

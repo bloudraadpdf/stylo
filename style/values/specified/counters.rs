@@ -162,8 +162,7 @@ impl Parse for BookmarkLabel {
         let mut items = Vec::new();
         loop {
             let result = parse_content_item(
-                context, input,
-                false, // allow_images
+                context, input, false, // allow_images
                 true,  // allow_counter_functions
                 false, // allow_string_functions
                 false, // allow_element_functions
@@ -176,9 +175,7 @@ impl Parse for BookmarkLabel {
             }
         }
         if items.is_empty() {
-            return Err(
-                input.new_custom_error(StyleParseErrorKind::UnspecifiedError),
-            );
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
         }
         Ok(generics::BookmarkLabel(items.into()))
     }
@@ -537,7 +534,7 @@ mod tests {
                 assert_eq!(name.0.as_ref(), "section");
                 assert_eq!(&**separator, ".");
                 assert_eq!(style.to_css_string(), "upper-roman");
-            }
+            },
             other => panic!("expected target-counters item, got {other:?}"),
         }
     }
@@ -555,14 +552,14 @@ mod tests {
                 assert_eq!(&**url, "#sec");
                 assert_eq!(name.0.as_ref(), "section");
                 assert_eq!(style.to_css_string(), "decimal");
-            }
+            },
             other => panic!("expected target-counter item, got {other:?}"),
         }
         match &items.items[2] {
             generics::ContentItem::TargetText(url, keyword) => {
                 assert_eq!(&**url, "#sec");
                 assert_eq!(*keyword, generics::TargetTextKeyword::Before);
-            }
+            },
             other => panic!("expected target-text item, got {other:?}"),
         }
     }
