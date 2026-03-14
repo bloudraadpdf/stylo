@@ -19,7 +19,7 @@ use style_traits::{CssWriter, ToCss};
 pub use crate::values::specified::box_::{
     AlignmentBaseline, Appearance, BaselineSource, BookmarkLevel, BookmarkState, BreakBetween,
     BreakWithin, Clear, Contain, ContainerName, ContainerType, ContentVisibility, Display, Float,
-    FloatDefer, FloatReference, FootnoteDisplay, FootnotePolicy, MarginBreak, Overflow,
+    FloatDefer, FloatReference, FootnoteDisplay, FootnotePolicy, MarginBreak, MarginTrim, Overflow,
     OverflowAnchor, OverscrollBehavior, PositionProperty, ScrollSnapAlign, ScrollSnapAxis,
     ScrollSnapStop, ScrollSnapStrictness, ScrollSnapType, ScrollbarGutter, TouchAction, WillChange,
     WritingModeProperty,

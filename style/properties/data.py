@@ -566,6 +566,7 @@ class Longhand(Property):
                 "BreakBetween",
                 "BreakWithin",
                 "MarginBreak",
+                "MarginTrim",
                 "BackgroundRepeat",
                 "BorderImageRepeat",
                 "BorderStyle",

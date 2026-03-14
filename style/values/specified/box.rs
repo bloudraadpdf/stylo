@@ -77,6 +77,7 @@ pub enum DisplayOutside {
     None = 0,
     Inline,
     Block,
+    RunIn,
     TableCaption,
     InternalTable,
     InternalRuby,
@@ -194,6 +195,8 @@ impl Display {
     );
     pub const Ruby: Self =
         Self(((DisplayOutside::Inline as u16) << Self::OUTSIDE_SHIFT) | DisplayInside::Ruby as u16);
+    pub const RunIn: Self =
+        Self(((DisplayOutside::RunIn as u16) << Self::OUTSIDE_SHIFT) | DisplayInside::Flow as u16);
     #[cfg(feature = "gecko")]
     pub const WebkitBox: Self = Self(
         ((DisplayOutside::Block as u16) << Self::OUTSIDE_SHIFT) | DisplayInside::WebkitBox as u16,
@@ -380,7 +383,7 @@ impl Display {
     /// https://drafts.csswg.org/css-display/#inlinify
     pub fn inlinify(&self) -> Self {
         match self.outside() {
-            DisplayOutside::Block => {
+            DisplayOutside::Block | DisplayOutside::RunIn => {
                 let inside = match self.inside() {
                     // `display: block` inlinifies to `display: inline-block`,
                     // rather than `inline`, for legacy reasons.
@@ -448,6 +451,7 @@ impl DisplayKeyword {
             /// https://drafts.csswg.org/css-display/#typedef-display-outside
             "block" => Outside(DisplayOutside::Block),
             "inline" => Outside(DisplayOutside::Inline),
+            "run-in" => Full(Display::RunIn),
 
             "list-item" => ListItem,
 
@@ -473,6 +477,7 @@ impl ToCss for Display {
         match *self {
             Display::Block | Display::Inline => outside.to_css(dest),
             Display::InlineBlock => dest.write_str("inline-block"),
+            Display::RunIn => dest.write_str("run-in"),
             #[cfg(feature = "gecko")]
             Display::WebkitInlineBox => dest.write_str("-webkit-inline-box"),
             Display::TableCaption => dest.write_str("table-caption"),
@@ -1242,6 +1247,48 @@ bitflags! {
         const CONTENT = 1 << 6 | Contain::LAYOUT.bits() | Contain::STYLE.bits() | Contain::PAINT.bits();
         /// `strict` variant, turns on all types of containment
         const STRICT = 1 << 7 | Contain::LAYOUT.bits() | Contain::STYLE.bits() | Contain::PAINT.bits() | Contain::SIZE.bits();
+    }
+}
+
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[css(bitflags(
+    single = "none",
+    mixed = "block-start,block-end,inline-start,inline-end,block,inline",
+    overlapping_bits
+))]
+#[repr(C)]
+/// https://drafts.csswg.org/css-box-4/#margin-trim
+pub struct MarginTrim(u8);
+bitflags! {
+    impl MarginTrim: u8 {
+        /// `none` variant, no margin trimming.
+        const NONE = 0;
+        /// `block-start` variant.
+        const BLOCK_START = 1 << 0;
+        /// `block-end` variant.
+        const BLOCK_END = 1 << 1;
+        /// `inline-start` variant.
+        const INLINE_START = 1 << 2;
+        /// `inline-end` variant.
+        const INLINE_END = 1 << 3;
+        /// `block` shorthand, equivalent to `block-start block-end`.
+        const BLOCK = MarginTrim::BLOCK_START.bits() | MarginTrim::BLOCK_END.bits();
+        /// `inline` shorthand, equivalent to `inline-start inline-end`.
+        const INLINE = MarginTrim::INLINE_START.bits() | MarginTrim::INLINE_END.bits();
     }
 }
 

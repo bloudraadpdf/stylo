@@ -2148,6 +2148,7 @@ initial = "computed::TextAlign::Start"
 struct = "inherited_text"
 animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-text/#propdef-text-align"
+aliases = ["text-align-all"]
 rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
@@ -2720,7 +2721,6 @@ servo_restyle_damage = "rebuild_box"
 type = "RubyPosition"
 initial = "computed::RubyPosition::AlternateOver"
 struct = "inherited_text"
-engine = "gecko"
 spec = "https://drafts.csswg.org/css-ruby/#ruby-position-property"
 animation_type = "discrete"
 affects = "layout"
@@ -3430,6 +3430,14 @@ rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
+[margin-trim]
+type = "MarginTrim"
+initial = "specified::MarginTrim::empty()"
+struct = "margin"
+spec = "https://drafts.csswg.org/css-box-4/#margin-trim"
+animation_type = "discrete"
+affects = "layout"
+
 [scroll-margin-top]
 type = "Length"
 initial = "computed::Length::zero()"
@@ -3948,7 +3956,6 @@ keyword = { values = ["flex", "legacy"] }
 
 [text-orientation]
 struct = "inherited_box"
-engine = "gecko"
 spec = "https://drafts.csswg.org/css-writing-modes/#propdef-text-orientation"
 animation_type = "none"
 affects = "layout"
@@ -4046,7 +4053,6 @@ keyword = { values = ["auto", "none"] }
 
 [ruby-align]
 struct = "inherited_text"
-engine = "gecko"
 spec = "https://drafts.csswg.org/css-ruby/#ruby-align-property"
 animation_type = "discrete"
 affects = "layout"

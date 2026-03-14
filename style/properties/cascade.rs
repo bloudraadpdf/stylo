@@ -805,9 +805,7 @@ impl<'b> Cascade<'b> {
             return;
         }
 
-        let has_writing_mode = apply!(WritingMode) | apply!(Direction);
-        #[cfg(feature = "gecko")]
-        let has_writing_mode = has_writing_mode | apply!(TextOrientation);
+        let has_writing_mode = apply!(WritingMode) | apply!(Direction) | apply!(TextOrientation);
 
         if has_writing_mode {
             context.builder.writing_mode = WritingMode::new(context.builder.get_inherited_box())
