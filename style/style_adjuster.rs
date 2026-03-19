@@ -340,7 +340,6 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
     /// text only inherits properties.
     ///
     /// Note that this, for Gecko, comes through Servo_ComputedValues_Inherit.
-    #[cfg(feature = "gecko")]
     pub fn adjust_for_text(&mut self) {
         debug_assert!(!self.style.is_root_element);
         self.adjust_for_text_combine_upright();
@@ -358,7 +357,6 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
     ///
     /// FIXME(emilio): How does this play with logical properties? Doesn't
     /// mutating writing-mode change the potential physical sides chosen?
-    #[cfg(feature = "gecko")]
     fn adjust_for_text_combine_upright(&mut self) {
         use crate::computed_values::text_combine_upright::T as TextCombineUpright;
         use crate::computed_values::writing_mode::T as WritingMode;
@@ -369,7 +367,10 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
 
         if matches!(
             writing_mode,
-            WritingMode::VerticalRl | WritingMode::VerticalLr
+            WritingMode::VerticalRl
+                | WritingMode::VerticalLr
+                | WritingMode::SidewaysRl
+                | WritingMode::SidewaysLr
         ) && text_combine_upright == TextCombineUpright::All
         {
             self.style.add_flags(ComputedValueFlags::IS_TEXT_COMBINED);
@@ -387,7 +388,6 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
     /// This is necessary because its parent may not itself have the flag set
     /// (e.g. ruby or ruby containers), thus we may not inherit the flag from
     /// them.
-    #[cfg(feature = "gecko")]
     fn adjust_for_text_in_ruby(&mut self) {
         let parent_display = self.style.get_parent_box().clone_display();
         if parent_display.is_ruby_type()
