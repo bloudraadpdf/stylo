@@ -199,6 +199,8 @@ pub enum ListStyleType {
     /// Tibetan numbering (e.g., ༡, ༢, ༣, ..., ༩༨, ༩༩, ༡༠༠).
     /// <https://www.w3.org/TR/css-counter-styles-3/#valdef-counter-style-name-tibetan>
     Tibetan,
+    /// Custom counter style name.
+    Custom(crate::values::CustomIdent),
     /// Han "Earthly Branch" ordinals (e.g., 子, 丑, 寅, ..., 亥).
     /// <https://www.w3.org/TR/css-counter-styles-3/#valdef-counter-style-name-cjk-earthly-branch>
     CjkEarthlyBranch,

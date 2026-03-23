@@ -572,10 +572,12 @@ impl Clone for Stylesheet {
 #[cfg(all(test, feature = "servo"))]
 mod tests {
     use super::*;
+    use crate::properties::PropertyDeclaration;
     use crate::shared_lock::ToCssWithGuard;
     use crate::stylesheets::CssRule;
     use servo_arc::Arc;
     use std::sync::{Mutex, OnceLock};
+    use style_traits::ToCss;
 
     fn pref_lock() -> &'static Mutex<()> {
         static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -647,6 +649,66 @@ mod tests {
                 .iter()
                 .any(|rule| matches!(rule, CssRule::Margin(..))),
             "expected nested @margin rule in @page"
+        );
+    }
+
+    #[test]
+    fn servo_preserves_attr_fallback_content_in_pseudo_style_rules() {
+        let stylesheet =
+            parse_stylesheet(r#"p::after { content: " [" attr(data-status string, "unknown") "]"; }"#);
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let style = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Style(rule) => Some(rule.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected style rule");
+        let content = style
+            .block
+            .read_with(&guard)
+            .declaration_importance_iter()
+            .find_map(|(decl, _)| match decl {
+                PropertyDeclaration::Content(value) => Some(value.to_css_string()),
+                _ => None,
+            })
+            .expect("expected content declaration");
+        assert_eq!(
+            content,
+            r#"" [" attr(data-status string, "unknown") "]""#,
+            "typed style rules should preserve attr() fallback and syntax in pseudo content",
+        );
+    }
+
+    #[test]
+    fn servo_preserves_custom_counter_content_in_pseudo_style_rules() {
+        let stylesheet =
+            parse_stylesheet(r#"p::before { content: "Item " counter(item, bracketed) " / "; }"#);
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let style = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Style(rule) => Some(rule.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected style rule");
+        let content = style
+            .block
+            .read_with(&guard)
+            .declaration_importance_iter()
+            .find_map(|(decl, _)| match decl {
+                PropertyDeclaration::Content(value) => Some(value.to_css_string()),
+                _ => None,
+            })
+            .expect("expected content declaration");
+        assert_eq!(
+            content,
+            r#""Item " counter(item, bracketed) " / ""#,
+            "typed style rules should preserve counter() content in pseudo declarations",
         );
     }
 

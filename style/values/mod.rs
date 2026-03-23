@@ -585,6 +585,15 @@ impl CustomIdent {
     }
 }
 
+impl Parse for CustomIdent {
+    fn parse<'i, 't>(
+        _: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        Self::parse(input, &[])
+    }
+}
+
 impl ToCss for CustomIdent {
     fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
     where

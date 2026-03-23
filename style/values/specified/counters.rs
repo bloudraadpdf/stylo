@@ -413,11 +413,11 @@ fn parse_content_item<'i, 't>(
 
 impl Content {
     #[cfg(feature = "servo")]
-    fn parse_counter_style(_: &ParserContext, input: &mut Parser) -> ListStyleType {
+    fn parse_counter_style(context: &ParserContext, input: &mut Parser) -> ListStyleType {
         input
             .try_parse(|input| {
                 input.expect_comma()?;
-                ListStyleType::parse(input)
+                ListStyleType::parse(context, input)
             })
             .unwrap_or(ListStyleType::Decimal)
     }
@@ -640,6 +640,37 @@ mod tests {
                 assert_eq!(*keyword, generics::TargetTextKeyword::Before);
             },
             other => panic!("expected attr()-backed target-text item, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn content_items_accept_attr_fallback_and_type_annotation() {
+        let content = parse_content_value(r##"" [" attr(data-status string, "unknown") "]""##);
+        let Content::Items(items) = content else {
+            panic!("expected content items");
+        };
+        match &items.items[1] {
+            generics::ContentItem::Attr(attr) => {
+                assert_eq!(attr.attribute.as_ref(), "data-status");
+                assert_eq!(attr.syntax, AttrSyntax::Keyword(String::from("string").into()));
+                assert_eq!(&*attr.fallback, r#""unknown""#);
+            },
+            other => panic!("expected attr() content item, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn content_items_accept_custom_counter_styles() {
+        let content = parse_content_value(r##""Item " counter(item, bracketed) " / ""##);
+        let Content::Items(items) = content else {
+            panic!("expected content items");
+        };
+        match &items.items[1] {
+            generics::ContentItem::Counter(name, style) => {
+                assert_eq!(name.0.as_ref(), "item");
+                assert_eq!(style.to_css_string(), "bracketed");
+            },
+            other => panic!("expected counter() content item, got {other:?}"),
         }
     }
 }
