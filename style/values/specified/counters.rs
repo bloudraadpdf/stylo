@@ -378,7 +378,7 @@ fn parse_content_item<'i, 't>(
                     };
                     Ok(generics::ContentItem::Leader(leader_type))
                 }),
-                "attr" if !static_prefs::pref!("layout.css.attr.enabled") => input.parse_nested_block(|input| {
+                "attr" if static_prefs::pref!("layout.css.attr.enabled") => input.parse_nested_block(|input| {
                     Ok(generics::ContentItem::Attr(Attr::parse_function(context, input)?))
                 }),
                 _ => {
@@ -539,7 +539,32 @@ mod tests {
     use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
     use crate::values::specified::AttrSyntax;
     use cssparser::{Parser, ParserInput};
+    use std::sync::{Mutex, OnceLock};
     use style_traits::{ParsingMode, ToCss};
+
+    fn pref_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    struct BoolPrefGuard {
+        key: &'static str,
+        old: bool,
+    }
+
+    impl BoolPrefGuard {
+        fn set(key: &'static str, value: bool) -> Self {
+            let old = style_config::get_bool(key);
+            style_config::set_bool(key, value);
+            Self { key, old }
+        }
+    }
+
+    impl Drop for BoolPrefGuard {
+        fn drop(&mut self) {
+            style_config::set_bool(self.key, self.old);
+        }
+    }
 
     fn parse_content_value(css: &str) -> Content {
         let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
@@ -614,6 +639,9 @@ mod tests {
 
     #[test]
     fn target_functions_accept_attr_targets_and_content_keyword_wrappers() {
+        let _guard = pref_lock().lock().unwrap();
+        let _attr_pref = BoolPrefGuard::set("layout.css.attr.enabled", true);
+
         let content = parse_content_value(
             r##"target-counter(attr(href url), page) " / " target-text(attr(href), content(before))"##,
         );
@@ -645,6 +673,9 @@ mod tests {
 
     #[test]
     fn content_items_accept_attr_fallback_and_type_annotation() {
+        let _guard = pref_lock().lock().unwrap();
+        let _attr_pref = BoolPrefGuard::set("layout.css.attr.enabled", true);
+
         let content = parse_content_value(r##"" [" attr(data-status string, "unknown") "]""##);
         let Content::Items(items) = content else {
             panic!("expected content items");
@@ -654,6 +685,25 @@ mod tests {
                 assert_eq!(attr.attribute.as_ref(), "data-status");
                 assert_eq!(attr.syntax, AttrSyntax::Keyword(String::from("string").into()));
                 assert_eq!(&*attr.fallback, r#""unknown""#);
+            },
+            other => panic!("expected attr() content item, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn content_items_accept_plain_attr_functions() {
+        let _guard = pref_lock().lock().unwrap();
+        let _attr_pref = BoolPrefGuard::set("layout.css.attr.enabled", true);
+
+        let content = parse_content_value("attr(data-label)");
+        let Content::Items(items) = content else {
+            panic!("expected content items");
+        };
+        match &items.items[0] {
+            generics::ContentItem::Attr(attr) => {
+                assert_eq!(attr.attribute.as_ref(), "data-label");
+                assert_eq!(attr.syntax, AttrSyntax::None);
+                assert_eq!(&*attr.fallback, "");
             },
             other => panic!("expected attr() content item, got {other:?}"),
         }

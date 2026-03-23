@@ -654,6 +654,9 @@ mod tests {
 
     #[test]
     fn servo_preserves_attr_fallback_content_in_pseudo_style_rules() {
+        let _guard = pref_lock().lock().unwrap();
+        let _attr_pref = BoolPrefGuard::set("layout.css.attr.enabled", true);
+
         let stylesheet =
             parse_stylesheet(r#"p::after { content: " [" attr(data-status string, "unknown") "]"; }"#);
         let guard = stylesheet.shared_lock.read();
@@ -679,6 +682,38 @@ mod tests {
             content,
             r#"" [" attr(data-status string, "unknown") "]""#,
             "typed style rules should preserve attr() fallback and syntax in pseudo content",
+        );
+    }
+
+    #[test]
+    fn servo_preserves_plain_attr_content_in_pseudo_style_rules() {
+        let _guard = pref_lock().lock().unwrap();
+        let _attr_pref = BoolPrefGuard::set("layout.css.attr.enabled", true);
+
+        let stylesheet = parse_stylesheet(r#"p::after { content: attr(data-label); }"#);
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let style = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Style(rule) => Some(rule.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected style rule");
+        let content = style
+            .block
+            .read_with(&guard)
+            .declaration_importance_iter()
+            .find_map(|(decl, _)| match decl {
+                PropertyDeclaration::Content(value) => Some(value.to_css_string()),
+                _ => None,
+            })
+            .expect("expected content declaration");
+        assert_eq!(
+            content,
+            "attr(data-label)",
+            "plain attr() should remain a typed content declaration, not WithVariables",
         );
     }
 
