@@ -429,6 +429,8 @@ impl NonCustomPropertyId {
         debug_assert!(
             rule_types.contains(CssRuleType::Keyframe) ||
             rule_types.contains(CssRuleType::Page) ||
+            rule_types.contains(CssRuleType::Margin) ||
+            rule_types.contains(CssRuleType::Footnote) ||
             rule_types.contains(CssRuleType::Style) ||
             rule_types.contains(CssRuleType::Scope) ||
             rule_types.contains(CssRuleType::PositionTry),

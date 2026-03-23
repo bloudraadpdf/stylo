@@ -10,6 +10,7 @@ mod document_rule;
 mod font_face_rule;
 pub mod font_feature_values_rule;
 pub mod font_palette_values_rule;
+mod footnote_rule;
 pub mod import_rule;
 pub mod keyframes_rule;
 pub mod layer_rule;
@@ -57,6 +58,7 @@ pub use self::document_rule::DocumentRule;
 pub use self::font_face_rule::FontFaceRule;
 pub use self::font_feature_values_rule::FontFeatureValuesRule;
 pub use self::font_palette_values_rule::FontPaletteValuesRule;
+pub use self::footnote_rule::FootnoteRule;
 pub use self::import_rule::ImportRule;
 pub use self::keyframes_rule::KeyframesRule;
 pub use self::layer_rule::{LayerBlockRule, LayerStatementRule};
@@ -342,6 +344,7 @@ pub enum CssRule {
     CounterStyle(Arc<Locked<CounterStyleRule>>),
     Keyframes(Arc<Locked<KeyframesRule>>),
     Margin(Arc<MarginRule>),
+    Footnote(Arc<FootnoteRule>),
     Supports(Arc<SupportsRule>),
     Page(Arc<Locked<PageRule>>),
     Property(Arc<PropertyRule>),
@@ -386,6 +389,9 @@ impl CssRule {
             CssRule::CounterStyle(_) => 0,
             CssRule::Keyframes(_) => 0,
             CssRule::Margin(ref arc) => {
+                arc.unconditional_shallow_size_of(ops) + arc.size_of(guard, ops)
+            },
+            CssRule::Footnote(ref arc) => {
                 arc.unconditional_shallow_size_of(ops) + arc.size_of(guard, ops)
             },
             CssRule::Supports(ref arc) => {
@@ -461,6 +467,7 @@ pub enum CssRuleRef<'a> {
     CounterStyle(&'a LockedCounterStyleRule),
     Keyframes(&'a LockedKeyframesRule),
     Margin(&'a MarginRule),
+    Footnote(&'a FootnoteRule),
     Supports(&'a SupportsRule),
     Page(&'a LockedPageRule),
     Property(&'a PropertyRule),
@@ -488,6 +495,7 @@ impl<'a> From<&'a CssRule> for CssRuleRef<'a> {
             CssRule::CounterStyle(r) => CssRuleRef::CounterStyle(r.as_ref()),
             CssRule::Keyframes(r) => CssRuleRef::Keyframes(r.as_ref()),
             CssRule::Margin(r) => CssRuleRef::Margin(r.as_ref()),
+            CssRule::Footnote(r) => CssRuleRef::Footnote(r.as_ref()),
             CssRule::Supports(r) => CssRuleRef::Supports(r.as_ref()),
             CssRule::Page(r) => CssRuleRef::Page(r.as_ref()),
             CssRule::Property(r) => CssRuleRef::Property(r.as_ref()),
@@ -544,6 +552,7 @@ pub enum CssRuleType {
     // https://drafts.csswg.org/css-nesting-1/#nested-declarations-rule
     NestedDeclarations = 24,
     CustomMedia = 25,
+    Footnote = 26,
 }
 
 impl CssRuleType {
@@ -628,6 +637,7 @@ impl CssRule {
             CssRule::CounterStyle(_) => CssRuleType::CounterStyle,
             CssRule::Keyframes(_) => CssRuleType::Keyframes,
             CssRule::Margin(_) => CssRuleType::Margin,
+            CssRule::Footnote(_) => CssRuleType::Footnote,
             CssRule::Namespace(_) => CssRuleType::Namespace,
             CssRule::Supports(_) => CssRuleType::Supports,
             CssRule::Page(_) => CssRuleType::Page,
@@ -763,6 +773,9 @@ impl DeepCloneWithLock for CssRule {
             CssRule::Margin(ref arc) => {
                 CssRule::Margin(Arc::new(arc.deep_clone_with_lock(lock, guard)))
             },
+            CssRule::Footnote(ref arc) => {
+                CssRule::Footnote(Arc::new(arc.deep_clone_with_lock(lock, guard)))
+            },
             CssRule::Supports(ref arc) => {
                 CssRule::Supports(Arc::new(arc.deep_clone_with_lock(lock, guard)))
             },
@@ -813,6 +826,7 @@ impl ToCssWithGuard for CssRule {
             CssRule::CounterStyle(ref lock) => lock.read_with(guard).to_css(guard, dest),
             CssRule::Keyframes(ref lock) => lock.read_with(guard).to_css(guard, dest),
             CssRule::Margin(ref rule) => rule.to_css(guard, dest),
+            CssRule::Footnote(ref rule) => rule.to_css(guard, dest),
             CssRule::Media(ref rule) => rule.to_css(guard, dest),
             CssRule::CustomMedia(ref rule) => rule.to_css(guard, dest),
             CssRule::Supports(ref rule) => rule.to_css(guard, dest),

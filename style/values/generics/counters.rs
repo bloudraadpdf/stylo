@@ -310,6 +310,46 @@ fn is_content_keyword(keyword: &TargetTextKeyword) -> bool {
     *keyword == TargetTextKeyword::Content
 }
 
+/// Authored reference used by `target-*()` generated-content functions.
+#[derive(
+    Clone,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+)]
+#[repr(u8)]
+pub enum GenericTargetReference {
+    /// A quoted string target like `"#chapter-1"`.
+    String(crate::OwnedStr),
+    /// A `url(...)` target.
+    Url(crate::OwnedStr),
+    /// An `attr(...)` target reference.
+    Attr(Attr),
+}
+pub use self::GenericTargetReference as TargetReference;
+
+impl ToCss for TargetReference {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        match self {
+            Self::String(value) => value.to_css(dest),
+            Self::Url(value) => {
+                dest.write_str("url(")?;
+                value.to_css(dest)?;
+                dest.write_char(')')
+            },
+            Self::Attr(attr) => attr.to_css(dest),
+        }
+    }
+}
+
 /// Type of leader pattern for `leader()` function.
 ///
 /// https://www.w3.org/TR/css-gcpm-3/#funcdef-leader
@@ -487,31 +527,31 @@ pub enum GenericContentItem<I> {
     Attr(Attr),
     /// image-set(url) | url(url)
     Image(I),
-    /// `target-counter([ <string> | <url> ], <ident>, <counter-style>?)`
+    /// `target-counter([ <string> | <url> | <attr()> ], <ident>, <counter-style>?)`
     ///
     /// https://www.w3.org/TR/css-gcpm-3/#funcdef-target-counter
     #[css(comma, function = "target-counter")]
     TargetCounter(
-        crate::OwnedStr,
+        TargetReference,
         CustomIdent,
         #[css(skip_if = "is_decimal")] CounterStyleType,
     ),
-    /// `target-counters([ <string> | <url> ], <ident>, <string>, <counter-style>?)`
+    /// `target-counters([ <string> | <url> | <attr()> ], <ident>, <string>, <counter-style>?)`
     ///
     /// https://www.w3.org/TR/css-content-3/#funcdef-target-counters
     #[css(comma, function = "target-counters")]
     TargetCounters(
-        crate::OwnedStr,
+        TargetReference,
         CustomIdent,
         crate::OwnedStr,
         #[css(skip_if = "is_decimal")] CounterStyleType,
     ),
-    /// `target-text([ <string> | <url> ], <keyword>?)`
+    /// `target-text([ <string> | <url> | <attr()> ], <keyword>?)`
     ///
     /// https://www.w3.org/TR/css-gcpm-3/#funcdef-target-text
     #[css(comma, function = "target-text")]
     TargetText(
-        crate::OwnedStr,
+        TargetReference,
         #[css(skip_if = "is_content_keyword")] TargetTextKeyword,
     ),
     /// `leader(dotted | solid | space | <string>)`

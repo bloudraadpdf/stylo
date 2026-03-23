@@ -17,10 +17,12 @@ use super::{CSSFloat, CSSInteger};
 use crate::context::QuirksMode;
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
+use crate::properties_and_values::syntax::Descriptor;
+use crate::values::generics::calc::SortKey as AttrUnit;
 use crate::values::specified::calc::CalcNode;
-use crate::values::{serialize_atom_identifier, serialize_number, AtomString};
+use crate::values::{serialize_atom_identifier, serialize_number};
 use crate::{Atom, Namespace, One, Prefix, Zero};
-use cssparser::{Parser, Token};
+use cssparser::{match_ignore_ascii_case, Parser, Token};
 use std::fmt::{self, Write};
 use std::ops::Add;
 use style_traits::values::specified::AllowedNumericType;
@@ -48,10 +50,10 @@ pub use self::box_::{
     AlignmentBaseline, Appearance, BaselineShift, BaselineSource, BookmarkLevel, BookmarkState,
     BreakBetween, BreakWithin, Clear, Contain, ContainIntrinsicSize, ContainerName, ContainerType,
     ContentVisibility, Display, Float, FloatDefer, FloatReference, FootnoteDisplay, FootnotePolicy,
-    LineClamp, MarginBreak, MarginTrim, Overflow, OverflowAnchor, OverflowClipMargin, OverscrollBehavior,
-    Perspective, PositionProperty, Resize, ScrollSnapAlign, ScrollSnapAxis, ScrollSnapStop,
-    ScrollSnapStrictness, ScrollSnapType, ScrollbarGutter, TouchAction, WillChange, WillChangeBits,
-    WritingModeProperty, Zoom,
+    LineClamp, MarginBreak, MarginTrim, Overflow, OverflowAnchor, OverflowClipMargin,
+    OverscrollBehavior, Perspective, PositionProperty, Resize, ScrollSnapAlign, ScrollSnapAxis,
+    ScrollSnapStop, ScrollSnapStrictness, ScrollSnapType, ScrollbarGutter, TouchAction, WillChange,
+    WillChangeBits, WritingModeProperty, Zoom,
 };
 pub use self::color::{
     Color, ColorOrAuto, ColorPropertyValue, ColorScheme, ForcedColorAdjust, PrintColorAdjust,
@@ -901,7 +903,57 @@ impl AllowQuirks {
 
 /// An attr(...) rule
 ///
-/// `[namespace? `|`]? ident`
+/// `[namespace? `|`]? ident [attr-type]? [, fallback]?`
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    Eq,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+)]
+#[repr(u8)]
+pub enum AttrSyntax {
+    /// No explicit attr type.
+    #[default]
+    None,
+    /// `raw-string`
+    RawString,
+    /// Legacy keyword / unit syntax such as `string`, `url`, `number`, or `px`.
+    Keyword(crate::OwnedStr),
+    /// `type(<syntax>)`
+    Type(crate::OwnedStr),
+}
+
+impl ToCss for AttrSyntax {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        match self {
+            Self::None => Ok(()),
+            Self::RawString => dest.write_str("raw-string"),
+            Self::Keyword(keyword) => {
+                if &**keyword == "%" {
+                    dest.write_char('%')
+                } else {
+                    dest.write_str(&*keyword)
+                }
+            },
+            Self::Type(syntax) => {
+                dest.write_str("type(")?;
+                dest.write_str(&*syntax)?;
+                dest.write_char(')')
+            },
+        }
+    }
+}
+
+/// An attr(...) rule.
 #[derive(
     Clone,
     Debug,
@@ -922,8 +974,10 @@ pub struct Attr {
     pub namespace_url: Namespace,
     /// Attribute name
     pub attribute: Atom,
+    /// Parsed attr type / unit syntax.
+    pub syntax: AttrSyntax,
     /// Fallback value
-    pub fallback: AtomString,
+    pub fallback: crate::OwnedStr,
 }
 
 impl Parse for Attr {
@@ -974,7 +1028,7 @@ impl Attr {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Attr, ParseError<'i>> {
-        // Syntax is `[namespace? '|']? ident [',' fallback]?`
+        // Syntax is `[namespace? '|']? ident [attr-type]? [, fallback]?`
         let namespace = input
             .try_parse(|input| parse_namespace(context, input))
             .ok();
@@ -992,22 +1046,67 @@ impl Attr {
             input.expect_ident()?.as_ref()
         });
 
-        // Fallback will always be a string value for now as we do not support
-        // attr() types yet.
+        let syntax = input.try_parse(parse_attr_syntax).unwrap_or_default();
         let fallback = input
-            .try_parse(|input| -> Result<AtomString, ParseError<'i>> {
+            .try_parse(|input| -> Result<crate::OwnedStr, ParseError<'i>> {
                 input.expect_comma()?;
-                Ok(input.expect_string()?.as_ref().into())
+                parse_attr_fallback(input)
             })
             .unwrap_or_default();
+        input.expect_exhausted()?;
 
         Ok(Attr {
             namespace_prefix,
             namespace_url,
             attribute,
+            syntax,
             fallback,
         })
     }
+}
+
+fn is_legacy_attr_keyword(keyword: &str) -> bool {
+    matches!(
+        keyword,
+        "string" | "url" | "color" | "integer" | "length" | "angle" | "time" | "frequency"
+    )
+}
+
+fn parse_attr_syntax<'i, 't>(input: &mut Parser<'i, 't>) -> Result<AttrSyntax, ParseError<'i>> {
+    let token = input.next()?.clone();
+    match token {
+        Token::Function(ref name) if name.eq_ignore_ascii_case("type") => {
+            let syntax = input.parse_nested_block(Descriptor::from_css_parser)?;
+            Ok(AttrSyntax::Type(syntax.to_css_string().into()))
+        },
+        Token::Ident(ref ident) => Ok(match_ignore_ascii_case! { ident,
+            "raw-string" => AttrSyntax::RawString,
+            _ => {
+                if AttrUnit::from_ident(ident).is_ok() || is_legacy_attr_keyword(ident.as_ref()) {
+                    AttrSyntax::Keyword(ident.as_ref().to_owned().into())
+                } else {
+                    let ident = ident.clone();
+                    return Err(input.new_custom_error(
+                        StyleParseErrorKind::UnexpectedIdent(ident)
+                    ));
+                }
+            },
+        }),
+        Token::Delim('%') => Ok(AttrSyntax::Keyword(String::from("%").into())),
+        token => Err(input.new_unexpected_token_error(token)),
+    }
+}
+
+fn parse_attr_fallback<'i, 't>(
+    input: &mut Parser<'i, 't>,
+) -> Result<crate::OwnedStr, ParseError<'i>> {
+    let start = input.position();
+    while input.next_including_whitespace_and_comments().is_ok() {}
+    let fallback = input.slice_from(start).trim();
+    if fallback.is_empty() {
+        return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+    }
+    Ok(fallback.to_owned().into())
 }
 
 impl ToCss for Attr {
@@ -1022,11 +1121,75 @@ impl ToCss for Attr {
         }
         serialize_atom_identifier(&self.attribute, dest)?;
 
+        if self.syntax != AttrSyntax::None {
+            dest.write_char(' ')?;
+            self.syntax.to_css(dest)?;
+        }
+
         if !self.fallback.is_empty() {
             dest.write_str(", ")?;
-            self.fallback.to_css(dest)?;
+            dest.write_str(self.fallback.as_ref())?;
         }
 
         dest.write_char(')')
+    }
+}
+
+#[cfg(all(test, feature = "servo"))]
+mod tests {
+    use super::*;
+    use crate::context::QuirksMode;
+    use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
+    use ::url::Url;
+    use cssparser::ParserInput;
+    use style_traits::{ParsingMode, ToCss};
+
+    fn parse_attr(css: &str) -> Attr {
+        let url_data = UrlExtraData::from(Url::parse("https://example.invalid/").unwrap());
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input = ParserInput::new(css);
+        let mut parser = Parser::new(&mut input);
+        parser
+            .parse_entirely(|input| Attr::parse(&context, input))
+            .expect("attr() should parse")
+    }
+
+    #[test]
+    fn attr_parses_legacy_type_and_string_fallback() {
+        let attr = parse_attr(r#"attr(data-status string, "unknown")"#);
+        assert_eq!(attr.attribute.as_ref(), "data-status");
+        assert_eq!(
+            attr.syntax,
+            AttrSyntax::Keyword(String::from("string").into())
+        );
+        assert_eq!(&*attr.fallback, r#""unknown""#);
+        assert_eq!(
+            attr.to_css_string(),
+            r#"attr(data-status string, "unknown")"#
+        );
+    }
+
+    #[test]
+    fn attr_parses_type_function_and_raw_fallback() {
+        let attr = parse_attr(r#"attr(data-width type(<length-percentage>), 100%)"#);
+        assert_eq!(attr.attribute.as_ref(), "data-width");
+        assert_eq!(
+            attr.syntax,
+            AttrSyntax::Type(String::from("<length-percentage>").into())
+        );
+        assert_eq!(&*attr.fallback, "100%");
+        assert_eq!(
+            attr.to_css_string(),
+            r#"attr(data-width type(<length-percentage>), 100%)"#
+        );
     }
 }

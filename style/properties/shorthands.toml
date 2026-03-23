@@ -75,99 +75,118 @@ kind = "two_properties"
 [border-color]
 sub_properties = ["border-top-color", "border-right-color", "border-bottom-color", "border-left-color"]
 spec = "https://drafts.csswg.org/css-backgrounds/#border-color"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 kind = "four_sides"
 allow_quirks = true
 
 [border-style]
 sub_properties = ["border-top-style", "border-right-style", "border-bottom-style", "border-left-style"]
 spec = "https://drafts.csswg.org/css-backgrounds/#border-style"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 kind = "four_sides"
 
 [border-width]
 sub_properties = ["border-top-width", "border-right-width", "border-bottom-width", "border-left-width"]
 spec = "https://drafts.csswg.org/css-backgrounds/#border-width"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 kind = "four_sides"
 allow_quirks = true
 
 [border-block-color]
 sub_properties = ["border-block-start-color", "border-block-end-color"]
 spec = "https://drafts.csswg.org/css-logical/#propdef-border-block-color"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 kind = "two_properties"
 
 [border-inline-color]
 sub_properties = ["border-inline-start-color", "border-inline-end-color"]
 spec = "https://drafts.csswg.org/css-logical/#propdef-border-inline-color"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 kind = "two_properties"
 
 [border-block-width]
 sub_properties = ["border-block-start-width", "border-block-end-width"]
 spec = "https://drafts.csswg.org/css-logical/#propdef-border-block-width"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 kind = "two_properties"
 
 [border-inline-width]
 sub_properties = ["border-inline-start-width", "border-inline-end-width"]
 spec = "https://drafts.csswg.org/css-logical/#propdef-border-inline-width"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 kind = "two_properties"
 
 [border-block-style]
 sub_properties = ["border-block-start-style", "border-block-end-style"]
 spec = "https://drafts.csswg.org/css-logical/#propdef-border-block-style"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 kind = "two_properties"
 
 [border-inline-style]
 sub_properties = ["border-inline-start-style", "border-inline-end-style"]
 spec = "https://drafts.csswg.org/css-logical/#propdef-border-inline-style"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 kind = "two_properties"
 
 [border-top]
 sub_properties = ["border-top-width", "border-top-style", "border-top-color"]
 spec = "https://drafts.csswg.org/css-backgrounds-3/#propdef-border-top"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 kind = "single_border"
 
 [border-right]
 sub_properties = ["border-right-width", "border-right-style", "border-right-color"]
 spec = "https://drafts.csswg.org/css-backgrounds-3/#propdef-border-right"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 kind = "single_border"
 
 [border-bottom]
 sub_properties = ["border-bottom-width", "border-bottom-style", "border-bottom-color"]
 spec = "https://drafts.csswg.org/css-backgrounds-3/#propdef-border-top"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 kind = "single_border"
 
 [border-left]
 sub_properties = ["border-left-width", "border-left-style", "border-left-color"]
 spec = "https://drafts.csswg.org/css-backgrounds-3/#propdef-border-left"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 kind = "single_border"
 
 [border-block-start]
 sub_properties = ["border-block-start-width", "border-block-start-style", "border-block-start-color"]
 spec = "https://drafts.csswg.org/css-logical/#propdef-border-block-start"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 kind = "single_border"
 
 [border-block-end]
 sub_properties = ["border-block-end-width", "border-block-end-style", "border-block-end-color"]
 spec = "https://drafts.csswg.org/css-logical/#propdef-border-block-end"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 kind = "single_border"
 
 [border-inline-start]
 sub_properties = ["border-inline-start-width", "border-inline-start-style", "border-inline-start-color"]
 spec = "https://drafts.csswg.org/css-logical/#propdef-border-inline-start"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 kind = "single_border"
 extra_gecko_aliases = ["-moz-border-start"]
 
 [border-inline-end]
 sub_properties = ["border-inline-end-width", "border-inline-end-style", "border-inline-end-color"]
 spec = "https://drafts.csswg.org/css-logical/#propdef-border-inline-end"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 kind = "single_border"
 extra_gecko_aliases = ["-moz-border-end"]
 
 [border-block]
 sub_properties = ["border-block-start-width", "border-block-start-style", "border-block-start-color", "border-block-end-width", "border-block-end-style", "border-block-end-color"]
 spec = "https://drafts.csswg.org/css-logical/#propdef-border-block"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [border-inline]
 sub_properties = ["border-inline-start-width", "border-inline-start-style", "border-inline-start-color", "border-inline-end-width", "border-inline-end-style", "border-inline-end-color"]
 spec = "https://drafts.csswg.org/css-logical/#propdef-border-inline"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [border-image]
 sub_properties = ["border-image-outset", "border-image-repeat", "border-image-slice", "border-image-source", "border-image-width"]
@@ -270,19 +289,19 @@ rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 [inset]
 sub_properties = ["top", "right", "bottom", "left"]
 spec = "https://drafts.csswg.org/css-logical/#propdef-inset"
-rule_types_allowed = ["style", "keyframe", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "margin", "scope", "position-try"]
 kind = "four_sides"
 
 [inset-block]
 sub_properties = ["inset-block-start", "inset-block-end"]
 spec = "https://drafts.csswg.org/css-logical/#propdef-inset-block"
-rule_types_allowed = ["style", "keyframe", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "margin", "scope", "position-try"]
 kind = "two_properties"
 
 [inset-inline]
 sub_properties = ["inset-inline-start", "inset-inline-end"]
 spec = "https://drafts.csswg.org/css-logical/#propdef-inset-inline"
-rule_types_allowed = ["style", "keyframe", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "margin", "scope", "position-try"]
 kind = "two_properties"
 
 [contain-intrinsic-size]

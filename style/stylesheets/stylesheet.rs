@@ -379,6 +379,7 @@ impl SanitizationKind {
             CssRule::Keyframes(..) |
             CssRule::Page(..) |
             CssRule::Margin(..) |
+            CssRule::Footnote(..) |
             CssRule::Property(..) |
             CssRule::FontFeatureValues(..) |
             CssRule::FontPaletteValues(..) |
@@ -571,8 +572,34 @@ impl Clone for Stylesheet {
 #[cfg(all(test, feature = "servo"))]
 mod tests {
     use super::*;
+    use crate::shared_lock::ToCssWithGuard;
     use crate::stylesheets::CssRule;
     use servo_arc::Arc;
+    use std::sync::{Mutex, OnceLock};
+
+    fn pref_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    struct BoolPrefGuard {
+        key: &'static str,
+        old: bool,
+    }
+
+    impl BoolPrefGuard {
+        fn set(key: &'static str, value: bool) -> Self {
+            let old = style_config::get_bool(key);
+            style_config::set_bool(key, value);
+            Self { key, old }
+        }
+    }
+
+    impl Drop for BoolPrefGuard {
+        fn drop(&mut self) {
+            style_config::set_bool(self.key, self.old);
+        }
+    }
 
     fn parse_stylesheet(css: &str) -> Stylesheet {
         let shared_lock = SharedRwLock::new();
@@ -620,6 +647,40 @@ mod tests {
                 .iter()
                 .any(|rule| matches!(rule, CssRule::Margin(..))),
             "expected nested @margin rule in @page"
+        );
+    }
+
+    #[test]
+    fn servo_parses_footnote_rules_inside_page() {
+        let _guard = pref_lock().lock().unwrap();
+        let _columns_pref = BoolPrefGuard::set("layout.columns.enabled", true);
+
+        let stylesheet = parse_stylesheet(
+            "@page { @footnote { border-top: 1pt solid black; column-span: all; max-height: 100pt; } }",
+        );
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let page = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Page(page) => Some(page.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected @page rule");
+        let nested = page.rules.read_with(&guard);
+        let footnote = nested
+            .0
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Footnote(rule) => Some(rule),
+                _ => None,
+            })
+            .expect("expected nested @footnote rule");
+        assert_eq!(
+            footnote.block.read_with(&guard).len(),
+            5,
+            "border-top should expand to three longhands, alongside column-span and max-height",
         );
     }
 
@@ -693,6 +754,56 @@ mod tests {
             margin.block.read_with(&guard).len(),
             2,
             "width and height should parse in margin box"
+        );
+    }
+
+    #[test]
+    fn servo_parses_position_and_inset_properties_in_margin_box() {
+        let stylesheet = parse_stylesheet(
+            "@page { @bottom-right { position: absolute; bottom: 24px; right: 36px; inset-block-start: auto; } }",
+        );
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let page = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Page(p) => Some(p.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected @page rule");
+        let nested = page.rules.read_with(&guard);
+        let margin = nested
+            .0
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Margin(m) => Some(m),
+                _ => None,
+            })
+            .expect("expected @margin rule");
+        assert_eq!(
+            margin.block.read_with(&guard).len(),
+            4,
+            "position plus physical and logical inset properties should parse in margin box",
+        );
+    }
+
+    #[test]
+    fn servo_preserves_env_fallback_in_page_rule_serialization() {
+        let stylesheet = parse_stylesheet("@page { margin-top: env(safe-area-inset-top, 12pt); }");
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let page_rule_css = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Page(_) => Some(rule.to_css_string(&guard)),
+                _ => None,
+            })
+            .expect("expected @page rule");
+        assert!(
+            page_rule_css.contains("env(safe-area-inset-top, 12pt)"),
+            "expected serialized @page rule to preserve env() fallback, got: {page_rule_css}",
         );
     }
 

@@ -28,9 +28,9 @@ use crate::stylesheets::scope_rule::{ScopeBounds, ScopeRule};
 use crate::stylesheets::supports_rule::SupportsCondition;
 use crate::stylesheets::{
     AllowImportRules, CorsMode, CssRule, CssRuleType, CssRuleTypes, CssRules, CustomMediaCondition,
-    CustomMediaRule, DocumentRule, FontFeatureValuesRule, FontPaletteValuesRule, KeyframesRule,
-    MarginRule, MarginRuleType, MediaRule, NamespaceRule, NestedDeclarationsRule, PageRule,
-    PageSelectors, PositionTryRule, RulesMutateError, StartingStyleRule, StyleRule,
+    CustomMediaRule, DocumentRule, FontFeatureValuesRule, FontPaletteValuesRule, FootnoteRule,
+    KeyframesRule, MarginRule, MarginRuleType, MediaRule, NamespaceRule, NestedDeclarationsRule,
+    PageRule, PageSelectors, PositionTryRule, RulesMutateError, StartingStyleRule, StyleRule,
     StylesheetLoader, SupportsRule,
 };
 use crate::values::computed::font::FamilyName;
@@ -278,6 +278,8 @@ pub enum AtRulePrelude {
     ),
     /// A @margin rule prelude.
     Margin(MarginRuleType),
+    /// A nested @footnote rule prelude.
+    Footnote,
     /// A @namespace rule prelude.
     Namespace(Option<Prefix>, Namespace),
     /// A @layer rule prelude.
@@ -309,6 +311,7 @@ impl AtRulePrelude {
             Self::Document(..) => "-moz-document",
             Self::Import(..) => "import",
             Self::Margin(..) => "margin",
+            Self::Footnote => "footnote",
             Self::Namespace(..) => "namespace",
             Self::Layer(..) => "layer",
             Self::Scope(..) => "scope",
@@ -541,7 +544,7 @@ impl<'a, 'i> NestedRuleParser<'a, 'i> {
             | AtRulePrelude::Property(..)
             | AtRulePrelude::Import(..)
             | AtRulePrelude::PositionTry(..) => !self.in_style_or_page_rule(),
-            AtRulePrelude::Margin(..) => self.in_page_rule(),
+            AtRulePrelude::Margin(..) | AtRulePrelude::Footnote => self.in_page_rule(),
         }
     }
 
@@ -788,6 +791,9 @@ impl<'a, 'i> AtRuleParser<'i> for NestedRuleParser<'a, 'i> {
             },
             _ => {
                 if cfg!(feature = "servo") || static_prefs::pref!("layout.css.margin-rules.enabled") {
+                    if name.eq_ignore_ascii_case("footnote") {
+                        return Ok(AtRulePrelude::Footnote);
+                    }
                     if let Some(margin_rule_type) = MarginRuleType::match_name(&name) {
                         return Ok(AtRulePrelude::Margin(margin_rule_type));
                     }
@@ -931,6 +937,15 @@ impl<'a, 'i> AtRuleParser<'i> for NestedRuleParser<'a, 'i> {
                 });
                 CssRule::Margin(Arc::new(MarginRule {
                     rule_type,
+                    block: Arc::new(self.shared_lock.wrap(declarations)),
+                    source_location,
+                }))
+            },
+            AtRulePrelude::Footnote => {
+                let declarations = self.nest_for_rule(CssRuleType::Footnote, |p| {
+                    parse_property_declaration_list(&p.context, input, &[])
+                });
+                CssRule::Footnote(Arc::new(FootnoteRule {
                     block: Arc::new(self.shared_lock.wrap(declarations)),
                     source_location,
                 }))

@@ -83,6 +83,7 @@ where
             | CssRule::CustomMedia(_)
             | CssRule::Keyframes(_)
             | CssRule::Margin(_)
+            | CssRule::Footnote(_)
             | CssRule::Property(_)
             | CssRule::LayerStatement(_)
             | CssRule::FontFeatureValues(_)

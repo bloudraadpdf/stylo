@@ -2012,10 +2012,7 @@ impl BreakBetween {
         let break_value = BreakBetween::parse(input)?;
         match break_value {
             BreakBetween::Always => Ok(BreakBetween::Page),
-            BreakBetween::Auto
-            | BreakBetween::Avoid
-            | BreakBetween::Left
-            | BreakBetween::Right => {
+            BreakBetween::Auto | BreakBetween::Avoid | BreakBetween::Left | BreakBetween::Right => {
                 Ok(break_value)
             },
             BreakBetween::Column
@@ -2036,10 +2033,7 @@ impl BreakBetween {
         W: Write,
     {
         match *self {
-            BreakBetween::Auto
-            | BreakBetween::Avoid
-            | BreakBetween::Left
-            | BreakBetween::Right => {
+            BreakBetween::Auto | BreakBetween::Avoid | BreakBetween::Left | BreakBetween::Right => {
                 self.to_css(dest)
             },
             BreakBetween::Page => dest.write_str("always"),
