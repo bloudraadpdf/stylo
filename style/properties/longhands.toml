@@ -3859,8 +3859,7 @@ gecko_ffi_name = "mFont.variantCaps"
 servo_restyle_damage = "rebuild_box"
 
 [font-variant-caps.keyword]
-values = ["normal", "small-caps"]
-extra_gecko_values = ["all-small-caps", "petite-caps", "all-petite-caps", "unicase", "titling-caps"]
+values = ["normal", "small-caps", "all-small-caps", "petite-caps", "all-petite-caps", "unicase", "titling-caps"]
 gecko_constant_prefix = "NS_FONT_VARIANT_CAPS"
 
 [font-kerning]
