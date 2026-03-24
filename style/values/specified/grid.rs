@@ -294,7 +294,7 @@ fn allow_grid_template_subgrids() -> bool {
 #[cfg(feature = "servo")]
 #[inline]
 fn allow_grid_template_subgrids() -> bool {
-    false
+    style_config::get_bool("layout.grid.enabled")
 }
 
 #[cfg(feature = "gecko")]
@@ -306,7 +306,7 @@ fn allow_grid_template_masonry() -> bool {
 #[cfg(feature = "servo")]
 #[inline]
 fn allow_grid_template_masonry() -> bool {
-    false
+    style_config::get_bool("layout.css.grid-template-masonry-value.enabled")
 }
 
 impl Parse for GridTemplateComponent<LengthPercentage, Integer> {
@@ -438,5 +438,60 @@ impl Parse for LineNameList<Integer> {
             expanded_line_names_length,
             line_names: line_names.into(),
         })
+    }
+}
+
+#[cfg(all(test, feature = "servo"))]
+mod tests {
+    use super::*;
+    use crate::context::QuirksMode;
+    use crate::parser::ParserContext;
+    use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
+    use crate::test_support::{pref_lock, BoolPrefGuard};
+    use cssparser::{Parser, ParserInput};
+    use style_traits::ParsingMode;
+    use url::Url;
+
+    fn parse_grid_template_component(
+        css: &str,
+    ) -> GridTemplateComponent<LengthPercentage, Integer> {
+        let url_data = UrlExtraData::from(Url::parse("https://example.invalid/").unwrap());
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input = ParserInput::new(css);
+        let mut parser = Parser::new(&mut input);
+        parser
+            .parse_entirely(|input| {
+                GridTemplateComponent::<LengthPercentage, Integer>::parse(&context, input)
+            })
+            .expect("grid-template component should parse")
+    }
+
+    #[test]
+    fn servo_parses_subgrid_grid_templates_when_grid_pref_is_enabled() {
+        let _lock = pref_lock().lock().unwrap();
+        let _grid_pref = BoolPrefGuard::set("layout.grid.enabled", true);
+
+        let parsed = parse_grid_template_component("subgrid [track-start]");
+        assert!(matches!(parsed, GridTemplateComponent::Subgrid(_)));
+    }
+
+    #[test]
+    fn servo_parses_masonry_grid_templates_when_masonry_pref_is_enabled() {
+        let _lock = pref_lock().lock().unwrap();
+        let _grid_pref = BoolPrefGuard::set("layout.grid.enabled", true);
+        let _masonry_pref =
+            BoolPrefGuard::set("layout.css.grid-template-masonry-value.enabled", true);
+
+        let parsed = parse_grid_template_component("masonry");
+        assert!(matches!(parsed, GridTemplateComponent::Masonry));
     }
 }
