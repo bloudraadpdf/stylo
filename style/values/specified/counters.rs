@@ -296,14 +296,14 @@ fn parse_content_item<'i, 't>(
             match_ignore_ascii_case! { &name,
                 "counter" if allow_counter_functions => input.parse_nested_block(|input| {
                     let name = CustomIdent::parse(input, &[])?;
-                    let style = Content::parse_counter_style(context, input);
+                    let style = Content::parse_counter_style(context, input)?;
                     Ok(generics::ContentItem::Counter(name, style))
                 }),
                 "counters" if allow_counter_functions => input.parse_nested_block(|input| {
                     let name = CustomIdent::parse(input, &[])?;
                     input.expect_comma()?;
                     let separator = input.expect_string()?.as_ref().to_owned().into();
-                    let style = Content::parse_counter_style(context, input);
+                    let style = Content::parse_counter_style(context, input)?;
                     Ok(generics::ContentItem::Counters(name, separator, style))
                 }),
                 "string" if allow_string_functions => input.parse_nested_block(|input| {
@@ -335,7 +335,7 @@ fn parse_content_item<'i, 't>(
                     let url = parse_target_reference(context, input)?;
                     input.expect_comma()?;
                     let name = CustomIdent::parse(input, &[])?;
-                    let style = Content::parse_counter_style(context, input);
+                    let style = Content::parse_counter_style(context, input)?;
                     Ok(generics::ContentItem::TargetCounter(url, name, style))
                 }),
                 "target-counters" if allow_counter_functions => input.parse_nested_block(|input| {
@@ -344,7 +344,7 @@ fn parse_content_item<'i, 't>(
                     let name = CustomIdent::parse(input, &[])?;
                     input.expect_comma()?;
                     let separator = input.expect_string()?.as_ref().to_owned().into();
-                    let style = Content::parse_counter_style(context, input);
+                    let style = Content::parse_counter_style(context, input)?;
                     Ok(generics::ContentItem::TargetCounters(
                         url,
                         name,
@@ -413,24 +413,30 @@ fn parse_content_item<'i, 't>(
 
 impl Content {
     #[cfg(feature = "servo")]
-    fn parse_counter_style(context: &ParserContext, input: &mut Parser) -> ListStyleType {
-        input
-            .try_parse(|input| {
-                input.expect_comma()?;
-                ListStyleType::parse(context, input)
-            })
-            .unwrap_or(ListStyleType::Decimal)
+    fn parse_counter_style<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<ListStyleType, ParseError<'i>> {
+        if input.try_parse(|input| input.expect_comma()).is_err() {
+            return Ok(ListStyleType::Decimal);
+        }
+        let style = ListStyleType::parse(context, input)?;
+        if matches!(style, ListStyleType::String(_)) {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+        Ok(style)
     }
 
     #[cfg(feature = "gecko")]
-    fn parse_counter_style(context: &ParserContext, input: &mut Parser) -> CounterStyle {
+    fn parse_counter_style<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<CounterStyle, ParseError<'i>> {
         use crate::counter_style::CounterStyleParsingFlags;
-        input
-            .try_parse(|input| {
-                input.expect_comma()?;
-                CounterStyle::parse(context, input, CounterStyleParsingFlags::empty())
-            })
-            .unwrap_or_else(|_| CounterStyle::decimal())
+        if input.try_parse(|input| input.expect_comma()).is_err() {
+            return Ok(CounterStyle::decimal());
+        }
+        CounterStyle::parse(context, input, CounterStyleParsingFlags::empty())
     }
 }
 
@@ -647,6 +653,28 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "servo")]
+    #[test]
+    fn servo_counter_function_rejects_string_counter_styles() {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input = ParserInput::new(r#"counter(item, ">>")"#);
+        let mut parser = Parser::new(&mut input);
+        assert!(
+            Content::parse(&context, &mut parser).is_err(),
+            "counter() should reject string list-style-type syntax as a counter style",
+        );
+    }
+
     #[test]
     fn content_items_accept_attr_fallback_and_type_annotation() {
         let _guard = pref_lock().lock().unwrap();
@@ -659,7 +687,10 @@ mod tests {
         match &items.items[1] {
             generics::ContentItem::Attr(attr) => {
                 assert_eq!(attr.attribute.as_ref(), "data-status");
-                assert_eq!(attr.syntax, AttrSyntax::Keyword(String::from("string").into()));
+                assert_eq!(
+                    attr.syntax,
+                    AttrSyntax::Keyword(String::from("string").into())
+                );
                 assert_eq!(&*attr.fallback, r#""unknown""#);
             },
             other => panic!("expected attr() content item, got {other:?}"),

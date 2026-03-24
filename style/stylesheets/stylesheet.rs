@@ -817,6 +817,34 @@ mod tests {
     }
 
     #[test]
+    fn servo_preserves_string_list_style_type_declaration() {
+        let stylesheet = parse_stylesheet(r#"li { list-style-type: ">> "; }"#);
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let style = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Style(rule) => Some(rule.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected style rule");
+        let list_style_type = style
+            .block
+            .read_with(&guard)
+            .declaration_importance_iter()
+            .find_map(|(decl, _)| match decl {
+                PropertyDeclaration::ListStyleType(value) => Some(value.to_css_string()),
+                _ => None,
+            })
+            .expect("expected list-style-type declaration");
+        assert_eq!(
+            list_style_type, "\">> \"",
+            "list-style-type string values should remain typed in servo mode",
+        );
+    }
+
+    #[test]
     fn servo_preserves_custom_counter_content_in_pseudo_style_rules() {
         let stylesheet =
             parse_stylesheet(r#"p::before { content: "Item " counter(item, bracketed) " / "; }"#);

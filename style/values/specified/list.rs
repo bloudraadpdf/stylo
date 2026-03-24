@@ -109,6 +109,9 @@ pub enum ListStyleType {
     /// The element has no marker string.
     /// <https://www.w3.org/TR/css-lists-3/#valdef-list-style-type-none>
     None,
+    /// The marker string is the specified string.
+    /// <https://www.w3.org/TR/css-lists-3/#string-list-style-type>
+    String(crate::OwnedStr),
     /// A hollow circle, similar to ◦ U+25E6 WHITE BULLET.
     /// <https://www.w3.org/TR/css-counter-styles-3/#circle>
     Circle,
