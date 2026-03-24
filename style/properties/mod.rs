@@ -36,7 +36,7 @@ pub mod generated {
     include!(concat!(env!("OUT_DIR"), "/properties.rs"));
 }
 
-use crate::custom_properties::{self, ComputedCustomProperties};
+use crate::custom_properties::{self, ComputedCustomProperties, EnvironmentResolutionMode};
 use crate::derives::*;
 use crate::dom::AttributeTracker;
 #[cfg(feature = "gecko")]
@@ -1451,6 +1451,27 @@ impl UnparsedValue {
         shorthand_cache: &'cache mut ShorthandsWithPropertyReferencesCache,
         attribute_tracker: &mut AttributeTracker,
     ) -> Cow<'cache, PropertyDeclaration> {
+        self.substitute_variables_with_environment_resolution(
+            longhand_id,
+            custom_properties,
+            stylist,
+            computed_context,
+            EnvironmentResolutionMode::ResolveLiveEnvironment,
+            shorthand_cache,
+            attribute_tracker,
+        )
+    }
+
+    fn substitute_variables_with_environment_resolution<'cache>(
+        &self,
+        longhand_id: LonghandId,
+        custom_properties: &ComputedCustomProperties,
+        stylist: &Stylist,
+        computed_context: &computed::Context,
+        environment_resolution: EnvironmentResolutionMode,
+        shorthand_cache: &'cache mut ShorthandsWithPropertyReferencesCache,
+        attribute_tracker: &mut AttributeTracker,
+    ) -> Cow<'cache, PropertyDeclaration> {
         let invalid_at_computed_value_time = || {
             let keyword = if longhand_id.inherited() {
                 CSSWideKeyword::Inherit
@@ -1479,11 +1500,12 @@ impl UnparsedValue {
             }
         }
 
-        let css = match custom_properties::substitute(
+        let css = match custom_properties::substitute_with_environment_resolution(
             &self.variable_value,
             custom_properties,
             stylist,
             computed_context,
+            environment_resolution,
             attribute_tracker,
         ) {
             Ok(css) => css,

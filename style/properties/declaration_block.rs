@@ -14,6 +14,7 @@ use super::{
 };
 use crate::context::QuirksMode;
 use crate::custom_properties;
+use crate::custom_properties::EnvironmentResolutionMode;
 use crate::derives::*;
 use crate::dom::AttributeTracker;
 use crate::dom::DummyAttributeProvider;
@@ -998,6 +999,25 @@ impl PropertyDeclarationBlock {
         computed_values: Option<&ComputedValues>,
         stylist: &Stylist,
     ) -> Result<std::borrow::Cow<'a, PropertyDeclaration>, ()> {
+        self.single_longhand_value_to_declaration_with_environment_resolution(
+            longhand,
+            computed_values,
+            stylist,
+            EnvironmentResolutionMode::ResolveLiveEnvironment,
+        )
+    }
+
+    /// Take a declaration block known to contain a single longhand property and
+    /// return its typed declaration, resolving `var()` and `env()` references
+    /// according to the supplied environment resolution mode when
+    /// `computed_values` are supplied.
+    pub fn single_longhand_value_to_declaration_with_environment_resolution<'a>(
+        &'a self,
+        longhand: LonghandId,
+        computed_values: Option<&ComputedValues>,
+        stylist: &Stylist,
+        environment_resolution: EnvironmentResolutionMode,
+    ) -> Result<std::borrow::Cow<'a, PropertyDeclaration>, ()> {
         // FIXME(emilio): Should this assert, or assert that the declaration is
         // the property we expect?
         let declaration = self.declarations.get(0).ok_or(())?;
@@ -1032,14 +1052,20 @@ impl PropertyDeclarationBlock {
             // declarations. This will be fixed properly in Gecko bug 1391537.
             (&PropertyDeclaration::WithVariables(ref declaration), Some(_)) => {
                 let mut shorthand_cache = Default::default();
-                Ok(std::borrow::Cow::Owned(declaration.value.substitute_variables(
-                    declaration.id,
-                    &context.builder.custom_properties,
-                    stylist,
-                    &context,
-                    &mut shorthand_cache,
-                    &mut AttributeTracker::new(&DummyAttributeProvider {}),
-                ).into_owned()))
+                Ok(std::borrow::Cow::Owned(
+                    declaration
+                        .value
+                        .substitute_variables_with_environment_resolution(
+                            declaration.id,
+                            &context.builder.custom_properties,
+                            stylist,
+                            &context,
+                            environment_resolution,
+                            &mut shorthand_cache,
+                            &mut AttributeTracker::new(&DummyAttributeProvider {}),
+                        )
+                        .into_owned(),
+                ))
             }
             (ref d, _) => Ok(std::borrow::Cow::Borrowed(d)),
         }

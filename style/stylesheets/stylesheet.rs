@@ -583,38 +583,14 @@ mod tests {
     use crate::servo::media_queries::{Device, FontMetricsProvider};
     use crate::shared_lock::ToCssWithGuard;
     use crate::stylesheets::CssRule;
+    use crate::test_support::{pref_lock, BoolPrefGuard};
     use crate::values::computed::font::GenericFontFamily;
     use crate::values::computed::{CSSPixelLength, Length};
     use crate::Atom;
     use cssparser::TokenSerializationType;
     use euclid::{Scale, Size2D};
     use servo_arc::Arc;
-    use std::sync::{Mutex, OnceLock};
     use style_traits::{CSSPixel, DevicePixel, ToCss};
-
-    fn pref_lock() -> &'static Mutex<()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
-    }
-
-    struct BoolPrefGuard {
-        key: &'static str,
-        old: bool,
-    }
-
-    impl BoolPrefGuard {
-        fn set(key: &'static str, value: bool) -> Self {
-            let old = style_config::get_bool(key);
-            style_config::set_bool(key, value);
-            Self { key, old }
-        }
-    }
-
-    impl Drop for BoolPrefGuard {
-        fn drop(&mut self) {
-            style_config::set_bool(self.key, self.old);
-        }
-    }
 
     fn parse_stylesheet(css: &str) -> Stylesheet {
         let shared_lock = SharedRwLock::new();
@@ -859,6 +835,62 @@ mod tests {
         match &*resolved {
             PropertyDeclaration::MarginTop(value) => {
                 assert_eq!(value.to_css_string(), "25mm");
+            }
+            other => panic!("expected typed margin-top declaration, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn servo_resolves_env_fallbacks_to_typed_values_when_environment_is_missing() {
+        let stylesheet = parse_stylesheet("div { margin-top: env(safe-area-inset-top, 54pt); }");
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let style = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Style(rule) => Some(rule.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected style rule");
+        let declaration = style
+            .block
+            .read_with(&guard)
+            .declaration_importance_iter()
+            .find_map(|(decl, _)| Some(decl.clone()))
+            .expect("expected margin-top declaration");
+
+        assert!(
+            matches!(declaration, PropertyDeclaration::WithVariables(..)),
+            "expected env() declaration to remain deferred before typed resolution",
+        );
+
+        let stylist = test_stylist();
+        let computed = stylist.device().default_computed_values();
+        let block = PropertyDeclarationBlock::with_one(declaration, Importance::Normal);
+
+        let live = block
+            .single_longhand_value_to_declaration(LonghandId::MarginTop, Some(computed), &stylist)
+            .expect("expected live environment resolution to succeed");
+        let fallback = block
+            .single_longhand_value_to_declaration_with_environment_resolution(
+                LonghandId::MarginTop,
+                Some(computed),
+                &stylist,
+                crate::custom_properties::EnvironmentResolutionMode::TreatAsMissing,
+            )
+            .expect("expected authored env fallback resolution to succeed");
+
+        match &*live {
+            PropertyDeclaration::MarginTop(value) => {
+                assert_eq!(value.to_css_string(), "0px");
+            }
+            other => panic!("expected typed margin-top declaration, got {other:?}"),
+        }
+
+        match &*fallback {
+            PropertyDeclaration::MarginTop(value) => {
+                assert_eq!(value.to_css_string(), "54pt");
             }
             other => panic!("expected typed margin-top declaration, got {other:?}"),
         }

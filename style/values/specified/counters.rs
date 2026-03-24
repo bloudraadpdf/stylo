@@ -537,34 +537,10 @@ mod tests {
     use crate::context::QuirksMode;
     use crate::parser::{Parse, ParserContext};
     use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
+    use crate::test_support::{pref_lock, BoolPrefGuard};
     use crate::values::specified::AttrSyntax;
     use cssparser::{Parser, ParserInput};
-    use std::sync::{Mutex, OnceLock};
     use style_traits::{ParsingMode, ToCss};
-
-    fn pref_lock() -> &'static Mutex<()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
-    }
-
-    struct BoolPrefGuard {
-        key: &'static str,
-        old: bool,
-    }
-
-    impl BoolPrefGuard {
-        fn set(key: &'static str, value: bool) -> Self {
-            let old = style_config::get_bool(key);
-            style_config::set_bool(key, value);
-            Self { key, old }
-        }
-    }
-
-    impl Drop for BoolPrefGuard {
-        fn drop(&mut self) {
-            style_config::set_bool(self.key, self.old);
-        }
-    }
 
     fn parse_content_value(css: &str) -> Content {
         let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());

@@ -50,6 +50,16 @@ use style_traits::{CssWriter, ParseError, StyleParseErrorKind, ToCss};
 #[derive(Debug, MallocSizeOf)]
 pub struct CssEnvironment;
 
+/// Controls how `env()` references are handled during variable substitution.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EnvironmentResolutionMode {
+    /// Resolve `env()` references against the live device environment.
+    ResolveLiveEnvironment,
+    /// Treat `env()` references as unavailable so authored fallbacks, if any,
+    /// are used instead.
+    TreatAsMissing,
+}
+
 type EnvironmentEvaluator = fn(device: &Device, url_data: &UrlExtraData) -> VariableValue;
 
 struct EnvironmentVariable {
@@ -1937,6 +1947,7 @@ fn substitute_references_if_needed_and_apply(
         custom_properties,
         stylist,
         computed_context,
+        EnvironmentResolutionMode::ResolveLiveEnvironment,
         attribute_tracker,
     ) {
         Ok(v) => v,
@@ -2095,6 +2106,7 @@ fn do_substitute_chunk<'a>(
     custom_properties: &'a ComputedCustomProperties,
     stylist: &Stylist,
     computed_context: &computed::Context,
+    environment_resolution: EnvironmentResolutionMode,
     references: &mut std::iter::Peekable<std::slice::Iter<SubstitutionFunctionReference>>,
     attribute_tracker: &mut AttributeTracker,
 ) -> Result<Substitution<'a>, ()> {
@@ -2134,6 +2146,7 @@ fn do_substitute_chunk<'a>(
             reference,
             stylist,
             computed_context,
+            environment_resolution,
             references,
             attribute_tracker,
         )?;
@@ -2171,6 +2184,7 @@ fn substitute_one_reference<'a>(
     reference: &SubstitutionFunctionReference,
     stylist: &Stylist,
     computed_context: &computed::Context,
+    environment_resolution: EnvironmentResolutionMode,
     references: &mut std::iter::Peekable<std::slice::Iter<SubstitutionFunctionReference>>,
     attribute_tracker: &mut AttributeTracker,
 ) -> Result<Substitution<'a>, ()> {
@@ -2189,11 +2203,16 @@ fn substitute_one_reference<'a>(
                 .map(|v| Substitution::from_value(v.to_variable_value()))
         },
         SubstitutionFunctionKind::Env => {
-            let device = stylist.device();
-            device
-                .environment()
-                .get(&reference.name, device, url_data)
-                .map(Substitution::from_value)
+            match environment_resolution {
+                EnvironmentResolutionMode::ResolveLiveEnvironment => {
+                    let device = stylist.device();
+                    device
+                        .environment()
+                        .get(&reference.name, device, url_data)
+                        .map(Substitution::from_value)
+                }
+                EnvironmentResolutionMode::TreatAsMissing => None,
+            }
         },
         // https://drafts.csswg.org/css-values-5/#attr-substitution
         SubstitutionFunctionKind::Attr => {
@@ -2274,6 +2293,7 @@ fn substitute_one_reference<'a>(
         custom_properties,
         stylist,
         computed_context,
+        environment_resolution,
         references,
         attribute_tracker,
     )
@@ -2285,6 +2305,7 @@ fn substitute_internal<'a>(
     custom_properties: &'a ComputedCustomProperties,
     stylist: &Stylist,
     computed_context: &computed::Context,
+    environment_resolution: EnvironmentResolutionMode,
     attribute_tracker: &mut AttributeTracker,
 ) -> Result<Substitution<'a>, ()> {
     let mut refs = variable_value.references.refs.iter().peekable();
@@ -2298,6 +2319,7 @@ fn substitute_internal<'a>(
         custom_properties,
         stylist,
         computed_context,
+        environment_resolution,
         &mut refs,
         attribute_tracker,
     )
@@ -2311,12 +2333,32 @@ pub fn substitute<'a>(
     computed_context: &computed::Context,
     attribute_tracker: &mut AttributeTracker,
 ) -> Result<Cow<'a, str>, ()> {
+    substitute_with_environment_resolution(
+        variable_value,
+        custom_properties,
+        stylist,
+        computed_context,
+        EnvironmentResolutionMode::ResolveLiveEnvironment,
+        attribute_tracker,
+    )
+}
+
+/// Replace var(), env(), and attr() functions, returning the resulting CSS string.
+pub fn substitute_with_environment_resolution<'a>(
+    variable_value: &'a VariableValue,
+    custom_properties: &'a ComputedCustomProperties,
+    stylist: &Stylist,
+    computed_context: &computed::Context,
+    environment_resolution: EnvironmentResolutionMode,
+    attribute_tracker: &mut AttributeTracker,
+) -> Result<Cow<'a, str>, ()> {
     debug_assert!(variable_value.has_references());
     let v = substitute_internal(
         variable_value,
         custom_properties,
         stylist,
         computed_context,
+        environment_resolution,
         attribute_tracker,
     )?;
     Ok(v.css)
