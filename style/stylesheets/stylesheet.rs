@@ -1225,6 +1225,27 @@ mod tests {
     }
 
     #[test]
+    fn servo_parses_break_avoid_column() {
+        let stylesheet =
+            parse_stylesheet("div { break-before: avoid-column; break-after: avoid-column; }");
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let style = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Style(s) => Some(s.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected style rule");
+        assert_eq!(
+            style.block.read_with(&guard).len(),
+            2,
+            "break-before: avoid-column and break-after: avoid-column should parse",
+        );
+    }
+
+    #[test]
     fn servo_parses_bookmark_level() {
         let stylesheet = parse_stylesheet("h1 { bookmark-level: 1; } h2 { bookmark-level: none; }");
         let guard = stylesheet.shared_lock.read();

@@ -1993,6 +1993,7 @@ pub enum BreakBetween {
     Column,
     Page,
     Avoid,
+    AvoidColumn,
     Left,
     Right,
     Recto,
@@ -2015,7 +2016,8 @@ impl BreakBetween {
             BreakBetween::Auto | BreakBetween::Avoid | BreakBetween::Left | BreakBetween::Right => {
                 Ok(break_value)
             },
-            BreakBetween::Column
+            BreakBetween::AvoidColumn
+            | BreakBetween::Column
             | BreakBetween::Page
             | BreakBetween::Recto
             | BreakBetween::Verso => {
@@ -2038,6 +2040,7 @@ impl BreakBetween {
             },
             BreakBetween::Page => dest.write_str("always"),
             BreakBetween::Always
+            | BreakBetween::AvoidColumn
             | BreakBetween::Column
             | BreakBetween::Recto
             | BreakBetween::Verso => Ok(()),
