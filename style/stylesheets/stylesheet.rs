@@ -817,6 +817,39 @@ mod tests {
     }
 
     #[test]
+    fn servo_preserves_font_size_adjust_syntax_distinction() {
+        let stylesheet = parse_stylesheet(
+            "p.num { font-size-adjust: 0.5; } p.explicit { font-size-adjust: ex-height 0.5; }",
+        );
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let values: Vec<String> = rules
+            .iter()
+            .filter_map(|rule| match rule {
+                CssRule::Style(rule) => Some(rule.read_with(&guard)),
+                _ => None,
+            })
+            .map(|style| {
+                style
+                    .block
+                    .read_with(&guard)
+                    .declaration_importance_iter()
+                    .find_map(|(decl, _)| match decl {
+                        PropertyDeclaration::FontSizeAdjust(value) => Some(value.to_css_string()),
+                        _ => None,
+                    })
+                    .expect("expected font-size-adjust declaration")
+            })
+            .collect();
+        assert_eq!(
+            values,
+            vec!["0.5".to_string(), "ex-height 0.5".to_string()],
+            "typed style rules should preserve implicit and explicit ex-height syntax distinctly",
+        );
+    }
+
+    #[test]
     fn servo_preserves_string_list_style_type_declaration() {
         let stylesheet = parse_stylesheet(r#"li { list-style-type: ">> "; }"#);
         let guard = stylesheet.shared_lock.read();

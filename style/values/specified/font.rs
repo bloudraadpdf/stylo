@@ -762,7 +762,7 @@ impl Parse for FontSizeAdjust {
         let basis = match_ignore_ascii_case! { &ident,
             "none" => return Ok(Self::None),
             // Check for size adjustment basis keywords.
-            "ex-height" => Self::ExHeight,
+            "ex-height" => Self::ExplicitExHeight,
             "cap-height" => Self::CapHeight,
             "ch-width" => Self::ChWidth,
             "ic-width" => Self::IcWidth,

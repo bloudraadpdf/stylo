@@ -873,6 +873,16 @@ impl ToComputedValue for specified::FontSizeAdjust {
                     QueryFontMetricsFlags::empty()
                 )
             },
+            Self::ExplicitExHeight(val) => {
+                resolve!(
+                    ExplicitExHeight,
+                    val,
+                    false,
+                    x_height,
+                    0.5,
+                    QueryFontMetricsFlags::empty()
+                )
+            },
             Self::CapHeight(val) => {
                 resolve!(
                     CapHeight,
@@ -927,6 +937,7 @@ impl ToComputedValue for specified::FontSizeAdjust {
         match *computed {
             FontSizeAdjust::None => Self::None,
             FontSizeAdjust::ExHeight(ref val) => case!(ExHeight, val),
+            FontSizeAdjust::ExplicitExHeight(ref val) => case!(ExplicitExHeight, val),
             FontSizeAdjust::CapHeight(ref val) => case!(CapHeight, val),
             FontSizeAdjust::ChWidth(ref val) => case!(ChWidth, val),
             FontSizeAdjust::IcWidth(ref val) => case!(IcWidth, val),
