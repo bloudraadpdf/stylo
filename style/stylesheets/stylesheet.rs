@@ -789,6 +789,34 @@ mod tests {
     }
 
     #[test]
+    fn servo_preserves_text_indent_hanging_each_line_declaration() {
+        let stylesheet = parse_stylesheet("p { text-indent: 2em hanging each-line; }");
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let style = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Style(rule) => Some(rule.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected style rule");
+        let text_indent = style
+            .block
+            .read_with(&guard)
+            .declaration_importance_iter()
+            .find_map(|(decl, _)| match decl {
+                PropertyDeclaration::TextIndent(value) => Some(value.to_css_string()),
+                _ => None,
+            })
+            .expect("expected text-indent declaration");
+        assert_eq!(
+            text_indent, "2em hanging each-line",
+            "text-indent keywords should remain a typed declaration in servo mode",
+        );
+    }
+
+    #[test]
     fn servo_preserves_custom_counter_content_in_pseudo_style_rules() {
         let stylesheet =
             parse_stylesheet(r#"p::before { content: "Item " counter(item, bracketed) " / "; }"#);
