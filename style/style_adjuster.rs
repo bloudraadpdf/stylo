@@ -371,8 +371,10 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
                 | WritingMode::VerticalLr
                 | WritingMode::SidewaysRl
                 | WritingMode::SidewaysLr
-        ) && text_combine_upright == TextCombineUpright::All
-        {
+        ) && matches!(
+            text_combine_upright,
+            TextCombineUpright::All | TextCombineUpright::Digits(_)
+        ) {
             self.style.add_flags(ComputedValueFlags::IS_TEXT_COMBINED);
             self.style
                 .mutate_inherited_box()

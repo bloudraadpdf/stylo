@@ -124,6 +124,42 @@ impl WordSpacing {
     }
 }
 
+/// A computed value for the `text-combine-upright` property.
+#[derive(Clone, Copy, Debug, Eq, MallocSizeOf, PartialEq, ToResolvedValue, ToShmem, ToTyped)]
+#[repr(C, u8)]
+pub enum TextCombineUpright {
+    /// `none`
+    None,
+    /// `all`
+    All,
+    /// `digits <integer [2,4]>`
+    Digits(CSSInteger),
+}
+
+impl TextCombineUpright {
+    /// Return the initial value.
+    #[inline]
+    pub fn get_initial_value() -> Self {
+        Self::None
+    }
+}
+
+impl ToCss for TextCombineUpright {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        match self {
+            Self::None => dest.write_str("none"),
+            Self::All => dest.write_str("all"),
+            Self::Digits(digits) => {
+                dest.write_str("digits ")?;
+                write!(dest, "{digits}")
+            },
+        }
+    }
+}
+
 /// Computed value for the text-emphasis-style property
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, ToCss, ToResolvedValue, ToTyped)]
 #[allow(missing_docs)]

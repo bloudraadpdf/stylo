@@ -18,7 +18,7 @@ use crate::values::generics::NumberOrAuto;
 use crate::values::specified::length::{Length, LengthPercentage};
 use crate::values::specified::{AllowQuirks, Integer, Number};
 use crate::Zero;
-use cssparser::Parser;
+use cssparser::{match_ignore_ascii_case, Parser};
 use icu_segmenter::GraphemeClusterSegmenter;
 use std::fmt::{self, Write};
 use style_traits::values::SequenceWriter;
@@ -978,6 +978,80 @@ pub enum LineBreak {
     Normal,
     Strict,
     Anywhere,
+}
+
+/// Values for the `text-combine-upright` property.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToShmem, ToTyped)]
+#[repr(C, u8)]
+pub enum TextCombineUpright {
+    /// `none`
+    None,
+    /// `all`
+    All,
+    /// `digits <integer [2,4]>`
+    Digits(Integer),
+}
+
+impl Parse for TextCombineUpright {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        let location = input.current_source_location();
+        let ident = input.expect_ident_cloned()?;
+        match_ignore_ascii_case! { &ident,
+            "none" => Ok(Self::None),
+            "all" => Ok(Self::All),
+            "digits" => {
+                let digits = Integer::parse(context, input)?;
+                if !(2..=4).contains(&digits.value()) {
+                    return Err(location.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+                }
+                Ok(Self::Digits(digits))
+            },
+            _ => Err(location.new_custom_error(StyleParseErrorKind::UnexpectedIdent(ident))),
+        }
+    }
+}
+
+impl ToCss for TextCombineUpright {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        match self {
+            Self::None => dest.write_str("none"),
+            Self::All => dest.write_str("all"),
+            Self::Digits(digits) => {
+                dest.write_str("digits ")?;
+                digits.to_css(dest)
+            },
+        }
+    }
+}
+
+impl ToComputedValue for TextCombineUpright {
+    type ComputedValue = computed::text::TextCombineUpright;
+
+    fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
+        match self {
+            Self::None => computed::text::TextCombineUpright::None,
+            Self::All => computed::text::TextCombineUpright::All,
+            Self::Digits(digits) => {
+                computed::text::TextCombineUpright::Digits(digits.to_computed_value(context))
+            },
+        }
+    }
+
+    fn from_computed_value(computed: &Self::ComputedValue) -> Self {
+        match computed {
+            computed::text::TextCombineUpright::None => Self::None,
+            computed::text::TextCombineUpright::All => Self::All,
+            computed::text::TextCombineUpright::Digits(digits) => {
+                Self::Digits(ToComputedValue::from_computed_value(digits))
+            },
+        }
+    }
 }
 
 /// Values for the `overflow-wrap` property.

@@ -115,7 +115,7 @@ pub use self::svg::{DProperty, MozContextProperties};
 pub use self::svg::{SVGLength, SVGOpacity, SVGPaint, SVGPaintKind};
 pub use self::svg::{SVGPaintOrder, SVGStrokeDashArray, SVGWidth, VectorEffect};
 pub use self::text::{HyphenateCharacter, HyphenateLimitChars};
-pub use self::text::{InitialLetter, LetterSpacing, LineBreak, TextIndent};
+pub use self::text::{InitialLetter, LetterSpacing, LineBreak, TextCombineUpright, TextIndent};
 pub use self::text::{OverflowWrap, RubyPosition, TextOverflow, WordBreak, WordSpacing};
 pub use self::text::{TextAlign, TextAlignLast, TextEmphasisPosition, TextEmphasisStyle};
 pub use self::text::{TextAutospace, TextUnderlinePosition};

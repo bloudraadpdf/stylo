@@ -701,8 +701,9 @@ mod tests {
         let _guard = pref_lock().lock().unwrap();
         let _attr_pref = BoolPrefGuard::set("layout.css.attr.enabled", true);
 
-        let stylesheet =
-            parse_stylesheet(r#"p::after { content: " [" attr(data-status string, "unknown") "]"; }"#);
+        let stylesheet = parse_stylesheet(
+            r#"p::after { content: " [" attr(data-status string, "unknown") "]"; }"#,
+        );
         let guard = stylesheet.shared_lock.read();
         let contents = stylesheet.contents.read_with(&guard);
         let rules = contents.rules(&guard);
@@ -723,8 +724,7 @@ mod tests {
             })
             .expect("expected content declaration");
         assert_eq!(
-            content,
-            r#"" [" attr(data-status string, "unknown") "]""#,
+            content, r#"" [" attr(data-status string, "unknown") "]""#,
             "typed style rules should preserve attr() fallback and syntax in pseudo content",
         );
     }
@@ -755,9 +755,36 @@ mod tests {
             })
             .expect("expected content declaration");
         assert_eq!(
-            content,
-            "attr(data-label)",
+            content, "attr(data-label)",
             "plain attr() should remain a typed content declaration, not WithVariables",
+        );
+    }
+
+    #[test]
+    fn servo_preserves_text_combine_upright_digits_declaration() {
+        let stylesheet = parse_stylesheet("div { text-combine-upright: digits 4; }");
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let style = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Style(rule) => Some(rule.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected style rule");
+        let text_combine_upright = style
+            .block
+            .read_with(&guard)
+            .declaration_importance_iter()
+            .find_map(|(decl, _)| match decl {
+                PropertyDeclaration::TextCombineUpright(value) => Some(value.to_css_string()),
+                _ => None,
+            })
+            .expect("expected text-combine-upright declaration");
+        assert_eq!(
+            text_combine_upright, "digits 4",
+            "typed style rules should preserve text-combine-upright digits values",
         );
     }
 
@@ -785,8 +812,7 @@ mod tests {
             })
             .expect("expected content declaration");
         assert_eq!(
-            content,
-            r#""Item " counter(item, bracketed) " / ""#,
+            content, r#""Item " counter(item, bracketed) " / ""#,
             "typed style rules should preserve counter() content in pseudo declarations",
         );
     }
@@ -825,17 +851,13 @@ mod tests {
         );
         let block = PropertyDeclarationBlock::with_one(declaration, Importance::Normal);
         let resolved = block
-            .single_longhand_value_to_declaration(
-                LonghandId::MarginTop,
-                Some(&computed),
-                &stylist,
-            )
+            .single_longhand_value_to_declaration(LonghandId::MarginTop, Some(&computed), &stylist)
             .expect("expected typed declaration after variable substitution");
 
         match &*resolved {
             PropertyDeclaration::MarginTop(value) => {
                 assert_eq!(value.to_css_string(), "25mm");
-            }
+            },
             other => panic!("expected typed margin-top declaration, got {other:?}"),
         }
     }
@@ -884,14 +906,14 @@ mod tests {
         match &*live {
             PropertyDeclaration::MarginTop(value) => {
                 assert_eq!(value.to_css_string(), "0px");
-            }
+            },
             other => panic!("expected typed margin-top declaration, got {other:?}"),
         }
 
         match &*fallback {
             PropertyDeclaration::MarginTop(value) => {
                 assert_eq!(value.to_css_string(), "54pt");
-            }
+            },
             other => panic!("expected typed margin-top declaration, got {other:?}"),
         }
     }
