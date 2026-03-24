@@ -7,7 +7,7 @@
 #![deny(missing_docs)]
 
 use super::{
-    property_counts, AllShorthand, ComputedValues, LogicalGroupSet, LonghandIdSet,
+    property_counts, AllShorthand, ComputedValues, LogicalGroupSet, LonghandId, LonghandIdSet,
     LonghandIdSetIterator, NonCustomPropertyIdSet, PropertyDeclaration, PropertyDeclarationId,
     PropertyId, ShorthandId, SourcePropertyDeclaration, SourcePropertyDeclarationDrain,
     SubpropertiesVec,
@@ -983,12 +983,25 @@ impl PropertyDeclarationBlock {
             return self.shorthand_to_css(shorthand, dest);
         }
 
+        let longhand = property.longhand_id().ok_or(fmt::Error)?;
+        self.single_longhand_value_to_declaration(longhand, computed_values, stylist)
+            .map_err(|()| fmt::Error)?
+            .to_css(dest)
+    }
+
+    /// Take a declaration block known to contain a single longhand property and
+    /// return its typed declaration, resolving `var()` references when
+    /// `computed_values` are supplied.
+    pub fn single_longhand_value_to_declaration<'a>(
+        &'a self,
+        longhand: LonghandId,
+        computed_values: Option<&ComputedValues>,
+        stylist: &Stylist,
+    ) -> Result<std::borrow::Cow<'a, PropertyDeclaration>, ()> {
         // FIXME(emilio): Should this assert, or assert that the declaration is
         // the property we expect?
-        let declaration = match self.declarations.get(0) {
-            Some(d) => d,
-            None => return Err(fmt::Error),
-        };
+        let declaration = self.declarations.get(0).ok_or(())?;
+        debug_assert_eq!(declaration.id().as_longhand(), Some(longhand));
 
         let mut rule_cache_conditions = RuleCacheConditions::default();
         let mut context = Context::new(
@@ -1017,18 +1030,18 @@ impl PropertyDeclarationBlock {
             // getKeyframes() implementation for CSS animations, if
             // |computed_values| is supplied, we use it to expand such variable
             // declarations. This will be fixed properly in Gecko bug 1391537.
-            (&PropertyDeclaration::WithVariables(ref declaration), Some(_)) => declaration
-                .value
-                .substitute_variables(
+            (&PropertyDeclaration::WithVariables(ref declaration), Some(_)) => {
+                let mut shorthand_cache = Default::default();
+                Ok(std::borrow::Cow::Owned(declaration.value.substitute_variables(
                     declaration.id,
                     &context.builder.custom_properties,
                     stylist,
                     &context,
-                    &mut Default::default(),
+                    &mut shorthand_cache,
                     &mut AttributeTracker::new(&DummyAttributeProvider {}),
-                )
-                .to_css(dest),
-            (ref d, _) => d.to_css(dest),
+                ).into_owned()))
+            }
+            (ref d, _) => Ok(std::borrow::Cow::Borrowed(d)),
         }
     }
 

@@ -367,6 +367,30 @@ impl ComputedValue {
             None
         }
     }
+
+    /// Parse this computed custom-property value as a specified CSS value
+    /// using this value's stored URL data.
+    pub fn parse_as<T>(&self, quirks_mode: QuirksMode, parsing_mode: ParsingMode) -> Result<T, ()>
+    where
+        T: Parse,
+    {
+        let variable_value = self.to_variable_value();
+        let context = ParserContext::new(
+            Origin::Author,
+            &variable_value.url_data,
+            None,
+            parsing_mode,
+            quirks_mode,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input = cssparser::ParserInput::new(&variable_value.css);
+        let mut input = CSSParser::new(&mut input);
+        input
+            .parse_entirely(|input| T::parse(&context, input))
+            .map_err(|_| ())
+    }
 }
 
 /// Whether the computed value parsing should allow computationaly dependent values like 3em or

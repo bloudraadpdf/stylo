@@ -572,12 +572,25 @@ impl Clone for Stylesheet {
 #[cfg(all(test, feature = "servo"))]
 mod tests {
     use super::*;
-    use crate::properties::PropertyDeclaration;
+    use crate::font_metrics::FontMetrics;
+    use crate::media_queries::MediaType;
+    use crate::properties::{
+        declaration_block::PropertyDeclarationBlock, style_structs::Font, ComputedValues,
+        Importance, LonghandId, PropertyDeclaration, StyleBuilder,
+    };
+    use crate::properties_and_values::value::ComputedValue as ComputedRegisteredValue;
+    use crate::queries::values::PrefersColorScheme;
+    use crate::servo::media_queries::{Device, FontMetricsProvider};
     use crate::shared_lock::ToCssWithGuard;
     use crate::stylesheets::CssRule;
+    use crate::values::computed::font::GenericFontFamily;
+    use crate::values::computed::{CSSPixelLength, Length};
+    use crate::Atom;
+    use cssparser::TokenSerializationType;
+    use euclid::{Scale, Size2D};
     use servo_arc::Arc;
     use std::sync::{Mutex, OnceLock};
-    use style_traits::ToCss;
+    use style_traits::{CSSPixel, DevicePixel, ToCss};
 
     fn pref_lock() -> &'static Mutex<()> {
         static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -618,6 +631,61 @@ mod tests {
             QuirksMode::NoQuirks,
             AllowImportRules::Yes,
         )
+    }
+
+    #[derive(Debug)]
+    struct TestFontMetricsProvider;
+
+    impl FontMetricsProvider for TestFontMetricsProvider {
+        fn query_font_metrics(
+            &self,
+            _vertical: bool,
+            _font: &Font,
+            _base_size: CSSPixelLength,
+            _flags: crate::values::specified::font::QueryFontMetricsFlags,
+        ) -> FontMetrics {
+            FontMetrics::default()
+        }
+
+        fn base_size_for_generic(&self, _generic: GenericFontFamily) -> Length {
+            Length::new(16.0)
+        }
+    }
+
+    fn test_stylist() -> crate::stylist::Stylist {
+        let default_computed_values =
+            ComputedValues::initial_values_with_font_override(Font::initial_values());
+        let device = Device::new(
+            MediaType::print(),
+            QuirksMode::NoQuirks,
+            Size2D::<f32, CSSPixel>::new(793.7, 1122.5),
+            Scale::<f32, CSSPixel, DevicePixel>::new(1.0),
+            Box::new(TestFontMetricsProvider),
+            default_computed_values,
+            PrefersColorScheme::Light,
+        );
+        crate::stylist::Stylist::new(device, QuirksMode::NoQuirks)
+    }
+
+    fn computed_values_with_custom_length(
+        stylist: &crate::stylist::Stylist,
+        name: &str,
+        css: &str,
+        url_data: &UrlExtraData,
+    ) -> Arc<ComputedValues> {
+        let mut builder =
+            StyleBuilder::for_inheritance(stylist.device(), Some(stylist), None, None);
+        let value = ComputedRegisteredValue::universal(Arc::new(
+            crate::custom_properties::VariableValue::new(
+                css.to_owned(),
+                url_data,
+                TokenSerializationType::Dimension,
+                TokenSerializationType::Dimension,
+            ),
+        ));
+        let atom = Atom::from(crate::custom_properties::parse_name(name).unwrap());
+        builder.custom_properties.inherited.insert(&atom, value);
+        builder.build()
     }
 
     #[test]
@@ -745,6 +813,73 @@ mod tests {
             r#""Item " counter(item, bracketed) " / ""#,
             "typed style rules should preserve counter() content in pseudo declarations",
         );
+    }
+
+    #[test]
+    fn servo_resolves_single_longhand_variable_declaration_to_typed_value() {
+        let stylesheet = parse_stylesheet("div { margin-top: var(--page-margin); }");
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let style = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Style(rule) => Some(rule.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected style rule");
+        let declaration = style
+            .block
+            .read_with(&guard)
+            .declaration_importance_iter()
+            .find_map(|(decl, _)| Some(decl.clone()))
+            .expect("expected margin-top declaration");
+
+        assert!(
+            matches!(declaration, PropertyDeclaration::WithVariables(..)),
+            "expected typed rule tree to store unresolved var() longhands as WithVariables"
+        );
+
+        let stylist = test_stylist();
+        let computed = computed_values_with_custom_length(
+            &stylist,
+            "--page-margin",
+            "25mm",
+            &contents.url_data,
+        );
+        let block = PropertyDeclarationBlock::with_one(declaration, Importance::Normal);
+        let resolved = block
+            .single_longhand_value_to_declaration(
+                LonghandId::MarginTop,
+                Some(&computed),
+                &stylist,
+            )
+            .expect("expected typed declaration after variable substitution");
+
+        match &*resolved {
+            PropertyDeclaration::MarginTop(value) => {
+                assert_eq!(value.to_css_string(), "25mm");
+            }
+            other => panic!("expected typed margin-top declaration, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn servo_parses_computed_custom_property_value_as_length_percentage() {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let value = ComputedRegisteredValue::universal(Arc::new(
+            crate::custom_properties::VariableValue::new(
+                "25mm".to_owned(),
+                &url_data,
+                TokenSerializationType::Dimension,
+                TokenSerializationType::Dimension,
+            ),
+        ));
+
+        let parsed: crate::values::specified::LengthPercentage = value
+            .parse_as(QuirksMode::NoQuirks, style_traits::ParsingMode::DEFAULT)
+            .expect("expected computed custom property value to parse as a length percentage");
+        assert_eq!(parsed.to_css_string(), "25mm");
     }
 
     #[test]
