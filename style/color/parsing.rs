@@ -101,7 +101,7 @@ pub fn parse_color_with<'i, 't>(
             return input.parse_nested_block(|arguments| {
                 let color_function = parse_color_function(context, name, arguments)?;
 
-                if color_function.has_origin_color() {
+                if color_function.should_preserve_as_function() {
                     // Preserve the color as it was parsed.
                     Ok(SpecifiedColor::ColorFunction(Box::new(color_function)))
                 } else if let Ok(resolved) = color_function.resolve_to_absolute() {
@@ -139,6 +139,7 @@ fn parse_color_function<'i, 't>(
         "oklab" => parse_lab_like(context, arguments, origin_color, ColorFunction::Oklab),
         "oklch" => parse_lch_like(context, arguments, origin_color, ColorFunction::Oklch),
         "color" => parse_color_with_color_space(context, arguments, origin_color),
+        "device-cmyk" => parse_device_cmyk(context, arguments, origin_color),
         _ => return Err(arguments.new_unexpected_token_error(Token::Ident(name))),
     }?;
 
@@ -358,6 +359,71 @@ fn parse_color_with_color_space<'i, 't>(
         c3,
         alpha,
         color_space.into(),
+    ))
+}
+
+/// Parse `device-cmyk()` using either the comma-separated legacy syntax or
+/// the space-separated syntax used by existing authored content.
+#[inline]
+fn parse_device_cmyk<'i, 't>(
+    context: &ParserContext,
+    arguments: &mut Parser<'i, 't>,
+    origin_color: Option<SpecifiedColor>,
+) -> Result<ColorFunction<SpecifiedColor>, ParseError<'i>> {
+    if origin_color.is_some() {
+        return Err(arguments.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+    }
+
+    let cyan = parse_number_or_percentage(context, arguments, false)?;
+    let legacy_syntax = arguments.try_parse(|p| p.expect_comma()).is_ok();
+
+    let (magenta, yellow, black, alpha, fallback) = if legacy_syntax {
+        let magenta = parse_number_or_percentage(context, arguments, false)?;
+        arguments.expect_comma()?;
+        let yellow = parse_number_or_percentage(context, arguments, false)?;
+        arguments.expect_comma()?;
+        let black = parse_number_or_percentage(context, arguments, false)?;
+
+        let alpha_state = arguments.state();
+        let alpha = parse_legacy_alpha(context, arguments).unwrap_or_else(|_| {
+            arguments.reset(&alpha_state);
+            ColorComponent::AlphaOmitted
+        });
+
+        let fallback = if !arguments.is_exhausted() {
+            arguments.expect_comma()?;
+            Some(Box::new(SpecifiedColor::parse(context, arguments)?))
+        } else {
+            None
+        };
+
+        (magenta, yellow, black, alpha, fallback)
+    } else {
+        let magenta = parse_number_or_percentage(context, arguments, false)?;
+        let yellow = parse_number_or_percentage(context, arguments, false)?;
+        let black = parse_number_or_percentage(context, arguments, false)?;
+        let alpha_state = arguments.state();
+        let alpha = parse_modern_alpha(context, arguments).unwrap_or_else(|_| {
+            arguments.reset(&alpha_state);
+            ColorComponent::AlphaOmitted
+        });
+        let fallback = if !arguments.is_exhausted() {
+            arguments.expect_comma()?;
+            Some(Box::new(SpecifiedColor::parse(context, arguments)?))
+        } else {
+            None
+        };
+
+        (magenta, yellow, black, alpha, fallback)
+    };
+
+    Ok(ColorFunction::DeviceCmyk(
+        cyan,
+        magenta,
+        yellow,
+        black,
+        alpha,
+        fallback.into(),
     ))
 }
 

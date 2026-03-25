@@ -88,6 +88,15 @@ pub enum ColorFunction<OriginColor> {
         ColorComponent<NumberOrPercentageComponent>, // alpha
         ColorSpace,
     ),
+    /// A device-dependent CMYK colour with an optional fallback colour.
+    DeviceCmyk(
+        ColorComponent<NumberOrPercentageComponent>, // cyan
+        ColorComponent<NumberOrPercentageComponent>, // magenta
+        ColorComponent<NumberOrPercentageComponent>, // yellow
+        ColorComponent<NumberOrPercentageComponent>, // key
+        ColorComponent<NumberOrPercentageComponent>, // alpha
+        Optional<Box<OriginColor>>,                  // fallback colour
+    ),
 }
 
 impl ColorFunction<AbsoluteColor> {
@@ -348,6 +357,37 @@ impl ColorFunction<AbsoluteColor> {
                     alpha!(alpha, origin_color.as_ref()),
                 )
             },
+            ColorFunction::DeviceCmyk(c, m, y, k, alpha, fallback) => {
+                if let Some(fallback) = fallback.as_ref() {
+                    let mut fallback = **fallback;
+                    if !matches!(alpha, ColorComponent::AlphaOmitted) {
+                        fallback.alpha = alpha!(alpha, None).unwrap_or(fallback.alpha);
+                    }
+                    fallback
+                } else {
+                    let resolve_component =
+                        |component: &ColorComponent<NumberOrPercentageComponent>| {
+                            component
+                                .resolve(None)
+                                .map(|value| value.map(|value| value.to_number(1.0)))
+                        };
+
+                    let cyan = resolve_component(c)?.unwrap_or(0.0).clamp(0.0, 1.0);
+                    let magenta = resolve_component(m)?.unwrap_or(0.0).clamp(0.0, 1.0);
+                    let yellow = resolve_component(y)?.unwrap_or(0.0).clamp(0.0, 1.0);
+                    let key = resolve_component(k)?.unwrap_or(0.0).clamp(0.0, 1.0);
+
+                    let mut result = AbsoluteColor::new(
+                        ColorSpace::Srgb,
+                        (1.0 - cyan) * (1.0 - key),
+                        (1.0 - magenta) * (1.0 - key),
+                        (1.0 - yellow) * (1.0 - key),
+                        alpha!(alpha, None),
+                    );
+                    result.flags = ColorFlags::IS_LEGACY_SRGB;
+                    result
+                }
+            },
         })
     }
 }
@@ -364,25 +404,56 @@ impl ColorFunction<SpecifiedColor> {
             | Self::Oklab(origin_color, ..)
             | Self::Oklch(origin_color, ..)
             | Self::Color(origin_color, ..) => origin_color.is_some(),
+            Self::DeviceCmyk(..) => false,
         }
+    }
+
+    /// Whether this function should remain a typed function at specified-value
+    /// time rather than eagerly collapsing to an absolute colour.
+    pub fn should_preserve_as_function(&self) -> bool {
+        self.has_origin_color() || matches!(self, Self::DeviceCmyk(..))
     }
 
     /// Try to resolve the color function to an [`AbsoluteColor`] that does not
     /// contain any variables (currentcolor, color components, etc.).
     pub fn resolve_to_absolute(&self) -> Result<AbsoluteColor, ()> {
-        // Map the color function to one with an absolute origin color.
-        let resolvable = self.map_origin_color(|o| o.resolve_to_absolute());
-        resolvable.resolve_to_absolute()
+        match self {
+            Self::DeviceCmyk(c, m, y, k, alpha, fallback) => {
+                let fallback = match fallback.as_ref() {
+                    Some(fallback) => Some(Box::new(fallback.resolve_to_absolute().ok_or(())?)),
+                    None => None,
+                };
+
+                ColorFunction::DeviceCmyk(
+                    c.clone(),
+                    m.clone(),
+                    y.clone(),
+                    k.clone(),
+                    alpha.clone(),
+                    fallback.into(),
+                )
+                .resolve_to_absolute()
+            },
+            _ => {
+                // Map the color function to one with an absolute origin color.
+                let resolvable = self.map_origin_color(|o| o.resolve_to_absolute());
+                resolvable.resolve_to_absolute()
+            },
+        }
     }
 }
 
 impl<Color> ColorFunction<Color> {
-    /// Map the origin color to another type.  Return None from `f` if the conversion fails.
-    pub fn map_origin_color<U>(&self, f: impl FnOnce(&Color) -> Option<U>) -> ColorFunction<U> {
+    /// Map colour dependencies to another type. Return None from `f` if the
+    /// conversion fails.
+    pub fn map_origin_color<U>(
+        &self,
+        mut f: impl FnMut(&Color) -> Option<U>,
+    ) -> ColorFunction<U> {
         macro_rules! map {
             ($f:ident, $o:expr, $c0:expr, $c1:expr, $c2:expr, $alpha:expr) => {{
                 ColorFunction::$f(
-                    $o.as_ref().and_then(f).into(),
+                    $o.as_ref().and_then(|value| f(value)).into(),
                     $c0.clone(),
                     $c1.clone(),
                     $c2.clone(),
@@ -399,12 +470,23 @@ impl<Color> ColorFunction<Color> {
             ColorFunction::Oklab(o, c0, c1, c2, alpha) => map!(Oklab, o, c0, c1, c2, alpha),
             ColorFunction::Oklch(o, c0, c1, c2, alpha) => map!(Oklch, o, c0, c1, c2, alpha),
             ColorFunction::Color(o, c0, c1, c2, alpha, color_space) => ColorFunction::Color(
-                o.as_ref().and_then(f).into(),
+                o.as_ref().and_then(|value| f(value)).into(),
                 c0.clone(),
                 c1.clone(),
                 c2.clone(),
                 alpha.clone(),
                 color_space.clone(),
+            ),
+            ColorFunction::DeviceCmyk(c, m, y, k, alpha, fallback) => ColorFunction::DeviceCmyk(
+                c.clone(),
+                m.clone(),
+                y.clone(),
+                k.clone(),
+                alpha.clone(),
+                fallback
+                    .as_ref()
+                    .and_then(|value| f(value.as_ref()).map(Box::new))
+                    .into(),
             ),
         }
     }
@@ -433,6 +515,32 @@ impl<C: style_traits::ToCss> style_traits::ToCss for ColorFunction<C> {
     where
         W: std::fmt::Write,
     {
+        if let Self::DeviceCmyk(c, m, y, k, alpha, fallback) = self {
+            let is_opaque = if let ColorComponent::Value(value) = *alpha {
+                value.to_number(OPAQUE) == OPAQUE
+            } else {
+                false
+            };
+
+            dest.write_str("device-cmyk(")?;
+            c.to_css(dest)?;
+            dest.write_str(" ")?;
+            m.to_css(dest)?;
+            dest.write_str(" ")?;
+            y.to_css(dest)?;
+            dest.write_str(" ")?;
+            k.to_css(dest)?;
+            if !is_opaque && !matches!(alpha, ColorComponent::AlphaOmitted) {
+                dest.write_str(" / ")?;
+                alpha.to_css(dest)?;
+            }
+            if let Optional::Some(fallback) = fallback {
+                dest.write_str(", ")?;
+                fallback.to_css(dest)?;
+            }
+            return dest.write_str(")");
+        }
+
         let (origin_color, alpha) = match self {
             Self::Rgb(origin_color, _, _, _, alpha) => {
                 dest.write_str("rgb(")?;
@@ -466,6 +574,7 @@ impl<C: style_traits::ToCss> style_traits::ToCss for ColorFunction<C> {
                 dest.write_str("color(")?;
                 (origin_color, alpha)
             },
+            Self::DeviceCmyk(..) => unreachable!("handled above"),
         };
 
         if let Optional::Some(origin_color) = origin_color {
@@ -538,6 +647,7 @@ impl<C: style_traits::ToCss> style_traits::ToCss for ColorFunction<C> {
                 serialize_components!(c0, c1, c2);
                 serialize_alpha!(alpha);
             },
+            Self::DeviceCmyk(..) => unreachable!("handled above"),
         }
 
         dest.write_str(")")

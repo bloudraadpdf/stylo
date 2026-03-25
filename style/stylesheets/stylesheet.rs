@@ -949,6 +949,86 @@ mod tests {
     }
 
     #[test]
+    fn servo_preserves_device_cmyk_authored_declarations() {
+        let stylesheet = parse_stylesheet(
+            "p { color: device-cmyk(0 1 1 0, red); background-color: device-cmyk(0, 0, 0, 1); }",
+        );
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let style = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Style(rule) => Some(rule.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected style rule");
+        let declarations: Vec<String> = style
+            .block
+            .read_with(&guard)
+            .declaration_importance_iter()
+            .filter_map(|(decl, _)| match decl {
+                PropertyDeclaration::Color(value) => Some(value.to_css_string()),
+                PropertyDeclaration::BackgroundColor(value) => Some(value.to_css_string()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            declarations,
+            vec![
+                "device-cmyk(0 1 1 0, red)".to_string(),
+                "device-cmyk(0 0 0 1)".to_string(),
+            ],
+            "typed Servo rules should preserve device-cmyk() rather than requiring source rewrites",
+        );
+    }
+
+    #[test]
+    fn servo_computes_device_cmyk_with_fallback_colour() {
+        let computed = parse_and_compute_color("device-cmyk(0 1 1 0, red)");
+        assert_eq!(
+            computed.resolve_to_absolute(&AbsoluteColor::BLACK),
+            AbsoluteColor::srgb_legacy(255, 0, 0, 1.0)
+        );
+    }
+
+    #[test]
+    fn servo_computes_device_cmyk_alpha_in_modern_and_legacy_forms() {
+        let modern = parse_and_compute_color("device-cmyk(0 1 1 0 / 0.5)");
+        let modern_resolved = modern.resolve_to_absolute(&AbsoluteColor::BLACK);
+        assert_eq!(modern_resolved.into_srgb_legacy().raw_components()[3], 0.5);
+
+        let legacy = parse_and_compute_color("device-cmyk(0, 1, 1, 0, 0.5, red)");
+        let legacy_resolved = legacy.resolve_to_absolute(&AbsoluteColor::BLACK);
+        assert_eq!(
+            legacy_resolved.into_srgb_legacy(),
+            AbsoluteColor::srgb_legacy(255, 0, 0, 0.5)
+        );
+    }
+
+    #[test]
+    fn servo_computes_device_cmyk_without_fallback_via_naive_srgb_conversion() {
+        let computed = parse_and_compute_color("device-cmyk(0 1 1 0)");
+        assert_eq!(
+            computed.resolve_to_absolute(&AbsoluteColor::BLACK),
+            AbsoluteColor::srgb_legacy(255, 0, 0, 1.0)
+        );
+    }
+
+    #[test]
+    fn servo_preserves_device_cmyk_with_currentcolor_fallback_until_resolution() {
+        let computed = parse_and_compute_color("device-cmyk(0 1 1 0, currentcolor)");
+        assert_eq!(
+            computed.to_css_string(),
+            "device-cmyk(0 1 1 0, currentcolor)"
+        );
+        assert_eq!(
+            computed.resolve_to_absolute(&AbsoluteColor::srgb_legacy(0, 0, 255, 1.0)),
+            AbsoluteColor::srgb_legacy(0, 0, 255, 1.0)
+        );
+    }
+
+    #[test]
     fn servo_preserves_font_size_adjust_syntax_distinction() {
         let stylesheet = parse_stylesheet(
             "p.num { font-size-adjust: 0.5; } p.explicit { font-size-adjust: ex-height 0.5; }",

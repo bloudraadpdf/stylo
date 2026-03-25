@@ -908,8 +908,10 @@ impl Color {
                 ComputedColor::Absolute(color)
             },
             Color::ColorFunction(ref color_function) => {
-                debug_assert!(color_function.has_origin_color(),
-                    "no need for a ColorFunction if it doesn't contain an unresolvable origin color");
+                debug_assert!(
+                    color_function.should_preserve_as_function(),
+                    "specified ColorFunction values should only survive parsing for relative or explicitly preserved colour functions"
+                );
 
                 // Try to eagerly resolve the color function before making it a computed color.
                 if let Ok(absolute) = color_function.resolve_to_absolute() {
