@@ -599,6 +599,7 @@ class Longhand(Property):
                 "FontWeight",
                 "GreaterThanOrEqualToOneNumber",
                 "GridAutoFlow",
+                "HangingPunctuation",
                 "ImageRendering",
                 "Inert",
                 "InitialLetter",

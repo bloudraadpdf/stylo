@@ -842,6 +842,34 @@ mod tests {
     }
 
     #[test]
+    fn servo_preserves_hanging_punctuation_declaration() {
+        let stylesheet = parse_stylesheet("p { hanging-punctuation: first allow-end last; }");
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let style = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Style(rule) => Some(rule.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected style rule");
+        let hanging_punctuation = style
+            .block
+            .read_with(&guard)
+            .declaration_importance_iter()
+            .find_map(|(decl, _)| match decl {
+                PropertyDeclaration::HangingPunctuation(value) => Some(value.to_css_string()),
+                _ => None,
+            })
+            .expect("expected hanging-punctuation declaration");
+        assert_eq!(
+            hanging_punctuation, "first last allow-end",
+            "typed style rules should preserve hanging-punctuation values",
+        );
+    }
+
+    #[test]
     fn servo_preserves_text_indent_hanging_each_line_declaration() {
         let stylesheet = parse_stylesheet("p { text-indent: 2em hanging each-line; }");
         let guard = stylesheet.shared_lock.read();

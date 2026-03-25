@@ -115,10 +115,11 @@ pub use self::svg::{SVGLength, SVGOpacity, SVGPaint};
 pub use self::svg::{SVGPaintOrder, SVGStrokeDashArray, SVGWidth, VectorEffect};
 pub use self::svg_path::SVGPathData;
 pub use self::text::RubyPosition;
-pub use self::text::{HyphenateCharacter, HyphenateLimitChars};
 pub use self::text::{
-    InitialLetter, LetterSpacing, LineBreak, TextAlign, TextCombineUpright, TextIndent,
+    HangingPunctuation, InitialLetter, LetterSpacing, LineBreak, TextAlign, TextCombineUpright,
+    TextIndent,
 };
+pub use self::text::{HyphenateCharacter, HyphenateLimitChars};
 pub use self::text::{
     OverflowWrap, TextEmphasisPosition, TextEmphasisStyle, WordBreak, WordSpaceTransform,
 };

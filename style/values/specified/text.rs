@@ -916,6 +916,41 @@ pub enum WordSpaceTransform {
     IdeographicSpace,
 }
 
+/// Values for the `hanging-punctuation` property.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    PartialEq,
+    Parse,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[css(bitflags(single = "none", mixed = "first,last,allow-end,force-end"))]
+#[repr(C)]
+#[allow(missing_docs)]
+pub struct HangingPunctuation(u8);
+bitflags! {
+    impl HangingPunctuation: u8 {
+        /// No punctuation hangs outside the line box.
+        const NONE = 0;
+        /// Hang opening punctuation at the start of the first formatted line.
+        const FIRST = 1 << 0;
+        /// Hang closing punctuation at the end of the last formatted line.
+        const LAST = 1 << 1;
+        /// Conditionally hang a stop or comma at line end.
+        const ALLOW_END = 1 << 2;
+        /// Always hang a stop or comma at line end.
+        const FORCE_END = 1 << 3;
+    }
+}
+
 /// Values for the `text-justify` CSS property.
 #[repr(u8)]
 #[derive(

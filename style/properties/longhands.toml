@@ -2719,6 +2719,16 @@ spec = "https://drafts.csswg.org/css-text-4/#hyphenate-char-limits"
 affects = "layout"
 boxed = true
 
+[hanging-punctuation]
+type = "HangingPunctuation"
+initial = "computed::HangingPunctuation::NONE"
+initial_specified_value = "specified::text::HangingPunctuation::NONE"
+struct = "inherited_text"
+spec = "https://drafts.csswg.org/css-text-4/#propdef-hanging-punctuation"
+animation_type = "discrete"
+affects = "layout"
+servo_restyle_damage = "rebuild_box"
+
 [line-break]
 type = "LineBreak"
 initial = "computed::LineBreak::Auto"
