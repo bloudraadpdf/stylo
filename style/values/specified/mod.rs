@@ -119,7 +119,9 @@ pub use self::text::{HyphenateCharacter, HyphenateLimitChars};
 pub use self::text::{
     InitialLetter, LetterSpacing, LineBreak, TextAlign, TextCombineUpright, TextIndent,
 };
-pub use self::text::{OverflowWrap, TextEmphasisPosition, TextEmphasisStyle, WordBreak};
+pub use self::text::{
+    OverflowWrap, TextEmphasisPosition, TextEmphasisStyle, WordBreak, WordSpaceTransform,
+};
 pub use self::text::{TextAlignKeyword, TextDecorationLine, TextOverflow, WordSpacing};
 pub use self::text::{TextAlignLast, TextAutospace, TextUnderlinePosition};
 pub use self::text::{

@@ -2643,6 +2643,16 @@ spec = "https://drafts.csswg.org/css-text/#propdef-word-spacing"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
+[word-space-transform]
+type = "WordSpaceTransform"
+initial = "computed::WordSpaceTransform::None"
+initial_specified_value = "specified::text::WordSpaceTransform::None"
+struct = "inherited_text"
+spec = "https://drafts.csswg.org/css-text-4/#word-space-transform"
+animation_type = "discrete"
+servo_restyle_damage = "rebuild_box"
+affects = "layout"
+
 [-moz-control-character-visibility]
 type = "text::MozControlCharacterVisibility"
 initial = "Default::default()"

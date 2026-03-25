@@ -892,6 +892,30 @@ pub enum WordBreak {
     BreakWord,
 }
 
+/// Values for the `word-space-transform` property.
+#[repr(u8)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[allow(missing_docs)]
+pub enum WordSpaceTransform {
+    None,
+    Space,
+    IdeographicSpace,
+}
+
 /// Values for the `text-justify` CSS property.
 #[repr(u8)]
 #[derive(

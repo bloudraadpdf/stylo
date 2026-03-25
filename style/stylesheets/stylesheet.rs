@@ -814,6 +814,34 @@ mod tests {
     }
 
     #[test]
+    fn servo_preserves_word_space_transform_declaration() {
+        let stylesheet = parse_stylesheet("p { word-space-transform: ideographic-space; }");
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let style = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Style(rule) => Some(rule.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected style rule");
+        let word_space_transform = style
+            .block
+            .read_with(&guard)
+            .declaration_importance_iter()
+            .find_map(|(decl, _)| match decl {
+                PropertyDeclaration::WordSpaceTransform(value) => Some(value.to_css_string()),
+                _ => None,
+            })
+            .expect("expected word-space-transform declaration");
+        assert_eq!(
+            word_space_transform, "ideographic-space",
+            "typed style rules should preserve word-space-transform values",
+        );
+    }
+
+    #[test]
     fn servo_preserves_text_indent_hanging_each_line_declaration() {
         let stylesheet = parse_stylesheet("p { text-indent: 2em hanging each-line; }");
         let guard = stylesheet.shared_lock.read();
