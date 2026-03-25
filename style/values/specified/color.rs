@@ -167,7 +167,6 @@ pub enum Color {
     /// Right now this is only the case for relative colors with `currentColor` as the origin.
     ColorFunction(Box<ColorFunction<Self>>),
     /// A system color.
-    #[cfg(feature = "gecko")]
     System(SystemColor),
     /// A color mix.
     ColorMix(Box<ColorMix>),
@@ -196,7 +195,6 @@ impl From<AbsoluteColor> for Color {
 ///   https://drafts.csswg.org/css-color/#css-system-colors
 ///   https://drafts.csswg.org/css-color/#deprecated-system-colors
 #[allow(missing_docs)]
-#[cfg(feature = "gecko")]
 #[derive(Clone, Copy, Debug, MallocSizeOf, Parse, PartialEq, ToCss, ToShmem)]
 #[repr(u8)]
 pub enum SystemColor {
@@ -419,8 +417,115 @@ pub enum SystemColor {
     End, // Just for array-indexing purposes.
 }
 
-#[cfg(feature = "gecko")]
 impl SystemColor {
+    #[cfg(feature = "servo")]
+    #[inline]
+    fn compute(&self, cx: &Context) -> ComputedColor {
+        let background = cx.device().default_background_color();
+        let foreground = cx.device().default_color();
+        let accent = AbsoluteColor::srgb_legacy(0, 120, 212, 1.0);
+        let accent_text = AbsoluteColor::WHITE;
+        let highlight = AbsoluteColor::srgb_legacy(51, 144, 255, 1.0);
+        let highlight_text = AbsoluteColor::WHITE;
+        let button_face = AbsoluteColor::srgb_legacy(240, 240, 240, 1.0);
+        let button_border = AbsoluteColor::srgb_legacy(118, 118, 118, 1.0);
+        let light_shadow = AbsoluteColor::srgb_legacy(211, 211, 211, 1.0);
+        let dark_shadow = AbsoluteColor::srgb_legacy(64, 64, 64, 1.0);
+        let disabled_text = AbsoluteColor::srgb_legacy(128, 128, 128, 1.0);
+        let info_background = AbsoluteColor::srgb_legacy(255, 255, 225, 1.0);
+        let mark = AbsoluteColor::srgb_legacy(255, 255, 0, 1.0);
+
+        let absolute = match self {
+            Self::Canvas
+            | Self::Window
+            | Self::Field
+            | Self::Menu
+            | Self::MozDialog
+            | Self::MozCombobox
+            | Self::Background => background,
+            Self::Canvastext
+            | Self::Windowtext
+            | Self::Buttontext
+            | Self::Fieldtext
+            | Self::Captiontext
+            | Self::Inactivecaptiontext
+            | Self::Infotext
+            | Self::Menutext
+            | Self::MozDialogtext
+            | Self::MozComboboxtext
+            | Self::MozOddtreerow
+            | Self::Marktext => foreground,
+            Self::Linktext => AbsoluteColor::srgb_legacy(0, 0, 238, 1.0),
+            Self::Visitedtext => AbsoluteColor::srgb_legacy(85, 26, 139, 1.0),
+            Self::Activetext => AbsoluteColor::srgb_legacy(255, 0, 0, 1.0),
+            Self::Accentcolor => accent,
+            Self::Accentcolortext => accent_text,
+            Self::Highlight
+            | Self::Selecteditem
+            | Self::MozMenuhover
+            | Self::MozCellhighlight
+            | Self::TextHighlightBackground
+            | Self::TargetTextBackground
+            | Self::TextSelectAttentionBackground => highlight,
+            Self::Highlighttext
+            | Self::Selecteditemtext
+            | Self::MozMenuhovertext
+            | Self::MozMenubarhovertext
+            | Self::MozCellhighlighttext
+            | Self::TextHighlightForeground
+            | Self::TargetTextForeground
+            | Self::TextSelectAttentionForeground => highlight_text,
+            Self::Buttonface
+            | Self::Threedface
+            | Self::MozButtondisabledface
+            | Self::MozHeaderbar
+            | Self::MozHeaderbarinactive
+            | Self::Appworkspace
+            | Self::Scrollbar => button_face,
+            Self::Buttonborder
+            | Self::Activeborder
+            | Self::Inactiveborder
+            | Self::MozButtonhoverborder
+            | Self::MozButtonactiveborder
+            | Self::MozButtondisabledborder
+            | Self::MozSidebarborder => button_border,
+            Self::Graytext
+            | Self::Buttonshadow
+            | Self::Threedshadow
+            | Self::TextSelectDisabledBackground => disabled_text,
+            Self::Buttonhighlight | Self::Threedhighlight => AbsoluteColor::WHITE,
+            Self::Threedlightshadow => light_shadow,
+            Self::Threeddarkshadow | Self::Windowframe => dark_shadow,
+            Self::Mark => mark,
+            Self::Infobackground => info_background,
+            Self::Activecaption
+            | Self::Inactivecaption
+            | Self::MozButtonhoverface
+            | Self::MozButtonactiveface
+            | Self::MozHeaderbartext
+            | Self::MozHeaderbarinactivetext
+            | Self::MozMacFocusring
+            | Self::MozSidebar
+            | Self::MozAutofillBackground
+            | Self::MozColheader
+            | Self::MozColheaderhover
+            | Self::MozColheaderactive => accent,
+            Self::MozButtonhovertext
+            | Self::MozButtonactivetext
+            | Self::MozMacDefaultbuttontext
+            | Self::MozMacDisabledtoolbartext
+            | Self::MozSidebartext
+            | Self::MozColheadertext
+            | Self::MozColheaderhovertext
+            | Self::MozColheaderactivetext => accent_text,
+            Self::MozDisabledfield => button_face,
+            _ => foreground,
+        };
+
+        ComputedColor::Absolute(absolute)
+    }
+
+    #[cfg(feature = "gecko")]
     #[inline]
     fn compute(&self, cx: &Context) -> ComputedColor {
         use crate::gecko::values::convert_nscolor_to_absolute_color;
@@ -485,11 +590,8 @@ impl Color {
                 Ok(color)
             },
             Err(e) => {
-                #[cfg(feature = "gecko")]
-                {
-                    if let Ok(system) = input.try_parse(|i| SystemColor::parse(context, i)) {
-                        return Ok(Color::System(system));
-                    }
+                if let Ok(system) = input.try_parse(|i| SystemColor::parse(context, i)) {
+                    return Ok(Color::System(system));
                 }
 
                 if let Ok(mix) = input.try_parse(|i| ColorMix::parse(context, i, preserve_authored))
@@ -595,7 +697,6 @@ impl ToCss for Color {
                 c.to_css(dest)?;
                 dest.write_char(')')
             },
-            #[cfg(feature = "gecko")]
             Color::System(system) => system.to_css(dest),
             #[cfg(feature = "gecko")]
             Color::InheritFromBodyQuirk => dest.write_str("-moz-inherit-from-body-quirk"),
@@ -610,7 +711,6 @@ impl Color {
             #[cfg(feature = "gecko")]
             Self::InheritFromBodyQuirk => false,
             Self::CurrentColor => true,
-            #[cfg(feature = "gecko")]
             Self::System(..) => true,
             Self::Absolute(ref absolute) => allow_transparent && absolute.color.is_transparent(),
             Self::ColorFunction(ref color_function) => {
@@ -841,7 +941,6 @@ impl Color {
             Color::ContrastColor(ref c) => {
                 ComputedColor::ContrastColor(Box::new(c.to_computed_color(context)?))
             },
-            #[cfg(feature = "gecko")]
             Color::System(system) => system.compute(context?),
             #[cfg(feature = "gecko")]
             Color::InheritFromBodyQuirk => {

@@ -572,6 +572,7 @@ impl Clone for Stylesheet {
 #[cfg(all(test, feature = "servo"))]
 mod tests {
     use super::*;
+    use crate::color::AbsoluteColor;
     use crate::font_metrics::FontMetrics;
     use crate::media_queries::MediaType;
     use crate::properties::{
@@ -662,6 +663,30 @@ mod tests {
         let atom = Atom::from(crate::custom_properties::parse_name(name).unwrap());
         builder.custom_properties.inherited.insert(&atom, value);
         builder.build()
+    }
+
+    fn parse_and_compute_color(value: &str) -> crate::values::computed::Color {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            None,
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input = ParserInput::new(value);
+        let mut parser = Parser::new(&mut input);
+        let stylist = test_stylist();
+
+        crate::values::specified::color::Color::parse_and_compute(
+            &context,
+            &mut parser,
+            Some(stylist.device()),
+        )
+        .expect("expected computed color")
     }
 
     #[test]
@@ -813,6 +838,57 @@ mod tests {
         assert_eq!(
             text_indent, "2em hanging each-line",
             "text-indent keywords should remain a typed declaration in servo mode",
+        );
+    }
+
+    #[test]
+    fn servo_preserves_system_color_declarations() {
+        let stylesheet =
+            parse_stylesheet("p { color: CanvasText; background-color: AccentColor; }");
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let style = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Style(rule) => Some(rule.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected style rule");
+        let declarations: Vec<String> = style
+            .block
+            .read_with(&guard)
+            .declaration_importance_iter()
+            .filter_map(|(decl, _)| match decl {
+                PropertyDeclaration::Color(value) => Some(value.to_css_string()),
+                PropertyDeclaration::BackgroundColor(value) => Some(value.to_css_string()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            declarations,
+            vec!["canvastext".to_string(), "accentcolor".to_string()],
+            "typed Servo rules should preserve system-colour keywords rather than requiring source rewrites",
+        );
+    }
+
+    #[test]
+    fn servo_resolves_system_colors_to_print_defaults() {
+        let canvas = parse_and_compute_color("Canvas");
+        let canvastext = parse_and_compute_color("CanvasText");
+        let linktext = parse_and_compute_color("LinkText");
+
+        assert_eq!(
+            canvas.resolve_to_absolute(&AbsoluteColor::BLACK),
+            AbsoluteColor::WHITE
+        );
+        assert_eq!(
+            canvastext.resolve_to_absolute(&AbsoluteColor::BLACK),
+            AbsoluteColor::BLACK
+        );
+        assert_eq!(
+            linktext.resolve_to_absolute(&AbsoluteColor::BLACK),
+            AbsoluteColor::srgb_legacy(0, 0, 238, 1.0)
         );
     }
 
