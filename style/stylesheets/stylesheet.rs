@@ -1395,6 +1395,25 @@ mod tests {
     }
 
     #[test]
+    fn servo_parses_negative_bleed_in_page_rules_without_parse_errors() {
+        let stylesheet = parse_stylesheet("@page { bleed: -3pt; }");
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let page_rule_css = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Page(_) => Some(rule.to_css_string(&guard)),
+                _ => None,
+            })
+            .expect("expected @page rule");
+        assert!(
+            page_rule_css.contains("bleed: -3pt"),
+            "expected serialized @page rule to preserve negative bleed, got: {page_rule_css}",
+        );
+    }
+
+    #[test]
     fn servo_parses_counter_with_lower_roman() {
         let stylesheet =
             parse_stylesheet(r#"@page { @top-center { content: counter(page, lower-roman); } }"#);

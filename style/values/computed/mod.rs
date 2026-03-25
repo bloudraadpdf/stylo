@@ -91,7 +91,7 @@ pub use self::list::Quotes;
 pub use self::motion::{OffsetPath, OffsetPosition, OffsetRotate};
 pub use self::outline::OutlineStyle;
 pub use self::page::{
-    PageMarks, PageName, PageOrientation, PageSize, PageSizeOrientation, PaperSize,
+    Bleed, PageMarks, PageName, PageOrientation, PageSize, PageSizeOrientation, PaperSize,
 };
 pub use self::percentage::{NonNegativePercentage, Percentage};
 pub use self::position::AnchorFunction;

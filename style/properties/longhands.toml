@@ -1770,10 +1770,10 @@ rule_types_allowed = ["page"]
 affects = "layout"
 
 [bleed]
-type = "length::NonNegativeLengthOrAuto"
-initial = "computed::length::NonNegativeLengthOrAuto::auto()"
+type = "Bleed"
+initial = "computed::Bleed::auto()"
 struct = "page"
-initial_specified_value = "specified::length::NonNegativeLengthOrAuto::auto()"
+initial_specified_value = "specified::Bleed::auto()"
 spec = "https://drafts.csswg.org/css-page-3/#bleed"
 animation_type = "none"
 rule_types_allowed = ["page"]

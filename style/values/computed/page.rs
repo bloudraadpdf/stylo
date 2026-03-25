@@ -5,7 +5,7 @@
 //! Computed @page at-rule properties and named-page style properties
 
 use crate::derives::*;
-use crate::values::computed::length::NonNegativeLength;
+use crate::values::computed::length::{Length, NonNegativeLength};
 use crate::values::computed::{Context, ToComputedValue};
 use crate::values::generics;
 use crate::values::generics::size::Size2D;
@@ -17,6 +17,52 @@ pub use generics::page::PageOrientation;
 pub use generics::page::PageSizeOrientation;
 pub use generics::page::PaperSize;
 pub use specified::PageName;
+
+/// Computed value of the `bleed` page descriptor.
+#[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, ToCss, ToResolvedValue, ToShmem, ToTyped)]
+#[repr(C, u8)]
+pub enum Bleed {
+    /// `auto`
+    Auto,
+    /// Non-negative computed length.
+    Length(Length),
+}
+
+impl Bleed {
+    /// `auto` value.
+    #[inline]
+    pub fn auto() -> Self {
+        Self::Auto
+    }
+
+    /// Whether this is the `auto` value.
+    #[inline]
+    pub fn is_auto(&self) -> bool {
+        matches!(self, Self::Auto)
+    }
+}
+
+impl ToComputedValue for specified::Bleed {
+    type ComputedValue = Bleed;
+
+    fn to_computed_value(&self, ctx: &Context) -> Self::ComputedValue {
+        match self {
+            specified::Bleed::Auto => Bleed::Auto,
+            specified::Bleed::Length(length) => {
+                Bleed::Length(length.to_computed_value(ctx).clamp_to_non_negative())
+            },
+        }
+    }
+
+    fn from_computed_value(computed: &Self::ComputedValue) -> Self {
+        match computed {
+            Bleed::Auto => specified::Bleed::Auto,
+            Bleed::Length(length) => {
+                specified::Bleed::Length(ToComputedValue::from_computed_value(length))
+            },
+        }
+    }
+}
 
 /// Computed value of the @page size descriptor
 ///

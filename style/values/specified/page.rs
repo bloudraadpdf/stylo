@@ -7,6 +7,7 @@
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
 use crate::values::generics::size::Size2D;
+use crate::values::specified::length::Length;
 use crate::values::specified::length::NonNegativeLength;
 use crate::values::{generics, CustomIdent};
 use cssparser::{match_ignore_ascii_case, Parser};
@@ -16,6 +17,52 @@ pub use generics::page::PageMarks;
 pub use generics::page::PageOrientation;
 pub use generics::page::PageSizeOrientation;
 pub use generics::page::PaperSize;
+
+/// Specified value of the `bleed` page descriptor.
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(C, u8)]
+pub enum Bleed {
+    /// `auto`
+    Auto,
+    /// `<length>`
+    Length(Length),
+}
+
+impl Bleed {
+    /// `auto` value.
+    #[inline]
+    pub fn auto() -> Self {
+        Self::Auto
+    }
+
+    /// Whether this is the `auto` value.
+    #[inline]
+    pub fn is_auto(&self) -> bool {
+        matches!(self, Self::Auto)
+    }
+}
+
+impl Parse for Bleed {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
+            return Ok(Self::Auto);
+        }
+
+        Ok(Self::Length(Length::parse(context, input)?))
+    }
+}
 /// Specified value of the @page size descriptor
 pub type PageSize = generics::page::PageSize<Size2D<NonNegativeLength>>;
 
