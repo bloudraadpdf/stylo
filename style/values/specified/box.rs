@@ -1993,6 +1993,7 @@ pub enum BreakBetween {
     Column,
     Page,
     Avoid,
+    AvoidRegion,
     AvoidColumn,
     Left,
     Right,
@@ -2016,7 +2017,8 @@ impl BreakBetween {
             BreakBetween::Auto | BreakBetween::Avoid | BreakBetween::Left | BreakBetween::Right => {
                 Ok(break_value)
             },
-            BreakBetween::AvoidColumn
+            BreakBetween::AvoidRegion
+            | BreakBetween::AvoidColumn
             | BreakBetween::Column
             | BreakBetween::Page
             | BreakBetween::Recto
@@ -2040,6 +2042,7 @@ impl BreakBetween {
             },
             BreakBetween::Page => dest.write_str("always"),
             BreakBetween::Always
+            | BreakBetween::AvoidRegion
             | BreakBetween::AvoidColumn
             | BreakBetween::Column
             | BreakBetween::Recto
@@ -2073,6 +2076,7 @@ pub enum BreakWithin {
     Auto,
     Avoid,
     AvoidPage,
+    AvoidRegion,
     AvoidColumn,
 }
 
@@ -2089,7 +2093,7 @@ impl BreakWithin {
         let break_value = BreakWithin::parse(input)?;
         match break_value {
             BreakWithin::Auto | BreakWithin::Avoid => Ok(break_value),
-            BreakWithin::AvoidPage | BreakWithin::AvoidColumn => {
+            BreakWithin::AvoidPage | BreakWithin::AvoidRegion | BreakWithin::AvoidColumn => {
                 Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
             },
         }
@@ -2105,7 +2109,7 @@ impl BreakWithin {
     {
         match *self {
             BreakWithin::Auto | BreakWithin::Avoid => self.to_css(dest),
-            BreakWithin::AvoidPage | BreakWithin::AvoidColumn => Ok(()),
+            BreakWithin::AvoidPage | BreakWithin::AvoidRegion | BreakWithin::AvoidColumn => Ok(()),
         }
     }
 }

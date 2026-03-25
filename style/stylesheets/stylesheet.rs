@@ -1411,6 +1411,28 @@ mod tests {
     }
 
     #[test]
+    fn servo_parses_break_avoid_region() {
+        let stylesheet = parse_stylesheet(
+            "div { break-before: avoid-region; break-after: avoid-region; break-inside: avoid-region; }",
+        );
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let style = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Style(s) => Some(s.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected style rule");
+        assert_eq!(
+            style.block.read_with(&guard).len(),
+            3,
+            "break-before/break-after/break-inside avoid-region should parse",
+        );
+    }
+
+    #[test]
     fn servo_parses_column_fill_balance_all() {
         let _columns_pref = BoolPrefGuard::set("layout.columns.enabled", true);
         let stylesheet = parse_stylesheet("div { column-fill: balance-all; }");
