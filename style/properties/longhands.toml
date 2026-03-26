@@ -4332,7 +4332,6 @@ keyword = { values = ["normal", "multiply", "screen", "overlay", "darken", "ligh
 
 [dominant-baseline]
 struct = "inherited_svg"
-engine = "gecko"
 spec = "https://www.w3.org/TR/css-inline-3/#propdef-dominant-baseline"
 animation_type = "discrete"
 affects = "layout"

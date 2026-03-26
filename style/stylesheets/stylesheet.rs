@@ -842,6 +842,94 @@ mod tests {
     }
 
     #[test]
+    fn servo_preserves_alignment_baseline_extended_values_declaration() {
+        let stylesheet = parse_stylesheet(
+            r#"
+                .alpha { alignment-baseline: alphabetic; }
+                .ideo { alignment-baseline: ideographic; }
+                .hang { alignment-baseline: hanging; }
+                .central { alignment-baseline: central; }
+                .math { alignment-baseline: mathematical; }
+            "#,
+        );
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let values: Vec<String> = rules
+            .iter()
+            .filter_map(|rule| match rule {
+                CssRule::Style(rule) => Some(rule.read_with(&guard)),
+                _ => None,
+            })
+            .filter_map(|style| {
+                style
+                    .block
+                    .read_with(&guard)
+                    .declaration_importance_iter()
+                    .find_map(|(decl, _)| match decl {
+                        PropertyDeclaration::AlignmentBaseline(value) => {
+                            Some(value.to_css_string())
+                        }
+                        _ => None,
+                    })
+            })
+            .collect();
+        assert_eq!(
+            values,
+            vec![
+                "alphabetic".to_string(),
+                "ideographic".to_string(),
+                "hanging".to_string(),
+                "central".to_string(),
+                "mathematical".to_string(),
+            ],
+            "typed Servo rules should preserve the full CSS Inline 3 alignment-baseline value set",
+        );
+    }
+
+    #[test]
+    fn servo_preserves_dominant_baseline_declaration() {
+        let stylesheet = parse_stylesheet(
+            r#"
+                .hang { dominant-baseline: hanging; }
+                .ideo { dominant-baseline: ideographic; }
+                .math { dominant-baseline: mathematical; }
+            "#,
+        );
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let values: Vec<String> = rules
+            .iter()
+            .filter_map(|rule| match rule {
+                CssRule::Style(rule) => Some(rule.read_with(&guard)),
+                _ => None,
+            })
+            .filter_map(|style| {
+                style
+                    .block
+                    .read_with(&guard)
+                    .declaration_importance_iter()
+                    .find_map(|(decl, _)| match decl {
+                        PropertyDeclaration::DominantBaseline(value) => {
+                            Some(value.to_css_string())
+                        }
+                        _ => None,
+                    })
+            })
+            .collect();
+        assert_eq!(
+            values,
+            vec![
+                "hanging".to_string(),
+                "ideographic".to_string(),
+                "mathematical".to_string(),
+            ],
+            "typed Servo rules should preserve dominant-baseline declarations",
+        );
+    }
+
+    #[test]
     fn servo_preserves_hanging_punctuation_declaration() {
         let stylesheet = parse_stylesheet("p { hanging-punctuation: first allow-end last; }");
         let guard = stylesheet.shared_lock.read();

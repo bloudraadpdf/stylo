@@ -640,22 +640,20 @@ pub enum AlignmentBaseline {
     Baseline,
     /// Use the text-under baseline.
     TextBottom,
-    // Bug 2010717 - Uncomment to support alignment-baseline: alphabetic
-    // /// Use the alphabetic baseline.
-    // Alphabetic,
-    // Bug 2010718 - Uncomment to support alignment-baseline: ideographic
-    // /// Use the ideographic-under baseline.
-    // Ideographic,
+    /// Use the alphabetic baseline.
+    Alphabetic,
+    /// Use the ideographic-under baseline.
+    Ideographic,
     /// In general, use the x-middle baselines; except under text-orientation: upright
     /// (where the alphabetic and x-height baselines are essentially meaningless) use
     /// the central baseline instead.
     Middle,
-    // Bug 2010719 - Uncomment to support alignment-baseline: central
-    // /// Use the central baseline.
-    // Central,
-    // Bug 2010720 - Uncomment to support alignment-baseline: mathematical
-    // /// Use the math baseline.
-    // Mathematical,
+    /// Use the central baseline.
+    Central,
+    /// Use the math baseline.
+    Mathematical,
+    /// Use the hanging baseline.
+    Hanging,
     /// Use the text-over baseline.
     TextTop,
     /// Used to implement the deprecated "align=middle" attribute for HTML img elements.
