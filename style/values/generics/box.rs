@@ -90,6 +90,165 @@ impl<L> ToAnimatedZero for BaselineShift<L> {
     }
 }
 
+/// Snap alignment for CSS Page Floats `snap-block()`.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(u8)]
+pub enum SnapBlockAlignment {
+    /// Snap toward the block-start edge.
+    Start,
+    /// Snap toward the block-end edge.
+    End,
+    /// Snap toward the nearest block edge.
+    Near,
+}
+
+impl ToCss for SnapBlockAlignment {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        dest.write_str(match self {
+            Self::Start => "start",
+            Self::End => "end",
+            Self::Near => "near",
+        })
+    }
+}
+
+/// Payload for `float: snap-block(...)`.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+pub struct GenericSnapBlock<LengthPercentage> {
+    /// Optional snap threshold. When omitted, the consumer applies the spec default.
+    pub threshold: Option<LengthPercentage>,
+    /// Optional snap alignment. When omitted, the consumer applies the spec default.
+    pub alignment: Option<SnapBlockAlignment>,
+}
+
+impl<LengthPercentage: ToCss> ToCss for GenericSnapBlock<LengthPercentage> {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        dest.write_str("snap-block")?;
+        if self.threshold.is_none() && self.alignment.is_none() {
+            return Ok(());
+        }
+
+        dest.write_char('(')?;
+        if let Some(threshold) = &self.threshold {
+            threshold.to_css(dest)?;
+            if self.alignment.is_some() {
+                dest.write_str(", ")?;
+            }
+        }
+        if let Some(alignment) = self.alignment {
+            alignment.to_css(dest)?;
+        }
+        dest.write_char(')')
+    }
+}
+
+pub use self::GenericSnapBlock as SnapBlock;
+
+/// A generic value for the `float` property.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[allow(missing_docs)]
+pub enum GenericFloat<LengthPercentage> {
+    Left,
+    Right,
+    None,
+    InlineStart,
+    InlineEnd,
+    BlockStart,
+    BlockEnd,
+    Footnote,
+    Top,
+    Bottom,
+    TopUnlessRoom,
+    BottomUnlessRoom,
+    SnapBlock(GenericSnapBlock<LengthPercentage>),
+}
+
+impl<LengthPercentage> GenericFloat<LengthPercentage> {
+    /// Returns true if `self` is not `None`.
+    pub fn is_floating(&self) -> bool {
+        !matches!(self, Self::None)
+    }
+
+    /// Returns true if this is a page float or footnote float.
+    pub fn is_page_or_footnote_float(&self) -> bool {
+        matches!(
+            self,
+            Self::BlockStart
+                | Self::BlockEnd
+                | Self::Footnote
+                | Self::Top
+                | Self::Bottom
+                | Self::TopUnlessRoom
+                | Self::BottomUnlessRoom
+                | Self::SnapBlock(..)
+        )
+    }
+}
+
+impl<LengthPercentage: ToCss> ToCss for GenericFloat<LengthPercentage> {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        match self {
+            Self::Left => dest.write_str("left"),
+            Self::Right => dest.write_str("right"),
+            Self::None => dest.write_str("none"),
+            Self::InlineStart => dest.write_str("inline-start"),
+            Self::InlineEnd => dest.write_str("inline-end"),
+            Self::BlockStart => dest.write_str("block-start"),
+            Self::BlockEnd => dest.write_str("block-end"),
+            Self::Footnote => dest.write_str("footnote"),
+            Self::Top => dest.write_str("top"),
+            Self::Bottom => dest.write_str("bottom"),
+            Self::TopUnlessRoom => dest.write_str("top-unless-room"),
+            Self::BottomUnlessRoom => dest.write_str("bottom-unless-room"),
+            Self::SnapBlock(snap_block) => snap_block.to_css(dest),
+        }
+    }
+}
+
+pub use self::GenericFloat as Float;
+
 /// https://drafts.csswg.org/css-sizing-4/#intrinsic-size-override
 #[derive(
     Animate,

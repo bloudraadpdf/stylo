@@ -888,6 +888,80 @@ mod tests {
     }
 
     #[test]
+    fn servo_preserves_page_float_and_extended_clear_declarations() {
+        let stylesheet = parse_stylesheet(
+            r#"
+                .block-start { float: block-start; }
+                .block-end { float: block-end; }
+                .snap-bare { float: snap-block; }
+                .snap-near { float: snap-block(2em, near); }
+                .snap-end { float: snap-block(end); }
+                .clear-block-start { clear: block-start; }
+                .clear-block-end { clear: block-end; }
+                .clear-top { clear: top; }
+                .clear-bottom { clear: bottom; }
+                .clear-all { clear: all; }
+            "#,
+        );
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let mut float_values = Vec::new();
+        let mut clear_values = Vec::new();
+
+        for style in rules.iter().filter_map(|rule| match rule {
+            CssRule::Style(rule) => Some(rule.read_with(&guard)),
+            _ => None,
+        }) {
+            if let Some(float_value) = style
+                .block
+                .read_with(&guard)
+                .declaration_importance_iter()
+                .find_map(|(decl, _)| match decl {
+                    PropertyDeclaration::Float(value) => Some(value.to_css_string()),
+                    _ => None,
+                })
+            {
+                float_values.push(float_value);
+            }
+            if let Some(clear_value) = style
+                .block
+                .read_with(&guard)
+                .declaration_importance_iter()
+                .find_map(|(decl, _)| match decl {
+                    PropertyDeclaration::Clear(value) => Some(value.to_css_string()),
+                    _ => None,
+                })
+            {
+                clear_values.push(clear_value);
+            }
+        }
+
+        assert_eq!(
+            float_values,
+            vec![
+                "block-start".to_string(),
+                "block-end".to_string(),
+                "snap-block".to_string(),
+                "snap-block(2em, near)".to_string(),
+                "snap-block(end)".to_string(),
+            ],
+            "typed Servo rules should preserve logical page-float keywords and snap-block arguments",
+        );
+        assert_eq!(
+            clear_values,
+            vec![
+                "block-start".to_string(),
+                "block-end".to_string(),
+                "top".to_string(),
+                "bottom".to_string(),
+                "all".to_string(),
+            ],
+            "typed Servo rules should preserve extended page-float clear values",
+        );
+    }
+
+    #[test]
     fn servo_preserves_dominant_baseline_declaration() {
         let stylesheet = parse_stylesheet(
             r#"

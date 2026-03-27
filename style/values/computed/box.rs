@@ -6,24 +6,52 @@
 
 use crate::derives::*;
 use crate::values::animated::{Animate, Procedure, ToAnimatedValue};
-use crate::values::computed::length::{LengthPercentage, NonNegativeLength};
+use crate::values::computed::length::{Length, LengthPercentage, NonNegativeLength};
 use crate::values::computed::{Context, Integer, Number, ToComputedValue};
 use crate::values::generics::box_::{
     GenericBaselineShift, GenericContainIntrinsicSize, GenericLineClamp, GenericOverflowClipMargin,
-    GenericPerspective,
+    GenericFloat, GenericPerspective, GenericSnapBlock,
 };
 use crate::values::specified::box_ as specified;
 use std::fmt;
 use style_traits::{CssWriter, ToCss};
 
+pub use crate::values::generics::box_::SnapBlockAlignment;
 pub use crate::values::specified::box_::{
     AlignmentBaseline, Appearance, BaselineSource, BookmarkLevel, BookmarkState, BreakBetween,
-    BreakWithin, Clear, Contain, ContainerName, ContainerType, ContentVisibility, Display, Float,
+    BreakWithin, Clear, Contain, ContainerName, ContainerType, ContentVisibility, Display,
     FloatDefer, FloatReference, FootnoteDisplay, FootnotePolicy, MarginBreak, MarginTrim, Overflow,
     OverflowAnchor, OverscrollBehavior, PositionProperty, ScrollSnapAlign, ScrollSnapAxis,
-    ScrollSnapStop, ScrollSnapStrictness, ScrollSnapType, ScrollbarGutter, TouchAction, WillChange,
-    WritingModeProperty,
+    ScrollSnapStop, ScrollSnapStrictness, ScrollSnapType, ScrollbarGutter, TouchAction,
+    WillChange, WritingModeProperty,
 };
+
+/// A computed value for the `float` property.
+#[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, ToResolvedValue, ToShmem, ToTyped)]
+pub enum SnapBlockThreshold {
+    /// A computed length threshold.
+    Length(Length),
+    /// A computed percentage threshold.
+    Percentage(crate::values::computed::Percentage),
+}
+
+impl ToCss for SnapBlockThreshold {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: fmt::Write,
+    {
+        match self {
+            Self::Length(length) => length.to_css(dest),
+            Self::Percentage(percentage) => percentage.to_css(dest),
+        }
+    }
+}
+
+/// A computed value for the `float` property.
+pub type Float = GenericFloat<SnapBlockThreshold>;
+
+/// A computed payload for `float: snap-block(...)`.
+pub type SnapBlock = GenericSnapBlock<SnapBlockThreshold>;
 
 /// A computed value for the `baseline-shift` property.
 pub type BaselineShift = GenericBaselineShift<LengthPercentage>;

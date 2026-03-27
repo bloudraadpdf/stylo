@@ -9,9 +9,11 @@ pub use crate::logical_geometry::WritingModeProperty;
 use crate::parser::{Parse, ParserContext};
 use crate::properties::{LonghandId, PropertyDeclarationId, PropertyId};
 use crate::values::generics::box_::{
-    BaselineShiftKeyword, GenericBaselineShift, GenericContainIntrinsicSize, GenericLineClamp,
-    GenericOverflowClipMargin, GenericPerspective, OverflowClipMarginBox,
+    BaselineShiftKeyword, GenericBaselineShift, GenericContainIntrinsicSize, GenericFloat,
+    GenericLineClamp, GenericOverflowClipMargin, GenericPerspective, GenericSnapBlock,
+    OverflowClipMarginBox, SnapBlockAlignment,
 };
+use crate::values::computed::{Context, ToComputedValue};
 use crate::values::specified::length::{LengthPercentage, NonNegativeLength};
 use crate::values::specified::{AllowQuirks, Integer, NonNegativeNumberOrPercentage};
 use crate::values::CustomIdent;
@@ -1503,99 +1505,66 @@ impl Parse for ContainerName {
 /// A specified value for the `perspective` property.
 pub type Perspective = GenericPerspective<NonNegativeLength>;
 
-/// https://drafts.csswg.org/css-box/#propdef-float
-#[allow(missing_docs)]
-#[cfg_attr(feature = "servo", derive(Deserialize, Serialize))]
+/// A copyable threshold payload for `snap-block()`.
 #[derive(
     Clone,
     Copy,
     Debug,
-    Eq,
-    FromPrimitive,
-    Hash,
     MallocSizeOf,
     PartialEq,
     SpecifiedValueInfo,
-    ToComputedValue,
-    ToResolvedValue,
     ToShmem,
     ToTyped,
 )]
-#[repr(u8)]
-pub enum Float {
-    Left,
-    Right,
-    None,
-    // https://drafts.csswg.org/css-logical-props/#float-clear
-    InlineStart,
-    InlineEnd,
-    // https://www.w3.org/TR/css-gcpm-3/#propdef-float
-    Footnote,
-    // https://www.w3.org/TR/css-page-floats-3/#valdef-float-top
-    Top,
-    // https://www.w3.org/TR/css-page-floats-3/#valdef-float-bottom
-    Bottom,
-    // https://www.w3.org/TR/css-page-floats-3/#valdef-float-top-unless-room
-    TopUnlessRoom,
-    // https://www.w3.org/TR/css-page-floats-3/#valdef-float-bottom-unless-room
-    BottomUnlessRoom,
-    // https://www.w3.org/TR/css-page-floats-3/#valdef-float-snap-block
-    SnapBlock,
+pub enum SnapBlockThreshold {
+    /// A length threshold.
+    Length(crate::values::specified::length::NoCalcLength),
+    /// A percentage threshold.
+    Percentage(crate::values::computed::Percentage),
 }
 
-impl Float {
-    /// Returns true if `self` is not `None`.
-    pub fn is_floating(self) -> bool {
-        self != Self::None
-    }
-
-    /// Returns true if this is a page float (top, bottom, snap-block variants)
-    /// or footnote — these should NOT trigger CSS 2.1 blockification.
-    pub fn is_page_or_footnote_float(self) -> bool {
-        matches!(
-            self,
-            Self::Footnote
-                | Self::Top
-                | Self::Bottom
-                | Self::TopUnlessRoom
-                | Self::BottomUnlessRoom
-                | Self::SnapBlock
-        )
+impl ToCss for SnapBlockThreshold {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        match self {
+            Self::Length(length) => length.to_css(dest),
+            Self::Percentage(percentage) => percentage.to_css(dest),
+        }
     }
 }
 
-impl Parse for Float {
+impl Parse for SnapBlockThreshold {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        match LengthPercentage::parse(context, input)? {
+            LengthPercentage::Length(length) => Ok(Self::Length(length)),
+            LengthPercentage::Percentage(percentage) => Ok(Self::Percentage(percentage)),
+            LengthPercentage::Calc(_) => {
+                Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
+            },
+        }
+    }
+}
+
+/// https://drafts.csswg.org/css-box/#propdef-float
+#[allow(missing_docs)]
+pub type Float = GenericFloat<SnapBlockThreshold>;
+
+impl Parse for SnapBlockAlignment {
     fn parse<'i, 't>(
         _context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        // Try functional syntax: snap-block(...)
-        if input
-            .try_parse(|i| i.expect_function_matching("snap-block"))
-            .is_ok()
-        {
-            input.parse_nested_block(|input| {
-                // Parse and discard arguments — threshold/alignment stored in
-                // companion longhands (future work).
-                while input.next().is_ok() {}
-                Ok(())
-            })?;
-            return Ok(Float::SnapBlock);
-        }
         let location = input.current_source_location();
         let ident = input.expect_ident()?;
         Ok(match_ignore_ascii_case! { &ident,
-            "left" => Float::Left,
-            "right" => Float::Right,
-            "none" => Float::None,
-            "inline-start" => Float::InlineStart,
-            "inline-end" => Float::InlineEnd,
-            "footnote" => Float::Footnote,
-            "top" => Float::Top,
-            "bottom" => Float::Bottom,
-            "top-unless-room" => Float::TopUnlessRoom,
-            "bottom-unless-room" => Float::BottomUnlessRoom,
-            "snap-block" => Float::SnapBlock,
+            "start" => Self::Start,
+            "end" => Self::End,
+            "near" => Self::Near,
             _ => {
                 let ident = ident.clone();
                 return Err(location.new_custom_error(
@@ -1606,23 +1575,169 @@ impl Parse for Float {
     }
 }
 
-impl ToCss for Float {
-    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
-    where
-        W: fmt::Write,
-    {
-        dest.write_str(match *self {
-            Float::Left => "left",
-            Float::Right => "right",
-            Float::None => "none",
-            Float::InlineStart => "inline-start",
-            Float::InlineEnd => "inline-end",
-            Float::Footnote => "footnote",
-            Float::Top => "top",
-            Float::Bottom => "bottom",
-            Float::TopUnlessRoom => "top-unless-room",
-            Float::BottomUnlessRoom => "bottom-unless-room",
-            Float::SnapBlock => "snap-block",
+impl GenericSnapBlock<SnapBlockThreshold> {
+    fn parse_function<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        input.expect_function_matching("snap-block")?;
+        input.parse_nested_block(|input| {
+            let mut threshold = None;
+            let mut alignment = None;
+
+            while !input.is_exhausted() {
+                if threshold.is_none() {
+                    if let Ok(value) = input.try_parse(|i| SnapBlockThreshold::parse(context, i)) {
+                        threshold = Some(value);
+                    } else if alignment.is_none() {
+                        alignment = Some(input.try_parse(|i| SnapBlockAlignment::parse(context, i))?);
+                    } else {
+                        return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+                    }
+                } else if alignment.is_none() {
+                    alignment = Some(input.try_parse(|i| SnapBlockAlignment::parse(context, i))?);
+                } else {
+                    return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+                }
+
+                let _ = input.try_parse(|i| i.expect_comma());
+            }
+
+            if threshold.is_none() && alignment.is_none() {
+                return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+            }
+
+            Ok(Self {
+                threshold,
+                alignment,
+            })
+        })
+    }
+}
+
+impl ToComputedValue for SnapBlockThreshold {
+    type ComputedValue = crate::values::computed::box_::SnapBlockThreshold;
+
+    fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
+        match self {
+            Self::Length(length) => Self::ComputedValue::Length(length.to_computed_value(context)),
+            Self::Percentage(percentage) => Self::ComputedValue::Percentage(*percentage),
+        }
+    }
+
+    fn from_computed_value(computed: &Self::ComputedValue) -> Self {
+        match computed {
+            Self::ComputedValue::Length(length) => Self::Length(
+                crate::values::specified::length::NoCalcLength::from_computed_value(length),
+            ),
+            Self::ComputedValue::Percentage(percentage) => Self::Percentage(*percentage),
+        }
+    }
+}
+
+impl ToComputedValue for GenericSnapBlock<SnapBlockThreshold> {
+    type ComputedValue = GenericSnapBlock<crate::values::computed::box_::SnapBlockThreshold>;
+
+    fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
+        Self::ComputedValue {
+            threshold: self
+                .threshold
+                .as_ref()
+                .map(|value| value.to_computed_value(context)),
+            alignment: self.alignment,
+        }
+    }
+
+    fn from_computed_value(computed: &Self::ComputedValue) -> Self {
+        Self {
+            threshold: computed
+                .threshold
+                .as_ref()
+                .map(SnapBlockThreshold::from_computed_value),
+            alignment: computed.alignment,
+        }
+    }
+}
+
+impl ToComputedValue for GenericFloat<SnapBlockThreshold> {
+    type ComputedValue = GenericFloat<crate::values::computed::box_::SnapBlockThreshold>;
+
+    fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
+        match self {
+            Self::Left => Self::ComputedValue::Left,
+            Self::Right => Self::ComputedValue::Right,
+            Self::None => Self::ComputedValue::None,
+            Self::InlineStart => Self::ComputedValue::InlineStart,
+            Self::InlineEnd => Self::ComputedValue::InlineEnd,
+            Self::BlockStart => Self::ComputedValue::BlockStart,
+            Self::BlockEnd => Self::ComputedValue::BlockEnd,
+            Self::Footnote => Self::ComputedValue::Footnote,
+            Self::Top => Self::ComputedValue::Top,
+            Self::Bottom => Self::ComputedValue::Bottom,
+            Self::TopUnlessRoom => Self::ComputedValue::TopUnlessRoom,
+            Self::BottomUnlessRoom => Self::ComputedValue::BottomUnlessRoom,
+            Self::SnapBlock(snap_block) => {
+                Self::ComputedValue::SnapBlock(snap_block.to_computed_value(context))
+            },
+        }
+    }
+
+    fn from_computed_value(computed: &Self::ComputedValue) -> Self {
+        match computed {
+            Self::ComputedValue::Left => Self::Left,
+            Self::ComputedValue::Right => Self::Right,
+            Self::ComputedValue::None => Self::None,
+            Self::ComputedValue::InlineStart => Self::InlineStart,
+            Self::ComputedValue::InlineEnd => Self::InlineEnd,
+            Self::ComputedValue::BlockStart => Self::BlockStart,
+            Self::ComputedValue::BlockEnd => Self::BlockEnd,
+            Self::ComputedValue::Footnote => Self::Footnote,
+            Self::ComputedValue::Top => Self::Top,
+            Self::ComputedValue::Bottom => Self::Bottom,
+            Self::ComputedValue::TopUnlessRoom => Self::TopUnlessRoom,
+            Self::ComputedValue::BottomUnlessRoom => Self::BottomUnlessRoom,
+            Self::ComputedValue::SnapBlock(snap_block) => {
+                Self::SnapBlock(GenericSnapBlock::from_computed_value(snap_block))
+            },
+        }
+    }
+}
+
+impl Parse for GenericFloat<SnapBlockThreshold> {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if let Ok(snap_block) =
+            input.try_parse(|i| GenericSnapBlock::<SnapBlockThreshold>::parse_function(context, i))
+        {
+            return Ok(Self::SnapBlock(snap_block));
+        }
+        let location = input.current_source_location();
+        let ident = input.expect_ident()?;
+        Ok(match_ignore_ascii_case! { &ident,
+            "left" => Self::Left,
+            "right" => Self::Right,
+            "none" => Self::None,
+            "inline-start" => Self::InlineStart,
+            "inline-end" => Self::InlineEnd,
+            "block-start" => Self::BlockStart,
+            "block-end" => Self::BlockEnd,
+            "footnote" => Self::Footnote,
+            "top" => Self::Top,
+            "bottom" => Self::Bottom,
+            "top-unless-room" => Self::TopUnlessRoom,
+            "bottom-unless-room" => Self::BottomUnlessRoom,
+            "snap-block" => Self::SnapBlock(GenericSnapBlock {
+                threshold: None,
+                alignment: None,
+            }),
+            _ => {
+                let ident = ident.clone();
+                return Err(location.new_custom_error(
+                    StyleParseErrorKind::UnexpectedIdent(ident)
+                ));
+            }
         })
     }
 }
@@ -1784,6 +1899,11 @@ pub enum Clear {
     // https://drafts.csswg.org/css-logical-props/#float-clear
     InlineStart,
     InlineEnd,
+    BlockStart,
+    BlockEnd,
+    Top,
+    Bottom,
+    All,
 }
 
 /// https://drafts.csswg.org/css-ui/#propdef-resize
