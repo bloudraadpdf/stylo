@@ -536,7 +536,7 @@ type = "NonNegativeLengthPercentage"
 initial = "computed::NonNegativeLengthPercentage::zero()"
 struct = "box"
 spec = "https://www.w3.org/TR/css-page-floats-3/#propdef-float-offset"
-animation_type = "by_computed_value"
+animation_type = "discrete"
 affects = "layout"
 servo_restyle_damage = "rebuild_box"
 
