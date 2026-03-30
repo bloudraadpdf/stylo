@@ -475,7 +475,6 @@ sub_properties = ["font-variant-caps", "font-variant-alternates", "font-variant-
 spec = "https://drafts.csswg.org/css-fonts-3/#propdef-font-variant"
 
 [font-synthesis]
-engine = "gecko"
 sub_properties = ["font-synthesis-weight", "font-synthesis-style", "font-synthesis-small-caps", "font-synthesis-position"]
 spec = "https://drafts.csswg.org/css-fonts-3/#propdef-font-variant"
 derive_value_info = false
