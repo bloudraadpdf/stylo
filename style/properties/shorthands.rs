@@ -2918,7 +2918,6 @@ pub mod font_variant {
     }
 }
 
-#[cfg(feature = "gecko")]
 pub mod font_synthesis {
     pub use crate::properties::shorthands_generated::font_synthesis::*;
 
