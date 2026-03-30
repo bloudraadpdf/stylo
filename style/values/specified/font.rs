@@ -1585,6 +1585,7 @@ pub enum FontSynthesis {
     ToShmem,
     ToTyped,
 )]
+#[cfg_attr(feature = "servo", derive(Deserialize, Serialize))]
 pub enum FontSynthesisStyle {
     /// This attribute may be synthesized if not supported by a face.
     Auto,
