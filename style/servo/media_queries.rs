@@ -14,10 +14,10 @@ use crate::media_queries::MediaType;
 use crate::properties::style_structs::Font;
 use crate::properties::ComputedValues;
 use crate::queries::feature::{AllowsRanges, Evaluator, FeatureFlags, QueryFeatureDescription};
-use crate::queries::values::PrefersColorScheme;
+use crate::queries::values::{Orientation, PrefersColorScheme};
 use crate::values::computed::font::GenericFontFamily;
 use crate::values::computed::{
-    CSSPixelLength, Context, Length, LineHeight, NonNegativeLength, Resolution,
+    CSSPixelLength, Context, Length, LineHeight, NonNegativeLength, Ratio, Resolution,
 };
 use crate::values::specified::color::{ColorSchemeFlags, ForcedColors};
 use crate::values::specified::font::{
@@ -539,6 +539,19 @@ fn eval_width(context: &Context) -> CSSPixelLength {
     CSSPixelLength::new(context.device().au_viewport_size().width.to_f32_px())
 }
 
+fn eval_height(context: &Context) -> CSSPixelLength {
+    CSSPixelLength::new(context.device().au_viewport_size().height.to_f32_px())
+}
+
+fn eval_orientation(context: &Context, value: Option<Orientation>) -> bool {
+    Orientation::eval(context.device().au_viewport_size(), value)
+}
+
+fn eval_aspect_ratio(context: &Context) -> Ratio {
+    let size = context.device().au_viewport_size();
+    Ratio::new(size.width.0 as f32, size.height.0 as f32)
+}
+
 #[derive(Clone, Copy, Debug, FromPrimitive, Parse, ToCss)]
 #[repr(u8)]
 enum Scan {
@@ -571,11 +584,29 @@ fn eval_prefers_color_scheme(context: &Context, query_value: Option<PrefersColor
 }
 
 /// A list with all the media features that Servo supports.
-pub static MEDIA_FEATURES: [QueryFeatureDescription; 6] = [
+pub static MEDIA_FEATURES: [QueryFeatureDescription; 9] = [
     feature!(
         atom!("width"),
         AllowsRanges::Yes,
         Evaluator::Length(eval_width),
+        FeatureFlags::empty(),
+    ),
+    feature!(
+        atom!("height"),
+        AllowsRanges::Yes,
+        Evaluator::Length(eval_height),
+        FeatureFlags::empty(),
+    ),
+    feature!(
+        atom!("orientation"),
+        AllowsRanges::No,
+        keyword_evaluator!(eval_orientation, Orientation),
+        FeatureFlags::empty(),
+    ),
+    feature!(
+        atom!("aspect-ratio"),
+        AllowsRanges::Yes,
+        Evaluator::NumberRatio(eval_aspect_ratio),
         FeatureFlags::empty(),
     ),
     feature!(
