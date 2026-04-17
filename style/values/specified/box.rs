@@ -1901,6 +1901,11 @@ pub enum Clear {
     InlineEnd,
     BlockStart,
     BlockEnd,
+    // https://drafts.csswg.org/css-page-floats-3/#propdef-clear
+    // Clears both block-start and block-end page floats.
+    BothBlock,
+    // Clears both inline-start and inline-end page floats.
+    BothInline,
     Top,
     Bottom,
     All,
@@ -2111,12 +2116,19 @@ pub enum BreakBetween {
     Column,
     Page,
     Avoid,
+    AvoidPage,
     AvoidRegion,
     AvoidColumn,
     Left,
     Right,
     Recto,
     Verso,
+    // https://drafts.csswg.org/css-break-4/#propdef-break-before
+    // Force a break to a new region in a region fragmentation context.
+    Region,
+    // Force a break in every fragmentation context type simultaneously —
+    // stronger than `Always`. CSS Break Level 4 addition.
+    All,
 }
 
 impl BreakBetween {
@@ -2135,12 +2147,15 @@ impl BreakBetween {
             BreakBetween::Auto | BreakBetween::Avoid | BreakBetween::Left | BreakBetween::Right => {
                 Ok(break_value)
             },
-            BreakBetween::AvoidRegion
+            BreakBetween::AvoidPage
+            | BreakBetween::AvoidRegion
             | BreakBetween::AvoidColumn
             | BreakBetween::Column
             | BreakBetween::Page
             | BreakBetween::Recto
-            | BreakBetween::Verso => {
+            | BreakBetween::Verso
+            | BreakBetween::Region
+            | BreakBetween::All => {
                 Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
             },
         }
@@ -2160,11 +2175,14 @@ impl BreakBetween {
             },
             BreakBetween::Page => dest.write_str("always"),
             BreakBetween::Always
+            | BreakBetween::AvoidPage
             | BreakBetween::AvoidRegion
             | BreakBetween::AvoidColumn
             | BreakBetween::Column
             | BreakBetween::Recto
-            | BreakBetween::Verso => Ok(()),
+            | BreakBetween::Verso
+            | BreakBetween::Region
+            | BreakBetween::All => Ok(()),
         }
     }
 }
@@ -2196,6 +2214,10 @@ pub enum BreakWithin {
     AvoidPage,
     AvoidRegion,
     AvoidColumn,
+    // https://drafts.csswg.org/css-break-4/#break-within
+    // Force the formatter to break within this element in a region fragmentation
+    // context. Added alongside the existing `avoid-region` for symmetry.
+    Region,
 }
 
 impl BreakWithin {
@@ -2211,7 +2233,10 @@ impl BreakWithin {
         let break_value = BreakWithin::parse(input)?;
         match break_value {
             BreakWithin::Auto | BreakWithin::Avoid => Ok(break_value),
-            BreakWithin::AvoidPage | BreakWithin::AvoidRegion | BreakWithin::AvoidColumn => {
+            BreakWithin::AvoidPage
+            | BreakWithin::AvoidRegion
+            | BreakWithin::AvoidColumn
+            | BreakWithin::Region => {
                 Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
             },
         }
@@ -2227,7 +2252,10 @@ impl BreakWithin {
     {
         match *self {
             BreakWithin::Auto | BreakWithin::Avoid => self.to_css(dest),
-            BreakWithin::AvoidPage | BreakWithin::AvoidRegion | BreakWithin::AvoidColumn => Ok(()),
+            BreakWithin::AvoidPage
+            | BreakWithin::AvoidRegion
+            | BreakWithin::AvoidColumn
+            | BreakWithin::Region => Ok(()),
         }
     }
 }
