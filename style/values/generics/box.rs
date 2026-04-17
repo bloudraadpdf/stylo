@@ -193,6 +193,56 @@ impl<LengthPercentage: ToCss> ToCss for GenericSnapBlock<LengthPercentage> {
 
 pub use self::GenericSnapBlock as SnapBlock;
 
+/// Payload for `float: snap-inline(...)` — CSS Page Floats 3 section 3.2.
+///
+/// Inline-axis analogue of `GenericSnapBlock`. The spec grammar is
+/// `snap-inline( <length-percentage>? [, <alignment-keyword>]? )`; the
+/// alignment enum is shared with block-axis snap because the keywords
+/// (`start`, `end`, `near`) are identical between the two axes.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+pub struct GenericSnapInline<LengthPercentage> {
+    /// Optional snap threshold. `None` means spec default (2em).
+    pub threshold: Option<LengthPercentage>,
+    /// Optional snap alignment (`start` / `end` / `near`).
+    pub alignment: Option<SnapBlockAlignment>,
+}
+
+impl<LengthPercentage: ToCss> ToCss for GenericSnapInline<LengthPercentage> {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        dest.write_str("snap-inline")?;
+        if self.threshold.is_none() && self.alignment.is_none() {
+            return Ok(());
+        }
+
+        dest.write_char('(')?;
+        if let Some(threshold) = &self.threshold {
+            threshold.to_css(dest)?;
+            if self.alignment.is_some() {
+                dest.write_str(", ")?;
+            }
+        }
+        if let Some(alignment) = self.alignment {
+            alignment.to_css(dest)?;
+        }
+        dest.write_char(')')
+    }
+}
+
+pub use self::GenericSnapInline as SnapInline;
+
 /// A generic value for the `float` property.
 #[derive(
     Clone,
@@ -220,6 +270,7 @@ pub enum GenericFloat<LengthPercentage> {
     TopUnlessRoom,
     BottomUnlessRoom,
     SnapBlock(GenericSnapBlock<LengthPercentage>),
+    SnapInline(GenericSnapInline<LengthPercentage>),
 }
 
 impl<LengthPercentage> GenericFloat<LengthPercentage> {
@@ -240,6 +291,7 @@ impl<LengthPercentage> GenericFloat<LengthPercentage> {
                 | Self::TopUnlessRoom
                 | Self::BottomUnlessRoom
                 | Self::SnapBlock(..)
+                | Self::SnapInline(..)
         )
     }
 }
@@ -263,6 +315,7 @@ impl<LengthPercentage: ToCss> ToCss for GenericFloat<LengthPercentage> {
             Self::TopUnlessRoom => dest.write_str("top-unless-room"),
             Self::BottomUnlessRoom => dest.write_str("bottom-unless-room"),
             Self::SnapBlock(snap_block) => snap_block.to_css(dest),
+            Self::SnapInline(snap_inline) => snap_inline.to_css(dest),
         }
     }
 }

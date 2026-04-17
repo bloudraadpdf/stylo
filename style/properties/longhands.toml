@@ -921,6 +921,11 @@ type = "Float"
 initial = "computed::Float::None"
 struct = "box"
 animation_type = "discrete"
+# CSS Page Floats L3 adds snap-block() and snap-inline() function forms,
+# each carrying an optional length-percentage threshold payload. Together
+# with the two-threshold snap-block form the float `SpecifiedValue` grows
+# beyond the in-place 24-byte BOX_THRESHOLD, so the longhand is boxed.
+boxed = true
 spec = "https://drafts.csswg.org/css-box/#propdef-float"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"

@@ -10,7 +10,7 @@ use crate::values::computed::length::{Length, LengthPercentage, NonNegativeLengt
 use crate::values::computed::{Context, Integer, Number, ToComputedValue};
 use crate::values::generics::box_::{
     GenericBaselineShift, GenericContainIntrinsicSize, GenericLineClamp, GenericOverflowClipMargin,
-    GenericFloat, GenericPerspective, GenericSnapBlock,
+    GenericFloat, GenericPerspective, GenericSnapBlock, GenericSnapInline,
 };
 use crate::values::specified::box_ as specified;
 use std::fmt;
@@ -52,6 +52,9 @@ pub type Float = GenericFloat<SnapBlockThreshold>;
 
 /// A computed payload for `float: snap-block(...)`.
 pub type SnapBlock = GenericSnapBlock<SnapBlockThreshold>;
+
+/// A computed payload for `float: snap-inline(...)`.
+pub type SnapInline = GenericSnapInline<SnapBlockThreshold>;
 
 /// A computed value for the `baseline-shift` property.
 pub type BaselineShift = GenericBaselineShift<LengthPercentage>;
