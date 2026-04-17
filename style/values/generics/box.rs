@@ -128,7 +128,14 @@ impl ToCss for SnapBlockAlignment {
     }
 }
 
-/// Payload for `float: snap-block(...)`.
+/// Payload for `float: snap-block(...)` — CSS Page Floats 3 section 3.2.
+///
+/// Supports both the single-threshold form
+/// `snap-block(<length-percentage>, <alignment>)` and the two-threshold
+/// form `snap-block(<start-threshold> <end-threshold>, <alignment>)`.
+/// When `start_threshold` is `None` the consumer applies the spec default
+/// (2em). When `end_threshold` is `None` the consumer mirrors
+/// `start_threshold` (single-threshold shape).
 #[derive(
     Clone,
     Copy,
@@ -141,8 +148,11 @@ impl ToCss for SnapBlockAlignment {
     ToTyped,
 )]
 pub struct GenericSnapBlock<LengthPercentage> {
-    /// Optional snap threshold. When omitted, the consumer applies the spec default.
-    pub threshold: Option<LengthPercentage>,
+    /// Optional block-start snap threshold. `None` means spec default.
+    pub start_threshold: Option<LengthPercentage>,
+    /// Optional block-end snap threshold — populated only for the
+    /// explicit two-length form. `None` means "mirror `start_threshold`".
+    pub end_threshold: Option<LengthPercentage>,
     /// Optional snap alignment. When omitted, the consumer applies the spec default.
     pub alignment: Option<SnapBlockAlignment>,
 }
@@ -153,18 +163,28 @@ impl<LengthPercentage: ToCss> ToCss for GenericSnapBlock<LengthPercentage> {
         W: Write,
     {
         dest.write_str("snap-block")?;
-        if self.threshold.is_none() && self.alignment.is_none() {
+        if self.start_threshold.is_none()
+            && self.end_threshold.is_none()
+            && self.alignment.is_none()
+        {
             return Ok(());
         }
 
         dest.write_char('(')?;
-        if let Some(threshold) = &self.threshold {
-            threshold.to_css(dest)?;
-            if self.alignment.is_some() {
+        let wrote_threshold = if let Some(start) = &self.start_threshold {
+            start.to_css(dest)?;
+            if let Some(end) = &self.end_threshold {
+                dest.write_char(' ')?;
+                end.to_css(dest)?;
+            }
+            true
+        } else {
+            false
+        };
+        if let Some(alignment) = self.alignment {
+            if wrote_threshold {
                 dest.write_str(", ")?;
             }
-        }
-        if let Some(alignment) = self.alignment {
             alignment.to_css(dest)?;
         }
         dest.write_char(')')
