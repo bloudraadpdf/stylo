@@ -3725,7 +3725,7 @@ animation_type = "discrete"
 affects = "paint"
 servo_restyle_damage = "repaint"
 vector = {}
-keyword = { values = ["scroll", "fixed"], extra_gecko_values = ["local"], gecko_enum_prefix = "StyleImageLayerAttachment" }
+keyword = { values = ["scroll", "fixed", "local"], gecko_enum_prefix = "StyleImageLayerAttachment" }
 rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [background-clip]
