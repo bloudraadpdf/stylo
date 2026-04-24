@@ -780,7 +780,7 @@ affects = "layout"
 type = "ContentVisibility"
 initial = "computed::ContentVisibility::Visible"
 struct = "box"
-engine = "gecko"
+animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-contain/#content-visibility"
 affects = "layout"
 
