@@ -46,12 +46,11 @@ pub enum PseudoElement {
     Before,
     Selection,
     FirstLetter,
+    FirstLine,
 
-    // If/when :first-line is added, update is_first_line accordingly.
-
-    // If/when ::first-line or ::placeholder are added, adjust
-    // our property_restriction implementation to do property filtering for
-    // them.  Also, make sure the UA sheet has the !important rules some of the
+    // If/when ::placeholder is added, adjust our property_restriction
+    // implementation to do property filtering for it.  Also, make sure
+    // the UA sheet has the !important rules some of the
     // APPLIES_TO_PLACEHOLDER properties expect!
 
     // Non-eager pseudos.
@@ -95,6 +94,7 @@ impl ToCss for PseudoElement {
             Before => "::before",
             Selection => "::selection",
             FirstLetter => "::first-letter",
+            FirstLine => "::first-line",
             Backdrop => "::backdrop",
             DetailsSummary => "::-servo-details-summary",
             DetailsContent => "::details-content",
@@ -120,7 +120,7 @@ impl ::selectors::parser::PseudoElement for PseudoElement {
 }
 
 /// The number of eager pseudo-elements. Keep this in sync with cascade_type.
-pub const EAGER_PSEUDO_COUNT: usize = 4;
+pub const EAGER_PSEUDO_COUNT: usize = 5;
 
 impl PseudoElement {
     /// Gets the canonical index of this eagerly-cascaded pseudo-element.
@@ -195,7 +195,7 @@ impl PseudoElement {
     /// Whether the current pseudo element is :first-line
     #[inline]
     pub fn is_first_line(&self) -> bool {
-        false
+        *self == PseudoElement::FirstLine
     }
 
     /// Whether this pseudo-element is representing the color swatch
@@ -248,7 +248,8 @@ impl PseudoElement {
             PseudoElement::After
             | PseudoElement::Before
             | PseudoElement::Selection
-            | PseudoElement::FirstLetter => PseudoElementCascadeType::Eager,
+            | PseudoElement::FirstLetter
+            | PseudoElement::FirstLine => PseudoElementCascadeType::Eager,
             PseudoElement::Backdrop
             | PseudoElement::ColorSwatch
             | PseudoElement::DetailsSummary
@@ -284,6 +285,7 @@ impl PseudoElement {
     pub fn property_restriction(&self) -> Option<PropertyFlags> {
         match *self {
             PseudoElement::FirstLetter => Some(PropertyFlags::APPLIES_TO_FIRST_LETTER),
+            PseudoElement::FirstLine => Some(PropertyFlags::APPLIES_TO_FIRST_LINE),
             _ => None,
         }
     }
@@ -648,6 +650,7 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             "backdrop" => Backdrop,
             "selection" => Selection,
             "first-letter" => FirstLetter,
+            "first-line" => FirstLine,
             "marker" => Marker,
             "footnote-call" => FootnoteCall,
             "footnote-marker" => FootnoteMarker,
