@@ -79,6 +79,20 @@ page_pseudo_classes! {
     ///
     /// [right]: https://drafts.csswg.org/css-page-3/#spread-pseudos
     Right => "right",
+    /// [`:recto`][recto] pseudo-class
+    ///
+    /// Direction-aware spread pseudo: equivalent to `:right` in
+    /// left-to-right page progression and `:left` in right-to-left.
+    ///
+    /// [recto]: https://drafts.csswg.org/css-page-3/#spread-pseudos
+    Recto => "recto",
+    /// [`:verso`][verso] pseudo-class
+    ///
+    /// Direction-aware spread pseudo: equivalent to `:left` in
+    /// left-to-right page progression and `:right` in right-to-left.
+    ///
+    /// [verso]: https://drafts.csswg.org/css-page-3/#spread-pseudos
+    Verso => "verso",
 }
 
 bitflags! {
@@ -101,6 +115,10 @@ bitflags! {
         const RIGHT = 1 << 3;
         /// Flag for `:nth(An+B)` presence
         const NTH = 1 << 4;
+        /// Flag for PagePseudoClass::Recto
+        const RECTO = 1 << 5;
+        /// Flag for PagePseudoClass::Verso
+        const VERSO = 1 << 6;
     }
 }
 
@@ -113,6 +131,8 @@ impl PagePseudoClassFlags {
             PagePseudoClass::Blank => PagePseudoClassFlags::BLANK,
             PagePseudoClass::Left => PagePseudoClassFlags::LEFT,
             PagePseudoClass::Right => PagePseudoClassFlags::RIGHT,
+            PagePseudoClass::Recto => PagePseudoClassFlags::RECTO,
+            PagePseudoClass::Verso => PagePseudoClassFlags::VERSO,
         }
     }
     /// Checks if the given pseudo class applies to this set of flags.
@@ -231,7 +251,10 @@ impl PageSelector {
             }
             match pc {
                 PagePseudoClass::First | PagePseudoClass::Blank => g += 1,
-                PagePseudoClass::Left | PagePseudoClass::Right => h += 1,
+                PagePseudoClass::Left
+                | PagePseudoClass::Right
+                | PagePseudoClass::Recto
+                | PagePseudoClass::Verso => h += 1,
             }
         }
         // Check :nth() match
