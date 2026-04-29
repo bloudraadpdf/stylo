@@ -203,16 +203,32 @@ impl Parse for BorderSideWidth {
 }
 
 // https://drafts.csswg.org/css-values-4/#snap-a-length-as-a-border-width
-//
-// peedeeef-fork note: the device-pixel snap is intentionally bypassed
-// during computed-value resolution. Vector PDF renderers (including
-// the consumer of this fork) and Chromium's layout pipeline both
-// preserve the unsnapped author-resolved length through computed
-// values; the snap belongs in the rasteriser, not in compute. Carrying
-// the unsnapped Au keeps `border-width` and `outline-width` authored
-// in `pt` from losing up to 25% of their value after Stylo style
-// resolution at 96dpi (e.g. `2pt → 1.5pt`). See peedeeef memo
+fn snap_as_border_width(len: Au, context: &Context) -> Au {
+    debug_assert!(len >= Au(0));
+
+    // Round `width` down to the nearest device pixel, but any non-zero value that would round
+    // down to zero is clamped to 1 device pixel.
+    if len == Au(0) {
+        return len;
+    }
+
+    let au_per_dev_px = context.device().app_units_per_device_pixel();
+    std::cmp::max(Au(au_per_dev_px), Au(len.0 / au_per_dev_px * au_per_dev_px))
+}
+
+// peedeeef-fork note: `BorderSideWidth::to_computed_value` no longer
+// applies `snap_as_border_width`. Vector PDF renderers (and Chromium's
+// layout pipeline) both preserve the unsnapped author-resolved length
+// through computed values; the snap belongs in the rasteriser, not in
+// compute. Carrying the unsnapped Au keeps `border-width` /
+// `outline-width` authored in `pt` from losing up to 25% of their
+// value after Stylo style resolution at 96dpi (e.g. `2pt → 1.5pt`).
+// See peedeeef memo
 // `project_a49_ui_outline_pt_widths_lost_to_stylo_snap_deferred.md`.
+//
+// `snap_as_border_width` is retained because the pref-gated
+// `OutlineOffset::to_computed_value` below still calls it when chrome
+// rules opt in, and Servo callers can still elect to snap explicitly.
 impl ToComputedValue for BorderSideWidth {
     type ComputedValue = ComputedBorderSideWidth;
 
