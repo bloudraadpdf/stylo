@@ -530,6 +530,11 @@ spec = "https://www.w3.org/TR/css-page-floats-3/#propdef-float-defer"
 animation_type = "discrete"
 affects = "layout"
 servo_restyle_damage = "rebuild_box"
+# Earlier drafts of CSS Page Floats 3 named the property
+# `float-defer-page`. Several reference renderers (PDFreactor, Prince,
+# AHF) and a substantial body of test-suite content still author the
+# legacy spelling, so accept it as an alias of `float-defer`.
+aliases = ["float-defer-page"]
 
 [float-offset]
 type = "NonNegativeLengthPercentage"
