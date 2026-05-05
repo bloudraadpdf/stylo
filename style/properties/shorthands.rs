@@ -726,8 +726,8 @@ pub mod snap_block {
             W: fmt::Write,
         {
             // Serialise as the property form: space-separated threshold(s) and alignment.
-            let snap = match self.float.as_ref() {
-                Float::SnapBlock(s) => s,
+            let snap = match *self.float {
+                Float::SnapBlock(ref s) => s,
                 _ => return Ok(()),
             };
             let mut wrote = false;
@@ -792,8 +792,8 @@ pub mod snap_inline {
         where
             W: fmt::Write,
         {
-            let snap = match self.float.as_ref() {
-                Float::SnapInline(s) => s,
+            let snap = match *self.float {
+                Float::SnapInline(ref s) => s,
                 _ => return Ok(()),
             };
             let mut wrote = false;
