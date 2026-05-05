@@ -669,6 +669,149 @@ pub mod page_break_inside {
     }
 }
 
+/// CSS Page Floats 3 §3.2 — `snap-block` shorthand.
+///
+/// PDFreactor and Prince support `snap-block: <threshold>? <alignment>?` as a
+/// separate CSS property (shorthand) that expands to
+/// `float: snap-block(<threshold>, <alignment>)`. This compatibility shorthand
+/// lets authors write both forms:
+///   - `float: snap-block(30pt, end)` — function form, longhand
+///   - `snap-block: 30pt end`         — property form, shorthand (this module)
+pub mod snap_block {
+    use super::*;
+    pub use crate::properties::shorthands_generated::snap_block::*;
+    use crate::values::generics::box_::{GenericSnapBlock, SnapBlockAlignment};
+    use crate::values::specified::box_::{Float, SnapBlockThreshold};
+
+    pub fn parse_value<'i>(
+        context: &ParserContext,
+        input: &mut Parser<'i, '_>,
+    ) -> Result<Longhands, ParseError<'i>> {
+        // Grammar: <threshold>? [<threshold>]? <alignment>?
+        // Space-separated (no function parentheses, no comma separator).
+        let mut start_threshold = None;
+        let mut end_threshold = None;
+        let mut alignment = None;
+
+        if let Ok(value) = input.try_parse(|i| SnapBlockThreshold::parse(context, i)) {
+            start_threshold = Some(value);
+            // Optional second length-percentage for two-threshold form.
+            if let Ok(value) = input.try_parse(|i| SnapBlockThreshold::parse(context, i)) {
+                end_threshold = Some(value);
+            }
+        }
+
+        if let Ok(value) = input.try_parse(|i| SnapBlockAlignment::parse(context, i)) {
+            alignment = Some(value);
+        }
+
+        if start_threshold.is_none() && end_threshold.is_none() && alignment.is_none() {
+            return Err(input.new_custom_error(
+                style_traits::StyleParseErrorKind::UnspecifiedError,
+            ));
+        }
+
+        Ok(expanded! {
+            float: Float::SnapBlock(GenericSnapBlock {
+                start_threshold,
+                end_threshold,
+                alignment,
+            }),
+        })
+    }
+
+    impl<'a> ToCss for LonghandsToSerialize<'a> {
+        fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+        where
+            W: fmt::Write,
+        {
+            // Serialise as the property form: space-separated threshold(s) and alignment.
+            let snap = match self.float.as_ref() {
+                Float::SnapBlock(s) => s,
+                _ => return Ok(()),
+            };
+            let mut wrote = false;
+            if let Some(ref t) = snap.start_threshold {
+                t.to_css(dest)?;
+                wrote = true;
+                if let Some(ref t2) = snap.end_threshold {
+                    dest.write_char(' ')?;
+                    t2.to_css(dest)?;
+                }
+            }
+            if let Some(alignment) = snap.alignment {
+                if wrote {
+                    dest.write_char(' ')?;
+                }
+                alignment.to_css(dest)?;
+            }
+            Ok(())
+        }
+    }
+}
+
+/// CSS Page Floats 3 §3.2 — `snap-inline` shorthand.
+///
+/// Inline-axis analogue of `snap-block`. Expands to
+/// `float: snap-inline(<threshold>, <alignment>)`.
+pub mod snap_inline {
+    use super::*;
+    pub use crate::properties::shorthands_generated::snap_inline::*;
+    use crate::values::generics::box_::{GenericSnapInline, SnapBlockAlignment};
+    use crate::values::specified::box_::{Float, SnapBlockThreshold};
+
+    pub fn parse_value<'i>(
+        context: &ParserContext,
+        input: &mut Parser<'i, '_>,
+    ) -> Result<Longhands, ParseError<'i>> {
+        // Grammar: <threshold>? <alignment>?
+        let mut threshold = None;
+        let mut alignment = None;
+
+        if let Ok(value) = input.try_parse(|i| SnapBlockThreshold::parse(context, i)) {
+            threshold = Some(value);
+        }
+
+        if let Ok(value) = input.try_parse(|i| SnapBlockAlignment::parse(context, i)) {
+            alignment = Some(value);
+        }
+
+        if threshold.is_none() && alignment.is_none() {
+            return Err(input.new_custom_error(
+                style_traits::StyleParseErrorKind::UnspecifiedError,
+            ));
+        }
+
+        Ok(expanded! {
+            float: Float::SnapInline(GenericSnapInline { threshold, alignment }),
+        })
+    }
+
+    impl<'a> ToCss for LonghandsToSerialize<'a> {
+        fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+        where
+            W: fmt::Write,
+        {
+            let snap = match self.float.as_ref() {
+                Float::SnapInline(s) => s,
+                _ => return Ok(()),
+            };
+            let mut wrote = false;
+            if let Some(ref t) = snap.threshold {
+                t.to_css(dest)?;
+                wrote = true;
+            }
+            if let Some(alignment) = snap.alignment {
+                if wrote {
+                    dest.write_char(' ')?;
+                }
+                alignment.to_css(dest)?;
+            }
+            Ok(())
+        }
+    }
+}
+
 #[cfg(feature = "gecko")]
 pub mod offset {
     use super::*;
