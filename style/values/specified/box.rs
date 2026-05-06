@@ -1741,6 +1741,8 @@ impl ToComputedValue for GenericFloat<SnapBlockThreshold> {
             Self::None => Self::ComputedValue::None,
             Self::InlineStart => Self::ComputedValue::InlineStart,
             Self::InlineEnd => Self::ComputedValue::InlineEnd,
+            Self::Outside => Self::ComputedValue::Outside,
+            Self::Inside => Self::ComputedValue::Inside,
             Self::BlockStart => Self::ComputedValue::BlockStart,
             Self::BlockEnd => Self::ComputedValue::BlockEnd,
             Self::Footnote => Self::ComputedValue::Footnote,
@@ -1764,6 +1766,8 @@ impl ToComputedValue for GenericFloat<SnapBlockThreshold> {
             Self::ComputedValue::None => Self::None,
             Self::ComputedValue::InlineStart => Self::InlineStart,
             Self::ComputedValue::InlineEnd => Self::InlineEnd,
+            Self::ComputedValue::Outside => Self::Outside,
+            Self::ComputedValue::Inside => Self::Inside,
             Self::ComputedValue::BlockStart => Self::BlockStart,
             Self::ComputedValue::BlockEnd => Self::BlockEnd,
             Self::ComputedValue::Footnote => Self::Footnote,
@@ -1804,6 +1808,12 @@ impl Parse for GenericFloat<SnapBlockThreshold> {
             "none" => Self::None,
             "inline-start" => Self::InlineStart,
             "inline-end" => Self::InlineEnd,
+            // CSS Page Floats 3 §3.2.3: logical float values that resolve
+            // to the outer/inner inline edge relative to the spine, per the
+            // page's recto/verso status (LTR: outside=right on recto, left
+            // on verso; inside=left on recto, right on verso).
+            "outside" => Self::Outside,
+            "inside" => Self::Inside,
             "block-start" => Self::BlockStart,
             "block-end" => Self::BlockEnd,
             "footnote" => Self::Footnote,

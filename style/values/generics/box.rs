@@ -262,6 +262,14 @@ pub enum GenericFloat<LengthPercentage> {
     None,
     InlineStart,
     InlineEnd,
+    /// CSS Page Floats 3 §3.2.3: logical float value resolving to the outer
+    /// (spine-facing away) inline edge — `right` on recto pages, `left` on
+    /// verso pages (LTR progression).
+    Outside,
+    /// CSS Page Floats 3 §3.2.3: logical float value resolving to the inner
+    /// (spine-facing) inline edge — `left` on recto pages, `right` on verso
+    /// pages (LTR progression).
+    Inside,
     BlockStart,
     BlockEnd,
     Footnote,
@@ -307,6 +315,8 @@ impl<LengthPercentage: ToCss> ToCss for GenericFloat<LengthPercentage> {
             Self::None => dest.write_str("none"),
             Self::InlineStart => dest.write_str("inline-start"),
             Self::InlineEnd => dest.write_str("inline-end"),
+            Self::Outside => dest.write_str("outside"),
+            Self::Inside => dest.write_str("inside"),
             Self::BlockStart => dest.write_str("block-start"),
             Self::BlockEnd => dest.write_str("block-end"),
             Self::Footnote => dest.write_str("footnote"),
