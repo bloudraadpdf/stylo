@@ -3529,7 +3529,7 @@ pub mod animation {
     }
 }
 
-#[cfg(feature = "gecko")]
+#[cfg(any(feature = "gecko", feature = "servo"))]
 pub mod mask {
     pub use crate::properties::shorthands_generated::mask::*;
 
@@ -3556,12 +3556,15 @@ pub mod mask {
                 mask_origin::single_value::SpecifiedValue::BorderBox => {
                     mask_clip::single_value::SpecifiedValue::BorderBox
                 },
+                #[cfg(feature = "gecko")]
                 mask_origin::single_value::SpecifiedValue::FillBox => {
                     mask_clip::single_value::SpecifiedValue::FillBox
                 },
+                #[cfg(feature = "gecko")]
                 mask_origin::single_value::SpecifiedValue::StrokeBox => {
                     mask_clip::single_value::SpecifiedValue::StrokeBox
                 },
+                #[cfg(feature = "gecko")]
                 mask_origin::single_value::SpecifiedValue::ViewBox => {
                     mask_clip::single_value::SpecifiedValue::ViewBox
                 },
@@ -3760,6 +3763,10 @@ pub mod mask {
                     || *position_y != PositionComponent::zero();
                 let has_origin = *origin != Origin::BorderBox;
                 let has_clip = *clip != Clip::BorderBox;
+                #[cfg(feature = "gecko")]
+                let clip_suppresses_origin = *clip == Clip::NoClip;
+                #[cfg(not(feature = "gecko"))]
+                let clip_suppresses_origin = false;
 
                 if !has_other && !has_position && !has_origin && !has_clip {
                     return image.to_css(dest);
@@ -3788,7 +3795,7 @@ pub mod mask {
                     writer.item(repeat)?;
                 }
 
-                if has_origin || (has_clip && *clip != Clip::NoClip) {
+                if has_origin || (has_clip && !clip_suppresses_origin) {
                     writer.item(origin)?;
                 }
 
@@ -3810,7 +3817,7 @@ pub mod mask {
     }
 }
 
-#[cfg(feature = "gecko")]
+#[cfg(any(feature = "gecko", feature = "servo"))]
 pub mod mask_position {
     pub use crate::properties::shorthands_generated::mask_position::*;
 
