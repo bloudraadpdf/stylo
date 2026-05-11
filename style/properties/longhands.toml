@@ -100,7 +100,6 @@ affects = "layout"
 type = "LineClamp"
 initial = "computed::LineClamp::none()"
 struct = "box"
-engine = "gecko"
 spec = "https://drafts.csswg.org/css-overflow-3/#line-clamp"
 affects = "layout"
 
@@ -3973,7 +3972,6 @@ keyword = { values = ["mixed", "upright", "sideways"], gecko_aliases = ["sideway
 
 [image-orientation]
 struct = "inherited_box"
-engine = "gecko"
 spec = "https://drafts.csswg.org/css-images/#propdef-image-orientation"
 animation_type = "discrete"
 affects = "layout"
@@ -4109,6 +4107,14 @@ animation_type = "discrete"
 affects = "layout"
 servo_restyle_damage = "rebuild_box"
 keyword = { values = ["outside", "inside"] }
+
+[marker-side]
+struct = "list"
+spec = "https://drafts.csswg.org/css-lists/#marker-side"
+animation_type = "discrete"
+affects = "layout"
+servo_restyle_damage = "rebuild_box"
+keyword = { values = ["match-self", "match-parent"] }
 
 [flex-direction]
 struct = "position"
