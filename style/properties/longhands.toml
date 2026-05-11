@@ -3746,7 +3746,6 @@ rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [background-blend-mode]
 struct = "background"
-engine = "gecko"
 vector = {}
 animation_type = "discrete"
 spec = "https://drafts.fxtf.org/compositing/#background-blend-mode"
