@@ -269,6 +269,17 @@ spec = "https://www.w3.org/TR/css-page-floats-3/#propdef-snap-block"
 sub_properties = ["float"]
 spec = "https://www.w3.org/TR/css-page-floats-3/#propdef-snap-inline"
 
+# CSS Text 4 §8.1 — `text-align` is a shorthand for `text-align-all`
+# and `text-align-last`.
+#   Value: <text-align-all> || <text-align-last>
+# When given a single value, set text-align-all to that value and reset
+# text-align-last to `auto`. When given two values, the first sets
+# text-align-all and the second sets text-align-last.
+[text-align]
+sub_properties = ["text-align-all", "text-align-last"]
+spec = "https://drafts.csswg.org/css-text-4/#text-align-property"
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+
 [offset]
 engine = "gecko"
 sub_properties = ["offset-path", "offset-distance", "offset-rotate", "offset-anchor", "offset-position"]

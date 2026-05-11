@@ -1066,7 +1066,7 @@ def _remove_common_first_line_and_first_letter_properties(props, engine):
         props.remove("text-wrap-style")
 
     props.remove("overflow-wrap")
-    props.remove("text-align")
+    props.remove("text-align-all")
     props.remove("text-justify")
     props.remove("white-space-collapse")
     props.remove("text-wrap-mode")

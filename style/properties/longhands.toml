@@ -2137,13 +2137,12 @@ struct = "inherited_svg"
 spec = "https://svgwg.org/svg2-draft/painting.html#StrokeWidth"
 affects = "layout"
 
-[text-align]
+[text-align-all]
 type = "TextAlign"
 initial = "computed::TextAlign::Start"
 struct = "inherited_text"
 animation_type = "discrete"
-spec = "https://drafts.csswg.org/css-text/#propdef-text-align"
-aliases = ["text-align-all"]
+spec = "https://drafts.csswg.org/css-text-4/#text-align-all-property"
 rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"

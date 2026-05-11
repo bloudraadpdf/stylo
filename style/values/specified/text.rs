@@ -599,7 +599,7 @@ impl ToComputedValue for TextAlign {
                 let parent = _context
                     .builder
                     .get_parent_inherited_text()
-                    .clone_text_align();
+                    .clone_text_align_all();
                 let ltr = _context.builder.inherited_writing_mode().is_bidi_ltr();
                 match (parent, ltr) {
                     (TextAlignKeyword::Start, true) => TextAlignKeyword::Left,
@@ -613,7 +613,7 @@ impl ToComputedValue for TextAlign {
                 let parent = _context
                     .builder
                     .get_parent_inherited_text()
-                    .clone_text_align();
+                    .clone_text_align_all();
                 if parent == TextAlignKeyword::Start {
                     TextAlignKeyword::Center
                 } else {

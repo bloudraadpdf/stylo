@@ -812,6 +812,54 @@ pub mod snap_inline {
     }
 }
 
+/// CSS Text 4 §8.1 — `text-align` shorthand.
+///
+///   Value: <text-align-all> || <text-align-last>
+///
+/// When given a single value, set text-align-all to that value and
+/// reset text-align-last to its initial value (`auto`). When given two
+/// values, the first sets text-align-all and the second sets
+/// text-align-last.
+pub mod text_align {
+    use super::*;
+    pub use crate::properties::shorthands_generated::text_align::*;
+    use crate::values::specified::text::{TextAlign, TextAlignLast};
+
+    pub fn parse_value<'i>(
+        context: &ParserContext,
+        input: &mut Parser<'i, '_>,
+    ) -> Result<Longhands, ParseError<'i>> {
+        // `<text-align-all>` is parsed via `specified::TextAlign`.
+        // `<text-align-last>` is parsed via `specified::TextAlignLast`.
+        // The `||` combinator allows either order; in practice
+        // implementations interpret an optional second value as
+        // text-align-last. Authors writing `text-align: justify right`
+        // expect `text-align-all: justify` and `text-align-last: right`.
+        let first = TextAlign::parse(context, input)?;
+        let second = input
+            .try_parse(|i| TextAlignLast::parse(i))
+            .unwrap_or(TextAlignLast::Auto);
+        Ok(expanded! {
+            text_align_all: first,
+            text_align_last: second,
+        })
+    }
+
+    impl<'a> ToCss for LonghandsToSerialize<'a> {
+        fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+        where
+            W: fmt::Write,
+        {
+            self.text_align_all.to_css(dest)?;
+            if *self.text_align_last != TextAlignLast::Auto {
+                dest.write_char(' ')?;
+                self.text_align_last.to_css(dest)?;
+            }
+            Ok(())
+        }
+    }
+}
+
 #[cfg(feature = "gecko")]
 pub mod offset {
     use super::*;

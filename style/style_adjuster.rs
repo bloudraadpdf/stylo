@@ -630,19 +630,19 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
     /// In this case, we don't want to inherit the text alignment into the
     /// table.
     fn adjust_for_table_text_align(&mut self) {
-        use crate::properties::longhands::text_align::computed_value::T as TextAlign;
+        use crate::properties::longhands::text_align_all::computed_value::T as TextAlign;
         if self.style.get_box().clone_display() != Display::Table {
             return;
         }
 
-        match self.style.get_inherited_text().clone_text_align() {
+        match self.style.get_inherited_text().clone_text_align_all() {
             TextAlign::MozLeft | TextAlign::MozCenter | TextAlign::MozRight => {},
             _ => return,
         }
 
         self.style
             .mutate_inherited_text()
-            .set_text_align(TextAlign::Start)
+            .set_text_align_all(TextAlign::Start)
     }
 
     #[cfg(feature = "gecko")]
