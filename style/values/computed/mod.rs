@@ -90,6 +90,7 @@ pub use self::list::ListStyleType;
 pub use self::list::Quotes;
 pub use self::motion::{OffsetPath, OffsetPosition, OffsetRotate};
 pub use self::outline::OutlineStyle;
+pub use self::bd_pdf::BdPdfMetaValue;
 pub use self::page::{
     Bleed, PageMarks, PageName, PageOrientation, PageSize, PageSizeOrientation, PaperSize,
 };
@@ -144,6 +145,7 @@ pub mod angle;
 pub mod animation;
 pub mod background;
 pub mod basic_shape;
+pub mod bd_pdf;
 pub mod border;
 #[path = "box.rs"]
 pub mod box_;

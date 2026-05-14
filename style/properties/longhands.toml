@@ -1785,6 +1785,58 @@ animation_type = "none"
 rule_types_allowed = ["page"]
 affects = "layout"
 
+# moegoe -bd-pdf-* document metadata longhands. Native fork-extension
+# surface for G6 (PDF document metadata via CSS). Applies to all
+# elements (not @page descriptors); not inherited; initial `none`.
+# Renderer (moegoe-core) concatenates across all elements that set
+# them per the moegoe specification mirror `docs/specs/bd-fork.md`
+# (first-non-empty-wins for title/subject/xmp; accumulate for
+# author/keywords).
+[-bd-pdf-title]
+type = "BdPdfMetaValue"
+initial = "computed::BdPdfMetaValue::none()"
+struct = "counters"
+initial_specified_value = "specified::BdPdfMetaValue::none()"
+spec = "Nonstandard (moegoe -bd-* fork extension; G6 PDF document metadata)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-author]
+type = "BdPdfMetaValue"
+initial = "computed::BdPdfMetaValue::none()"
+struct = "counters"
+initial_specified_value = "specified::BdPdfMetaValue::none()"
+spec = "Nonstandard (moegoe -bd-* fork extension; G6 PDF document metadata)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-subject]
+type = "BdPdfMetaValue"
+initial = "computed::BdPdfMetaValue::none()"
+struct = "counters"
+initial_specified_value = "specified::BdPdfMetaValue::none()"
+spec = "Nonstandard (moegoe -bd-* fork extension; G6 PDF document metadata)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-keywords]
+type = "BdPdfMetaValue"
+initial = "computed::BdPdfMetaValue::none()"
+struct = "counters"
+initial_specified_value = "specified::BdPdfMetaValue::none()"
+spec = "Nonstandard (moegoe -bd-* fork extension; G6 PDF document metadata)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-xmp]
+type = "BdPdfMetaValue"
+initial = "computed::BdPdfMetaValue::none()"
+struct = "counters"
+initial_specified_value = "specified::BdPdfMetaValue::none()"
+spec = "Nonstandard (moegoe -bd-* fork extension; G6 PDF document metadata)"
+animation_type = "none"
+affects = ""
+
 [paint-order]
 type = "SVGPaintOrder"
 initial = "computed::SVGPaintOrder::normal()"
