@@ -115,7 +115,7 @@ pub enum BdPdfCommentState {
     Open,
 }
 
-/// Specified value of `-bd-pdf-comment-content` and
+/// Specified value of `-bd-pdf-comment-contents` and
 /// `-bd-pdf-comment-title`.
 ///
 /// v1 grammar: `none | <string>`. `attr()` / `content()` /
