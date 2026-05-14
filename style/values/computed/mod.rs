@@ -103,6 +103,7 @@ pub use self::bd_pdf_viewer::{
     BdPdfTriState, BdPdfViewerDirection, BdPdfViewerDuplex, BdPdfViewerNonFullscreenPageMode,
     BdPdfViewerPageLayout, BdPdfViewerPageMode, BdPdfViewerPrintScaling,
 };
+pub use self::bd_tab_stops::{BdTabStop, BdTabStopAlignment, BdTabStopLeader, BdTabStops};
 pub use self::page::{
     Bleed, PageMarks, PageName, PageOrientation, PageSize, PageSizeOrientation, PaperSize,
 };
@@ -162,6 +163,7 @@ pub mod bd_pdf_comment;
 pub mod bd_pdf_conformance;
 pub mod bd_pdf_tag;
 pub mod bd_pdf_viewer;
+pub mod bd_tab_stops;
 pub mod border;
 #[path = "box.rs"]
 pub mod box_;

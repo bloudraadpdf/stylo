@@ -3054,6 +3054,18 @@ spec = "https://drafts.csswg.org/css-text-3/#tab-size-property"
 aliases = ["-moz-tab-size"]
 affects = "layout"
 
+# moegoe -bd-tab-stops — positional tab stops with alignment + leader.
+# Authored on the paragraph (per OOXML <w:tabs>); CSS `tab-size`
+# continues to define the interval used *between* positional stops.
+[-bd-tab-stops]
+type = "BdTabStops"
+initial = "computed::BdTabStops::None"
+struct = "inherited_text"
+initial_specified_value = "specified::BdTabStops::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; positional tab stops with alignment + leader)"
+animation_type = "none"
+affects = "layout"
+
 [text-autospace]
 type = "TextAutospace"
 initial = "computed::text::TextAutospace::NO_AUTOSPACE"
