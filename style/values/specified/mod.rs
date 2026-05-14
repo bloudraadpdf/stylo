@@ -93,6 +93,7 @@ pub use self::bd_pdf_comment::{
     BdPdfCommentString, BdPdfLinkBorder,
 };
 pub use self::bd_pdf_conformance::{BdPdfConformanceValue, BdPdfVersionValue};
+pub use self::bd_pdf_format::BdPdfFormat;
 pub use self::bd_pdf_tag::{
     BdPdfStandardRole, BdPdfTagStringAuto, BdPdfTagStringPlain, BdPdfTagValue,
 };
@@ -160,6 +161,7 @@ pub mod basic_shape;
 pub mod bd_pdf;
 pub mod bd_pdf_comment;
 pub mod bd_pdf_conformance;
+pub mod bd_pdf_format;
 pub mod bd_pdf_tag;
 pub mod bd_pdf_viewer;
 pub mod bd_tab_stops;

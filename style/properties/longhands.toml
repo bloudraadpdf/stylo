@@ -2042,6 +2042,19 @@ spec = "Nonstandard (moegoe -bd-* fork extension; G7 PDF annotations)"
 animation_type = "none"
 affects = ""
 
+# moegoe G3 — AcroForm interactive form opt-in. `pdf` flags the
+# document as containing interactive form widgets (ISO 32000-2
+# §12.7). v1 ships the parse surface only; full widget emission
+# remains a separate workstream.
+[-bd-pdf-format]
+type = "BdPdfFormat"
+initial = "computed::BdPdfFormat::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfFormat::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; G3 PDF format AcroForm stub)"
+animation_type = "none"
+affects = ""
+
 # moegoe G8 — tagged-PDF role overrides. Per-element; not
 # inherited. `-bd-pdf-tag: auto` derives from HTML semantics.
 [-bd-pdf-tag]
