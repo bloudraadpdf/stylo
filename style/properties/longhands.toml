@@ -1837,6 +1837,267 @@ spec = "Nonstandard (moegoe -bd-* fork extension; G6 PDF document metadata)"
 animation_type = "none"
 affects = ""
 
+# moegoe G4 — PDF/A and PDF/UA conformance. Document-level; the
+# renderer honours only `:root` declarations.
+[-bd-pdf-conformance]
+type = "BdPdfConformanceValue"
+initial = "computed::BdPdfConformanceValue::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfConformanceValue::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; G4 PDF/A conformance)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-version]
+type = "BdPdfVersionValue"
+initial = "computed::BdPdfVersionValue::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfVersionValue::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; G4 PDF/A conformance)"
+animation_type = "none"
+affects = ""
+
+# moegoe G5 — PDF viewer preferences (ISO 32000-2 §12.2).
+# Document-level; the renderer honours only `:root` declarations.
+[-bd-pdf-viewer-page-layout]
+type = "BdPdfViewerPageLayout"
+initial = "computed::BdPdfViewerPageLayout::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfViewerPageLayout::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; G5 PDF viewer preferences)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-viewer-page-mode]
+type = "BdPdfViewerPageMode"
+initial = "computed::BdPdfViewerPageMode::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfViewerPageMode::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; G5 PDF viewer preferences)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-viewer-non-fullscreen-page-mode]
+type = "BdPdfViewerNonFullscreenPageMode"
+initial = "computed::BdPdfViewerNonFullscreenPageMode::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfViewerNonFullscreenPageMode::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; G5 PDF viewer preferences)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-viewer-direction]
+type = "BdPdfViewerDirection"
+initial = "computed::BdPdfViewerDirection::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfViewerDirection::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; G5 PDF viewer preferences)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-viewer-print-scaling]
+type = "BdPdfViewerPrintScaling"
+initial = "computed::BdPdfViewerPrintScaling::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfViewerPrintScaling::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; G5 PDF viewer preferences)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-viewer-duplex]
+type = "BdPdfViewerDuplex"
+initial = "computed::BdPdfViewerDuplex::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfViewerDuplex::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; G5 PDF viewer preferences)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-viewer-hide-toolbar]
+type = "BdPdfTriState"
+initial = "computed::BdPdfTriState::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfTriState::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; G5 PDF viewer preferences)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-viewer-hide-menubar]
+type = "BdPdfTriState"
+initial = "computed::BdPdfTriState::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfTriState::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; G5 PDF viewer preferences)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-viewer-hide-window-ui]
+type = "BdPdfTriState"
+initial = "computed::BdPdfTriState::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfTriState::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; G5 PDF viewer preferences)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-viewer-fit-window]
+type = "BdPdfTriState"
+initial = "computed::BdPdfTriState::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfTriState::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; G5 PDF viewer preferences)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-viewer-center-window]
+type = "BdPdfTriState"
+initial = "computed::BdPdfTriState::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfTriState::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; G5 PDF viewer preferences)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-viewer-display-doc-title]
+type = "BdPdfTriState"
+initial = "computed::BdPdfTriState::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfTriState::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; G5 PDF viewer preferences)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-viewer-pick-tray-by-pdf-size]
+type = "BdPdfTriState"
+initial = "computed::BdPdfTriState::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfTriState::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; G5 PDF viewer preferences)"
+animation_type = "none"
+affects = ""
+
+# moegoe G7 — PDF annotations (Link border + Comment family).
+# Per-element. Initial `none` / `auto` (no annotation).
+[-bd-pdf-link-border]
+type = "BdPdfLinkBorder"
+initial = "computed::BdPdfLinkBorder::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfLinkBorder::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; G7 PDF annotations)"
+animation_type = "none"
+affects = ""
+boxed = true
+
+[-bd-pdf-comment]
+type = "BdPdfCommentKind"
+initial = "computed::BdPdfCommentKind::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfCommentKind::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; G7 PDF annotations)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-comment-content]
+type = "BdPdfCommentString"
+initial = "computed::BdPdfCommentString::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfCommentString::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; G7 PDF annotations)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-comment-title]
+type = "BdPdfCommentString"
+initial = "computed::BdPdfCommentString::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfCommentString::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; G7 PDF annotations)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-comment-colour]
+type = "BdPdfCommentColour"
+initial = "computed::BdPdfCommentColour::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfCommentColour::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; G7 PDF annotations)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-comment-icon]
+type = "BdPdfCommentIcon"
+initial = "computed::BdPdfCommentIcon::Note"
+struct = "counters"
+initial_specified_value = "specified::BdPdfCommentIcon::Note"
+spec = "Nonstandard (moegoe -bd-* fork extension; G7 PDF annotations)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-comment-state]
+type = "BdPdfCommentState"
+initial = "computed::BdPdfCommentState::Closed"
+struct = "counters"
+initial_specified_value = "specified::BdPdfCommentState::Closed"
+spec = "Nonstandard (moegoe -bd-* fork extension; G7 PDF annotations)"
+animation_type = "none"
+affects = ""
+
+# moegoe G8 — tagged-PDF role overrides. Per-element; not
+# inherited. `-bd-pdf-tag: auto` derives from HTML semantics.
+[-bd-pdf-tag]
+type = "BdPdfTagValue"
+initial = "computed::BdPdfTagValue::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfTagValue::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; G8 tagged-PDF role overrides)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-tag-alt]
+type = "BdPdfTagStringAuto"
+initial = "computed::BdPdfTagStringAuto::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfTagStringAuto::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; G8 tagged-PDF role overrides)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-tag-actual-text]
+type = "BdPdfTagStringAuto"
+initial = "computed::BdPdfTagStringAuto::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfTagStringAuto::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; G8 tagged-PDF role overrides)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-tag-title]
+type = "BdPdfTagStringPlain"
+initial = "computed::BdPdfTagStringPlain::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfTagStringPlain::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; G8 tagged-PDF role overrides)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-tag-lang]
+type = "BdPdfTagStringAuto"
+initial = "computed::BdPdfTagStringAuto::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfTagStringAuto::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; G8 tagged-PDF role overrides)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-tag-expanded]
+type = "BdPdfTagStringPlain"
+initial = "computed::BdPdfTagStringPlain::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfTagStringPlain::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; G8 tagged-PDF role overrides)"
+animation_type = "none"
+affects = ""
+
 [paint-order]
 type = "SVGPaintOrder"
 initial = "computed::SVGPaintOrder::normal()"

@@ -91,6 +91,18 @@ pub use self::list::Quotes;
 pub use self::motion::{OffsetPath, OffsetPosition, OffsetRotate};
 pub use self::outline::OutlineStyle;
 pub use self::bd_pdf::BdPdfMetaValue;
+pub use self::bd_pdf_comment::{
+    BdPdfCommentColour, BdPdfCommentIcon, BdPdfCommentKind, BdPdfCommentState,
+    BdPdfCommentString, BdPdfLinkBorder,
+};
+pub use self::bd_pdf_conformance::{BdPdfConformanceValue, BdPdfVersionValue};
+pub use self::bd_pdf_tag::{
+    BdPdfStandardRole, BdPdfTagStringAuto, BdPdfTagStringPlain, BdPdfTagValue,
+};
+pub use self::bd_pdf_viewer::{
+    BdPdfTriState, BdPdfViewerDirection, BdPdfViewerDuplex, BdPdfViewerNonFullscreenPageMode,
+    BdPdfViewerPageLayout, BdPdfViewerPageMode, BdPdfViewerPrintScaling,
+};
 pub use self::page::{
     Bleed, PageMarks, PageName, PageOrientation, PageSize, PageSizeOrientation, PaperSize,
 };
@@ -146,6 +158,10 @@ pub mod animation;
 pub mod background;
 pub mod basic_shape;
 pub mod bd_pdf;
+pub mod bd_pdf_comment;
+pub mod bd_pdf_conformance;
+pub mod bd_pdf_tag;
+pub mod bd_pdf_viewer;
 pub mod border;
 #[path = "box.rs"]
 pub mod box_;
