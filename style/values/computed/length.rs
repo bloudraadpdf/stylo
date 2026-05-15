@@ -66,6 +66,7 @@ impl specified::NoCalcLength {
             },
             Self::ViewportPercentage(length) => length.to_computed_value(context),
             Self::ContainerRelative(length) => length.to_computed_value(context),
+            Self::PageRelative(length) => length.to_computed_value(context),
             Self::ServoCharacterWidth(length) => length
                 .to_computed_value(context.style().get_font().clone_font_size().computed_size()),
         }

@@ -1047,6 +1047,201 @@ impl ContainerRelativeLength {
     }
 }
 
+/// moegoe -bd-* fork extension (F24): PDFreactor-compatible page-
+/// and bleed-box relative length units.
+///
+/// Each unit is 1% of a page-axis dimension. `-bd-p*` units track
+/// the page area (incl. margins); `-bd-b*` units track the bleed
+/// area (page + bleed marks outset). Inline / block aliases follow
+/// the writing-mode of the containing block. moegoe configures the
+/// Stylo viewport size to match the first-page dimensions, so
+/// page-relative units resolve via the same machinery as `vw` /
+/// `vh` today; bleed-relative units share the same path and pick
+/// up the bleed-box once that pipeline is threaded through Context
+/// (TODO).
+///
+/// Source: `pdfreactor-inventory.md:725-740`. Compat translation
+/// from PDFreactor `-ro-p*` / `-ro-b*` tokens lives in moegoe-css.
+#[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, ToCss, ToShmem)]
+#[repr(u8)]
+pub enum PageRelativeLength {
+    /// 1% of page width.
+    #[css(dimension)]
+    Pw(CSSFloat),
+    /// 1% of page inline-size (axis-typed alias of `Pw`).
+    #[css(dimension)]
+    Pi(CSSFloat),
+    /// 1% of page height.
+    #[css(dimension)]
+    Ph(CSSFloat),
+    /// 1% of page block-size (axis-typed alias of `Ph`).
+    #[css(dimension)]
+    Pb(CSSFloat),
+    /// 1% of `min(page-width, page-height)`.
+    #[css(dimension)]
+    Pmin(CSSFloat),
+    /// 1% of `max(page-width, page-height)`.
+    #[css(dimension)]
+    Pmax(CSSFloat),
+    /// 1% of bleed-box width.
+    #[css(dimension)]
+    Bw(CSSFloat),
+    /// 1% of bleed-box inline-size.
+    #[css(dimension)]
+    Bi(CSSFloat),
+    /// 1% of bleed-box height.
+    #[css(dimension)]
+    Bh(CSSFloat),
+    /// 1% of bleed-box block-size.
+    #[css(dimension)]
+    Bb(CSSFloat),
+    /// 1% of `min(bleed-width, bleed-height)`.
+    #[css(dimension)]
+    Bmin(CSSFloat),
+    /// 1% of `max(bleed-width, bleed-height)`.
+    #[css(dimension)]
+    Bmax(CSSFloat),
+}
+
+impl PageRelativeLength {
+    /// Return the unitless, raw value.
+    fn unitless_value(&self) -> CSSFloat {
+        match *self {
+            Self::Pw(v)
+            | Self::Pi(v)
+            | Self::Ph(v)
+            | Self::Pb(v)
+            | Self::Pmin(v)
+            | Self::Pmax(v)
+            | Self::Bw(v)
+            | Self::Bi(v)
+            | Self::Bh(v)
+            | Self::Bb(v)
+            | Self::Bmin(v)
+            | Self::Bmax(v) => v,
+        }
+    }
+
+    /// Return the unit, as a string.
+    fn unit(&self) -> &'static str {
+        match *self {
+            Self::Pw(_) => "-bd-pw",
+            Self::Pi(_) => "-bd-pi",
+            Self::Ph(_) => "-bd-ph",
+            Self::Pb(_) => "-bd-pb",
+            Self::Pmin(_) => "-bd-pmin",
+            Self::Pmax(_) => "-bd-pmax",
+            Self::Bw(_) => "-bd-bw",
+            Self::Bi(_) => "-bd-bi",
+            Self::Bh(_) => "-bd-bh",
+            Self::Bb(_) => "-bd-bb",
+            Self::Bmin(_) => "-bd-bmin",
+            Self::Bmax(_) => "-bd-bmax",
+        }
+    }
+
+    pub(crate) fn try_op<O>(&self, other: &Self, op: O) -> Result<Self, ()>
+    where
+        O: Fn(f32, f32) -> f32,
+    {
+        use self::PageRelativeLength::*;
+        if std::mem::discriminant(self) != std::mem::discriminant(other) {
+            return Err(());
+        }
+        Ok(match (self, other) {
+            (&Pw(one), &Pw(other)) => Pw(op(one, other)),
+            (&Pi(one), &Pi(other)) => Pi(op(one, other)),
+            (&Ph(one), &Ph(other)) => Ph(op(one, other)),
+            (&Pb(one), &Pb(other)) => Pb(op(one, other)),
+            (&Pmin(one), &Pmin(other)) => Pmin(op(one, other)),
+            (&Pmax(one), &Pmax(other)) => Pmax(op(one, other)),
+            (&Bw(one), &Bw(other)) => Bw(op(one, other)),
+            (&Bi(one), &Bi(other)) => Bi(op(one, other)),
+            (&Bh(one), &Bh(other)) => Bh(op(one, other)),
+            (&Bb(one), &Bb(other)) => Bb(op(one, other)),
+            (&Bmin(one), &Bmin(other)) => Bmin(op(one, other)),
+            (&Bmax(one), &Bmax(other)) => Bmax(op(one, other)),
+            _ => unsafe {
+                match *self {
+                    Pw(..) | Pi(..) | Ph(..) | Pb(..) | Pmin(..) | Pmax(..) | Bw(..) | Bi(..)
+                    | Bh(..) | Bb(..) | Bmin(..) | Bmax(..) => {},
+                }
+                debug_unreachable!("Forgot to handle unit in try_op()")
+            },
+        })
+    }
+
+    pub(crate) fn map(&self, mut op: impl FnMut(f32) -> f32) -> Self {
+        match self {
+            Self::Pw(x) => Self::Pw(op(*x)),
+            Self::Pi(x) => Self::Pi(op(*x)),
+            Self::Ph(x) => Self::Ph(op(*x)),
+            Self::Pb(x) => Self::Pb(op(*x)),
+            Self::Pmin(x) => Self::Pmin(op(*x)),
+            Self::Pmax(x) => Self::Pmax(op(*x)),
+            Self::Bw(x) => Self::Bw(op(*x)),
+            Self::Bi(x) => Self::Bi(op(*x)),
+            Self::Bh(x) => Self::Bh(op(*x)),
+            Self::Bb(x) => Self::Bb(op(*x)),
+            Self::Bmin(x) => Self::Bmin(op(*x)),
+            Self::Bmax(x) => Self::Bmax(op(*x)),
+        }
+    }
+
+    /// Computes the given page-relative length.
+    ///
+    /// moegoe sets the Stylo viewport size to match the first-page
+    /// dimensions, so this resolves via
+    /// `viewport_size_for_viewport_unit_resolution`. Inline / block
+    /// aliases respect the writing-mode. Bleed-box variants reuse
+    /// the viewport size for now; once the bleed-box dimensions are
+    /// threaded through Context, the bleed arms should switch to
+    /// the new accessor.
+    pub fn to_computed_value(&self, context: &Context) -> CSSPixelLength {
+        use self::PageRelativeLength::*;
+
+        let size = context.viewport_size_for_viewport_unit_resolution(ViewportVariant::UADefault);
+        let writing_mode_vertical = context.style().writing_mode.is_vertical();
+
+        let (factor, length): (CSSFloat, app_units::Au) = match *self {
+            Pw(v) | Bw(v) => (v, size.width),
+            Ph(v) | Bh(v) => (v, size.height),
+            Pi(v) | Bi(v) => (
+                v,
+                if writing_mode_vertical {
+                    size.height
+                } else {
+                    size.width
+                },
+            ),
+            Pb(v) | Bb(v) => (
+                v,
+                if writing_mode_vertical {
+                    size.width
+                } else {
+                    size.height
+                },
+            ),
+            Pmin(v) | Bmin(v) => (v, cmp::min(size.width, size.height)),
+            Pmax(v) | Bmax(v) => (v, cmp::max(size.width, size.height)),
+        };
+
+        let length = context.builder.effective_zoom.zoom(length.0 as f32);
+        let trunc_scaled =
+            ((length as f64 * factor as f64 / 100.).trunc() / AU_PER_PX as f64) as f32;
+        CSSPixelLength::new(crate::values::normalize(trunc_scaled))
+    }
+}
+
+impl PartialOrd for PageRelativeLength {
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        if std::mem::discriminant(self) != std::mem::discriminant(other) {
+            return None;
+        }
+        self.unitless_value().partial_cmp(&other.unitless_value())
+    }
+}
+
 /// A `<length>` without taking `calc` expressions into account
 ///
 /// <https://drafts.csswg.org/css-values/#lengths>
@@ -1072,6 +1267,11 @@ pub enum NoCalcLength {
     ///
     /// <https://drafts.csswg.org/css-contain-3/#container-lengths>
     ContainerRelative(ContainerRelativeLength),
+    /// A moegoe page-/bleed-relative length (F24).
+    ///
+    /// PDFreactor-compatible 1% page or bleed-axis units. See
+    /// [`PageRelativeLength`] for the resolution semantics.
+    PageRelative(PageRelativeLength),
     /// HTML5 "character width", as defined in HTML5 § 14.5.4.
     ///
     /// This cannot be specified by the user directly and is only generated by
@@ -1087,6 +1287,7 @@ impl NoCalcLength {
             Self::FontRelative(v) => v.unitless_value(),
             Self::ViewportPercentage(v) => v.unitless_value(),
             Self::ContainerRelative(v) => v.unitless_value(),
+            Self::PageRelative(v) => v.unitless_value(),
             Self::ServoCharacterWidth(c) => c.0 as f32,
         }
     }
@@ -1098,6 +1299,7 @@ impl NoCalcLength {
             Self::FontRelative(v) => v.unit(),
             Self::ViewportPercentage(v) => v.unit(),
             Self::ContainerRelative(v) => v.unit(),
+            Self::PageRelative(v) => v.unit(),
             Self::ServoCharacterWidth(_) => "",
         }
     }
@@ -1128,7 +1330,10 @@ impl NoCalcLength {
     /// because the font they're relative to should be zoomed already.
     pub fn should_zoom_text(&self) -> bool {
         match *self {
-            Self::Absolute(..) | Self::ViewportPercentage(..) | Self::ContainerRelative(..) => true,
+            Self::Absolute(..)
+            | Self::ViewportPercentage(..)
+            | Self::ContainerRelative(..)
+            | Self::PageRelative(..) => true,
             Self::ServoCharacterWidth(..) | Self::FontRelative(..) => false,
         }
     }
@@ -1253,6 +1458,22 @@ impl NoCalcLength {
             "cqmax" if !context.in_page_rule() && (cfg!(feature = "gecko") || cfg!(feature = "servo")) => {
                 Self::ContainerRelative(ContainerRelativeLength::Cqmax(value))
             },
+            // moegoe -bd-* fork extension (F24): PDFreactor-compatible
+            // page-relative and bleed-relative length units. Resolved
+            // via the viewport machinery (moegoe sets the viewport to
+            // the first-page dimensions).
+            "-bd-pw" => Self::PageRelative(PageRelativeLength::Pw(value)),
+            "-bd-pi" => Self::PageRelative(PageRelativeLength::Pi(value)),
+            "-bd-ph" => Self::PageRelative(PageRelativeLength::Ph(value)),
+            "-bd-pb" => Self::PageRelative(PageRelativeLength::Pb(value)),
+            "-bd-pmin" => Self::PageRelative(PageRelativeLength::Pmin(value)),
+            "-bd-pmax" => Self::PageRelative(PageRelativeLength::Pmax(value)),
+            "-bd-bw" => Self::PageRelative(PageRelativeLength::Bw(value)),
+            "-bd-bi" => Self::PageRelative(PageRelativeLength::Bi(value)),
+            "-bd-bh" => Self::PageRelative(PageRelativeLength::Bh(value)),
+            "-bd-bb" => Self::PageRelative(PageRelativeLength::Bb(value)),
+            "-bd-bmin" => Self::PageRelative(PageRelativeLength::Bmin(value)),
+            "-bd-bmax" => Self::PageRelative(PageRelativeLength::Bmax(value)),
             _ => return Err(()),
         })
     }
@@ -1278,6 +1499,9 @@ impl NoCalcLength {
             (&ContainerRelative(ref one), &ContainerRelative(ref other)) => {
                 ContainerRelative(one.try_op(other, op)?)
             },
+            (&PageRelative(ref one), &PageRelative(ref other)) => {
+                PageRelative(one.try_op(other, op)?)
+            },
             (&ServoCharacterWidth(ref one), &ServoCharacterWidth(ref other)) => {
                 ServoCharacterWidth(CharacterWidth(op(one.0 as f32, other.0 as f32) as i32))
             },
@@ -1289,6 +1513,7 @@ impl NoCalcLength {
                     | FontRelative(..)
                     | ViewportPercentage(..)
                     | ContainerRelative(..)
+                    | PageRelative(..)
                     | ServoCharacterWidth(..) => {},
                 }
                 debug_unreachable!("Forgot to handle unit in try_op()")
@@ -1304,6 +1529,7 @@ impl NoCalcLength {
             FontRelative(ref one) => FontRelative(one.map(op)),
             ViewportPercentage(ref one) => ViewportPercentage(one.map(op)),
             ContainerRelative(ref one) => ContainerRelative(one.map(op)),
+            PageRelative(ref one) => PageRelative(one.map(op)),
             ServoCharacterWidth(ref one) => {
                 ServoCharacterWidth(CharacterWidth(op(one.0 as f32) as i32))
             },
@@ -1386,6 +1612,7 @@ impl PartialOrd for NoCalcLength {
                 one.partial_cmp(other)
             },
             (&ContainerRelative(ref one), &ContainerRelative(ref other)) => one.partial_cmp(other),
+            (&PageRelative(ref one), &PageRelative(ref other)) => one.partial_cmp(other),
             (&ServoCharacterWidth(ref one), &ServoCharacterWidth(ref other)) => {
                 one.0.partial_cmp(&other.0)
             },
@@ -1397,6 +1624,7 @@ impl PartialOrd for NoCalcLength {
                     | FontRelative(..)
                     | ViewportPercentage(..)
                     | ContainerRelative(..)
+                    | PageRelative(..)
                     | ServoCharacterWidth(..) => {},
                 }
                 debug_unreachable!("Forgot an arm in partial_cmp?")
