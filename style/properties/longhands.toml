@@ -2409,6 +2409,65 @@ animation_type = "none"
 rule_types_allowed = ["page"]
 affects = "paint"
 
+# moegoe F5 — Image recompression / DPI control. Six properties
+# governing how embedded images are processed when emitting PDF.
+# `image-resolution` is the W3C-standard surface (CSS Images 4 §6);
+# the moegoe fork carries an explicit longhand here because it
+# is otherwise Gecko-gated.
+[image-resolution]
+type = "BdImageResolution"
+initial = "computed::BdImageResolution::one_dppx()"
+struct = "counters"
+initial_specified_value = "specified::BdImageResolution::one_dppx()"
+spec = "https://drafts.csswg.org/css-images-4/#the-image-resolution"
+animation_type = "none"
+affects = "paint"
+
+[-bd-image-resolution]
+type = "BdImageResolution"
+initial = "computed::BdImageResolution::one_dppx()"
+struct = "counters"
+initial_specified_value = "specified::BdImageResolution::one_dppx()"
+spec = "Nonstandard (moegoe -bd-* fork extension; F5 image resolution alias)"
+animation_type = "none"
+affects = "paint"
+
+[-bd-image-recompression]
+type = "BdImageRecompression"
+initial = "computed::BdImageRecompression::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdImageRecompression::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F5 image recompression policy)"
+animation_type = "none"
+affects = "paint"
+
+[-bd-image-resampling]
+type = "BdImageResampling"
+initial = "computed::BdImageResampling::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdImageResampling::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F5 image resampling kernel)"
+animation_type = "none"
+affects = "paint"
+
+[-bd-image-magic]
+type = "BdImageMagic"
+initial = "computed::BdImageMagic::None"
+struct = "counters"
+initial_specified_value = "specified::BdImageMagic::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; F5 image magic processing)"
+animation_type = "none"
+affects = ""
+
+[-bd-image-clip-path]
+type = "BdImageClipPath"
+initial = "computed::BdImageClipPath::None"
+struct = "counters"
+initial_specified_value = "specified::BdImageClipPath::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; F5 per-image clip path)"
+animation_type = "none"
+affects = "paint"
+
 [paint-order]
 type = "SVGPaintOrder"
 initial = "computed::SVGPaintOrder::normal()"

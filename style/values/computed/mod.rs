@@ -90,6 +90,9 @@ pub use self::list::ListStyleType;
 pub use self::list::Quotes;
 pub use self::motion::{OffsetPath, OffsetPosition, OffsetRotate};
 pub use self::outline::OutlineStyle;
+pub use self::bd_image::{
+    BdImageClipPath, BdImageMagic, BdImageRecompression, BdImageResampling, BdImageResolution,
+};
 pub use self::bd_page_boxes::{
     BdPdfArtSize, BdPdfCropSize, BdPdfMediaSize, BdPdfPageBoxSize, BdPdfPageClip,
 };
@@ -173,6 +176,7 @@ pub mod angle;
 pub mod animation;
 pub mod background;
 pub mod basic_shape;
+pub mod bd_image;
 pub mod bd_page_boxes;
 pub mod bd_page_marks;
 pub mod bd_page_rotation;
