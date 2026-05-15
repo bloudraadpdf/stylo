@@ -60,6 +60,14 @@ pub enum PseudoElement {
     Marker,
     FootnoteCall,
     FootnoteMarker,
+    // moegoe Family 13: PDFreactor break + footnote-area pseudos.
+    // The paginator inserts a synthetic inline-content child at the
+    // break boundary or the footnote-area box. Compat translator
+    // rewrites `::-ro-before-break`, `::-ro-after-break`, and
+    // `::-ro-footnote-area`.
+    BdBeforeBreak,
+    BdAfterBreak,
+    BdFootnoteArea,
 
     // Implemented pseudos. These pseudo elements are representing the
     // elements within an UA shadow DOM, and matching the elements with
@@ -101,6 +109,9 @@ impl ToCss for PseudoElement {
             Marker => "::marker",
             FootnoteCall => "::footnote-call",
             FootnoteMarker => "::footnote-marker",
+            BdBeforeBreak => "::-bd-before-break",
+            BdAfterBreak => "::-bd-after-break",
+            BdFootnoteArea => "::-bd-footnote-area",
             ColorSwatch => "::color-swatch",
             Placeholder => "::placeholder",
             ServoTextControlInnerContainer => "::-servo-text-control-inner-container",
@@ -256,6 +267,9 @@ impl PseudoElement {
             | PseudoElement::Marker
             | PseudoElement::FootnoteCall
             | PseudoElement::FootnoteMarker
+            | PseudoElement::BdBeforeBreak
+            | PseudoElement::BdAfterBreak
+            | PseudoElement::BdFootnoteArea
             | PseudoElement::Placeholder
             | PseudoElement::DetailsContent
             | PseudoElement::ServoTextControlInnerContainer
@@ -314,12 +328,25 @@ pub struct CustomState(pub AtomIdent);
 
 /// A non tree-structural pseudo-class.
 /// See https://drafts.csswg.org/selectors-4/#structural-pseudos
+///
+/// moegoe note (Family 13): the PDFreactor `:-ro-matches(s)` pseudo
+/// is intentionally NOT added here. The compat translator
+/// (`crates/moegoe-css/src/compat`) rewrites `:-ro-matches(s)` to
+/// the standard `:is(s)` selector before Stylo parses; `:is` is
+/// already provided by selectors-4 and adding a parallel pseudo
+/// would only fragment the matcher.
 #[derive(Clone, Debug, Eq, Hash, MallocSizeOf, PartialEq, ToShmem)]
 #[allow(missing_docs)]
 pub enum NonTSPseudoClass {
     Active,
     AnyLink,
     Autofill,
+    /// moegoe `:-bd-no-content` (Family 13). Matches an element
+    /// whose generated content is empty *and* whose DOM children
+    /// would not produce any boxes. Allows stylesheets to hide
+    /// borders / backgrounds on otherwise-empty containers.
+    /// Compat translator rewrites `:-ro-no-content`.
+    BdNoContent,
     Checked,
     /// The :state` pseudo-class.
     CustomState(CustomState),
@@ -397,6 +424,7 @@ impl ToCss for NonTSPseudoClass {
             Self::Active => ":active",
             Self::AnyLink => ":any-link",
             Self::Autofill => ":autofill",
+            Self::BdNoContent => ":-bd-no-content",
             Self::Checked => ":checked",
             Self::CustomState(ref state) => {
                 dest.write_str(":state(")?;
@@ -478,9 +506,10 @@ impl NonTSPseudoClass {
             Self::UserValid => ElementState::USER_VALID,
             Self::Valid => ElementState::VALID,
             Self::Visited => ElementState::VISITED,
-            Self::CustomState(_) | Self::Lang(_) | Self::ServoNonZeroBorder => {
-                ElementState::empty()
-            },
+            Self::BdNoContent
+            | Self::CustomState(_)
+            | Self::Lang(_)
+            | Self::ServoNonZeroBorder => ElementState::empty(),
         }
     }
 
@@ -604,6 +633,10 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             "-moz-meter-optimum" => NonTSPseudoClass::MozMeterOptimum,
             "-moz-meter-sub-optimum" => NonTSPseudoClass::MozMeterSubOptimum,
             "-moz-meter-sub-sub-optimum" => NonTSPseudoClass::MozMeterSubSubOptimum,
+            // moegoe Family 13: PDFreactor `:-ro-no-content` is
+            // rewritten to `:-bd-no-content` by the compat
+            // translator before Stylo parses.
+            "-bd-no-content" => NonTSPseudoClass::BdNoContent,
             "-servo-nonzero-border" => {
                 if !self.in_user_agent_stylesheet() {
                     return Err(location.new_custom_error(
@@ -654,6 +687,10 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             "marker" => Marker,
             "footnote-call" => FootnoteCall,
             "footnote-marker" => FootnoteMarker,
+            // moegoe Family 13: PDFreactor break + footnote-area pseudos.
+            "-bd-before-break" => BdBeforeBreak,
+            "-bd-after-break" => BdAfterBreak,
+            "-bd-footnote-area" => BdFootnoteArea,
             "-servo-details-summary" => {
                 if !self.in_user_agent_stylesheet() {
                     return Err(location.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(name.clone())))
