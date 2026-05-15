@@ -2557,6 +2557,10 @@ initial_specified_value = "specified::BdSidenoteAlign::Auto"
 spec = "Nonstandard (moegoe -bd-* fork extension; F7 sidenote align)"
 animation_type = "none"
 affects = "layout"
+# moegoe F7 — accepted inside `@-bd-sidenote` and on regular elements
+# (so authors can target `aside.sidenote` style rules in addition to
+# the page-area block).
+rule_types_allowed = ["style", "page", "sidenote"]
 
 [-bd-sidenote-avoid]
 type = "BdSidenoteAvoid"
@@ -2566,6 +2570,7 @@ initial_specified_value = "specified::BdSidenoteAvoid::None"
 spec = "Nonstandard (moegoe -bd-* fork extension; F7 sidenote avoid)"
 animation_type = "none"
 affects = "layout"
+rule_types_allowed = ["style", "page", "sidenote"]
 
 [-bd-sidenote-offset]
 type = "BdSidenoteOffset"
@@ -2575,6 +2580,7 @@ initial_specified_value = "specified::BdSidenoteOffset::zero()"
 spec = "Nonstandard (moegoe -bd-* fork extension; F7 sidenote offset)"
 animation_type = "none"
 affects = "layout"
+rule_types_allowed = ["style", "page", "sidenote"]
 
 # moegoe F8 — baseline grid / line snap. CSS parse surface only;
 # layout integration is a separate workstream.

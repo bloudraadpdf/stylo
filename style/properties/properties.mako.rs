@@ -431,6 +431,7 @@ impl NonCustomPropertyId {
             rule_types.contains(CssRuleType::Page) ||
             rule_types.contains(CssRuleType::Margin) ||
             rule_types.contains(CssRuleType::Footnote) ||
+            rule_types.contains(CssRuleType::Sidenote) ||
             rule_types.contains(CssRuleType::Style) ||
             rule_types.contains(CssRuleType::Scope) ||
             rule_types.contains(CssRuleType::PositionTry),
