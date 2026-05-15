@@ -99,6 +99,7 @@ pub use self::bd_page_boxes::{
 pub use self::bd_page_marks::{BdPageMarkLength, BdPageMarksColour};
 pub use self::bd_page_rotation::{BdPdfPageRotation, BdRotateBody};
 pub use self::bd_pdf::BdPdfMetaValue;
+pub use self::bd_pdf_colour::{BdPdfOverprint, BdPdfOverprintContent, BdPdfPageColourSpace};
 pub use self::bd_pdf_comment::{
     BdPdfCommentColour, BdPdfCommentIcon, BdPdfCommentKind, BdPdfCommentState,
     BdPdfCommentString, BdPdfLinkBorder,
@@ -181,6 +182,7 @@ pub mod bd_page_boxes;
 pub mod bd_page_marks;
 pub mod bd_page_rotation;
 pub mod bd_pdf;
+pub mod bd_pdf_colour;
 pub mod bd_pdf_comment;
 pub mod bd_pdf_conformance;
 pub mod bd_pdf_format;

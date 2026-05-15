@@ -1897,6 +1897,39 @@ spec = "Nonstandard (moegoe -bd-* fork extension; F1 PDF/X colour-handling flags
 animation_type = "none"
 affects = ""
 
+# moegoe F2 — Spot colours / CMYK / colour conversion (keyword
+# surface). The richer F2 work (extending Color with spot /
+# separation variants, @-bd-colour at-rule, -bd-spot() /
+# -bd-separation() functions) is deferred per the audit plan;
+# the keyword surface here can land independently.
+[-bd-pdf-page-colourspace]
+type = "BdPdfPageColourSpace"
+initial = "computed::BdPdfPageColourSpace::Auto"
+struct = "page"
+initial_specified_value = "specified::BdPdfPageColourSpace::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F2 page colour space)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "paint"
+
+[-bd-pdf-overprint]
+type = "BdPdfOverprint"
+initial = "computed::BdPdfOverprint::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfOverprint::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F2 PDF overprint)"
+animation_type = "none"
+affects = "paint"
+
+[-bd-pdf-overprint-content]
+type = "BdPdfOverprintContent"
+initial = "computed::BdPdfOverprintContent::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfOverprintContent::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F2 PDF text overprint)"
+animation_type = "none"
+affects = "paint"
+
 # moegoe G5 — PDF viewer preferences (ISO 32000-2 §12.2).
 # Document-level; the renderer honours only `:root` declarations.
 [-bd-pdf-viewer-page-layout]
