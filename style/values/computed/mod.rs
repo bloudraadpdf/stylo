@@ -90,12 +90,29 @@ pub use self::list::ListStyleType;
 pub use self::list::Quotes;
 pub use self::motion::{OffsetPath, OffsetPosition, OffsetRotate};
 pub use self::outline::OutlineStyle;
+pub use self::bd_barcode::{
+    BdBarcodeAffix, BdBarcodeCheckDigitMode, BdBarcodeColour, BdBarcodeCompositeType,
+    BdBarcodeContent, BdBarcodeEccLevel, BdBarcodeEncoding, BdBarcodeFontFamily,
+    BdBarcodeHrPosition, BdBarcodeReaderInit, BdBarcodeSize, BdBarcodeStructuredAppend,
+    BdBarcodeType, BdQrEccLetter,
+};
+pub use self::bd_bfo::BdIndex;
+pub use self::bd_change_bar::{
+    BdChangeBarAlign, BdChangeBarColour, BdChangeBarExclusion, BdChangeBarName,
+};
+pub use self::bd_float::{BdFloatDeferColumn, BdFloatModifier, BdFloatPolicy, BdFloatTail};
+pub use self::bd_flow::{BdFlowFrom, BdFlowInto, BdFlowIntoMode};
+pub use self::bd_page_marks::{BdColorBarPosition, BdPrintMarkSet};
 pub use self::bd_pdf::BdPdfMetaValue;
 pub use self::bd_pdf_comment::{
     BdPdfCommentColour, BdPdfCommentIcon, BdPdfCommentKind, BdPdfCommentState,
     BdPdfCommentString, BdPdfLinkBorder,
 };
 pub use self::bd_pdf_conformance::{BdPdfConformanceValue, BdPdfVersionValue};
+pub use self::bd_pdf_form::{
+    BdPdfFormFieldFlags, BdPdfFormFieldMaxLength, BdPdfSignatureFieldLock,
+    BdPdfSignatureFieldName,
+};
 pub use self::bd_pdf_format::BdPdfFormat;
 pub use self::bd_pdf_tag::{
     BdPdfStandardRole, BdPdfTagStringAuto, BdPdfTagStringPlain, BdPdfTagValue,
@@ -159,9 +176,16 @@ pub mod angle;
 pub mod animation;
 pub mod background;
 pub mod basic_shape;
+pub mod bd_barcode;
+pub mod bd_bfo;
+pub mod bd_change_bar;
+pub mod bd_float;
+pub mod bd_flow;
+pub mod bd_page_marks;
 pub mod bd_pdf;
 pub mod bd_pdf_comment;
 pub mod bd_pdf_conformance;
+pub mod bd_pdf_form;
 pub mod bd_pdf_format;
 pub mod bd_pdf_tag;
 pub mod bd_pdf_viewer;
