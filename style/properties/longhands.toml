@@ -2111,6 +2111,31 @@ spec = "Nonstandard (moegoe -bd-* fork extension; G8 tagged-PDF role overrides)"
 animation_type = "none"
 affects = ""
 
+# moegoe F19 — per-page rotation. Both are @page-only descriptors.
+# `-bd-pdf-page-rotation` sets the PDF `/Rotate` entry on the page
+# dictionary (viewer rotates the rendered page). `-bd-rotate-body`
+# rotates the body content within an unrotated page (Prince
+# `-prince-rotate-body` semantics).
+[-bd-pdf-page-rotation]
+type = "BdPdfPageRotation"
+initial = "computed::BdPdfPageRotation::Zero"
+struct = "page"
+initial_specified_value = "specified::BdPdfPageRotation::Zero"
+spec = "Nonstandard (moegoe -bd-* fork extension; F19 PDF page rotation)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "layout"
+
+[-bd-rotate-body]
+type = "BdRotateBody"
+initial = "computed::BdRotateBody::None"
+struct = "page"
+initial_specified_value = "specified::BdRotateBody::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; F19 page body rotation)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "layout"
+
 [paint-order]
 type = "SVGPaintOrder"
 initial = "computed::SVGPaintOrder::normal()"
