@@ -380,6 +380,7 @@ impl SanitizationKind {
             CssRule::Page(..) |
             CssRule::Margin(..) |
             CssRule::Footnote(..) |
+            CssRule::Sidenote(..) |
             CssRule::Property(..) |
             CssRule::FontFeatureValues(..) |
             CssRule::FontPaletteValues(..) |
@@ -2376,6 +2377,154 @@ mod tests {
             style.block.read_with(&guard).len(),
             6,
             "`mask-border` shorthand should expand into 6 longhands"
+        );
+    }
+
+    // moegoe Family 14 — `-bd-attr(...)` and `-bd-attr-ancestor(...)`
+    // are recognised function names inside `content:` and round-trip
+    // back through serialisation. The standard `attr(name, ancestor)`
+    // syntax is already covered by the existing tests.
+    #[test]
+    fn servo_parses_bd_attr_inside_content_value() {
+        let _guard = pref_lock().lock().unwrap();
+        let _attr_pref = BoolPrefGuard::set("layout.css.attr.enabled", true);
+
+        let stylesheet =
+            parse_stylesheet(r#"p::after { content: -bd-attr(data-label); }"#);
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let style = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Style(rule) => Some(rule.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected style rule");
+        let content = style
+            .block
+            .read_with(&guard)
+            .declaration_importance_iter()
+            .find_map(|(decl, _)| match decl {
+                PropertyDeclaration::Content(value) => Some(value.to_css_string()),
+                _ => None,
+            })
+            .expect("expected content declaration");
+        // Self-scope `-bd-attr(...)` serialises back as the standard
+        // `attr(...)` (the scope is reflected in the function name on
+        // the way out only for the ancestor branch).
+        assert_eq!(
+            content, "attr(data-label)",
+            "-bd-attr(name) should parse as a content item and serialise via the standard attr() spelling"
+        );
+    }
+
+    #[test]
+    fn servo_parses_bd_attr_ancestor_inside_content_value() {
+        let _guard = pref_lock().lock().unwrap();
+        let _attr_pref = BoolPrefGuard::set("layout.css.attr.enabled", true);
+
+        let stylesheet = parse_stylesheet(
+            r#"span::before { content: -bd-attr-ancestor(data-section); }"#,
+        );
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let style = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Style(rule) => Some(rule.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected style rule");
+        let content = style
+            .block
+            .read_with(&guard)
+            .declaration_importance_iter()
+            .find_map(|(decl, _)| match decl {
+                PropertyDeclaration::Content(value) => Some(value.to_css_string()),
+                _ => None,
+            })
+            .expect("expected content declaration");
+        assert_eq!(
+            content, "-bd-attr-ancestor(data-section)",
+            "-bd-attr-ancestor() should round-trip back to its function-name spelling"
+        );
+    }
+
+    // moegoe Family 7 — `@-bd-sidenote { … }` nests inside `@page` and
+    // accepts an optional flow-name ident in the prelude.
+    #[test]
+    fn servo_parses_bd_sidenote_rule_inside_page() {
+        let _guard = pref_lock().lock().unwrap();
+
+        let stylesheet = parse_stylesheet(
+            r#"@page { @-bd-sidenote { width: 80pt; } @-bd-sidenote left { width: 100pt; } }"#,
+        );
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let page = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Page(page) => Some(page.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected @page rule");
+        let nested = page.rules.read_with(&guard);
+        let sidenotes: Vec<_> = nested
+            .0
+            .iter()
+            .filter_map(|rule| match rule {
+                CssRule::Sidenote(s) => Some(s),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            sidenotes.len(),
+            2,
+            "expected two nested @-bd-sidenote rules, got {}",
+            sidenotes.len()
+        );
+        assert!(
+            sidenotes[0].name.is_none(),
+            "unnamed @-bd-sidenote should have no flow name"
+        );
+        assert_eq!(
+            sidenotes[1].name.as_ref().map(|n| n.0.to_string()),
+            Some("left".to_string()),
+            "@-bd-sidenote left should carry the flow-name ident"
+        );
+    }
+
+    // moegoe Family 30 — `:first-of-group` page pseudo-class.
+    #[test]
+    fn servo_parses_first_of_group_page_pseudo() {
+        let stylesheet =
+            parse_stylesheet("@page :first-of-group { margin-top: 5cm; }");
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let page = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Page(p) => Some(p.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected @page rule");
+        let selectors = page.selectors.as_slice();
+        assert_eq!(
+            selectors.len(),
+            1,
+            "single selector expected, got {}",
+            selectors.len()
+        );
+        let pseudos = &selectors[0].pseudos;
+        assert!(
+            pseudos
+                .iter()
+                .any(|pc| matches!(pc, crate::stylesheets::page_rule::PagePseudoClass::FirstOfGroup)),
+            "selector should carry the :first-of-group page pseudo"
         );
     }
 }
