@@ -913,6 +913,26 @@ impl Color {
                     "specified ColorFunction values should only survive parsing for relative or explicitly preserved colour functions"
                 );
 
+                // F2 — keep `device-cmyk(c m y k / a)` with no fallback as a
+                // typed `ColorFunction::DeviceCmyk` at compute time so
+                // downstream print backends can preserve the CMYK quad
+                // through to PDF emission. Without this, the cascade collapses
+                // CMYK to its naive sRGB projection per CSS Color 4 §10.2.2
+                // and the original ink-coverage data is unrecoverable.
+                //
+                // Authored fallbacks (e.g. `device-cmyk(0 1 1 0, red)`) keep
+                // the eager resolution path because the author explicitly
+                // asked for the fallback's colour space whenever CMYK is
+                // unavailable.
+                if let ColorFunction::DeviceCmyk(_, _, _, _, _, fallback) = &**color_function {
+                    if fallback.is_none() {
+                        let color_function = color_function.map_origin_color(|origin_color| {
+                            origin_color.to_computed_color(context)
+                        });
+                        return Some(ComputedColor::ColorFunction(Box::new(color_function)));
+                    }
+                }
+
                 // Try to eagerly resolve the color function before making it a computed color.
                 if let Ok(absolute) = color_function.resolve_to_absolute() {
                     ComputedColor::Absolute(absolute)
