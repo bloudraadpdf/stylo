@@ -18,14 +18,30 @@ pub use generics::page::PageSizeOrientation;
 pub use generics::page::PaperSize;
 pub use specified::PageName;
 
+/// Per-side computed bleed lengths (top, right, bottom, left).
+#[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, ToResolvedValue, ToShmem, ToTyped)]
+#[repr(C)]
+pub struct BleedSides {
+    /// Top edge.
+    pub top: Length,
+    /// Right edge.
+    pub right: Length,
+    /// Bottom edge.
+    pub bottom: Length,
+    /// Left edge.
+    pub left: Length,
+}
+
 /// Computed value of the `bleed` page descriptor.
-#[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, ToCss, ToResolvedValue, ToShmem, ToTyped)]
+#[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, ToResolvedValue, ToShmem, ToTyped)]
 #[repr(C, u8)]
 pub enum Bleed {
     /// `auto`
     Auto,
-    /// Non-negative computed length.
+    /// Non-negative computed length (applied to all four edges).
     Length(Length),
+    /// Per-side computed lengths.
+    Sides(BleedSides),
 }
 
 impl Bleed {
@@ -42,6 +58,38 @@ impl Bleed {
     }
 }
 
+impl style_traits::ToCss for Bleed {
+    fn to_css<W>(&self, dest: &mut style_traits::CssWriter<W>) -> std::fmt::Result
+    where
+        W: std::fmt::Write,
+    {
+        use std::fmt::Write as _;
+        match self {
+            Self::Auto => dest.write_str("auto"),
+            Self::Length(l) => l.to_css(dest),
+            Self::Sides(BleedSides {
+                top,
+                right,
+                bottom,
+                left,
+            }) => {
+                top.to_css(dest)?;
+                dest.write_char(' ')?;
+                right.to_css(dest)?;
+                if bottom != top || left != right {
+                    dest.write_char(' ')?;
+                    bottom.to_css(dest)?;
+                    if left != right {
+                        dest.write_char(' ')?;
+                        left.to_css(dest)?;
+                    }
+                }
+                Ok(())
+            },
+        }
+    }
+}
+
 impl ToComputedValue for specified::Bleed {
     type ComputedValue = Bleed;
 
@@ -51,6 +99,12 @@ impl ToComputedValue for specified::Bleed {
             specified::Bleed::Length(length) => {
                 Bleed::Length(length.to_computed_value(ctx).clamp_to_non_negative())
             },
+            specified::Bleed::Sides(s) => Bleed::Sides(BleedSides {
+                top: s.top.to_computed_value(ctx).clamp_to_non_negative(),
+                right: s.right.to_computed_value(ctx).clamp_to_non_negative(),
+                bottom: s.bottom.to_computed_value(ctx).clamp_to_non_negative(),
+                left: s.left.to_computed_value(ctx).clamp_to_non_negative(),
+            }),
         }
     }
 
@@ -60,6 +114,12 @@ impl ToComputedValue for specified::Bleed {
             Bleed::Length(length) => {
                 specified::Bleed::Length(ToComputedValue::from_computed_value(length))
             },
+            Bleed::Sides(s) => specified::Bleed::Sides(specified::BleedSides {
+                top: ToComputedValue::from_computed_value(&s.top),
+                right: ToComputedValue::from_computed_value(&s.right),
+                bottom: ToComputedValue::from_computed_value(&s.bottom),
+                left: ToComputedValue::from_computed_value(&s.left),
+            }),
         }
     }
 }

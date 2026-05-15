@@ -18,14 +18,43 @@ pub use generics::page::PageOrientation;
 pub use generics::page::PageSizeOrientation;
 pub use generics::page::PaperSize;
 
-/// Specified value of the `bleed` page descriptor.
+/// Per-side bleed lengths (top, right, bottom, left).
 #[derive(
     Clone,
     Debug,
     MallocSizeOf,
     PartialEq,
     SpecifiedValueInfo,
-    ToCss,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(C)]
+pub struct BleedSides {
+    /// Top edge.
+    pub top: Length,
+    /// Right edge.
+    pub right: Length,
+    /// Bottom edge.
+    pub bottom: Length,
+    /// Left edge.
+    pub left: Length,
+}
+
+/// Specified value of the `bleed` page descriptor.
+///
+/// The standard CSS Paged Media grammar admits `auto | <length>`.
+/// moegoe extends this with the 2/3/4-length shorthand syntax
+/// shared by `margin` / `padding` (F4 per the audit), so authors
+/// can declare asymmetric bleed without dropping into the per-side
+/// `-bd-page-bleed-*` longhands. Two/three-length expansion follows
+/// the CSS shorthand rules (top, right/left = right, bottom = top;
+/// top, right/left = right, bottom).
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
     ToShmem,
     ToTyped,
 )]
@@ -33,8 +62,11 @@ pub use generics::page::PaperSize;
 pub enum Bleed {
     /// `auto`
     Auto,
-    /// `<length>`
+    /// `<length>` — single value applied to all four edges.
     Length(Length),
+    /// `<length>{2..=4}` — explicit per-side values after CSS
+    /// shorthand expansion.
+    Sides(BleedSides),
 }
 
 impl Bleed {
@@ -51,6 +83,38 @@ impl Bleed {
     }
 }
 
+impl style_traits::ToCss for Bleed {
+    fn to_css<W>(&self, dest: &mut style_traits::CssWriter<W>) -> std::fmt::Result
+    where
+        W: std::fmt::Write,
+    {
+        use std::fmt::Write as _;
+        match self {
+            Self::Auto => dest.write_str("auto"),
+            Self::Length(l) => l.to_css(dest),
+            Self::Sides(BleedSides {
+                top,
+                right,
+                bottom,
+                left,
+            }) => {
+                top.to_css(dest)?;
+                dest.write_char(' ')?;
+                right.to_css(dest)?;
+                if bottom != top || left != right {
+                    dest.write_char(' ')?;
+                    bottom.to_css(dest)?;
+                    if left != right {
+                        dest.write_char(' ')?;
+                        left.to_css(dest)?;
+                    }
+                }
+                Ok(())
+            },
+        }
+    }
+}
+
 impl Parse for Bleed {
     fn parse<'i, 't>(
         context: &ParserContext,
@@ -60,7 +124,40 @@ impl Parse for Bleed {
             return Ok(Self::Auto);
         }
 
-        Ok(Self::Length(Length::parse(context, input)?))
+        let first = Length::parse(context, input)?;
+        // Try to parse up to three additional lengths.
+        let second = match input.try_parse(|i| Length::parse(context, i)) {
+            Ok(l) => l,
+            Err(_) => return Ok(Self::Length(first)),
+        };
+        let third = match input.try_parse(|i| Length::parse(context, i)) {
+            Ok(l) => Some(l),
+            Err(_) => None,
+        };
+        let fourth = match third.as_ref() {
+            Some(_) => input.try_parse(|i| Length::parse(context, i)).ok(),
+            None => None,
+        };
+        let (top, right, bottom, left) = match (third, fourth) {
+            (None, _) => {
+                // `<top/bottom> <right/left>`
+                (first.clone(), second.clone(), first, second)
+            },
+            (Some(third), None) => {
+                // `<top> <right/left> <bottom>`
+                (first, second.clone(), third, second)
+            },
+            (Some(third), Some(fourth)) => {
+                // `<top> <right> <bottom> <left>`
+                (first, second, third, fourth)
+            },
+        };
+        Ok(Self::Sides(BleedSides {
+            top,
+            right,
+            bottom,
+            left,
+        }))
     }
 }
 /// Specified value of the @page size descriptor

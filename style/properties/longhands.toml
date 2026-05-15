@@ -1783,6 +1783,7 @@ initial_specified_value = "specified::Bleed::auto()"
 spec = "https://drafts.csswg.org/css-page-3/#bleed"
 animation_type = "none"
 rule_types_allowed = ["page"]
+boxed = true
 affects = "layout"
 
 # moegoe -bd-pdf-* document metadata longhands. Native fork-extension
@@ -1856,6 +1857,78 @@ initial_specified_value = "specified::BdPdfVersionValue::Auto"
 spec = "Nonstandard (moegoe -bd-* fork extension; G4 PDF/A conformance)"
 animation_type = "none"
 affects = ""
+
+# moegoe F1 — PDF/X output intent + colour conversion. Document-level;
+# the renderer honours only `:root` declarations. The output intent
+# is mandatory when -bd-pdf-conformance selects a PDF/X flavour.
+[-bd-pdf-output-intent]
+type = "BdPdfOutputIntent"
+initial = "computed::BdPdfOutputIntent::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfOutputIntent::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F1 PDF/X output intent)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-fallback-cmyk-profile]
+type = "BdPdfFallbackCmykProfile"
+initial = "computed::BdPdfFallbackCmykProfile::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfFallbackCmykProfile::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; F1 PDF/X fallback CMYK profile)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-colour-conversion]
+type = "BdPdfColourConversion"
+initial = "computed::BdPdfColourConversion::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfColourConversion::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F1 PDF colour-conversion policy)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-colour-options]
+type = "BdPdfColourOptions"
+initial = "computed::BdPdfColourOptions::none()"
+struct = "counters"
+initial_specified_value = "specified::BdPdfColourOptions::none()"
+spec = "Nonstandard (moegoe -bd-* fork extension; F1 PDF/X colour-handling flags)"
+animation_type = "none"
+affects = ""
+
+# moegoe F2 — Spot colours / CMYK / colour conversion (keyword
+# surface). The richer F2 work (extending Color with spot /
+# separation variants, @-bd-colour at-rule, -bd-spot() /
+# -bd-separation() functions) is deferred per the audit plan;
+# the keyword surface here can land independently.
+[-bd-pdf-page-colourspace]
+type = "BdPdfPageColourSpace"
+initial = "computed::BdPdfPageColourSpace::Auto"
+struct = "page"
+initial_specified_value = "specified::BdPdfPageColourSpace::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F2 page colour space)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "paint"
+
+[-bd-pdf-overprint]
+type = "BdPdfOverprint"
+initial = "computed::BdPdfOverprint::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfOverprint::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F2 PDF overprint)"
+animation_type = "none"
+affects = "paint"
+
+[-bd-pdf-overprint-content]
+type = "BdPdfOverprintContent"
+initial = "computed::BdPdfOverprintContent::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfOverprintContent::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F2 PDF text overprint)"
+animation_type = "none"
+affects = "paint"
 
 # moegoe G5 — PDF viewer preferences (ISO 32000-2 §12.2).
 # Document-level; the renderer honours only `:root` declarations.
@@ -2110,6 +2183,323 @@ initial_specified_value = "specified::BdPdfTagStringPlain::None"
 spec = "Nonstandard (moegoe -bd-* fork extension; G8 tagged-PDF role overrides)"
 animation_type = "none"
 affects = ""
+
+# moegoe F27 — PDF output tuning. Per-element / inherited knobs
+# governing how the PDF backend (krilla) emits content.
+[-bd-pdf-text-rendering]
+type = "BdPdfTextRendering"
+initial = "computed::BdPdfTextRendering::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfTextRendering::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F27 PDF text rendering)"
+animation_type = "none"
+affects = "paint"
+
+[-bd-paint-reordering]
+type = "BdPaintReordering"
+initial = "computed::BdPaintReordering::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPaintReordering::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F27 paint reordering)"
+animation_type = "none"
+affects = "paint"
+
+[-bd-font-embedding-type]
+type = "BdFontEmbeddingType"
+initial = "computed::BdFontEmbeddingType::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdFontEmbeddingType::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F27 font embedding type)"
+animation_type = "none"
+affects = ""
+
+[-bd-glyph-layout-mode]
+type = "BdGlyphLayoutMode"
+initial = "computed::BdGlyphLayoutMode::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdGlyphLayoutMode::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F27 glyph layout mode)"
+animation_type = "none"
+affects = "layout"
+
+[-bd-rasterization]
+type = "BdRasterization"
+initial = "computed::BdRasterization::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdRasterization::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F27 rasterisation policy)"
+animation_type = "none"
+affects = "paint"
+
+[-bd-rasterization-max-size]
+type = "BdRasterizationMaxSize"
+initial = "computed::BdRasterizationMaxSize::zero()"
+struct = "counters"
+initial_specified_value = "specified::BdRasterizationMaxSize::zero()"
+spec = "Nonstandard (moegoe -bd-* fork extension; F27 rasterisation size threshold)"
+animation_type = "none"
+affects = "paint"
+
+[-bd-rasterization-supersampling]
+type = "BdRasterizationSupersampling"
+initial = "computed::BdRasterizationSupersampling::one()"
+struct = "counters"
+initial_specified_value = "specified::BdRasterizationSupersampling::one()"
+spec = "Nonstandard (moegoe -bd-* fork extension; F27 rasterisation supersampling)"
+animation_type = "none"
+affects = "paint"
+
+[-bd-pdf-shape-optimization]
+type = "BdPdfShapeOptimization"
+initial = "computed::BdPdfShapeOptimization::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfShapeOptimization::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F27 PDF shape optimisation)"
+animation_type = "none"
+affects = "paint"
+
+[-bd-pdf-passdown-styles]
+type = "BdPdfPassdownStyles"
+initial = "computed::BdPdfPassdownStyles::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfPassdownStyles::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F27 PDF passdown styles)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-bookmarks-enabled]
+type = "BdPdfBookmarksEnabled"
+initial = "computed::BdPdfBookmarksEnabled::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfBookmarksEnabled::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F27 PDF bookmarks gate)"
+animation_type = "none"
+affects = ""
+
+# moegoe F19 — per-page rotation. Both are @page-only descriptors.
+# `-bd-pdf-page-rotation` sets the PDF `/Rotate` entry on the page
+# dictionary (viewer rotates the rendered page). `-bd-rotate-body`
+# rotates the body content within an unrotated page (Prince
+# `-prince-rotate-body` semantics).
+[-bd-pdf-page-rotation]
+type = "BdPdfPageRotation"
+initial = "computed::BdPdfPageRotation::Zero"
+struct = "page"
+initial_specified_value = "specified::BdPdfPageRotation::Zero"
+spec = "Nonstandard (moegoe -bd-* fork extension; F19 PDF page rotation)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "layout"
+
+[-bd-rotate-body]
+type = "BdRotateBody"
+initial = "computed::BdRotateBody::None"
+struct = "page"
+initial_specified_value = "specified::BdRotateBody::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; F19 page body rotation)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "layout"
+
+# moegoe F3 — PDF page box overrides. All four are @page descriptors.
+# `size` (CSS Paged Media) maps to TrimBox; these descriptors let
+# pre-press authors override the other four PDF page boxes
+# (ISO 32000-2 §14.11.2) explicitly.
+[-bd-pdf-media-size]
+type = "BdPdfMediaSize"
+initial = "computed::BdPdfMediaSize::auto()"
+struct = "page"
+initial_specified_value = "specified::BdPdfMediaSize::auto()"
+spec = "Nonstandard (moegoe -bd-* fork extension; F3 PDF MediaBox)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+boxed = true
+affects = "layout"
+
+[-bd-pdf-crop-size]
+type = "BdPdfCropSize"
+initial = "computed::BdPdfCropSize::auto()"
+struct = "page"
+initial_specified_value = "specified::BdPdfCropSize::auto()"
+spec = "Nonstandard (moegoe -bd-* fork extension; F3 PDF CropBox)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+boxed = true
+affects = "layout"
+
+[-bd-pdf-art-size]
+type = "BdPdfArtSize"
+initial = "computed::BdPdfArtSize::auto()"
+struct = "page"
+initial_specified_value = "specified::BdPdfArtSize::auto()"
+spec = "Nonstandard (moegoe -bd-* fork extension; F3 PDF ArtBox)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+boxed = true
+affects = "layout"
+
+[-bd-pdf-page-clip]
+type = "BdPdfPageClip"
+initial = "computed::BdPdfPageClip::Media"
+struct = "page"
+initial_specified_value = "specified::BdPdfPageClip::Media"
+spec = "Nonstandard (moegoe -bd-* fork extension; F3 PDF page-clip selector)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "paint"
+
+# moegoe F4 — Per-mark tuning. Nine @page descriptors that
+# replace the historic hardcoded crop/cross/registration mark
+# constants. Each carries either a non-negative length (mark
+# size / offset / width) or a colour.
+[-bd-page-crop-mark-length]
+type = "BdPageMarkLength"
+initial = "computed::BdPageMarkLength::from_pt(12.0)"
+struct = "page"
+initial_specified_value = "specified::BdPageMarkLength::from_pt(12.0)"
+spec = "Nonstandard (moegoe -bd-* fork extension; F4 crop-mark length)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "paint"
+
+[-bd-page-crop-mark-offset]
+type = "BdPageMarkLength"
+initial = "computed::BdPageMarkLength::from_pt(3.0)"
+struct = "page"
+initial_specified_value = "specified::BdPageMarkLength::from_pt(3.0)"
+spec = "Nonstandard (moegoe -bd-* fork extension; F4 crop-mark offset)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "paint"
+
+[-bd-page-bleed-mark-length]
+type = "BdPageMarkLength"
+initial = "computed::BdPageMarkLength::from_pt(12.0)"
+struct = "page"
+initial_specified_value = "specified::BdPageMarkLength::from_pt(12.0)"
+spec = "Nonstandard (moegoe -bd-* fork extension; F4 bleed-mark length)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "paint"
+
+[-bd-page-bleed-mark-offset]
+type = "BdPageMarkLength"
+initial = "computed::BdPageMarkLength::from_pt(0.0)"
+struct = "page"
+initial_specified_value = "specified::BdPageMarkLength::from_pt(0.0)"
+spec = "Nonstandard (moegoe -bd-* fork extension; F4 bleed-mark offset)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "paint"
+
+[-bd-page-registration-mark-offset]
+type = "BdPageMarkLength"
+initial = "computed::BdPageMarkLength::from_pt(6.0)"
+struct = "page"
+initial_specified_value = "specified::BdPageMarkLength::from_pt(6.0)"
+spec = "Nonstandard (moegoe -bd-* fork extension; F4 registration-mark offset)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "paint"
+
+[-bd-page-registration-mark-size]
+type = "BdPageMarkLength"
+initial = "computed::BdPageMarkLength::from_pt(6.0)"
+struct = "page"
+initial_specified_value = "specified::BdPageMarkLength::from_pt(6.0)"
+spec = "Nonstandard (moegoe -bd-* fork extension; F4 registration-mark size)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "paint"
+
+[-bd-page-marks-colour]
+type = "BdPageMarksColour"
+initial = "computed::BdPageMarksColour::auto()"
+struct = "page"
+initial_specified_value = "specified::BdPageMarksColour::auto()"
+spec = "Nonstandard (moegoe -bd-* fork extension; F4 marks colour)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "paint"
+
+[-bd-page-marks-offset]
+type = "BdPageMarkLength"
+initial = "computed::BdPageMarkLength::from_pt(0.0)"
+struct = "page"
+initial_specified_value = "specified::BdPageMarkLength::from_pt(0.0)"
+spec = "Nonstandard (moegoe -bd-* fork extension; F4 all-marks offset)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "paint"
+
+[-bd-page-marks-width]
+type = "BdPageMarkLength"
+initial = "computed::BdPageMarkLength::from_pt(0.24)"
+struct = "page"
+initial_specified_value = "specified::BdPageMarkLength::from_pt(0.24)"
+spec = "Nonstandard (moegoe -bd-* fork extension; F4 marks line width)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "paint"
+
+# moegoe F5 — Image recompression / DPI control. Six properties
+# governing how embedded images are processed when emitting PDF.
+# `image-resolution` is the W3C-standard surface (CSS Images 4 §6);
+# the moegoe fork carries an explicit longhand here because it
+# is otherwise Gecko-gated.
+[image-resolution]
+type = "BdImageResolution"
+initial = "computed::BdImageResolution::one_dppx()"
+struct = "counters"
+initial_specified_value = "specified::BdImageResolution::one_dppx()"
+spec = "https://drafts.csswg.org/css-images-4/#the-image-resolution"
+animation_type = "none"
+affects = "paint"
+
+[-bd-image-resolution]
+type = "BdImageResolution"
+initial = "computed::BdImageResolution::one_dppx()"
+struct = "counters"
+initial_specified_value = "specified::BdImageResolution::one_dppx()"
+spec = "Nonstandard (moegoe -bd-* fork extension; F5 image resolution alias)"
+animation_type = "none"
+affects = "paint"
+
+[-bd-image-recompression]
+type = "BdImageRecompression"
+initial = "computed::BdImageRecompression::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdImageRecompression::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F5 image recompression policy)"
+animation_type = "none"
+affects = "paint"
+
+[-bd-image-resampling]
+type = "BdImageResampling"
+initial = "computed::BdImageResampling::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdImageResampling::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F5 image resampling kernel)"
+animation_type = "none"
+affects = "paint"
+
+[-bd-image-magic]
+type = "BdImageMagic"
+initial = "computed::BdImageMagic::None"
+struct = "counters"
+initial_specified_value = "specified::BdImageMagic::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; F5 image magic processing)"
+animation_type = "none"
+affects = ""
+
+[-bd-image-clip-path]
+type = "BdImageClipPath"
+initial = "computed::BdImageClipPath::None"
+struct = "counters"
+initial_specified_value = "specified::BdImageClipPath::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; F5 per-image clip path)"
+animation_type = "none"
+affects = "paint"
 
 [paint-order]
 type = "SVGPaintOrder"
