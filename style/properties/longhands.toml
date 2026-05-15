@@ -2267,6 +2267,53 @@ animation_type = "none"
 rule_types_allowed = ["page"]
 affects = "layout"
 
+# moegoe F3 — PDF page box overrides. All four are @page descriptors.
+# `size` (CSS Paged Media) maps to TrimBox; these descriptors let
+# pre-press authors override the other four PDF page boxes
+# (ISO 32000-2 §14.11.2) explicitly.
+[-bd-pdf-media-size]
+type = "BdPdfMediaSize"
+initial = "computed::BdPdfMediaSize::auto()"
+struct = "page"
+initial_specified_value = "specified::BdPdfMediaSize::auto()"
+spec = "Nonstandard (moegoe -bd-* fork extension; F3 PDF MediaBox)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+boxed = true
+affects = "layout"
+
+[-bd-pdf-crop-size]
+type = "BdPdfCropSize"
+initial = "computed::BdPdfCropSize::auto()"
+struct = "page"
+initial_specified_value = "specified::BdPdfCropSize::auto()"
+spec = "Nonstandard (moegoe -bd-* fork extension; F3 PDF CropBox)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+boxed = true
+affects = "layout"
+
+[-bd-pdf-art-size]
+type = "BdPdfArtSize"
+initial = "computed::BdPdfArtSize::auto()"
+struct = "page"
+initial_specified_value = "specified::BdPdfArtSize::auto()"
+spec = "Nonstandard (moegoe -bd-* fork extension; F3 PDF ArtBox)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+boxed = true
+affects = "layout"
+
+[-bd-pdf-page-clip]
+type = "BdPdfPageClip"
+initial = "computed::BdPdfPageClip::Media"
+struct = "page"
+initial_specified_value = "specified::BdPdfPageClip::Media"
+spec = "Nonstandard (moegoe -bd-* fork extension; F3 PDF page-clip selector)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "paint"
+
 [paint-order]
 type = "SVGPaintOrder"
 initial = "computed::SVGPaintOrder::normal()"
