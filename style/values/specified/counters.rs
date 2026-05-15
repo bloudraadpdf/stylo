@@ -381,6 +381,21 @@ fn parse_content_item<'i, 't>(
                 "attr" if static_prefs::pref!("layout.css.attr.enabled") => input.parse_nested_block(|input| {
                     Ok(generics::ContentItem::Attr(Attr::parse_function(context, input)?))
                 }),
+                // moegoe Family 14: `-bd-attr(...)` and
+                // `-bd-attr-ancestor(...)` extend `attr()` for use inside
+                // `content:`. The former parses with self-element scope (and
+                // accepts the `, ancestor` positional keyword); the latter
+                // forces ancestor scope.
+                "-bd-attr" if static_prefs::pref!("layout.css.attr.enabled") => input.parse_nested_block(|input| {
+                    Ok(generics::ContentItem::Attr(
+                        Attr::parse_function_with_scope(context, input, super::AttrScope::SelfElement)?,
+                    ))
+                }),
+                "-bd-attr-ancestor" if static_prefs::pref!("layout.css.attr.enabled") => input.parse_nested_block(|input| {
+                    Ok(generics::ContentItem::Attr(
+                        Attr::parse_function_with_scope(context, input, super::AttrScope::Ancestor)?,
+                    ))
+                }),
                 _ => {
                     let name = name.clone();
                     Err(input.new_custom_error(StyleParseErrorKind::UnexpectedFunction(name)))
