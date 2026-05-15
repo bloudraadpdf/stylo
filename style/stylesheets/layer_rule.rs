@@ -60,6 +60,16 @@ impl LayerOrder {
             self.0 += 1;
         }
     }
+
+    /// The raw `u16` cascade-order value backing this `LayerOrder`.
+    ///
+    /// Exposed so external consumers (e.g. printable-media engines that
+    /// resolve `@page` rules outside the element cascade) can apply CSS
+    /// Cascading L5 §6.4 layer ordering against this ordering scalar.
+    #[inline]
+    pub const fn as_u16(self) -> u16 {
+        self.0
+    }
 }
 
 /// A `<layer-name>`: https://drafts.csswg.org/css-cascade-5/#typedef-layer-name

@@ -3479,9 +3479,26 @@ impl CascadeData {
         self.part_rules.is_some()
     }
 
+    /// Map a `LayerId` to its `LayerOrder`.
+    ///
+    /// Exposed so external consumers (e.g. printable-media engines that
+    /// resolve `@page` rules outside the element cascade) can apply
+    /// CSS Cascading L5 §6.4 layer ordering to per-rule `LayerId`
+    /// values pulled from [`ExtraStyleData::pages`].
     #[inline]
-    fn layer_order_for(&self, id: LayerId) -> LayerOrder {
+    pub fn layer_order_for(&self, id: LayerId) -> LayerOrder {
         self.layers[id.0 as usize].order
+    }
+
+    /// Borrow the [`ExtraStyleData`] (font-face, @page, @counter-style,
+    /// @position-try, etc.) gathered alongside the cascade machinery.
+    ///
+    /// Combined with [`Self::layer_order_for`] this lets external
+    /// consumers resolve cascade-layer ordering for rule kinds that are
+    /// not part of the normal element cascade pipeline.
+    #[inline]
+    pub fn extra_data(&self) -> &ExtraStyleData {
+        &self.extra_data
     }
 
     pub(crate) fn container_condition_matches<E>(
