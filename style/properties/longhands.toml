@@ -2582,12 +2582,18 @@ animation_type = "none"
 affects = "layout"
 rule_types_allowed = ["style", "page", "sidenote"]
 
-# moegoe F8 — baseline grid / line snap. CSS parse surface only;
-# layout integration is a separate workstream.
+# moegoe F8 — baseline grid / line snap.
+#
+# Per CSS Line Grid Module 1, `line-grid` does NOT inherit (a grid-root
+# signal is per-element) and Prince treats `baseline-grid` the same way
+# (applies on grid-root, not on every descendant). The remaining two
+# properties (`line-snap`, `line-stacking-strategy`) inherit per the
+# same spec / Prince extension so descendants pick up the grid mode the
+# author set once on a container.
 [-bd-line-grid]
 type = "BdLineGrid"
 initial = "computed::BdLineGrid::None"
-struct = "inherited_text"
+struct = "box"
 initial_specified_value = "specified::BdLineGrid::None"
 spec = "Nonstandard (moegoe -bd-* fork extension; F8 line grid)"
 animation_type = "none"
@@ -2605,7 +2611,7 @@ affects = ""
 [-bd-baseline-grid]
 type = "BdBaselineGrid"
 initial = "computed::BdBaselineGrid::None"
-struct = "inherited_text"
+struct = "box"
 initial_specified_value = "specified::BdBaselineGrid::None"
 spec = "Nonstandard (moegoe -bd-* fork extension; F8 baseline grid, Prince spelling)"
 animation_type = "none"
