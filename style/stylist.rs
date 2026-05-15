@@ -4427,6 +4427,7 @@ impl CascadeData {
                 | CssRule::Keyframes(..)
                 | CssRule::Margin(..)
                 | CssRule::Footnote(..)
+                | CssRule::Sidenote(..)
                 | CssRule::Page(..)
                 | CssRule::Property(..)
                 | CssRule::Document(..)

@@ -68,6 +68,12 @@ pub enum PseudoElement {
     BdBeforeBreak,
     BdAfterBreak,
     BdFootnoteArea,
+    // moegoe Family 7 — sidenote call (in-flow inline at the anchor
+    // site) and marker (in the sidenote flow). Authors style each via
+    // `::-bd-sidenote-call` and `::-bd-sidenote-marker`; the compat
+    // translator rewrites `::-ro-sidenote-call` / `::-ro-sidenote-marker`.
+    BdSidenoteCall,
+    BdSidenoteMarker,
 
     // Implemented pseudos. These pseudo elements are representing the
     // elements within an UA shadow DOM, and matching the elements with
@@ -112,6 +118,8 @@ impl ToCss for PseudoElement {
             BdBeforeBreak => "::-bd-before-break",
             BdAfterBreak => "::-bd-after-break",
             BdFootnoteArea => "::-bd-footnote-area",
+            BdSidenoteCall => "::-bd-sidenote-call",
+            BdSidenoteMarker => "::-bd-sidenote-marker",
             ColorSwatch => "::color-swatch",
             Placeholder => "::placeholder",
             ServoTextControlInnerContainer => "::-servo-text-control-inner-container",
@@ -270,6 +278,8 @@ impl PseudoElement {
             | PseudoElement::BdBeforeBreak
             | PseudoElement::BdAfterBreak
             | PseudoElement::BdFootnoteArea
+            | PseudoElement::BdSidenoteCall
+            | PseudoElement::BdSidenoteMarker
             | PseudoElement::Placeholder
             | PseudoElement::DetailsContent
             | PseudoElement::ServoTextControlInnerContainer
@@ -691,6 +701,9 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             "-bd-before-break" => BdBeforeBreak,
             "-bd-after-break" => BdAfterBreak,
             "-bd-footnote-area" => BdFootnoteArea,
+            // moegoe Family 7: sidenote call (in-flow) + marker (in sidenote).
+            "-bd-sidenote-call" => BdSidenoteCall,
+            "-bd-sidenote-marker" => BdSidenoteMarker,
             "-servo-details-summary" => {
                 if !self.in_user_agent_stylesheet() {
                     return Err(location.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(name.clone())))

@@ -84,6 +84,7 @@ where
             | CssRule::Keyframes(_)
             | CssRule::Margin(_)
             | CssRule::Footnote(_)
+            | CssRule::Sidenote(_)
             | CssRule::Property(_)
             | CssRule::LayerStatement(_)
             | CssRule::FontFeatureValues(_)

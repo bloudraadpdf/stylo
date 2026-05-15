@@ -30,8 +30,8 @@ use crate::stylesheets::{
     AllowImportRules, CorsMode, CssRule, CssRuleType, CssRuleTypes, CssRules, CustomMediaCondition,
     CustomMediaRule, DocumentRule, FontFeatureValuesRule, FontPaletteValuesRule, FootnoteRule,
     KeyframesRule, MarginRule, MarginRuleType, MediaRule, NamespaceRule, NestedDeclarationsRule,
-    PageRule, PageSelectors, PositionTryRule, RulesMutateError, StartingStyleRule, StyleRule,
-    StylesheetLoader, SupportsRule,
+    PageRule, PageSelectors, PositionTryRule, RulesMutateError, SidenoteRule, StartingStyleRule,
+    StyleRule, StylesheetLoader, SupportsRule,
 };
 use crate::values::computed::font::FamilyName;
 use crate::values::{CssUrl, CustomIdent, DashedIdent, KeyframesName};
@@ -280,6 +280,9 @@ pub enum AtRulePrelude {
     Margin(MarginRuleType),
     /// A nested @footnote rule prelude.
     Footnote,
+    /// A nested `@-bd-sidenote` rule prelude (moegoe Family 7).
+    /// Optional ident names a specific sidenote flow.
+    Sidenote(Option<crate::values::AtomIdent>),
     /// A @namespace rule prelude.
     Namespace(Option<Prefix>, Namespace),
     /// A @layer rule prelude.
@@ -312,6 +315,7 @@ impl AtRulePrelude {
             Self::Import(..) => "import",
             Self::Margin(..) => "margin",
             Self::Footnote => "footnote",
+            Self::Sidenote(..) => "-bd-sidenote",
             Self::Namespace(..) => "namespace",
             Self::Layer(..) => "layer",
             Self::Scope(..) => "scope",
@@ -544,7 +548,9 @@ impl<'a, 'i> NestedRuleParser<'a, 'i> {
             | AtRulePrelude::Property(..)
             | AtRulePrelude::Import(..)
             | AtRulePrelude::PositionTry(..) => !self.in_style_or_page_rule(),
-            AtRulePrelude::Margin(..) | AtRulePrelude::Footnote => self.in_page_rule(),
+            AtRulePrelude::Margin(..)
+            | AtRulePrelude::Footnote
+            | AtRulePrelude::Sidenote(..) => self.in_page_rule(),
         }
     }
 
@@ -794,6 +800,22 @@ impl<'a, 'i> AtRuleParser<'i> for NestedRuleParser<'a, 'i> {
                     if name.eq_ignore_ascii_case("footnote") {
                         return Ok(AtRulePrelude::Footnote);
                     }
+                    // moegoe Family 7 — `@-bd-sidenote` accepts an
+                    // optional flow-name ident in its prelude
+                    // (e.g. `@-bd-sidenote left { … }`). Absence of an
+                    // ident matches the unnamed default flow.
+                    if name.eq_ignore_ascii_case("-bd-sidenote") {
+                        let flow_name = input
+                            .try_parse(|i| {
+                                let ident = i.expect_ident()?.clone();
+                                Ok::<_, ParseError<'i>>(crate::values::AtomIdent::from(
+                                    ident.as_ref(),
+                                ))
+                            })
+                            .ok();
+                        input.expect_exhausted()?;
+                        return Ok(AtRulePrelude::Sidenote(flow_name));
+                    }
                     if let Some(margin_rule_type) = MarginRuleType::match_name(&name) {
                         return Ok(AtRulePrelude::Margin(margin_rule_type));
                     }
@@ -946,6 +968,16 @@ impl<'a, 'i> AtRuleParser<'i> for NestedRuleParser<'a, 'i> {
                     parse_property_declaration_list(&p.context, input, &[])
                 });
                 CssRule::Footnote(Arc::new(FootnoteRule {
+                    block: Arc::new(self.shared_lock.wrap(declarations)),
+                    source_location,
+                }))
+            },
+            AtRulePrelude::Sidenote(name) => {
+                let declarations = self.nest_for_rule(CssRuleType::Sidenote, |p| {
+                    parse_property_declaration_list(&p.context, input, &[])
+                });
+                CssRule::Sidenote(Arc::new(SidenoteRule {
+                    name,
                     block: Arc::new(self.shared_lock.wrap(declarations)),
                     source_location,
                 }))
