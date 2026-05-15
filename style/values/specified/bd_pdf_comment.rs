@@ -211,6 +211,116 @@ impl Parse for BdPdfCommentColour {
     }
 }
 
+/// Specified value of `-bd-pdf-comment-author` (F22).
+///
+/// `auto | <string>`. `auto` defers to the render-time signed-in user
+/// (mirroring Prince `-prince-pdf-annotation-author` behaviour).
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue,
+    ToResolvedValue, ToShmem, ToTyped)]
+#[repr(C, u8)]
+pub enum BdPdfCommentAuthor {
+    /// `auto` — defer to render-time author.
+    Auto,
+    /// `<string>` — explicit author name.
+    Literal(OwnedStr),
+}
+
+impl BdPdfCommentAuthor {
+    /// Initial value (`auto`).
+    #[inline]
+    pub fn auto() -> Self {
+        Self::Auto
+    }
+
+    /// Whether the value is `auto`.
+    #[inline]
+    pub fn is_auto(&self) -> bool {
+        matches!(self, Self::Auto)
+    }
+}
+
+impl Parse for BdPdfCommentAuthor {
+    fn parse<'i, 't>(
+        _: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, style_traits::ParseError<'i>> {
+        if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
+            return Ok(Self::Auto);
+        }
+        let s = input.expect_string()?;
+        Ok(Self::Literal(s.as_ref().to_owned().into()))
+    }
+}
+
+/// Specified value of `-bd-pdf-comment-{createdate,modifydate}` (F22).
+///
+/// `auto | <string>`. `auto` defers to the render timestamp. The
+/// `<string>` form is parsed verbatim and validated downstream
+/// (ISO 8601 / PDF D: format).
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue,
+    ToResolvedValue, ToShmem, ToTyped)]
+#[repr(C, u8)]
+pub enum BdPdfCommentDate {
+    /// `auto` — defer to render timestamp.
+    Auto,
+    /// `<string>` — literal timestamp.
+    Literal(OwnedStr),
+}
+
+impl BdPdfCommentDate {
+    /// Initial value (`auto`).
+    #[inline]
+    pub fn auto() -> Self {
+        Self::Auto
+    }
+
+    /// Whether the value is `auto`.
+    #[inline]
+    pub fn is_auto(&self) -> bool {
+        matches!(self, Self::Auto)
+    }
+}
+
+impl Parse for BdPdfCommentDate {
+    fn parse<'i, 't>(
+        _: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, style_traits::ParseError<'i>> {
+        if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
+            return Ok(Self::Auto);
+        }
+        let s = input.expect_string()?;
+        Ok(Self::Literal(s.as_ref().to_owned().into()))
+    }
+}
+
+/// Specified value of `-bd-pdf-comment-position` (F22).
+#[repr(u8)]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    Eq,
+    Hash,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[allow(missing_docs)]
+pub enum BdPdfCommentPosition {
+    #[default]
+    Auto,
+    Anchor,
+    Body,
+    Margin,
+}
+
 /// Specified value of `-bd-pdf-link-border`.
 ///
 /// `none` — no border on the implicit Link annotation.
