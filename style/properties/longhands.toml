@@ -1783,6 +1783,7 @@ initial_specified_value = "specified::Bleed::auto()"
 spec = "https://drafts.csswg.org/css-page-3/#bleed"
 animation_type = "none"
 rule_types_allowed = ["page"]
+boxed = true
 affects = "layout"
 
 # moegoe -bd-pdf-* document metadata longhands. Native fork-extension
@@ -2310,6 +2311,100 @@ initial = "computed::BdPdfPageClip::Media"
 struct = "page"
 initial_specified_value = "specified::BdPdfPageClip::Media"
 spec = "Nonstandard (moegoe -bd-* fork extension; F3 PDF page-clip selector)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "paint"
+
+# moegoe F4 — Per-mark tuning. Nine @page descriptors that
+# replace the historic hardcoded crop/cross/registration mark
+# constants. Each carries either a non-negative length (mark
+# size / offset / width) or a colour.
+[-bd-page-crop-mark-length]
+type = "BdPageMarkLength"
+initial = "computed::BdPageMarkLength::from_pt(12.0)"
+struct = "page"
+initial_specified_value = "specified::BdPageMarkLength::from_pt(12.0)"
+spec = "Nonstandard (moegoe -bd-* fork extension; F4 crop-mark length)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "paint"
+
+[-bd-page-crop-mark-offset]
+type = "BdPageMarkLength"
+initial = "computed::BdPageMarkLength::from_pt(3.0)"
+struct = "page"
+initial_specified_value = "specified::BdPageMarkLength::from_pt(3.0)"
+spec = "Nonstandard (moegoe -bd-* fork extension; F4 crop-mark offset)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "paint"
+
+[-bd-page-bleed-mark-length]
+type = "BdPageMarkLength"
+initial = "computed::BdPageMarkLength::from_pt(12.0)"
+struct = "page"
+initial_specified_value = "specified::BdPageMarkLength::from_pt(12.0)"
+spec = "Nonstandard (moegoe -bd-* fork extension; F4 bleed-mark length)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "paint"
+
+[-bd-page-bleed-mark-offset]
+type = "BdPageMarkLength"
+initial = "computed::BdPageMarkLength::from_pt(0.0)"
+struct = "page"
+initial_specified_value = "specified::BdPageMarkLength::from_pt(0.0)"
+spec = "Nonstandard (moegoe -bd-* fork extension; F4 bleed-mark offset)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "paint"
+
+[-bd-page-registration-mark-offset]
+type = "BdPageMarkLength"
+initial = "computed::BdPageMarkLength::from_pt(6.0)"
+struct = "page"
+initial_specified_value = "specified::BdPageMarkLength::from_pt(6.0)"
+spec = "Nonstandard (moegoe -bd-* fork extension; F4 registration-mark offset)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "paint"
+
+[-bd-page-registration-mark-size]
+type = "BdPageMarkLength"
+initial = "computed::BdPageMarkLength::from_pt(6.0)"
+struct = "page"
+initial_specified_value = "specified::BdPageMarkLength::from_pt(6.0)"
+spec = "Nonstandard (moegoe -bd-* fork extension; F4 registration-mark size)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "paint"
+
+[-bd-page-marks-colour]
+type = "BdPageMarksColour"
+initial = "computed::BdPageMarksColour::auto()"
+struct = "page"
+initial_specified_value = "specified::BdPageMarksColour::auto()"
+spec = "Nonstandard (moegoe -bd-* fork extension; F4 marks colour)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "paint"
+
+[-bd-page-marks-offset]
+type = "BdPageMarkLength"
+initial = "computed::BdPageMarkLength::from_pt(0.0)"
+struct = "page"
+initial_specified_value = "specified::BdPageMarkLength::from_pt(0.0)"
+spec = "Nonstandard (moegoe -bd-* fork extension; F4 all-marks offset)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "paint"
+
+[-bd-page-marks-width]
+type = "BdPageMarkLength"
+initial = "computed::BdPageMarkLength::from_pt(0.24)"
+struct = "page"
+initial_specified_value = "specified::BdPageMarkLength::from_pt(0.24)"
+spec = "Nonstandard (moegoe -bd-* fork extension; F4 marks line width)"
 animation_type = "none"
 rule_types_allowed = ["page"]
 affects = "paint"

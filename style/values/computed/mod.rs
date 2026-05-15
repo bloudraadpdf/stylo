@@ -93,6 +93,7 @@ pub use self::outline::OutlineStyle;
 pub use self::bd_page_boxes::{
     BdPdfArtSize, BdPdfCropSize, BdPdfMediaSize, BdPdfPageBoxSize, BdPdfPageClip,
 };
+pub use self::bd_page_marks::{BdPageMarkLength, BdPageMarksColour};
 pub use self::bd_page_rotation::{BdPdfPageRotation, BdRotateBody};
 pub use self::bd_pdf::BdPdfMetaValue;
 pub use self::bd_pdf_comment::{
@@ -173,6 +174,7 @@ pub mod animation;
 pub mod background;
 pub mod basic_shape;
 pub mod bd_page_boxes;
+pub mod bd_page_marks;
 pub mod bd_page_rotation;
 pub mod bd_pdf;
 pub mod bd_pdf_comment;
