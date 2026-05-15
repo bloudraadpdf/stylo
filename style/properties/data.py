@@ -557,6 +557,32 @@ class Longhand(Property):
             return False
         if self.predefined_type:
             return self.predefined_type in {
+                # moegoe -bd-* fork extension Copy specified types.
+                # Each entry must match a predefined_type whose
+                # specified value is annotated `#[derive(Copy)]`. Adding
+                # a non-Copy type here triggers the AssertCopy blanket
+                # impl conflict; adding a Copy type whose entry lives
+                # elsewhere is harmless. See Family 13-26 audit
+                # `docs/audits/CSS-COVERAGE-AUDIT-2026-05-14`.
+                "BdBarcodeCheckDigitMode",
+                "BdBarcodeCompositeType",
+                "BdBarcodeEccLevel",
+                "BdBarcodeEncoding",
+                "BdBarcodeHrPosition",
+                "BdBarcodeReaderInit",
+                "BdBarcodeStructuredAppend",
+                "BdBarcodeType",
+                "BdChangeBarAlign",
+                "BdChangeBarExclusion",
+                "BdFloatDeferColumn",
+                "BdFloatModifier",
+                "BdFloatPolicy",
+                "BdFloatTail",
+                "BdFlowIntoMode",
+                "BdPdfFormFieldFlags",
+                "BdPdfFormFieldMaxLength",
+                "BdPdfSignatureFieldLock",
+                "BdPrintMarkSet",
                 "AlignmentBaseline",
                 "Appearance",
                 "AnimationComposition",
