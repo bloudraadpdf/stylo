@@ -80,7 +80,7 @@ impl Parse for BdPageMarkLength {
 /// `-ro-marks-color`). `auto` (initial) defers to the renderer's
 /// default — typically the "registration" colour space (100% of
 /// every separation channel).
-#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToShmem, ToTyped)]
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
 #[repr(C, u8)]
 pub enum BdPageMarksColour {
     /// `auto` — defer to the renderer default.
