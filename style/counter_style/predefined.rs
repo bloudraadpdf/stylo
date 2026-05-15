@@ -58,4 +58,16 @@ predefined! {
     "trad-chinese-formal",
     "cjk-ideographic",
     "ethiopic-numeric",
+    // moegoe -bd-* fork extension (F25): PDFreactor-compatible
+    // counter styles. `bd-footnote` mirrors PDFreactor's `-ro-footnote`
+    // (asterisk-style symbolic counter); the `bd-spelled-out-*` family
+    // mirrors PDFreactor's `-ro-spelled-out-{en,en-ordinal,de,fr}`
+    // (verbal cardinal / ordinal numerals). Predefined names live
+    // here only — the formula tables for these counters are wired
+    // in moegoe's CSS-to-IR conversion layer.
+    "bd-footnote",
+    "bd-spelled-out-en",
+    "bd-spelled-out-en-ordinal",
+    "bd-spelled-out-de",
+    "bd-spelled-out-fr",
 }
