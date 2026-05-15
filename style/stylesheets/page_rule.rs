@@ -93,6 +93,16 @@ page_pseudo_classes! {
     ///
     /// [verso]: https://drafts.csswg.org/css-page-3/#spread-pseudos
     Verso => "verso",
+    /// moegoe Family 30 — `:first-of-group` page pseudo-class
+    /// (Prince `prince.md:6567,8255`).
+    ///
+    /// Matches the first page in a page group as established by
+    /// `-bd-page-group: start` (Prince `-prince-page-group`). The
+    /// paginator sets the flag at every forced page-break-before that
+    /// originates a new group. Specificity is grouped with `:first` /
+    /// `:blank` (the `g` bucket) since this is also a positional
+    /// page-context pseudo with no direction component.
+    FirstOfGroup => "first-of-group",
 }
 
 bitflags! {
@@ -119,6 +129,8 @@ bitflags! {
         const RECTO = 1 << 5;
         /// Flag for PagePseudoClass::Verso
         const VERSO = 1 << 6;
+        /// Flag for PagePseudoClass::FirstOfGroup (Family 30)
+        const FIRST_OF_GROUP = 1 << 7;
     }
 }
 
@@ -133,6 +145,7 @@ impl PagePseudoClassFlags {
             PagePseudoClass::Right => PagePseudoClassFlags::RIGHT,
             PagePseudoClass::Recto => PagePseudoClassFlags::RECTO,
             PagePseudoClass::Verso => PagePseudoClassFlags::VERSO,
+            PagePseudoClass::FirstOfGroup => PagePseudoClassFlags::FIRST_OF_GROUP,
         }
     }
     /// Checks if the given pseudo class applies to this set of flags.
@@ -250,7 +263,9 @@ impl PageSelector {
                 return None;
             }
             match pc {
-                PagePseudoClass::First | PagePseudoClass::Blank => g += 1,
+                PagePseudoClass::First
+                | PagePseudoClass::Blank
+                | PagePseudoClass::FirstOfGroup => g += 1,
                 PagePseudoClass::Left
                 | PagePseudoClass::Right
                 | PagePseudoClass::Recto
