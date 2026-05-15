@@ -2150,6 +2150,98 @@ spec = "Nonstandard (moegoe -bd-* fork extension; G8 tagged-PDF role overrides)"
 animation_type = "none"
 affects = ""
 
+# moegoe F27 — PDF output tuning. Per-element / inherited knobs
+# governing how the PDF backend (krilla) emits content.
+[-bd-pdf-text-rendering]
+type = "BdPdfTextRendering"
+initial = "computed::BdPdfTextRendering::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfTextRendering::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F27 PDF text rendering)"
+animation_type = "none"
+affects = "paint"
+
+[-bd-paint-reordering]
+type = "BdPaintReordering"
+initial = "computed::BdPaintReordering::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPaintReordering::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F27 paint reordering)"
+animation_type = "none"
+affects = "paint"
+
+[-bd-font-embedding-type]
+type = "BdFontEmbeddingType"
+initial = "computed::BdFontEmbeddingType::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdFontEmbeddingType::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F27 font embedding type)"
+animation_type = "none"
+affects = ""
+
+[-bd-glyph-layout-mode]
+type = "BdGlyphLayoutMode"
+initial = "computed::BdGlyphLayoutMode::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdGlyphLayoutMode::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F27 glyph layout mode)"
+animation_type = "none"
+affects = "layout"
+
+[-bd-rasterization]
+type = "BdRasterization"
+initial = "computed::BdRasterization::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdRasterization::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F27 rasterisation policy)"
+animation_type = "none"
+affects = "paint"
+
+[-bd-rasterization-max-size]
+type = "BdRasterizationMaxSize"
+initial = "computed::BdRasterizationMaxSize::zero()"
+struct = "counters"
+initial_specified_value = "specified::BdRasterizationMaxSize::zero()"
+spec = "Nonstandard (moegoe -bd-* fork extension; F27 rasterisation size threshold)"
+animation_type = "none"
+affects = "paint"
+
+[-bd-rasterization-supersampling]
+type = "BdRasterizationSupersampling"
+initial = "computed::BdRasterizationSupersampling::one()"
+struct = "counters"
+initial_specified_value = "specified::BdRasterizationSupersampling::one()"
+spec = "Nonstandard (moegoe -bd-* fork extension; F27 rasterisation supersampling)"
+animation_type = "none"
+affects = "paint"
+
+[-bd-pdf-shape-optimization]
+type = "BdPdfShapeOptimization"
+initial = "computed::BdPdfShapeOptimization::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfShapeOptimization::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F27 PDF shape optimisation)"
+animation_type = "none"
+affects = "paint"
+
+[-bd-pdf-passdown-styles]
+type = "BdPdfPassdownStyles"
+initial = "computed::BdPdfPassdownStyles::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfPassdownStyles::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F27 PDF passdown styles)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-bookmarks-enabled]
+type = "BdPdfBookmarksEnabled"
+initial = "computed::BdPdfBookmarksEnabled::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfBookmarksEnabled::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F27 PDF bookmarks gate)"
+animation_type = "none"
+affects = ""
+
 # moegoe F19 — per-page rotation. Both are @page-only descriptors.
 # `-bd-pdf-page-rotation` sets the PDF `/Rotate` entry on the page
 # dictionary (viewer rotates the rendered page). `-bd-rotate-body`

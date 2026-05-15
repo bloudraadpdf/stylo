@@ -98,6 +98,11 @@ pub use self::bd_pdf_comment::{
 };
 pub use self::bd_pdf_conformance::{BdPdfConformanceValue, BdPdfVersionValue};
 pub use self::bd_pdf_format::BdPdfFormat;
+pub use self::bd_pdf_output::{
+    BdFontEmbeddingType, BdGlyphLayoutMode, BdPaintReordering, BdPdfBookmarksEnabled,
+    BdPdfPassdownStyles, BdPdfShapeOptimization, BdPdfTextRendering, BdRasterization,
+    BdRasterizationMaxSize, BdRasterizationSupersampling,
+};
 pub use self::bd_pdf_output_intent::{
     BdPdfColourConversion, BdPdfColourOption, BdPdfColourOptions, BdPdfFallbackCmykProfile,
     BdPdfOutputIntent,
@@ -169,6 +174,7 @@ pub mod bd_pdf;
 pub mod bd_pdf_comment;
 pub mod bd_pdf_conformance;
 pub mod bd_pdf_format;
+pub mod bd_pdf_output;
 pub mod bd_pdf_output_intent;
 pub mod bd_pdf_tag;
 pub mod bd_pdf_viewer;
