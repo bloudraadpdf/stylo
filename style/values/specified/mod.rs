@@ -88,7 +88,19 @@ pub use self::list::Quotes;
 pub use self::motion::{OffsetPath, OffsetPosition, OffsetRotate};
 pub use self::outline::OutlineStyle;
 pub use self::bd_a11y::{BdTextReplace, BdTooltip};
+pub use self::bd_barcode::{
+    BdBarcodeAffix, BdBarcodeCheckDigitMode, BdBarcodeColour, BdBarcodeCompositeType,
+    BdBarcodeContent, BdBarcodeEccLevel, BdBarcodeEncoding, BdBarcodeFontFamily,
+    BdBarcodeHrPosition, BdBarcodeReaderInit, BdBarcodeSize, BdBarcodeStructuredAppend,
+    BdBarcodeType, BdQrEccLetter,
+};
+pub use self::bd_bfo::BdIndex;
 pub use self::bd_bookmark::{BdPdfLinkType, BookmarkTarget};
+pub use self::bd_change_bar::{
+    BdChangeBarAlign, BdChangeBarColour, BdChangeBarExclusion, BdChangeBarName,
+};
+pub use self::bd_float::{BdFloatDeferColumn, BdFloatModifier, BdFloatPolicy, BdFloatTail};
+pub use self::bd_flow::{BdFlowFrom, BdFlowInto, BdFlowIntoMode};
 pub use self::bd_footnote::{
     BdFootnoteFragmentation, BdFootnoteRuleLength, FloatPlacement, FootnoteStylePosition,
 };
@@ -106,7 +118,9 @@ pub use self::bd_page_boxes::{
 };
 pub use self::bd_page_group::BdPageGroup;
 pub use self::bd_page_margin::BdPageMarginEdge;
-pub use self::bd_page_marks::{BdPageMarkLength, BdPageMarksColour};
+pub use self::bd_page_marks::{
+    BdColorBarPosition, BdPageMarkLength, BdPageMarksColour, BdPrintMarkSet,
+};
 pub use self::bd_page_rotation::{BdPdfPageRotation, BdRotateBody};
 pub use self::bd_pagination::{
     BdChangeLineBreaksForPagination, BdForcedBreaks, BdLineBreakChoices, BdNLines, BdPageFill,
@@ -121,6 +135,10 @@ pub use self::bd_pdf_comment::{
 pub use self::bd_pdf_conformance::{BdPdfConformanceValue, BdPdfVersionValue};
 pub use self::bd_pdf_destination::{
     BdDestinationArea, BdPdfAttachmentLocation, BdPdfAttachmentUrl, BdPdfStringSlot,
+};
+pub use self::bd_pdf_form::{
+    BdPdfFormFieldFlags, BdPdfFormFieldMaxLength, BdPdfSignatureFieldLock,
+    BdPdfSignatureFieldName,
 };
 pub use self::bd_pdf_format::BdPdfFormat;
 pub use self::bd_pdf_output::{
@@ -204,7 +222,12 @@ pub mod animation;
 pub mod background;
 pub mod basic_shape;
 pub mod bd_a11y;
+pub mod bd_barcode;
+pub mod bd_bfo;
 pub mod bd_bookmark;
+pub mod bd_change_bar;
+pub mod bd_float;
+pub mod bd_flow;
 pub mod bd_footnote;
 pub mod bd_gaps;
 pub mod bd_hyphenation;
@@ -223,6 +246,7 @@ pub mod bd_pdf_colour;
 pub mod bd_pdf_comment;
 pub mod bd_pdf_conformance;
 pub mod bd_pdf_destination;
+pub mod bd_pdf_form;
 pub mod bd_pdf_format;
 pub mod bd_pdf_output;
 pub mod bd_pdf_output_intent;
@@ -1045,6 +1069,40 @@ impl ToCss for AttrSyntax {
     }
 }
 
+/// Lookup scope for an `attr(...)` resolution.
+///
+/// moegoe Family 14: PDFreactor extends standard `attr()` with
+/// `-ro-attr(name, ancestor)` and `-ro-attr-ancestor(name)`. Both
+/// resolve to the value of the named attribute on the nearest
+/// ancestor that carries it. The compat translator rewrites the
+/// PDFreactor spellings to `-bd-attr` / `-bd-attr-ancestor` before
+/// Stylo parses; the function-name dispatch below tags the
+/// resulting `Attr` with the appropriate scope so downstream
+/// (`moegoe-css::computed_to_ir`) can choose `self` vs ancestor
+/// lookup.
+#[repr(u8)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Eq,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+)]
+pub enum AttrScope {
+    /// Standard CSS `attr()` — looks up on the element itself.
+    #[default]
+    SelfElement,
+    /// `-bd-attr-ancestor()` or `-bd-attr(name, ancestor)` —
+    /// looks up on the nearest ancestor with the named attribute.
+    Ancestor,
+}
+
 /// An attr(...) rule.
 #[derive(
     Clone,
@@ -1070,6 +1128,10 @@ pub struct Attr {
     pub syntax: AttrSyntax,
     /// Fallback value
     pub fallback: crate::OwnedStr,
+    /// Lookup scope — standard `attr()` is `SelfElement`;
+    /// `-bd-attr-ancestor()` and `-bd-attr(name, ancestor)` set
+    /// `Ancestor`. moegoe Family 14.
+    pub scope: AttrScope,
 }
 
 impl Parse for Attr {
@@ -1077,8 +1139,21 @@ impl Parse for Attr {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Attr, ParseError<'i>> {
-        input.expect_function_matching("attr")?;
-        input.parse_nested_block(|i| Attr::parse_function(context, i))
+        // moegoe Family 14: accept `attr`, `-bd-attr`, and
+        // `-bd-attr-ancestor` as the dispatch function name. The
+        // first two follow the standard grammar (with `ancestor`
+        // permitted as an additional positional keyword on
+        // `-bd-attr`); the third forces ancestor lookup.
+        let function = input.expect_function()?.clone();
+        let scope = match_ignore_ascii_case! { &function,
+            "attr" => AttrScope::SelfElement,
+            "-bd-attr" => AttrScope::SelfElement,
+            "-bd-attr-ancestor" => AttrScope::Ancestor,
+            _ => return Err(input.new_custom_error(
+                StyleParseErrorKind::UnspecifiedError,
+            )),
+        };
+        input.parse_nested_block(|i| Attr::parse_function_with_scope(context, i, scope))
     }
 }
 
@@ -1115,12 +1190,32 @@ fn parse_namespace<'i, 't>(
 
 impl Attr {
     /// Parse contents of attr() assuming we have already parsed `attr` and are
-    /// within a parse_nested_block()
+    /// within a parse_nested_block().
+    ///
+    /// Standard CSS `attr()` — keeps `AttrScope::SelfElement`.
     pub fn parse_function<'i, 't>(
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Attr, ParseError<'i>> {
-        // Syntax is `[namespace? '|']? ident [attr-type]? [, fallback]?`
+        Self::parse_function_with_scope(context, input, AttrScope::SelfElement)
+    }
+
+    /// Parse contents of `attr(...)` / `-bd-attr(...)` /
+    /// `-bd-attr-ancestor(...)` assuming we have already consumed
+    /// the function name and are within a `parse_nested_block()`.
+    ///
+    /// Grammar: `[namespace? '|']? ident [, ancestor]? [attr-type]?
+    /// [, fallback]?`. The `, ancestor` positional keyword is a
+    /// moegoe Family 14 extension on `-bd-attr` (and accepted on
+    /// `attr` for ergonomic parity); when present it forces
+    /// `AttrScope::Ancestor`. The `-bd-attr-ancestor` function
+    /// passes `AttrScope::Ancestor` directly and rejects the
+    /// keyword.
+    pub fn parse_function_with_scope<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+        mut scope: AttrScope,
+    ) -> Result<Attr, ParseError<'i>> {
         let namespace = input
             .try_parse(|input| parse_namespace(context, input))
             .ok();
@@ -1138,6 +1233,19 @@ impl Attr {
             input.expect_ident()?.as_ref()
         });
 
+        // moegoe Family 14: optional `, ancestor` keyword on
+        // `attr()` / `-bd-attr()`. Forces ancestor lookup.
+        if input
+            .try_parse(|i| -> Result<(), ParseError<'i>> {
+                i.expect_comma()?;
+                i.expect_ident_matching("ancestor")?;
+                Ok(())
+            })
+            .is_ok()
+        {
+            scope = AttrScope::Ancestor;
+        }
+
         let syntax = input.try_parse(parse_attr_syntax).unwrap_or_default();
         let fallback = input
             .try_parse(|input| -> Result<crate::OwnedStr, ParseError<'i>> {
@@ -1153,6 +1261,7 @@ impl Attr {
             attribute,
             syntax,
             fallback,
+            scope,
         })
     }
 }
@@ -1206,7 +1315,14 @@ impl ToCss for Attr {
     where
         W: Write,
     {
-        dest.write_str("attr(")?;
+        // moegoe Family 14: round-trip `-bd-attr-ancestor()` for
+        // ancestor-scoped attr() rules; otherwise serialise the
+        // standard `attr(... , ancestor)` shape so the value can
+        // be read back by a non-moegoe consumer too.
+        match self.scope {
+            AttrScope::SelfElement => dest.write_str("attr(")?,
+            AttrScope::Ancestor => dest.write_str("-bd-attr-ancestor(")?,
+        }
         if !self.namespace_prefix.is_empty() {
             serialize_atom_identifier(&self.namespace_prefix, dest)?;
             dest.write_char('|')?;
@@ -1283,5 +1399,27 @@ mod tests {
             attr.to_css_string(),
             r#"attr(data-width type(<length-percentage>), 100%)"#
         );
+    }
+
+    #[test]
+    fn attr_bd_ancestor_function_parses_and_round_trips() {
+        let attr = parse_attr(r#"-bd-attr-ancestor(data-section)"#);
+        assert_eq!(attr.attribute.as_ref(), "data-section");
+        assert_eq!(attr.scope, AttrScope::Ancestor);
+        assert_eq!(attr.to_css_string(), r#"-bd-attr-ancestor(data-section)"#);
+    }
+
+    #[test]
+    fn attr_bd_attr_with_ancestor_keyword_promotes_scope() {
+        let attr = parse_attr(r#"-bd-attr(data-section, ancestor)"#);
+        assert_eq!(attr.scope, AttrScope::Ancestor);
+        assert_eq!(attr.to_css_string(), r#"-bd-attr-ancestor(data-section)"#);
+    }
+
+    #[test]
+    fn standard_attr_keeps_self_scope() {
+        let attr = parse_attr(r#"attr(title)"#);
+        assert_eq!(attr.scope, AttrScope::SelfElement);
+        assert_eq!(attr.to_css_string(), r#"attr(title)"#);
     }
 }

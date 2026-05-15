@@ -91,7 +91,19 @@ pub use self::list::Quotes;
 pub use self::motion::{OffsetPath, OffsetPosition, OffsetRotate};
 pub use self::outline::OutlineStyle;
 pub use self::bd_a11y::{BdTextReplace, BdTooltip};
+pub use self::bd_barcode::{
+    BdBarcodeAffix, BdBarcodeCheckDigitMode, BdBarcodeColour, BdBarcodeCompositeType,
+    BdBarcodeContent, BdBarcodeEccLevel, BdBarcodeEncoding, BdBarcodeFontFamily,
+    BdBarcodeHrPosition, BdBarcodeReaderInit, BdBarcodeSize, BdBarcodeStructuredAppend,
+    BdBarcodeType, BdQrEccLetter,
+};
+pub use self::bd_bfo::BdIndex;
 pub use self::bd_bookmark::{BdPdfLinkType, BookmarkTarget};
+pub use self::bd_change_bar::{
+    BdChangeBarAlign, BdChangeBarColour, BdChangeBarExclusion, BdChangeBarName,
+};
+pub use self::bd_float::{BdFloatDeferColumn, BdFloatModifier, BdFloatPolicy, BdFloatTail};
+pub use self::bd_flow::{BdFlowFrom, BdFlowInto, BdFlowIntoMode};
 pub use self::bd_footnote::{
     BdFootnoteFragmentation, BdFootnoteRuleLength, FloatPlacement, FootnoteStylePosition,
 };
@@ -109,7 +121,9 @@ pub use self::bd_page_boxes::{
 };
 pub use self::bd_page_group::BdPageGroup;
 pub use self::bd_page_margin::BdPageMarginEdge;
-pub use self::bd_page_marks::{BdPageMarkLength, BdPageMarksColour};
+pub use self::bd_page_marks::{
+    BdColorBarPosition, BdPageMarkLength, BdPageMarksColour, BdPrintMarkSet,
+};
 pub use self::bd_page_rotation::{BdPdfPageRotation, BdRotateBody};
 pub use self::bd_pagination::{
     BdChangeLineBreaksForPagination, BdForcedBreaks, BdLineBreakChoices, BdNLines, BdPageFill,
@@ -127,6 +141,10 @@ pub use self::bd_pdf_destination::{
 };
 // re-export by computed path; bd_pdf_destination now declares its own
 // computed `BdPdfAttachmentUrl` that contains `ComputedUrl`.
+pub use self::bd_pdf_form::{
+    BdPdfFormFieldFlags, BdPdfFormFieldMaxLength, BdPdfSignatureFieldLock,
+    BdPdfSignatureFieldName,
+};
 pub use self::bd_pdf_format::BdPdfFormat;
 pub use self::bd_pdf_output::{
     BdFontEmbeddingType, BdGlyphLayoutMode, BdPaintReordering, BdPdfBookmarksEnabled,
@@ -207,7 +225,12 @@ pub mod animation;
 pub mod background;
 pub mod basic_shape;
 pub mod bd_a11y;
+pub mod bd_barcode;
+pub mod bd_bfo;
 pub mod bd_bookmark;
+pub mod bd_change_bar;
+pub mod bd_float;
+pub mod bd_flow;
 pub mod bd_footnote;
 pub mod bd_gaps;
 pub mod bd_hyphenation;
@@ -226,6 +249,7 @@ pub mod bd_pdf_colour;
 pub mod bd_pdf_comment;
 pub mod bd_pdf_conformance;
 pub mod bd_pdf_destination;
+pub mod bd_pdf_form;
 pub mod bd_pdf_format;
 pub mod bd_pdf_output;
 pub mod bd_pdf_output_intent;

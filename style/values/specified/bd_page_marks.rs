@@ -2,15 +2,16 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! moegoe per-mark tuning properties (F4).
+//! moegoe page-mark + print-shop properties (Families F4 and F20).
 //!
-//! Replaces the hardcoded crop / cross / registration-mark constants
-//! in `crates/moegoe-ir/src/page.rs` (`CROP_MARK_LENGTH_PT = 12pt`,
+//! F4 — per-mark tuning. Replaces the hardcoded crop / cross /
+//! registration-mark constants in
+//! `crates/moegoe-ir/src/page.rs` (`CROP_MARK_LENGTH_PT = 12pt`,
 //! `CROP_MARK_OFFSET_PT = 3pt`, `CROSS_MARK_SIZE_PT = 6pt`) with
 //! CSS-driven @page descriptors. Print shops use these knobs to
 //! line up registration marks against their plate-imposition rig.
 //!
-//! All nine are `@page`-only descriptors:
+//! All nine F4 longhands are `@page`-only descriptors:
 //!
 //! | Property | PDFreactor source |
 //! |----------|--------------------|
@@ -27,10 +28,19 @@
 //! Prince spellings (`-prince-mark-offset` / `-prince-mark-width`)
 //! map onto the corresponding `marks-*` properties via the moegoe
 //! compat translator.
+//!
+//! F20 — `-bd-page-colorbar-*` / `-bd-page-print-mark-set` page-margin
+//! print-shop tooling. Native moegoe fork-extension surface for
+//! PDFreactor's `-ro-colorbar-*` and `-ro-marks` properties (see
+//! `docs/reference-manuals/pdfreactor.md:14026–14043, 16279`). Eight
+//! positional colour-bar slots plus an offset, a marks shorthand,
+//! and a print-mark-set synthesised property. All F20 longhands are
+//! `@page` descriptors (`rule_types_allowed = ["page"]`).
 
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
 use crate::values::specified::length::NonNegativeLength;
+use crate::values::specified::url::UrlOrNone;
 use crate::values::specified::Color;
 use cssparser::Parser;
 use style_traits::ParseError;
@@ -93,19 +103,6 @@ impl BdPageMarksColour {
     }
 }
 
-impl style_traits::ToCss for BdPageMarksColour {
-    fn to_css<W>(&self, dest: &mut style_traits::CssWriter<W>) -> std::fmt::Result
-    where
-        W: std::fmt::Write,
-    {
-        use std::fmt::Write as _;
-        match self {
-            Self::Auto => dest.write_str("auto"),
-            Self::Colour(c) => c.to_css(dest),
-        }
-    }
-}
-
 impl Parse for BdPageMarksColour {
     fn parse<'i, 't>(
         context: &ParserContext,
@@ -119,6 +116,101 @@ impl Parse for BdPageMarksColour {
         }
         Ok(Self::Colour(Color::parse(context, input)?))
     }
+}
+
+// ===== F20 — colour bar / print-mark-set =================================
+
+/// Specified value of a `-bd-page-colorbar-*` slot.
+///
+/// `none` (initial) — slot empty. `auto` — engine default colour
+/// bar (per ISO 12647). `<url>` — explicit colour-bar artwork.
+#[derive(
+    Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped,
+)]
+#[repr(C, u8)]
+pub enum BdColorBarPosition {
+    /// `none`.
+    None,
+    /// `auto`.
+    Auto,
+    /// `<url>`.
+    Url(UrlOrNone),
+}
+
+impl Default for BdColorBarPosition {
+    #[inline]
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+impl BdColorBarPosition {
+    /// Initial value (`none`).
+    #[inline]
+    pub fn none() -> Self {
+        Self::None
+    }
+
+    /// Whether the value is `none`.
+    #[inline]
+    pub fn is_none(&self) -> bool {
+        matches!(self, Self::None)
+    }
+}
+
+impl Parse for BdColorBarPosition {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if input
+            .try_parse(|i| i.expect_ident_matching("none"))
+            .is_ok()
+        {
+            return Ok(Self::None);
+        }
+        if input
+            .try_parse(|i| i.expect_ident_matching("auto"))
+            .is_ok()
+        {
+            return Ok(Self::Auto);
+        }
+        Ok(Self::Url(UrlOrNone::parse(context, input)?))
+    }
+}
+
+// `-bd-page-colorbar-offset` uses the predefined `Length` type
+// directly.
+
+/// Specified value of `-bd-page-print-mark-set`.
+///
+/// Selects one of the well-known print-mark presets.
+#[repr(u8)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[allow(missing_docs)]
+pub enum BdPrintMarkSet {
+    #[default]
+    Auto,
+    None,
+    Default,
+    Iso12647,
+    Pdfx,
+    Custom,
 }
 
 #[cfg(test)]

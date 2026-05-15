@@ -2988,6 +2988,448 @@ spec = "Nonstandard (moegoe -bd-* fork extension; F31 linebreak-magic)"
 animation_type = "none"
 affects = "layout"
 
+# moegoe Family 26 — AcroForm widget field flags / maxlength /
+# signature longhands. Per-element; not inherited; consumed by the
+# form-widget conversion arm in `moegoe-css`. See
+# `crates/moegoe-css/src/computed_to_ir/forms.rs` (G3 plumbing).
+[-bd-pdf-form-field-flags]
+type = "BdPdfFormFieldFlags"
+initial = "computed::BdPdfFormFieldFlags::empty()"
+struct = "counters"
+initial_specified_value = "specified::BdPdfFormFieldFlags::empty()"
+spec = "Nonstandard (moegoe -bd-* fork extension; G3 AcroForm widget flags — Family 26)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-form-field-maxlength]
+type = "BdPdfFormFieldMaxLength"
+initial = "computed::BdPdfFormFieldMaxLength::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfFormFieldMaxLength::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; G3 AcroForm widget maxlength — Family 26)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-signature-field-lock]
+type = "BdPdfSignatureFieldLock"
+initial = "computed::BdPdfSignatureFieldLock::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfSignatureFieldLock::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; G3 AcroForm signature widget — Family 26)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-signature-field-name]
+type = "BdPdfSignatureFieldName"
+initial = "computed::BdPdfSignatureFieldName::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfSignatureFieldName::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; G3 AcroForm signature widget — Family 26)"
+animation_type = "none"
+affects = ""
+
+# moegoe Family 16 — change-bar revision marks. Per-element; not
+# inherited. The paginator allocates a margin-side track and the
+# paint stage draws a vertical bar covering the fragment's vertical
+# extent (see `docs/audits/CSS-COVERAGE-AUDIT-2026-05-14`).
+[-bd-change-bar-align]
+type = "BdChangeBarAlign"
+initial = "computed::BdChangeBarAlign::Start"
+struct = "counters"
+initial_specified_value = "specified::BdChangeBarAlign::Start"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 16 change-bar)"
+animation_type = "none"
+affects = ""
+
+[-bd-change-bar-colour]
+type = "BdChangeBarColour"
+initial = "computed::BdChangeBarColour::auto()"
+struct = "counters"
+initial_specified_value = "specified::BdChangeBarColour::auto()"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 16 change-bar)"
+animation_type = "none"
+affects = ""
+
+[-bd-change-bar-exclusion]
+type = "BdChangeBarExclusion"
+initial = "computed::BdChangeBarExclusion::None"
+struct = "counters"
+initial_specified_value = "specified::BdChangeBarExclusion::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 16 change-bar)"
+animation_type = "none"
+affects = ""
+
+[-bd-change-bar-name]
+type = "BdChangeBarName"
+initial = "computed::BdChangeBarName::None"
+struct = "counters"
+initial_specified_value = "specified::BdChangeBarName::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 16 change-bar)"
+animation_type = "none"
+affects = ""
+
+[-bd-change-bar-offset]
+type = "Length"
+initial = "computed::Length::zero()"
+struct = "counters"
+initial_specified_value = "specified::Length::zero()"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 16 change-bar)"
+animation_type = "none"
+affects = ""
+
+[-bd-change-bar-width]
+type = "NonNegativeLength"
+initial = "computed::NonNegativeLength::zero()"
+struct = "counters"
+initial_specified_value = "specified::NonNegativeLength::zero()"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 16 change-bar)"
+animation_type = "none"
+affects = ""
+
+# moegoe Family 17 — CSS Regions (SHELVED — thin parse shim).
+# Renderer emits `RenderWarning::UnsupportedCssFeature` until the
+# paginator gains a re-flow loop.
+[-bd-flow-from]
+type = "BdFlowFrom"
+initial = "computed::BdFlowFrom::None"
+struct = "counters"
+initial_specified_value = "specified::BdFlowFrom::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 17 CSS Regions — shelved)"
+animation_type = "none"
+affects = ""
+
+[-bd-flow-into]
+type = "BdFlowInto"
+initial = "computed::BdFlowInto::None"
+struct = "counters"
+initial_specified_value = "specified::BdFlowInto::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 17 CSS Regions — shelved)"
+animation_type = "none"
+affects = ""
+boxed = true
+
+# moegoe Family 18 — Prince-style page-float modifiers. Apply to
+# floated boxes; not inherited; consumed by the page-floats
+# placement pass in `moegoe-page`.
+[-bd-float-policy]
+type = "BdFloatPolicy"
+initial = "computed::BdFloatPolicy::Normal"
+struct = "counters"
+initial_specified_value = "specified::BdFloatPolicy::Normal"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 18 float modifiers)"
+animation_type = "none"
+affects = ""
+
+[-bd-float-tail]
+type = "BdFloatTail"
+initial = "computed::BdFloatTail::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdFloatTail::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 18 float modifiers)"
+animation_type = "none"
+affects = ""
+
+[-bd-float-modifier]
+type = "BdFloatModifier"
+initial = "computed::BdFloatModifier::None"
+struct = "counters"
+initial_specified_value = "specified::BdFloatModifier::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 18 float modifiers)"
+animation_type = "none"
+affects = ""
+
+[-bd-float-defer-column]
+type = "BdFloatDeferColumn"
+initial = "computed::BdFloatDeferColumn::None"
+struct = "counters"
+initial_specified_value = "specified::BdFloatDeferColumn::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 18 float modifiers)"
+animation_type = "none"
+affects = ""
+
+# moegoe Family 20 — page-marks / colour-bar print-shop tooling.
+# `@page` descriptors; consumed by the paint stage.
+[-bd-page-colorbar-top-left]
+type = "BdColorBarPosition"
+initial = "computed::BdColorBarPosition::None"
+struct = "page"
+initial_specified_value = "specified::BdColorBarPosition::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 20 page marks)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = ""
+
+[-bd-page-colorbar-top-right]
+type = "BdColorBarPosition"
+initial = "computed::BdColorBarPosition::None"
+struct = "page"
+initial_specified_value = "specified::BdColorBarPosition::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 20 page marks)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = ""
+
+[-bd-page-colorbar-bottom-left]
+type = "BdColorBarPosition"
+initial = "computed::BdColorBarPosition::None"
+struct = "page"
+initial_specified_value = "specified::BdColorBarPosition::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 20 page marks)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = ""
+
+[-bd-page-colorbar-bottom-right]
+type = "BdColorBarPosition"
+initial = "computed::BdColorBarPosition::None"
+struct = "page"
+initial_specified_value = "specified::BdColorBarPosition::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 20 page marks)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = ""
+
+[-bd-page-colorbar-left-top]
+type = "BdColorBarPosition"
+initial = "computed::BdColorBarPosition::None"
+struct = "page"
+initial_specified_value = "specified::BdColorBarPosition::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 20 page marks)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = ""
+
+[-bd-page-colorbar-left-bottom]
+type = "BdColorBarPosition"
+initial = "computed::BdColorBarPosition::None"
+struct = "page"
+initial_specified_value = "specified::BdColorBarPosition::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 20 page marks)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = ""
+
+[-bd-page-colorbar-right-top]
+type = "BdColorBarPosition"
+initial = "computed::BdColorBarPosition::None"
+struct = "page"
+initial_specified_value = "specified::BdColorBarPosition::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 20 page marks)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = ""
+
+[-bd-page-colorbar-right-bottom]
+type = "BdColorBarPosition"
+initial = "computed::BdColorBarPosition::None"
+struct = "page"
+initial_specified_value = "specified::BdColorBarPosition::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 20 page marks)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = ""
+
+[-bd-page-colorbar-offset]
+type = "Length"
+initial = "computed::Length::zero()"
+struct = "page"
+initial_specified_value = "specified::Length::zero()"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 20 page marks)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = ""
+
+[-bd-page-print-mark-set]
+type = "BdPrintMarkSet"
+initial = "computed::BdPrintMarkSet::Auto"
+struct = "page"
+initial_specified_value = "specified::BdPrintMarkSet::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 20 page marks)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = ""
+
+# moegoe Family 23 — BFO `-bfo-index` book-index marker. Per
+# audit: `@bfo env { ... }` at-rule is rewritten to `:root` by the
+# compat translator (not a Stylo descriptor); BFO trim properties
+# alias `-bd-pdf-crop-size`. Only `-bd-index` requires a new
+# longhand here.
+[-bd-index]
+type = "BdIndex"
+initial = "computed::BdIndex::None"
+struct = "counters"
+initial_specified_value = "specified::BdIndex::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 23 BFO index)"
+animation_type = "none"
+affects = ""
+boxed = true
+
+# moegoe Family 15 — barcodes. Per-element; not inherited; gated
+# on a backend symbol-generation crate (qrcode / barcoders).
+# Emits `RenderWarning::UnsupportedPdfFeature` until the
+# moegoe-barcode crate lands.
+[-bd-barcode-type]
+type = "BdBarcodeType"
+initial = "computed::BdBarcodeType::None"
+struct = "counters"
+initial_specified_value = "specified::BdBarcodeType::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 15 barcode — backend gated)"
+animation_type = "none"
+affects = ""
+
+[-bd-barcode-content]
+type = "BdBarcodeContent"
+initial = "computed::BdBarcodeContent::None"
+struct = "counters"
+initial_specified_value = "specified::BdBarcodeContent::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 15 barcode — backend gated)"
+animation_type = "none"
+affects = ""
+
+[-bd-barcode-checkdigit-mode]
+type = "BdBarcodeCheckDigitMode"
+initial = "computed::BdBarcodeCheckDigitMode::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdBarcodeCheckDigitMode::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 15 barcode — backend gated)"
+animation_type = "none"
+affects = ""
+
+[-bd-barcode-colour]
+type = "BdBarcodeColour"
+initial = "computed::BdBarcodeColour::auto()"
+struct = "counters"
+initial_specified_value = "specified::BdBarcodeColour::auto()"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 15 barcode — backend gated)"
+animation_type = "none"
+affects = ""
+
+[-bd-barcode-composite-content]
+type = "BdBarcodeContent"
+initial = "computed::BdBarcodeContent::None"
+struct = "counters"
+initial_specified_value = "specified::BdBarcodeContent::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 15 barcode — backend gated)"
+animation_type = "none"
+affects = ""
+
+[-bd-barcode-composite-type]
+type = "BdBarcodeCompositeType"
+initial = "computed::BdBarcodeCompositeType::None"
+struct = "counters"
+initial_specified_value = "specified::BdBarcodeCompositeType::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 15 barcode — backend gated)"
+animation_type = "none"
+affects = ""
+
+[-bd-barcode-ecc-level]
+type = "BdBarcodeEccLevel"
+initial = "computed::BdBarcodeEccLevel::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdBarcodeEccLevel::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 15 barcode — backend gated)"
+animation_type = "none"
+affects = ""
+
+[-bd-barcode-encoding]
+type = "BdBarcodeEncoding"
+initial = "computed::BdBarcodeEncoding::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdBarcodeEncoding::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 15 barcode — backend gated)"
+animation_type = "none"
+affects = ""
+
+[-bd-barcode-font-family]
+type = "BdBarcodeFontFamily"
+initial = "computed::BdBarcodeFontFamily::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdBarcodeFontFamily::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 15 barcode — backend gated)"
+animation_type = "none"
+affects = ""
+
+[-bd-barcode-font-size]
+type = "NonNegativeLength"
+initial = "computed::NonNegativeLength::zero()"
+struct = "counters"
+initial_specified_value = "specified::NonNegativeLength::zero()"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 15 barcode — backend gated)"
+animation_type = "none"
+affects = ""
+
+[-bd-barcode-human-readable-affix]
+type = "BdBarcodeAffix"
+initial = "computed::BdBarcodeAffix::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdBarcodeAffix::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 15 barcode — backend gated)"
+animation_type = "none"
+affects = ""
+
+[-bd-barcode-human-readable-position]
+type = "BdBarcodeHrPosition"
+initial = "computed::BdBarcodeHrPosition::None"
+struct = "counters"
+initial_specified_value = "specified::BdBarcodeHrPosition::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 15 barcode — backend gated)"
+animation_type = "none"
+affects = ""
+
+[-bd-barcode-letter-spacing]
+type = "Length"
+initial = "computed::Length::zero()"
+struct = "counters"
+initial_specified_value = "specified::Length::zero()"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 15 barcode — backend gated)"
+animation_type = "none"
+affects = ""
+
+[-bd-barcode-reader-initialization]
+type = "BdBarcodeReaderInit"
+initial = "computed::BdBarcodeReaderInit::None"
+struct = "counters"
+initial_specified_value = "specified::BdBarcodeReaderInit::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 15 barcode — backend gated)"
+animation_type = "none"
+affects = ""
+
+[-bd-barcode-size]
+type = "BdBarcodeSize"
+initial = "computed::BdBarcodeSize::auto()"
+struct = "counters"
+initial_specified_value = "specified::BdBarcodeSize::auto()"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 15 barcode — backend gated)"
+animation_type = "none"
+affects = ""
+
+[-bd-barcode-structured-append]
+type = "BdBarcodeStructuredAppend"
+initial = "computed::BdBarcodeStructuredAppend::None"
+struct = "counters"
+initial_specified_value = "specified::BdBarcodeStructuredAppend::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 15 barcode — backend gated)"
+animation_type = "none"
+affects = ""
+
+[-bd-barcode-structured-append-position]
+type = "BdBarcodeStructuredAppend"
+initial = "computed::BdBarcodeStructuredAppend::None"
+struct = "counters"
+initial_specified_value = "specified::BdBarcodeStructuredAppend::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 15 barcode — backend gated)"
+animation_type = "none"
+affects = ""
+
+[-bd-barcode-symbol-width]
+type = "NonNegativeLength"
+initial = "computed::NonNegativeLength::zero()"
+struct = "counters"
+initial_specified_value = "specified::NonNegativeLength::zero()"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 15 barcode — backend gated)"
+animation_type = "none"
+affects = ""
+
 [paint-order]
 type = "SVGPaintOrder"
 initial = "computed::SVGPaintOrder::normal()"
