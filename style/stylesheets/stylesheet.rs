@@ -1906,4 +1906,175 @@ mod tests {
             "container-relative lengths should parse in Servo mode"
         );
     }
+
+    /// moegoe F24 — all 12 PDFreactor-compatible proprietary length
+    /// units (page-relative and bleed-relative) must parse and
+    /// survive into the property block.
+    #[test]
+    fn servo_parses_bd_page_relative_units() {
+        let css = "
+            div {
+                margin-top: 1-bd-pw;
+                margin-bottom: 2-bd-pi;
+                margin-left: 3-bd-ph;
+                margin-right: 4-bd-pb;
+                width: 5-bd-pmin;
+                height: 6-bd-pmax;
+                padding-top: 7-bd-bw;
+                padding-bottom: 8-bd-bi;
+                padding-left: 9-bd-bh;
+                padding-right: 10-bd-bb;
+                min-width: 11-bd-bmin;
+                max-width: 12-bd-bmax;
+            }
+        ";
+        let stylesheet = parse_stylesheet(css);
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let style = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Style(s) => Some(s.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected style rule");
+        assert_eq!(
+            style.block.read_with(&guard).len(),
+            12,
+            "every -bd-p* / -bd-b* unit must parse"
+        );
+    }
+
+    /// moegoe F25 — proprietary counter-style names must survive
+    /// the predefined-name case normalisation step (defined in
+    /// `style/counter_style/predefined.rs`).
+    #[test]
+    fn servo_parses_bd_counter_styles() {
+        let css = "
+            ol.fn { list-style-type: bd-footnote; }
+            ol.en { list-style-type: bd-spelled-out-en; }
+            ol.en-o { list-style-type: bd-spelled-out-en-ordinal; }
+            ol.de { list-style-type: bd-spelled-out-de; }
+            ol.fr { list-style-type: bd-spelled-out-fr; }
+        ";
+        let stylesheet = parse_stylesheet(css);
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let style_rules: Vec<_> = rules
+            .iter()
+            .filter_map(|rule| match rule {
+                CssRule::Style(s) => Some(s.read_with(&guard)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(style_rules.len(), 5);
+        for s in style_rules {
+            assert_eq!(
+                s.block.read_with(&guard).len(),
+                1,
+                "every bd-* counter-style name should round-trip"
+            );
+        }
+    }
+
+    /// moegoe F32 — miscellaneous declarative-tuning longhands must
+    /// parse and survive into the property block.
+    #[test]
+    fn servo_parses_bd_misc_longhands() {
+        let css = "
+            div {
+                -bd-lang: \"en-GB\";
+                -bd-table-column-span: 3;
+                -bd-table-row-span: auto;
+                -bd-table-baseline: 2;
+                -bd-caption-page: first;
+                -bd-target-candidate: yes;
+                -bd-truncate-margin-after-break: none;
+                -bd-listitem-value: 7;
+                -bd-replacedelement: image;
+                -bd-scale-content: 0.75;
+                -bd-position-origin: padding;
+                -bd-line-break-opportunity: before;
+                -bd-object-slice: slice;
+                -bd-flow: figures;
+            }
+        ";
+        let stylesheet = parse_stylesheet(css);
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let style = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Style(s) => Some(s.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected style rule");
+        assert_eq!(
+            style.block.read_with(&guard).len(),
+            14,
+            "every F32 -bd-* longhand should parse"
+        );
+    }
+
+    /// moegoe F21 — gap fillers: mask-border-* family, border-clip,
+    /// overlay, and text-justify: prince-cjk must all parse.
+    #[test]
+    fn servo_parses_f21_gap_fillers() {
+        let css = "
+            div {
+                mask-border-source: url(\"mask.png\");
+                mask-border-slice: 30 fill;
+                mask-border-width: 1;
+                mask-border-outset: 0;
+                mask-border-repeat: round;
+                mask-border-mode: luminance;
+                border-clip: clip;
+                overlay: auto;
+                text-justify: prince-cjk;
+            }
+        ";
+        let stylesheet = parse_stylesheet(css);
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let style = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Style(s) => Some(s.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected style rule");
+        assert_eq!(
+            style.block.read_with(&guard).len(),
+            9,
+            "every F21 gap-filler property should parse"
+        );
+    }
+
+    /// moegoe F21 — the `mask-border` shorthand must parse and
+    /// expand into all six mask-border-* longhands.
+    #[test]
+    fn servo_parses_mask_border_shorthand() {
+        let css = "div { mask-border: url(\"mask.png\") 30 / 1 / 0 round luminance; }";
+        let stylesheet = parse_stylesheet(css);
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let style = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Style(s) => Some(s.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected style rule");
+        // Shorthand expands to six longhands.
+        assert_eq!(
+            style.block.read_with(&guard).len(),
+            6,
+            "`mask-border` shorthand should expand into 6 longhands"
+        );
+    }
 }
