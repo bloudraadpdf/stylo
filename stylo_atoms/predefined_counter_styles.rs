@@ -63,4 +63,12 @@ predefined! {
     "trad-chinese-formal",
     "cjk-ideographic",
     "ethiopic-numeric",
+    // moegoe -bd-* fork extension (F25): PDFreactor-compatible
+    // counter styles. Keep aligned with
+    // `style/counter_style/predefined.rs`.
+    "bd-footnote",
+    "bd-spelled-out-en",
+    "bd-spelled-out-en-ordinal",
+    "bd-spelled-out-de",
+    "bd-spelled-out-fr",
 }

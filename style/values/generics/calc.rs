@@ -176,6 +176,34 @@ pub enum SortKey {
     Vmax,
     Vmin,
     Vw,
+    // moegoe -bd-* fork extension (F24): PDFreactor-compatible
+    // page-relative length sort keys. Names mirror the CSS unit
+    // tokens (sans the `-bd-` prefix) so the calc serialiser emits
+    // recognisable spelling.
+    #[strum(serialize = "-bd-pw")]
+    BdPw,
+    #[strum(serialize = "-bd-pi")]
+    BdPi,
+    #[strum(serialize = "-bd-ph")]
+    BdPh,
+    #[strum(serialize = "-bd-pb")]
+    BdPb,
+    #[strum(serialize = "-bd-pmin")]
+    BdPmin,
+    #[strum(serialize = "-bd-pmax")]
+    BdPmax,
+    #[strum(serialize = "-bd-bw")]
+    BdBw,
+    #[strum(serialize = "-bd-bi")]
+    BdBi,
+    #[strum(serialize = "-bd-bh")]
+    BdBh,
+    #[strum(serialize = "-bd-bb")]
+    BdBb,
+    #[strum(serialize = "-bd-bmin")]
+    BdBmin,
+    #[strum(serialize = "-bd-bmax")]
+    BdBmax,
     #[css(skip)]
     ColorComponent,
     #[css(skip)]

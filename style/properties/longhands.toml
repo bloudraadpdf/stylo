@@ -3956,6 +3956,273 @@ spec = "Nonstandard (moegoe -bd-* fork extension; positional tab stops with alig
 animation_type = "none"
 affects = "layout"
 
+# moegoe F32 — miscellaneous declarative tunings sourced from
+# PDFreactor `-ro-*` and Prince `-prince-*`. Each rides the
+# `counters` style struct because none of them affect cascade
+# performance directly; effective semantics are resolved at the
+# IR-conversion boundary.
+
+# F32.1 — language tag override (Prince -prince-lang).
+[-bd-lang]
+type = "BdLang"
+initial = "computed::BdLang::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdLang::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F32.1 language-tag override)"
+animation_type = "none"
+affects = ""
+
+# F32.2 — @page descriptor — uniform content shrink-to-fit
+# (Prince -prince-shrink-to-fit). Applies only inside `@page`.
+[-bd-shrink-to-fit]
+type = "BdShrinkToFit"
+initial = "computed::BdShrinkToFit::Auto"
+struct = "page"
+initial_specified_value = "specified::BdShrinkToFit::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F32.2 page-content shrink)"
+animation_type = "none"
+affects = "layout"
+rule_types_allowed = ["page"]
+
+# F32.3 — colspan override (Prince table-column-span).
+[-bd-table-column-span]
+type = "BdIntegerAuto"
+initial = "computed::BdIntegerAuto::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdIntegerAuto::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F32.3 colspan override)"
+animation_type = "none"
+affects = "layout"
+
+# F32.4 — rowspan override (Prince table-row-span).
+[-bd-table-row-span]
+type = "BdIntegerAuto"
+initial = "computed::BdIntegerAuto::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdIntegerAuto::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F32.4 rowspan override)"
+animation_type = "none"
+affects = "layout"
+
+# F32.5 — table baseline row selector (Prince table-baseline).
+# Shares the `BdIntegerAuto` type with column-span / row-span overrides.
+[-bd-table-baseline]
+type = "BdIntegerAuto"
+initial = "computed::BdIntegerAuto::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdIntegerAuto::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F32.5 baseline-row override)"
+animation_type = "none"
+affects = "layout"
+
+# F32.6 — caption page placement (Prince caption-page).
+[-bd-caption-page]
+type = "BdCaptionPage"
+initial = "computed::BdCaptionPage::All"
+struct = "counters"
+initial_specified_value = "specified::BdCaptionPage::All"
+spec = "Nonstandard (moegoe -bd-* fork extension; F32.6 caption page placement)"
+animation_type = "none"
+affects = "layout"
+
+# F32.7 — cross-reference target candidacy
+# (PDFreactor -ro-target-candidate).
+[-bd-target-candidate]
+type = "BdTargetCandidate"
+initial = "computed::BdTargetCandidate::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdTargetCandidate::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F32.7 cross-ref target candidacy)"
+animation_type = "none"
+affects = ""
+
+# F32.8 — preserve margin after forced break
+# (PDFreactor -ro-truncate-margin-after-break).
+[-bd-truncate-margin-after-break]
+type = "BdTruncateMarginAfterBreak"
+initial = "computed::BdTruncateMarginAfterBreak::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdTruncateMarginAfterBreak::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F32.8 margin truncation after break)"
+animation_type = "none"
+affects = "layout"
+
+# F32.9 — list-item marker value override
+# (PDFreactor -ro-listitem-value).
+[-bd-listitem-value]
+type = "BdIntegerAuto"
+initial = "computed::BdIntegerAuto::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdIntegerAuto::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F32.9 list-item value override)"
+animation_type = "none"
+affects = "layout"
+
+# F32.10 — synthetic replaced-element opt-in
+# (PDFreactor -ro-replacedelement).
+[-bd-replacedelement]
+type = "BdReplacedElement"
+initial = "computed::BdReplacedElement::None"
+struct = "counters"
+initial_specified_value = "specified::BdReplacedElement::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; F32.10 replaced-element opt-in)"
+animation_type = "none"
+affects = "layout"
+
+# F32.12 — uniform first-page content scale
+# (PDFreactor -ro-scale-content).
+[-bd-scale-content]
+type = "BdScaleContent"
+initial = "computed::BdScaleContent::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdScaleContent::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F32.12 first-page content scale)"
+animation_type = "none"
+affects = "layout"
+
+# F32.13 — absolute-positioning reference box
+# (PDFreactor -ro-position-origin).
+[-bd-position-origin]
+type = "BdPositionOrigin"
+initial = "computed::BdPositionOrigin::Border"
+struct = "counters"
+initial_specified_value = "specified::BdPositionOrigin::Border"
+spec = "Nonstandard (moegoe -bd-* fork extension; F32.13 absolute-positioning reference box)"
+animation_type = "none"
+affects = "layout"
+
+# F32.14 — explicit line-break opportunity
+# (PDFreactor -ro-line-break-opportunity).
+[-bd-line-break-opportunity]
+type = "BdLineBreakOpportunity"
+initial = "computed::BdLineBreakOpportunity::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdLineBreakOpportunity::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F32.14 line-break opportunity)"
+animation_type = "none"
+affects = "layout"
+
+# F32.15 — block-image fragmentation
+# (PDFreactor -ro-object-slice).
+[-bd-object-slice]
+type = "BdObjectSlice"
+initial = "computed::BdObjectSlice::None"
+struct = "counters"
+initial_specified_value = "specified::BdObjectSlice::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; F32.15 block-image fragmentation)"
+animation_type = "none"
+affects = "layout"
+
+# F32.21 — content-flow routing into a named area
+# (Prince flow / -prince-flow).
+[-bd-flow]
+type = "BdFlow"
+initial = "computed::BdFlow::None"
+struct = "counters"
+initial_specified_value = "specified::BdFlow::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; F32.21 named-flow routing)"
+animation_type = "none"
+affects = "layout"
+
+# F21 — smaller standard-CSS gaps. mask-border-* family mirrors the
+# border-image-* family one-for-one in grammar and types; the only
+# new keyword is `mask-border-mode`.
+
+# F21.3 — mask-border-source — CSS Masking 2.
+[mask-border-source]
+type = "Image"
+initial = "computed::Image::None"
+struct = "svg"
+initial_specified_value = "specified::Image::None"
+parse_method = "parse_with_cors_anonymous"
+spec = "https://drafts.fxtf.org/css-masking-1/#propdef-mask-border-source"
+extra_prefixes = ["webkit"]
+animation_type = "discrete"
+servo_restyle_damage = "repaint"
+affects = "paint"
+
+# F21.4 — mask-border-slice.
+[mask-border-slice]
+type = "BorderImageSlice"
+initial = "computed::BorderImageSlice::hundred_percent()"
+struct = "svg"
+initial_specified_value = "specified::BorderImageSlice::hundred_percent()"
+spec = "https://drafts.fxtf.org/css-masking-1/#propdef-mask-border-slice"
+extra_prefixes = ["webkit"]
+boxed = true
+servo_restyle_damage = "repaint"
+affects = "paint"
+
+# F21.5 — mask-border-width.
+[mask-border-width]
+type = "BorderImageWidth"
+initial = "computed::BorderImageWidth::all(computed::BorderImageSideWidth::one())"
+struct = "svg"
+initial_specified_value = "specified::BorderImageWidth::all(specified::BorderImageSideWidth::one())"
+spec = "https://drafts.fxtf.org/css-masking-1/#propdef-mask-border-width"
+extra_prefixes = ["webkit"]
+boxed = true
+servo_restyle_damage = "repaint"
+affects = "paint"
+
+# F21.6 — mask-border-outset.
+[mask-border-outset]
+type = "NonNegativeLengthOrNumberRect"
+initial = "generics::rect::Rect::all(computed::NonNegativeLengthOrNumber::zero())"
+struct = "svg"
+initial_specified_value = "generics::rect::Rect::all(specified::NonNegativeLengthOrNumber::zero())"
+spec = "https://drafts.fxtf.org/css-masking-1/#propdef-mask-border-outset"
+extra_prefixes = ["webkit"]
+boxed = true
+servo_restyle_damage = "repaint"
+affects = "paint"
+
+# F21.7 — mask-border-repeat.
+[mask-border-repeat]
+type = "BorderImageRepeat"
+initial = "computed::BorderImageRepeat::stretch()"
+struct = "svg"
+initial_specified_value = "specified::BorderImageRepeat::stretch()"
+spec = "https://drafts.fxtf.org/css-masking-1/#propdef-mask-border-repeat"
+extra_prefixes = ["webkit"]
+animation_type = "discrete"
+servo_restyle_damage = "repaint"
+affects = "paint"
+
+# F21.8 — mask-border-mode.
+[mask-border-mode]
+type = "MaskBorderMode"
+initial = "computed::MaskBorderMode::Alpha"
+struct = "svg"
+initial_specified_value = "specified::MaskBorderMode::Alpha"
+spec = "https://drafts.fxtf.org/css-masking-1/#propdef-mask-border-mode"
+extra_prefixes = ["webkit"]
+animation_type = "discrete"
+servo_restyle_damage = "repaint"
+affects = "paint"
+
+# F21.13 — border-clip (Prince proprietary).
+[border-clip]
+type = "BorderClip"
+initial = "computed::BorderClip::Normal"
+struct = "border"
+initial_specified_value = "specified::BorderClip::Normal"
+spec = "Nonstandard (Prince proprietary; F21.13 border-stroke clipping at the padding edge)"
+animation_type = "discrete"
+servo_restyle_damage = "repaint"
+affects = "paint"
+
+# F21.24 — overlay (CSS Position 4).
+[overlay]
+type = "Overlay"
+initial = "computed::Overlay::None"
+struct = "position"
+initial_specified_value = "specified::Overlay::None"
+spec = "https://drafts.csswg.org/css-position-4/#propdef-overlay"
+animation_type = "discrete"
+servo_restyle_damage = "rebuild_box"
+affects = "layout"
+
 [text-autospace]
 type = "TextAutospace"
 initial = "computed::text::TextAutospace::NO_AUTOSPACE"

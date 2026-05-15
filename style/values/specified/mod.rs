@@ -139,6 +139,12 @@ pub use self::bd_pdf_viewer::{
     BdPdfTriState, BdPdfViewerDirection, BdPdfViewerDuplex, BdPdfViewerNonFullscreenPageMode,
     BdPdfViewerPageLayout, BdPdfViewerPageMode, BdPdfViewerPrintScaling,
 };
+pub use self::bd_gaps::{BorderClip, MaskBorderMode, Overlay};
+pub use self::bd_misc::{
+    BdCaptionPage, BdFlow, BdIntegerAuto, BdLang, BdLineBreakOpportunity, BdObjectSlice,
+    BdPositionOrigin, BdReplacedElement, BdScaleContent, BdShrinkToFit, BdTargetCandidate,
+    BdTruncateMarginAfterBreak,
+};
 pub use self::bd_sidenote::{BdFloatReferenceSidenote, BdSidenoteAlign, BdSidenoteAvoid, BdSidenoteOffset};
 pub use self::bd_tab_stops::{BdTabStop, BdTabStopAlignment, BdTabStopLeader, BdTabStops};
 pub use self::page::{
@@ -200,10 +206,12 @@ pub mod basic_shape;
 pub mod bd_a11y;
 pub mod bd_bookmark;
 pub mod bd_footnote;
+pub mod bd_gaps;
 pub mod bd_hyphenation;
 pub mod bd_image;
 pub mod bd_line_grid;
 pub mod bd_link;
+pub mod bd_misc;
 pub mod bd_page_boxes;
 pub mod bd_page_group;
 pub mod bd_page_margin;

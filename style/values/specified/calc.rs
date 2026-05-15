@@ -18,7 +18,9 @@ use crate::values::generics::position::{
     AnchorSideKeyword, GenericAnchorFunction, GenericAnchorSide, TreeScoped,
 };
 use crate::values::specified::length::{AbsoluteLength, FontRelativeLength, NoCalcLength};
-use crate::values::specified::length::{ContainerRelativeLength, ViewportPercentageLength};
+use crate::values::specified::length::{
+    ContainerRelativeLength, PageRelativeLength, ViewportPercentageLength,
+};
 use crate::values::specified::{self, Angle, Resolution, Time};
 use crate::values::{serialize_number, serialize_percentage, CSSFloat, DashedIdent};
 use cssparser::{match_ignore_ascii_case, CowRcStr, Parser, Token};
@@ -358,6 +360,20 @@ impl generic::CalcNodeLeaf for Leaf {
                     ContainerRelativeLength::Cqb(..) => SortKey::Cqb,
                     ContainerRelativeLength::Cqmin(..) => SortKey::Cqmin,
                     ContainerRelativeLength::Cqmax(..) => SortKey::Cqmax,
+                },
+                NoCalcLength::PageRelative(ref pr) => match *pr {
+                    PageRelativeLength::Pw(..) => SortKey::BdPw,
+                    PageRelativeLength::Pi(..) => SortKey::BdPi,
+                    PageRelativeLength::Ph(..) => SortKey::BdPh,
+                    PageRelativeLength::Pb(..) => SortKey::BdPb,
+                    PageRelativeLength::Pmin(..) => SortKey::BdPmin,
+                    PageRelativeLength::Pmax(..) => SortKey::BdPmax,
+                    PageRelativeLength::Bw(..) => SortKey::BdBw,
+                    PageRelativeLength::Bi(..) => SortKey::BdBi,
+                    PageRelativeLength::Bh(..) => SortKey::BdBh,
+                    PageRelativeLength::Bb(..) => SortKey::BdBb,
+                    PageRelativeLength::Bmin(..) => SortKey::BdBmin,
+                    PageRelativeLength::Bmax(..) => SortKey::BdBmax,
                 },
                 NoCalcLength::ServoCharacterWidth(..) => unreachable!(),
             },
