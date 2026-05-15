@@ -52,6 +52,25 @@ pub enum BdPdfConformanceValue {
     A4e,
     A4f,
     Ua1,
+    // F1 — PDF/X pre-press conformance levels. PDF/X-1a (greyscale +
+    // CMYK + spot only, ISO 15930-1/4), PDF/X-3 (adds RGB/Lab,
+    // ISO 15930-3/6), PDF/X-4 (adds transparency + layers,
+    // ISO 15930-7/8). Year suffix matches the inventory text and
+    // round-trips through the keyword serialisation. PDFreactor
+    // `pdfreactor.md:3174` and Prince `prince.md:9168` use these
+    // verbatim.
+    #[css(keyword = "pdf-x-1a-2001")]
+    PdfX1A2001,
+    #[css(keyword = "pdf-x-1a-2003")]
+    PdfX1A2003,
+    #[css(keyword = "pdf-x-3-2002")]
+    PdfX32002,
+    #[css(keyword = "pdf-x-3-2003")]
+    PdfX32003,
+    #[css(keyword = "pdf-x-4")]
+    PdfX4,
+    #[css(keyword = "pdf-x-4p")]
+    PdfX4P,
 }
 
 impl BdPdfConformanceValue {

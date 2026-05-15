@@ -1857,6 +1857,45 @@ spec = "Nonstandard (moegoe -bd-* fork extension; G4 PDF/A conformance)"
 animation_type = "none"
 affects = ""
 
+# moegoe F1 — PDF/X output intent + colour conversion. Document-level;
+# the renderer honours only `:root` declarations. The output intent
+# is mandatory when -bd-pdf-conformance selects a PDF/X flavour.
+[-bd-pdf-output-intent]
+type = "BdPdfOutputIntent"
+initial = "computed::BdPdfOutputIntent::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfOutputIntent::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F1 PDF/X output intent)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-fallback-cmyk-profile]
+type = "BdPdfFallbackCmykProfile"
+initial = "computed::BdPdfFallbackCmykProfile::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfFallbackCmykProfile::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; F1 PDF/X fallback CMYK profile)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-colour-conversion]
+type = "BdPdfColourConversion"
+initial = "computed::BdPdfColourConversion::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfColourConversion::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F1 PDF colour-conversion policy)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-colour-options]
+type = "BdPdfColourOptions"
+initial = "computed::BdPdfColourOptions::none()"
+struct = "counters"
+initial_specified_value = "specified::BdPdfColourOptions::none()"
+spec = "Nonstandard (moegoe -bd-* fork extension; F1 PDF/X colour-handling flags)"
+animation_type = "none"
+affects = ""
+
 # moegoe G5 — PDF viewer preferences (ISO 32000-2 §12.2).
 # Document-level; the renderer honours only `:root` declarations.
 [-bd-pdf-viewer-page-layout]
