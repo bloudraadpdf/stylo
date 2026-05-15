@@ -1906,4 +1906,306 @@ mod tests {
             "container-relative lengths should parse in Servo mode"
         );
     }
+
+    /// Helper: parse a declaration and assert the round-tripped value.
+    /// Used by the moegoe -bd-* fork-extension family round-trip tests
+    /// (F6–F12, F22, F28–F31).
+    fn assert_bd_roundtrip(
+        css: &str,
+        property_name: &str,
+        expected_value: &str,
+    ) {
+        let stylesheet = parse_stylesheet(css);
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let style = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Style(s) => Some(s.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected style rule");
+        let block = style.block.read_with(&guard);
+        assert_eq!(
+            block.len(),
+            1,
+            "expected exactly one declaration in `{css}` ({property_name})"
+        );
+        let mut buf = style_traits::CssString::default();
+        block.to_css(&mut buf).expect("serialise block");
+        let decl_str: String = buf.into();
+        assert!(
+            decl_str.contains(property_name),
+            "round-tripped block `{decl_str}` should mention `{property_name}`"
+        );
+        assert!(
+            decl_str.contains(expected_value),
+            "round-tripped block `{decl_str}` should preserve `{expected_value}`"
+        );
+    }
+
+    // ----- F6 ----------------------------------------------------------
+    #[test]
+    fn servo_preserves_bd_footnote_rule_length_declaration() {
+        assert_bd_roundtrip(
+            "p { -bd-footnote-rule-length: 50%; }",
+            "-bd-footnote-rule-length",
+            "50%",
+        );
+    }
+
+    #[test]
+    fn servo_preserves_footnote_style_position_declaration() {
+        assert_bd_roundtrip(
+            "p { footnote-style-position: outside; }",
+            "footnote-style-position",
+            "outside",
+        );
+    }
+
+    #[test]
+    fn servo_preserves_bd_footnote_fragmentation_declaration() {
+        assert_bd_roundtrip(
+            "p { -bd-footnote-fragmentation: keep; }",
+            "-bd-footnote-fragmentation",
+            "keep",
+        );
+    }
+
+    #[test]
+    fn servo_preserves_float_placement_inline_footnote_declaration() {
+        assert_bd_roundtrip(
+            "p { float-placement: inline-footnote; }",
+            "float-placement",
+            "inline-footnote",
+        );
+    }
+
+    // ----- F7 ----------------------------------------------------------
+    #[test]
+    fn servo_preserves_bd_sidenote_align_declaration() {
+        assert_bd_roundtrip(
+            "p { -bd-sidenote-align: outside; }",
+            "-bd-sidenote-align",
+            "outside",
+        );
+    }
+
+    #[test]
+    fn servo_preserves_bd_sidenote_offset_declaration() {
+        assert_bd_roundtrip(
+            "p { -bd-sidenote-offset: 12pt; }",
+            "-bd-sidenote-offset",
+            "12pt",
+        );
+    }
+
+    #[test]
+    fn servo_preserves_bd_sidenote_avoid_declaration() {
+        assert_bd_roundtrip(
+            "p { -bd-sidenote-avoid: caption figure; }",
+            "-bd-sidenote-avoid",
+            "caption figure",
+        );
+    }
+
+    // ----- F8 ----------------------------------------------------------
+    #[test]
+    fn servo_preserves_bd_line_grid_declaration() {
+        assert_bd_roundtrip(
+            "p { -bd-line-grid: create; }",
+            "-bd-line-grid",
+            "create",
+        );
+    }
+
+    #[test]
+    fn servo_preserves_bd_baseline_grid_declaration() {
+        assert_bd_roundtrip(
+            "p { -bd-baseline-grid: 14pt; }",
+            "-bd-baseline-grid",
+            "14pt",
+        );
+    }
+
+    // ----- F9 ----------------------------------------------------------
+    #[test]
+    fn servo_preserves_bd_pdf_destination_declaration() {
+        assert_bd_roundtrip(
+            r#"p { -bd-pdf-destination: "chapter-1"; }"#,
+            "-bd-pdf-destination",
+            r#""chapter-1""#,
+        );
+    }
+
+    #[test]
+    fn servo_preserves_bd_destination_area_declaration() {
+        assert_bd_roundtrip(
+            "p { -bd-destination-area: fit-width; }",
+            "-bd-destination-area",
+            "fit-width",
+        );
+    }
+
+    #[test]
+    fn servo_preserves_bd_pdf_attachment_location_declaration() {
+        assert_bd_roundtrip(
+            "p { -bd-pdf-attachment-location: after; }",
+            "-bd-pdf-attachment-location",
+            "after",
+        );
+    }
+
+    // ----- F10 ---------------------------------------------------------
+    #[test]
+    fn servo_preserves_bookmark_target_counter_declaration() {
+        assert_bd_roundtrip(
+            "p { bookmark-target: 3; }",
+            "bookmark-target",
+            "3",
+        );
+    }
+
+    #[test]
+    fn servo_preserves_bd_pdf_link_type_declaration() {
+        assert_bd_roundtrip(
+            "p { -bd-pdf-link-type: embed; }",
+            "-bd-pdf-link-type",
+            "embed",
+        );
+    }
+
+    // ----- F11 ---------------------------------------------------------
+    #[test]
+    fn servo_preserves_bd_link_declaration() {
+        assert_bd_roundtrip(
+            "p { -bd-link: none; }",
+            "-bd-link",
+            "none",
+        );
+    }
+
+    #[test]
+    fn servo_preserves_bd_link_area_declaration() {
+        assert_bd_roundtrip(
+            "p { -bd-link-area: text; }",
+            "-bd-link-area",
+            "text",
+        );
+    }
+
+    // ----- F12 ---------------------------------------------------------
+    #[test]
+    fn servo_preserves_bd_text_replace_declaration() {
+        assert_bd_roundtrip(
+            r#"p { -bd-text-replace: "foo" "bar"; }"#,
+            "-bd-text-replace",
+            r#""foo""#,
+        );
+    }
+
+    #[test]
+    fn servo_preserves_bd_tooltip_declaration() {
+        assert_bd_roundtrip(
+            r#"p { -bd-tooltip: "Click for details"; }"#,
+            "-bd-tooltip",
+            r#""Click for details""#,
+        );
+    }
+
+    // ----- F22 ---------------------------------------------------------
+    #[test]
+    fn servo_preserves_bd_pdf_comment_author_declaration() {
+        assert_bd_roundtrip(
+            r#"p { -bd-pdf-comment-author: "Alice"; }"#,
+            "-bd-pdf-comment-author",
+            r#""Alice""#,
+        );
+    }
+
+    #[test]
+    fn servo_preserves_bd_pdf_comment_position_declaration() {
+        assert_bd_roundtrip(
+            "p { -bd-pdf-comment-position: margin; }",
+            "-bd-pdf-comment-position",
+            "margin",
+        );
+    }
+
+    // ----- F28 ---------------------------------------------------------
+    #[test]
+    fn servo_preserves_bd_text_wrap_declaration() {
+        assert_bd_roundtrip(
+            "p { -bd-text-wrap: balance; }",
+            "-bd-text-wrap",
+            "balance",
+        );
+    }
+
+    #[test]
+    fn servo_preserves_bd_n_lines_declaration() {
+        assert_bd_roundtrip(
+            "p { -bd-n-lines: 5; }",
+            "-bd-n-lines",
+            "5",
+        );
+    }
+
+    // ----- F29 ---------------------------------------------------------
+    #[test]
+    fn servo_preserves_bd_margin_inside_declaration() {
+        let stylesheet = parse_stylesheet("@page { -bd-margin-inside: 36pt; }");
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let page = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Page(p) => Some(p.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected @page rule");
+        let block = page.block.read_with(&guard);
+        let mut buf = style_traits::CssString::default();
+        block.to_css(&mut buf).expect("serialise page block");
+        let decl_str: String = buf.into();
+        assert!(
+            decl_str.contains("-bd-margin-inside"),
+            "page-rule block `{decl_str}` should mention -bd-margin-inside",
+        );
+        assert!(
+            decl_str.contains("36pt"),
+            "page-rule block `{decl_str}` should preserve 36pt value",
+        );
+    }
+
+    // ----- F30 ---------------------------------------------------------
+    #[test]
+    fn servo_preserves_bd_page_group_declaration() {
+        assert_bd_roundtrip(
+            "section { -bd-page-group: start; }",
+            "-bd-page-group",
+            "start",
+        );
+    }
+
+    // ----- F31 ---------------------------------------------------------
+    #[test]
+    fn servo_preserves_bd_hyphenate_limit_lines_declaration() {
+        assert_bd_roundtrip(
+            "p { -bd-hyphenate-limit-lines: 2; }",
+            "-bd-hyphenate-limit-lines",
+            "2",
+        );
+    }
+
+    #[test]
+    fn servo_preserves_bd_linebreak_magic_declaration() {
+        assert_bd_roundtrip(
+            "p { -bd-linebreak-magic: all; }",
+            "-bd-linebreak-magic",
+            "all",
+        );
+    }
 }

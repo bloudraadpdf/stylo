@@ -2111,6 +2111,493 @@ spec = "Nonstandard (moegoe -bd-* fork extension; G8 tagged-PDF role overrides)"
 animation_type = "none"
 affects = ""
 
+# moegoe F6 — footnote area styling (rule + inline + side-position).
+# Audit: docs/audits/CSS-COVERAGE-AUDIT-2026-05-14/stylo-push-plan.md
+[-bd-footnote-rule-length]
+type = "BdFootnoteRuleLength"
+initial = "computed::BdFootnoteRuleLength::full()"
+struct = "counters"
+initial_specified_value = "specified::BdFootnoteRuleLength::full()"
+spec = "Nonstandard (moegoe -bd-* fork extension; F6 footnote rule length)"
+animation_type = "none"
+affects = "layout"
+
+[footnote-style-position]
+type = "FootnoteStylePosition"
+initial = "computed::FootnoteStylePosition::Inside"
+struct = "inherited_text"
+initial_specified_value = "specified::FootnoteStylePosition::Inside"
+spec = "Nonstandard (moegoe -bd-* fork extension; F6 footnote marker placement, Prince-named)"
+animation_type = "none"
+affects = "layout"
+
+[-bd-footnote-fragmentation]
+type = "BdFootnoteFragmentation"
+initial = "computed::BdFootnoteFragmentation::Auto"
+struct = "inherited_text"
+initial_specified_value = "specified::BdFootnoteFragmentation::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F6 footnote fragmentation)"
+animation_type = "none"
+affects = "layout"
+
+[float-placement]
+type = "FloatPlacement"
+initial = "computed::FloatPlacement::Block"
+struct = "counters"
+initial_specified_value = "specified::FloatPlacement::Block"
+spec = "Nonstandard (CSS Page Floats 3 + Prince inline-footnote extension; F6)"
+animation_type = "none"
+affects = "layout"
+
+# moegoe F7 — sidenote-area styling.
+[-bd-float-reference-sidenote]
+type = "BdFloatReferenceSidenote"
+initial = "computed::BdFloatReferenceSidenote::None"
+struct = "counters"
+initial_specified_value = "specified::BdFloatReferenceSidenote::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; F7 sidenote float-reference)"
+animation_type = "none"
+affects = "layout"
+
+[-bd-sidenote-align]
+type = "BdSidenoteAlign"
+initial = "computed::BdSidenoteAlign::Auto"
+struct = "inherited_text"
+initial_specified_value = "specified::BdSidenoteAlign::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F7 sidenote align)"
+animation_type = "none"
+affects = "layout"
+
+[-bd-sidenote-avoid]
+type = "BdSidenoteAvoid"
+initial = "computed::BdSidenoteAvoid::None"
+struct = "inherited_text"
+initial_specified_value = "specified::BdSidenoteAvoid::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; F7 sidenote avoid)"
+animation_type = "none"
+affects = "layout"
+
+[-bd-sidenote-offset]
+type = "BdSidenoteOffset"
+initial = "computed::BdSidenoteOffset::zero()"
+struct = "inherited_text"
+initial_specified_value = "specified::BdSidenoteOffset::zero()"
+spec = "Nonstandard (moegoe -bd-* fork extension; F7 sidenote offset)"
+animation_type = "none"
+affects = "layout"
+
+# moegoe F8 — baseline grid / line snap. CSS parse surface only;
+# layout integration is a separate workstream.
+[-bd-line-grid]
+type = "BdLineGrid"
+initial = "computed::BdLineGrid::None"
+struct = "inherited_text"
+initial_specified_value = "specified::BdLineGrid::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; F8 line grid)"
+animation_type = "none"
+affects = ""
+
+[-bd-line-snap]
+type = "BdLineSnap"
+initial = "computed::BdLineSnap::None"
+struct = "inherited_text"
+initial_specified_value = "specified::BdLineSnap::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; F8 line snap)"
+animation_type = "none"
+affects = ""
+
+[-bd-baseline-grid]
+type = "BdBaselineGrid"
+initial = "computed::BdBaselineGrid::None"
+struct = "inherited_text"
+initial_specified_value = "specified::BdBaselineGrid::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; F8 baseline grid, Prince spelling)"
+animation_type = "none"
+affects = ""
+
+[-bd-line-stacking-strategy]
+type = "BdLineStackingStrategy"
+initial = "computed::BdLineStackingStrategy::InlineLineHeight"
+struct = "inherited_text"
+initial_specified_value = "specified::BdLineStackingStrategy::InlineLineHeight"
+spec = "Nonstandard (moegoe -bd-* fork extension; F8 line stacking strategy)"
+animation_type = "none"
+affects = ""
+
+# moegoe F9 — PDF attachments + destination + page label + anchor.
+[-bd-pdf-attachment-description]
+type = "BdPdfStringSlot"
+initial = "computed::BdPdfStringSlot::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfStringSlot::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; F9 PDF attachment description)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-attachment-location]
+type = "BdPdfAttachmentLocation"
+initial = "computed::BdPdfAttachmentLocation::Before"
+struct = "counters"
+initial_specified_value = "specified::BdPdfAttachmentLocation::Before"
+spec = "Nonstandard (moegoe -bd-* fork extension; F9 PDF attachment location)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-attachment-mime-type]
+type = "BdPdfStringSlot"
+initial = "computed::BdPdfStringSlot::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfStringSlot::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F9 PDF attachment MIME)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-attachment-name]
+type = "BdPdfStringSlot"
+initial = "computed::BdPdfStringSlot::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfStringSlot::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F9 PDF attachment name)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-attachment-url]
+type = "BdPdfAttachmentUrl"
+initial = "computed::BdPdfAttachmentUrl::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfAttachmentUrl::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; F9 PDF attachment URL)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-destination]
+type = "BdPdfStringSlot"
+initial = "computed::BdPdfStringSlot::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfStringSlot::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F9 PDF named destination)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-page-label]
+type = "BdPdfStringSlot"
+initial = "computed::BdPdfStringSlot::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfStringSlot::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F9 PDF page label)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = ""
+
+[-bd-anchor]
+type = "BdPdfStringSlot"
+initial = "computed::BdPdfStringSlot::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfStringSlot::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; F9 PDF anchor)"
+animation_type = "none"
+affects = ""
+
+[-bd-destination-area]
+type = "BdDestinationArea"
+initial = "computed::BdDestinationArea::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdDestinationArea::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F9 PDF destination viewer area)"
+animation_type = "none"
+affects = ""
+
+# moegoe F10 — bookmarks: target + PDF link-type.
+[bookmark-target]
+type = "BookmarkTarget"
+initial = "computed::BookmarkTarget::None"
+struct = "counters"
+initial_specified_value = "specified::BookmarkTarget::None"
+spec = "Nonstandard (Prince-named standard extension; F10 bookmark target)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-link-type]
+type = "BdPdfLinkType"
+initial = "computed::BdPdfLinkType::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfLinkType::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F10 PDF link type)"
+animation_type = "none"
+affects = ""
+
+# moegoe F11 — link styling.
+[-bd-link]
+type = "BdLink"
+initial = "computed::BdLink::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdLink::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F11 declarative link)"
+animation_type = "none"
+affects = ""
+
+[-bd-link-area]
+type = "BdLinkArea"
+initial = "computed::BdLinkArea::BorderBox"
+struct = "counters"
+initial_specified_value = "specified::BdLinkArea::BorderBox"
+spec = "Nonstandard (moegoe -bd-* fork extension; F11 link annotation area)"
+animation_type = "none"
+affects = ""
+
+# moegoe F12 — text-replace + tooltip.
+[-bd-text-replace]
+type = "BdTextReplace"
+initial = "computed::BdTextReplace::None"
+struct = "inherited_text"
+initial_specified_value = "specified::BdTextReplace::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; F12 text replace)"
+animation_type = "none"
+affects = "layout"
+
+[-bd-tooltip]
+type = "BdTooltip"
+initial = "computed::BdTooltip::None"
+struct = "counters"
+initial_specified_value = "specified::BdTooltip::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; F12 tooltip)"
+animation_type = "none"
+affects = ""
+
+# moegoe F22 — remaining annotation surface.
+[-bd-pdf-comment-author]
+type = "BdPdfCommentAuthor"
+initial = "computed::BdPdfCommentAuthor::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfCommentAuthor::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F22 PDF comment author)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-comment-createdate]
+type = "BdPdfCommentDate"
+initial = "computed::BdPdfCommentDate::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfCommentDate::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F22 PDF comment create date)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-comment-modifydate]
+type = "BdPdfCommentDate"
+initial = "computed::BdPdfCommentDate::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfCommentDate::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F22 PDF comment modify date)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-comment-position]
+type = "BdPdfCommentPosition"
+initial = "computed::BdPdfCommentPosition::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfCommentPosition::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F22 PDF comment position)"
+animation_type = "none"
+affects = ""
+
+# moegoe F28 — Prince-for-Books pagination tuning. Parse surface
+# only; paginator integration is a separate workstream.
+[-bd-page-fill]
+type = "BdPageFill"
+initial = "computed::BdPageFill::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPageFill::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F28 Prince-for-Books page fill)"
+animation_type = "none"
+affects = ""
+
+[-bd-change-line-breaks-for-pagination]
+type = "BdChangeLineBreaksForPagination"
+initial = "computed::BdChangeLineBreaksForPagination::Auto"
+struct = "inherited_text"
+initial_specified_value = "specified::BdChangeLineBreaksForPagination::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F28)"
+animation_type = "none"
+affects = ""
+
+[-bd-line-break-choices]
+type = "BdLineBreakChoices"
+initial = "computed::BdLineBreakChoices::Default"
+struct = "inherited_text"
+initial_specified_value = "specified::BdLineBreakChoices::Default"
+spec = "Nonstandard (moegoe -bd-* fork extension; F28)"
+animation_type = "none"
+affects = ""
+
+[-bd-forced-breaks]
+type = "BdForcedBreaks"
+initial = "computed::BdForcedBreaks::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdForcedBreaks::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F28)"
+animation_type = "none"
+affects = ""
+
+[-bd-n-lines]
+type = "BdNLines"
+initial = "computed::BdNLines::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdNLines::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F28 n-lines pagination knob)"
+animation_type = "none"
+affects = ""
+
+[-bd-resize-adjust]
+type = "BdResizeAdjust"
+initial = "computed::BdResizeAdjust::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdResizeAdjust::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F28)"
+animation_type = "none"
+affects = ""
+
+[-bd-resize-options]
+type = "BdResizeOptions"
+initial = "computed::BdResizeOptions::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdResizeOptions::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F28)"
+animation_type = "none"
+affects = ""
+
+[-bd-spread-length-options]
+type = "BdSpreadLengthOptions"
+initial = "computed::BdSpreadLengthOptions::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdSpreadLengthOptions::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F28)"
+animation_type = "none"
+affects = ""
+
+[-bd-text-wrap]
+type = "BdTextWrap"
+initial = "computed::BdTextWrap::Wrap"
+struct = "inherited_text"
+initial_specified_value = "specified::BdTextWrap::Wrap"
+spec = "Nonstandard (moegoe -bd-* fork extension; F28 Prince-text-wrap)"
+animation_type = "none"
+affects = ""
+
+[-bd-wrap-inside]
+type = "BdWrapInside"
+initial = "computed::BdWrapInside::Auto"
+struct = "inherited_text"
+initial_specified_value = "specified::BdWrapInside::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F28 wrap-inside)"
+animation_type = "none"
+affects = ""
+
+# moegoe F29 — asymmetric / alternating page margins.
+[-bd-margin-inside]
+type = "BdPageMarginEdge"
+initial = "computed::BdPageMarginEdge::auto()"
+struct = "counters"
+initial_specified_value = "specified::BdPageMarginEdge::auto()"
+spec = "Nonstandard (moegoe -bd-* fork extension; F29 verso/recto asymmetric margin)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = ""
+
+[-bd-margin-outside]
+type = "BdPageMarginEdge"
+initial = "computed::BdPageMarginEdge::auto()"
+struct = "counters"
+initial_specified_value = "specified::BdPageMarginEdge::auto()"
+spec = "Nonstandard (moegoe -bd-* fork extension; F29 verso/recto asymmetric margin)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = ""
+
+[-bd-margin-alt]
+type = "BdPageMarginEdge"
+initial = "computed::BdPageMarginEdge::auto()"
+struct = "counters"
+initial_specified_value = "specified::BdPageMarginEdge::auto()"
+spec = "Nonstandard (moegoe -bd-* fork extension; F29 alternating margin)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = ""
+
+[-bd-inset-inside]
+type = "BdPageMarginEdge"
+initial = "computed::BdPageMarginEdge::auto()"
+struct = "counters"
+initial_specified_value = "specified::BdPageMarginEdge::auto()"
+spec = "Nonstandard (moegoe -bd-* fork extension; F29 inset-inside)"
+animation_type = "none"
+affects = ""
+
+[-bd-inset-outside]
+type = "BdPageMarginEdge"
+initial = "computed::BdPageMarginEdge::auto()"
+struct = "counters"
+initial_specified_value = "specified::BdPageMarginEdge::auto()"
+spec = "Nonstandard (moegoe -bd-* fork extension; F29 inset-outside)"
+animation_type = "none"
+affects = ""
+
+# moegoe F30 — page-group.
+[-bd-page-group]
+type = "BdPageGroup"
+initial = "computed::BdPageGroup::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPageGroup::Auto"
+spec = "Nonstandard (Prince-named extension; F30 page-group)"
+animation_type = "none"
+affects = ""
+
+# moegoe F31 — hyphenation extensions.
+[-bd-hyphenate-limit-lines]
+type = "BdHyphenateLimitLines"
+initial = "computed::BdHyphenateLimitLines::NoLimit"
+struct = "inherited_text"
+initial_specified_value = "specified::BdHyphenateLimitLines::NoLimit"
+spec = "Nonstandard (moegoe -bd-* fork extension; F31 hyphenate-limit-lines)"
+animation_type = "none"
+affects = "layout"
+
+[-bd-hyphenate-patterns]
+type = "BdHyphenatePatterns"
+initial = "computed::BdHyphenatePatterns::None"
+struct = "inherited_text"
+initial_specified_value = "specified::BdHyphenatePatterns::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; F31 hyphenate-patterns)"
+animation_type = "none"
+affects = "layout"
+
+[-bd-hyphenate-lines]
+type = "BdHyphenateLines"
+initial = "computed::BdHyphenateLines::Auto"
+struct = "inherited_text"
+initial_specified_value = "specified::BdHyphenateLines::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F31 hyphenate-lines)"
+animation_type = "none"
+affects = "layout"
+
+[-bd-hyphenate-word-length]
+type = "BdHyphenateWordLength"
+initial = "computed::BdHyphenateWordLength::Auto"
+struct = "inherited_text"
+initial_specified_value = "specified::BdHyphenateWordLength::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F31 hyphenate-word-length, deprecated alias of hyphenate-limit-chars)"
+animation_type = "none"
+affects = "layout"
+
+[-bd-linebreak-magic]
+type = "BdLinebreakMagic"
+initial = "computed::BdLinebreakMagic::Auto"
+struct = "inherited_text"
+initial_specified_value = "specified::BdLinebreakMagic::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F31 linebreak-magic)"
+animation_type = "none"
+affects = "layout"
+
 [paint-order]
 type = "SVGPaintOrder"
 initial = "computed::SVGPaintOrder::normal()"

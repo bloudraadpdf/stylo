@@ -10,7 +10,10 @@ use crate::values::computed::length::NonNegativeLength;
 use crate::values::computed::{Context, ToComputedValue};
 use crate::values::specified::bd_pdf_comment as specified;
 
-pub use specified::{BdPdfCommentIcon, BdPdfCommentKind, BdPdfCommentState, BdPdfCommentString};
+pub use specified::{
+    BdPdfCommentAuthor, BdPdfCommentDate, BdPdfCommentIcon, BdPdfCommentKind, BdPdfCommentPosition,
+    BdPdfCommentState, BdPdfCommentString,
+};
 
 /// Computed value of `-bd-pdf-comment-colour`.
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, ToCss, ToResolvedValue, ToShmem, ToTyped)]

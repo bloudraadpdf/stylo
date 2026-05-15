@@ -90,12 +90,34 @@ pub use self::list::ListStyleType;
 pub use self::list::Quotes;
 pub use self::motion::{OffsetPath, OffsetPosition, OffsetRotate};
 pub use self::outline::OutlineStyle;
+pub use self::bd_a11y::{BdTextReplace, BdTooltip};
+pub use self::bd_bookmark::{BdPdfLinkType, BookmarkTarget};
+pub use self::bd_footnote::{
+    BdFootnoteFragmentation, BdFootnoteRuleLength, FloatPlacement, FootnoteStylePosition,
+};
+pub use self::bd_hyphenation::{
+    BdHyphenateLimitLines, BdHyphenateLines, BdHyphenatePatterns, BdHyphenateWordLength,
+    BdLinebreakMagic,
+};
+pub use self::bd_line_grid::{BdBaselineGrid, BdLineGrid, BdLineSnap, BdLineStackingStrategy};
+pub use self::bd_link::{BdLink, BdLinkArea};
+pub use self::bd_page_group::BdPageGroup;
+pub use self::bd_page_margin::BdPageMarginEdge;
+pub use self::bd_pagination::{
+    BdChangeLineBreaksForPagination, BdForcedBreaks, BdLineBreakChoices, BdNLines, BdPageFill,
+    BdResizeAdjust, BdResizeOptions, BdSpreadLengthOptions, BdTextWrap, BdWrapInside,
+};
 pub use self::bd_pdf::BdPdfMetaValue;
 pub use self::bd_pdf_comment::{
-    BdPdfCommentColour, BdPdfCommentIcon, BdPdfCommentKind, BdPdfCommentState,
-    BdPdfCommentString, BdPdfLinkBorder,
+    BdPdfCommentAuthor, BdPdfCommentColour, BdPdfCommentDate, BdPdfCommentIcon, BdPdfCommentKind,
+    BdPdfCommentPosition, BdPdfCommentState, BdPdfCommentString, BdPdfLinkBorder,
 };
 pub use self::bd_pdf_conformance::{BdPdfConformanceValue, BdPdfVersionValue};
+pub use self::bd_pdf_destination::{
+    BdDestinationArea, BdPdfAttachmentLocation, BdPdfAttachmentUrl, BdPdfStringSlot,
+};
+// re-export by computed path; bd_pdf_destination now declares its own
+// computed `BdPdfAttachmentUrl` that contains `ComputedUrl`.
 pub use self::bd_pdf_format::BdPdfFormat;
 pub use self::bd_pdf_tag::{
     BdPdfStandardRole, BdPdfTagStringAuto, BdPdfTagStringPlain, BdPdfTagValue,
@@ -104,6 +126,7 @@ pub use self::bd_pdf_viewer::{
     BdPdfTriState, BdPdfViewerDirection, BdPdfViewerDuplex, BdPdfViewerNonFullscreenPageMode,
     BdPdfViewerPageLayout, BdPdfViewerPageMode, BdPdfViewerPrintScaling,
 };
+pub use self::bd_sidenote::{BdFloatReferenceSidenote, BdSidenoteAlign, BdSidenoteAvoid, BdSidenoteOffset};
 pub use self::bd_tab_stops::{BdTabStop, BdTabStopAlignment, BdTabStopLeader, BdTabStops};
 pub use self::page::{
     Bleed, PageMarks, PageName, PageOrientation, PageSize, PageSizeOrientation, PaperSize,
@@ -159,12 +182,23 @@ pub mod angle;
 pub mod animation;
 pub mod background;
 pub mod basic_shape;
+pub mod bd_a11y;
+pub mod bd_bookmark;
+pub mod bd_footnote;
+pub mod bd_hyphenation;
+pub mod bd_line_grid;
+pub mod bd_link;
+pub mod bd_page_group;
+pub mod bd_page_margin;
+pub mod bd_pagination;
 pub mod bd_pdf;
 pub mod bd_pdf_comment;
 pub mod bd_pdf_conformance;
+pub mod bd_pdf_destination;
 pub mod bd_pdf_format;
 pub mod bd_pdf_tag;
 pub mod bd_pdf_viewer;
+pub mod bd_sidenote;
 pub mod bd_tab_stops;
 pub mod border;
 #[path = "box.rs"]
