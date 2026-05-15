@@ -977,6 +977,11 @@ pub enum TextJustify {
     // and https://github.com/w3c/csswg-drafts/issues/6156 for the alias.
     #[parse(aliases = "distribute")]
     InterCharacter,
+    /// moegoe -bd-* fork extension (F21.23): mirrors Prince
+    /// `text-justify: prince-cjk`. Treated as `inter-character` for
+    /// CJK runs in renderers that do not have a dedicated CJK
+    /// justification algorithm.
+    PrinceCjk,
 }
 
 /// Values for the `-moz-control-character-visibility` CSS property.

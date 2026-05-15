@@ -109,6 +109,7 @@ pub use self::bd_misc::{
     BdPositionOrigin, BdReplacedElement, BdScaleContent, BdShrinkToFit, BdTargetCandidate,
     BdTruncateMarginAfterBreak,
 };
+pub use self::bd_gaps::{BorderClip, MaskBorderMode, Overlay};
 pub use self::bd_tab_stops::{BdTabStop, BdTabStopAlignment, BdTabStopLeader, BdTabStops};
 pub use self::page::{
     Bleed, PageMarks, PageName, PageOrientation, PageSize, PageSizeOrientation, PaperSize,
@@ -164,6 +165,7 @@ pub mod angle;
 pub mod animation;
 pub mod background;
 pub mod basic_shape;
+pub mod bd_gaps;
 pub mod bd_misc;
 pub mod bd_pdf;
 pub mod bd_pdf_comment;

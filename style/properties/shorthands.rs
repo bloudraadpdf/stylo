@@ -4330,3 +4330,177 @@ pub mod grid {
         }
     }
 }
+
+/// `mask-border` shorthand (F21.9). Mirrors `border-image` grammar
+/// — source / slice / width / outset / repeat — plus an extra
+/// `mode` keyword at the end (`alpha | luminance`).
+pub mod mask_border {
+    pub use crate::properties::shorthands_generated::mask_border::*;
+
+    use super::*;
+    use crate::properties::longhands::{
+        mask_border_mode, mask_border_outset, mask_border_repeat, mask_border_slice,
+        mask_border_source, mask_border_width,
+    };
+
+    pub fn parse_value<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Longhands, ParseError<'i>> {
+        let mut outset = mask_border_outset::get_initial_specified_value();
+        let mut repeat = mask_border_repeat::get_initial_specified_value();
+        let mut slice = mask_border_slice::get_initial_specified_value();
+        let mut source = mask_border_source::get_initial_specified_value();
+        let mut width = mask_border_width::get_initial_specified_value();
+        let mut mode = mask_border_mode::get_initial_specified_value();
+        let mut any = false;
+        let mut parsed_slice = false;
+        let mut parsed_source = false;
+        let mut parsed_repeat = false;
+        let mut parsed_mode = false;
+        loop {
+            if !parsed_slice {
+                if let Ok(value) =
+                    input.try_parse(|input| mask_border_slice::parse(context, input))
+                {
+                    parsed_slice = true;
+                    any = true;
+                    slice = value;
+                    let maybe_width_outset: Result<_, ParseError> = input.try_parse(|input| {
+                        input.expect_delim('/')?;
+                        let w = input
+                            .try_parse(|input| mask_border_width::parse(context, input))
+                            .ok();
+                        let o = input
+                            .try_parse(|input| {
+                                input.expect_delim('/')?;
+                                mask_border_outset::parse(context, input)
+                            })
+                            .ok();
+                        if w.is_none() && o.is_none() {
+                            return Err(
+                                input.new_custom_error(StyleParseErrorKind::UnspecifiedError)
+                            );
+                        }
+                        Ok((w, o))
+                    });
+                    if let Ok((w, o)) = maybe_width_outset {
+                        if let Some(w) = w {
+                            width = w;
+                        }
+                        if let Some(o) = o {
+                            outset = o;
+                        }
+                    }
+                    continue;
+                }
+            }
+            if !parsed_source {
+                if let Ok(value) =
+                    input.try_parse(|input| mask_border_source::parse(context, input))
+                {
+                    source = value;
+                    parsed_source = true;
+                    any = true;
+                    continue;
+                }
+            }
+            if !parsed_repeat {
+                if let Ok(value) =
+                    input.try_parse(|input| mask_border_repeat::parse(context, input))
+                {
+                    repeat = value;
+                    parsed_repeat = true;
+                    any = true;
+                    continue;
+                }
+            }
+            if !parsed_mode {
+                if let Ok(value) =
+                    input.try_parse(|input| mask_border_mode::parse(context, input))
+                {
+                    mode = value;
+                    parsed_mode = true;
+                    any = true;
+                    continue;
+                }
+            }
+            break;
+        }
+        if !any {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+        Ok(expanded! {
+            mask_border_mode: mode,
+            mask_border_outset: outset,
+            mask_border_repeat: repeat,
+            mask_border_slice: slice,
+            mask_border_source: source,
+            mask_border_width: width,
+        })
+    }
+
+    impl<'a> ToCss for LonghandsToSerialize<'a> {
+        fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+        where
+            W: fmt::Write,
+        {
+            let mut has_any = false;
+            let has_source =
+                *self.mask_border_source != mask_border_source::get_initial_specified_value();
+            has_any = has_any || has_source;
+            let has_slice =
+                *self.mask_border_slice != mask_border_slice::get_initial_specified_value();
+            has_any = has_any || has_slice;
+            let has_outset =
+                *self.mask_border_outset != mask_border_outset::get_initial_specified_value();
+            has_any = has_any || has_outset;
+            let has_width =
+                *self.mask_border_width != mask_border_width::get_initial_specified_value();
+            has_any = has_any || has_width;
+            let has_repeat =
+                *self.mask_border_repeat != mask_border_repeat::get_initial_specified_value();
+            has_any = has_any || has_repeat;
+            let has_mode =
+                *self.mask_border_mode != mask_border_mode::get_initial_specified_value();
+            has_any = has_any || has_mode;
+            if has_source || !has_any {
+                self.mask_border_source.to_css(dest)?;
+                if !has_any {
+                    return Ok(());
+                }
+            }
+            let needs_slice = has_slice || has_width || has_outset;
+            if needs_slice {
+                if has_source {
+                    dest.write_char(' ')?;
+                }
+                self.mask_border_slice.to_css(dest)?;
+                if has_width || has_outset {
+                    dest.write_str(" /")?;
+                    if has_width {
+                        dest.write_char(' ')?;
+                        self.mask_border_width.to_css(dest)?;
+                    }
+                    if has_outset {
+                        dest.write_str(" / ")?;
+                        self.mask_border_outset.to_css(dest)?;
+                    }
+                }
+            }
+            if has_repeat {
+                if has_source || needs_slice {
+                    dest.write_char(' ')?;
+                }
+                self.mask_border_repeat.to_css(dest)?;
+            }
+            if has_mode {
+                if has_source || needs_slice || has_repeat {
+                    dest.write_char(' ')?;
+                }
+                self.mask_border_mode.to_css(dest)?;
+            }
+            Ok(())
+        }
+    }
+}

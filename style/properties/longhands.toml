@@ -3247,6 +3247,105 @@ spec = "Nonstandard (moegoe -bd-* fork extension; F32.21 named-flow routing)"
 animation_type = "none"
 affects = "layout"
 
+# F21 — smaller standard-CSS gaps. mask-border-* family mirrors the
+# border-image-* family one-for-one in grammar and types; the only
+# new keyword is `mask-border-mode`.
+
+# F21.3 — mask-border-source — CSS Masking 2.
+[mask-border-source]
+type = "Image"
+initial = "computed::Image::None"
+struct = "svg"
+initial_specified_value = "specified::Image::None"
+parse_method = "parse_with_cors_anonymous"
+spec = "https://drafts.fxtf.org/css-masking-1/#propdef-mask-border-source"
+extra_prefixes = ["webkit"]
+animation_type = "discrete"
+servo_restyle_damage = "repaint"
+affects = "paint"
+
+# F21.4 — mask-border-slice.
+[mask-border-slice]
+type = "BorderImageSlice"
+initial = "computed::BorderImageSlice::hundred_percent()"
+struct = "svg"
+initial_specified_value = "specified::BorderImageSlice::hundred_percent()"
+spec = "https://drafts.fxtf.org/css-masking-1/#propdef-mask-border-slice"
+extra_prefixes = ["webkit"]
+boxed = true
+servo_restyle_damage = "repaint"
+affects = "paint"
+
+# F21.5 — mask-border-width.
+[mask-border-width]
+type = "BorderImageWidth"
+initial = "computed::BorderImageWidth::all(computed::BorderImageSideWidth::one())"
+struct = "svg"
+initial_specified_value = "specified::BorderImageWidth::all(specified::BorderImageSideWidth::one())"
+spec = "https://drafts.fxtf.org/css-masking-1/#propdef-mask-border-width"
+extra_prefixes = ["webkit"]
+boxed = true
+servo_restyle_damage = "repaint"
+affects = "paint"
+
+# F21.6 — mask-border-outset.
+[mask-border-outset]
+type = "NonNegativeLengthOrNumberRect"
+initial = "generics::rect::Rect::all(computed::NonNegativeLengthOrNumber::zero())"
+struct = "svg"
+initial_specified_value = "generics::rect::Rect::all(specified::NonNegativeLengthOrNumber::zero())"
+spec = "https://drafts.fxtf.org/css-masking-1/#propdef-mask-border-outset"
+extra_prefixes = ["webkit"]
+boxed = true
+servo_restyle_damage = "repaint"
+affects = "paint"
+
+# F21.7 — mask-border-repeat.
+[mask-border-repeat]
+type = "BorderImageRepeat"
+initial = "computed::BorderImageRepeat::stretch()"
+struct = "svg"
+initial_specified_value = "specified::BorderImageRepeat::stretch()"
+spec = "https://drafts.fxtf.org/css-masking-1/#propdef-mask-border-repeat"
+extra_prefixes = ["webkit"]
+animation_type = "discrete"
+servo_restyle_damage = "repaint"
+affects = "paint"
+
+# F21.8 — mask-border-mode.
+[mask-border-mode]
+type = "MaskBorderMode"
+initial = "computed::MaskBorderMode::Alpha"
+struct = "svg"
+initial_specified_value = "specified::MaskBorderMode::Alpha"
+spec = "https://drafts.fxtf.org/css-masking-1/#propdef-mask-border-mode"
+extra_prefixes = ["webkit"]
+animation_type = "discrete"
+servo_restyle_damage = "repaint"
+affects = "paint"
+
+# F21.13 — border-clip (Prince proprietary).
+[border-clip]
+type = "BorderClip"
+initial = "computed::BorderClip::Normal"
+struct = "border"
+initial_specified_value = "specified::BorderClip::Normal"
+spec = "Nonstandard (Prince proprietary; F21.13 border-stroke clipping at the padding edge)"
+animation_type = "discrete"
+servo_restyle_damage = "repaint"
+affects = "paint"
+
+# F21.24 — overlay (CSS Position 4).
+[overlay]
+type = "Overlay"
+initial = "computed::Overlay::None"
+struct = "position"
+initial_specified_value = "specified::Overlay::None"
+spec = "https://drafts.csswg.org/css-position-4/#propdef-overlay"
+animation_type = "discrete"
+servo_restyle_damage = "rebuild_box"
+affects = "layout"
+
 [text-autospace]
 type = "TextAutospace"
 initial = "computed::text::TextAutospace::NO_AUTOSPACE"

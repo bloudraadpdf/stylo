@@ -443,6 +443,11 @@ sub_properties = ["mask-position-x", "mask-position-y"]
 spec = "https://drafts.csswg.org/css-masks-4/#the-mask-position"
 extra_prefixes = ["webkit"]
 
+[mask-border]
+sub_properties = ["mask-border-mode", "mask-border-outset", "mask-border-repeat", "mask-border-slice", "mask-border-source", "mask-border-width"]
+spec = "https://drafts.fxtf.org/css-masking-1/#propdef-mask-border"
+extra_prefixes = ["webkit"]
+
 [border-radius]
 sub_properties = ["border-top-left-radius", "border-top-right-radius", "border-bottom-right-radius", "border-bottom-left-radius"]
 spec = "https://drafts.csswg.org/css-backgrounds/#border-radius"
