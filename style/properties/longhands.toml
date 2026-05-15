@@ -3120,6 +3120,20 @@ animation_type = "none"
 affects = ""
 boxed = true
 
+# CSS Regions L1 §6.5 `region-fragment` — controls what happens when
+# named-flow content overflows the last region in the chain. Authored
+# on the region-chain element (an element carrying `-bd-flow-from`).
+# `auto` (initial): content overflows the last region visibly.
+# `break`: overflowing content is dropped at the last region's edge.
+[-bd-region-fragment]
+type = "BdRegionFragment"
+initial = "computed::BdRegionFragment::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdRegionFragment::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 17 CSS Regions L1 §6.5)"
+animation_type = "none"
+affects = ""
+
 # moegoe Family 18 — Prince-style page-float modifiers. Apply to
 # floated boxes; not inherited; consumed by the page-floats
 # placement pass in `moegoe-page`.

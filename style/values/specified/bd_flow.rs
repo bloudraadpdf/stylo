@@ -114,6 +114,44 @@ pub enum BdFlowIntoMode {
     Element,
 }
 
+/// Specified value of `-bd-region-fragment` (CSS Regions L1 §6.5).
+///
+/// Authored on a region-chain element (an element with `-bd-flow-from`).
+/// Controls what happens when the named flow contains more content than
+/// the chain can hold.
+///
+/// `auto` (initial) — content past the last region's capacity is allowed
+/// to overflow the last region's content box visibly. The flow continues
+/// to render even after the chain has been exhausted (CSS Regions L1
+/// §6.5 default).
+///
+/// `break` — content past the last region's capacity is discarded; the
+/// last region acts as a hard fragmentation boundary and the unplaced
+/// flow content is dropped (CSS Regions L1 §6.5 "break").
+#[repr(u8)]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+pub enum BdRegionFragment {
+    /// `auto` — content overflows the last region visibly (initial).
+    #[default]
+    Auto,
+    /// `break` — content past the last region's capacity is dropped.
+    Break,
+}
+
 impl Default for BdFlowInto {
     #[inline]
     fn default() -> Self {

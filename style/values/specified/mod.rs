@@ -103,7 +103,7 @@ pub use self::bd_float::{
     BdFloatDeferColumn, BdFloatDeferPage, BdFloatDisplace, BdFloatModifier, BdFloatPolicy,
     BdFloatTail,
 };
-pub use self::bd_flow::{BdFlowFrom, BdFlowInto, BdFlowIntoMode};
+pub use self::bd_flow::{BdFlowFrom, BdFlowInto, BdFlowIntoMode, BdRegionFragment};
 pub use self::bd_footnote::{
     BdFootnoteFragmentation, BdFootnoteRuleLength, FloatPlacement, FootnoteStylePosition,
 };
