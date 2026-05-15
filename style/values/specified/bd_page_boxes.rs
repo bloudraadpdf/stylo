@@ -217,7 +217,7 @@ mod tests {
         let mut input = ParserInput::new(css);
         let mut parser = Parser::new(&mut input);
         parser
-            .parse_entirely(|input| BdPdfPageClip::parse(&context, input))
+            .parse_entirely(|input| BdPdfPageClip::parse(input))
             .expect("page-clip should parse")
     }
 

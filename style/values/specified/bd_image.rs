@@ -335,7 +335,7 @@ mod tests {
         let mut input = ParserInput::new(css);
         let mut parser = Parser::new(&mut input);
         parser
-            .parse_entirely(|input| BdImageResampling::parse(&context, input))
+            .parse_entirely(|input| BdImageResampling::parse(input))
             .expect("resampling value should parse")
     }
 

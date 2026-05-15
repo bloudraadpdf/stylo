@@ -138,7 +138,7 @@ mod tests {
         let mut input = ParserInput::new(css);
         let mut parser = Parser::new(&mut input);
         parser
-            .parse_entirely(|input| BdPdfPageColourSpace::parse(&context, input))
+            .parse_entirely(|input| BdPdfPageColourSpace::parse(input))
             .expect("colourspace should parse")
     }
 

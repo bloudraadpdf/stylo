@@ -356,7 +356,7 @@ mod tests {
         let mut input = ParserInput::new(css);
         let mut parser = Parser::new(&mut input);
         parser
-            .parse_entirely(|input| BdPdfTextRendering::parse(&context, input))
+            .parse_entirely(|input| BdPdfTextRendering::parse(input))
             .expect("text-rendering value should parse")
     }
 
