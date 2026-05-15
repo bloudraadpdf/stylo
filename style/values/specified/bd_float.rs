@@ -190,3 +190,112 @@ impl crate::parser::Parse for BdFloatDeferColumn {
         Ok(Self::Columns(n))
     }
 }
+
+/// Specified value of `-bd-float-defer-page`.
+///
+/// `none | next | last | <integer>` — page-defer counterpart to
+/// `-bd-float-defer-column`. Distinct from the standard
+/// `float-defer-page` alias (which accepts only `none | last |
+/// <integer>` per CSS Page Floats 3 §5.1) by adding the `next`
+/// keyword as authored sugar for `1`. Native moegoe surface; the
+/// renderer reads this side-table value as a per-element override
+/// over the standard `float-defer` cascade.
+#[derive(
+    Clone, Copy, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue,
+    ToResolvedValue, ToShmem, ToTyped,
+)]
+#[repr(C, u8)]
+pub enum BdFloatDeferPage {
+    /// Do not defer.
+    None,
+    /// `next` — defer by one page. Syntactic sugar for `1`.
+    Next,
+    /// Release to the last page.
+    Last,
+    /// Defer by N pages.
+    Pages(i32),
+}
+
+impl Default for BdFloatDeferPage {
+    #[inline]
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+impl BdFloatDeferPage {
+    /// Whether the value is `none`.
+    #[inline]
+    pub fn is_none(&self) -> bool {
+        matches!(self, Self::None)
+    }
+}
+
+impl crate::parser::Parse for BdFloatDeferPage {
+    fn parse<'i, 't>(
+        _: &crate::parser::ParserContext,
+        input: &mut cssparser::Parser<'i, 't>,
+    ) -> Result<Self, style_traits::ParseError<'i>> {
+        if input
+            .try_parse(|i| i.expect_ident_matching("none"))
+            .is_ok()
+        {
+            return Ok(Self::None);
+        }
+        if input
+            .try_parse(|i| i.expect_ident_matching("next"))
+            .is_ok()
+        {
+            return Ok(Self::Next);
+        }
+        if input
+            .try_parse(|i| i.expect_ident_matching("last"))
+            .is_ok()
+        {
+            return Ok(Self::Last);
+        }
+        let n = input.expect_integer()?;
+        Ok(Self::Pages(n))
+    }
+}
+
+/// Specified value of `-bd-float-displace`.
+///
+/// Controls how content surrounding a page float is laid out
+/// around the float's reserved band. CSS Page Floats Module
+/// Level 3 §3.3 describes the four displacement strategies:
+///
+/// * `indent` — surrounding content is indented by the float's
+///   inline measure (text wraps alongside the float).
+/// * `block` — the float reserves a full block-axis band; content
+///   flows above and below but not alongside.
+/// * `line` — only the line-boxes overlapping the float are
+///   shortened; subsequent lines past the float resume full
+///   inline measure.
+/// * `none` — surrounding content is not displaced; in-flow
+///   content may overlap the float.
+#[repr(u8)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[allow(missing_docs)]
+pub enum BdFloatDisplace {
+    #[default]
+    Indent,
+    Block,
+    Line,
+    None,
+}

@@ -3159,6 +3159,24 @@ spec = "Nonstandard (moegoe -bd-* fork extension; Family 18 float modifiers)"
 animation_type = "none"
 affects = ""
 
+[-bd-float-defer-page]
+type = "BdFloatDeferPage"
+initial = "computed::BdFloatDeferPage::None"
+struct = "counters"
+initial_specified_value = "specified::BdFloatDeferPage::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 18 float modifiers)"
+animation_type = "none"
+affects = ""
+
+[-bd-float-displace]
+type = "BdFloatDisplace"
+initial = "computed::BdFloatDisplace::Indent"
+struct = "counters"
+initial_specified_value = "specified::BdFloatDisplace::Indent"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 18 float modifiers)"
+animation_type = "none"
+affects = ""
+
 # moegoe Family 20 — page-marks / colour-bar print-shop tooling.
 # `@page` descriptors; consumed by the paint stage.
 [-bd-page-colorbar-top-left]

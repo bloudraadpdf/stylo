@@ -585,6 +585,8 @@ class Longhand(Property):
                 "BdChangeBarAlign",
                 "BdChangeBarExclusion",
                 "BdFloatDeferColumn",
+                "BdFloatDeferPage",
+                "BdFloatDisplace",
                 "BdFloatModifier",
                 "BdFloatPolicy",
                 "BdFloatTail",

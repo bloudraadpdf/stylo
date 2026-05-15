@@ -99,7 +99,10 @@ pub use self::bd_bookmark::{BdPdfLinkType, BookmarkTarget};
 pub use self::bd_change_bar::{
     BdChangeBarAlign, BdChangeBarColour, BdChangeBarExclusion, BdChangeBarName,
 };
-pub use self::bd_float::{BdFloatDeferColumn, BdFloatModifier, BdFloatPolicy, BdFloatTail};
+pub use self::bd_float::{
+    BdFloatDeferColumn, BdFloatDeferPage, BdFloatDisplace, BdFloatModifier, BdFloatPolicy,
+    BdFloatTail,
+};
 pub use self::bd_flow::{BdFlowFrom, BdFlowInto, BdFlowIntoMode};
 pub use self::bd_footnote::{
     BdFootnoteFragmentation, BdFootnoteRuleLength, FloatPlacement, FootnoteStylePosition,

@@ -7,5 +7,6 @@
 //! variant.
 
 pub use crate::values::specified::bd_float::{
-    BdFloatDeferColumn, BdFloatModifier, BdFloatPolicy, BdFloatTail,
+    BdFloatDeferColumn, BdFloatDeferPage, BdFloatDisplace, BdFloatModifier, BdFloatPolicy,
+    BdFloatTail,
 };
