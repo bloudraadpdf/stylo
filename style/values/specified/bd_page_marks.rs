@@ -213,6 +213,49 @@ pub enum BdPrintMarkSet {
     Custom,
 }
 
+/// G10 — per-mark `enabled` flag (`yes` / `no`).
+///
+/// Selects whether a given print-mark family (crop / registration /
+/// colour-bar / page-info) participates in the painted print-mark
+/// envelope. `auto` (initial) defers to the page-rule cascade — the
+/// historic crop/cross flag on `marks` plus the F20 print-mark-set
+/// keyword decide which families are active. Authors flip to `no`
+/// to suppress a single family explicitly without unsetting the
+/// shorthand, or to `yes` to force a family on regardless of the
+/// shorthand.
+#[repr(u8)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[allow(missing_docs)]
+pub enum BdPageMarkEnabled {
+    #[default]
+    Auto,
+    Yes,
+    No,
+}
+
+impl BdPageMarkEnabled {
+    /// Whether the value is at its initial `auto`.
+    #[inline]
+    pub fn is_auto(self) -> bool {
+        matches!(self, Self::Auto)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
