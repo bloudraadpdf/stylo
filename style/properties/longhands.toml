@@ -2662,6 +2662,71 @@ animation_type = "none"
 rule_types_allowed = ["page"]
 affects = "paint"
 
+# moegoe Tier 4 §A.4.7 — marker variants. Six longhands extending
+# F4 / F20 / F7 marker emission with per-mark colour, position,
+# swatch list, sidenote glyph and offset overrides. All `@page`-
+# scoped and `paint`-affecting (no layout impact).
+[-bd-pdf-mark-registration-color]
+type = "BdRegistrationColour"
+initial = "computed::BdRegistrationColour::Auto"
+struct = "page"
+initial_specified_value = "specified::BdRegistrationColour::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; Tier4 §A.4.7 registration-mark colour)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "paint"
+
+[-bd-pdf-mark-registration-position]
+type = "BdRegistrationPosition"
+initial = "computed::BdRegistrationPosition::AllCorners"
+struct = "page"
+initial_specified_value = "specified::BdRegistrationPosition::AllCorners"
+spec = "Nonstandard (moegoe -bd-* fork extension; Tier4 §A.4.7 registration-mark position)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "paint"
+
+[-bd-pdf-mark-colour-bar-swatches]
+type = "BdColourBarSwatches"
+initial = "computed::BdColourBarSwatches::None"
+struct = "page"
+initial_specified_value = "specified::BdColourBarSwatches::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; Tier4 §A.4.7 colour-bar swatch list)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "paint"
+
+[-bd-pdf-mark-colour-bar-position]
+type = "BdColourBarPositionSide"
+initial = "computed::BdColourBarPositionSide::Top"
+struct = "page"
+initial_specified_value = "specified::BdColourBarPositionSide::Top"
+spec = "Nonstandard (moegoe -bd-* fork extension; Tier4 §A.4.7 colour-bar position)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "paint"
+
+[-bd-pdf-mark-sidenote-glyph]
+type = "BdSidenoteGlyph"
+initial = "computed::BdSidenoteGlyph::Numeric"
+struct = "page"
+initial_specified_value = "specified::BdSidenoteGlyph::Numeric"
+spec = "Nonstandard (moegoe -bd-* fork extension; Tier4 §A.4.7 sidenote glyph)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "paint"
+
+[-bd-pdf-mark-sidenote-offset]
+type = "BdSidenoteMarkerOffset"
+initial = "computed::BdSidenoteMarkerOffset::zero()"
+struct = "page"
+initial_specified_value = "specified::BdSidenoteMarkerOffset::zero()"
+spec = "Nonstandard (moegoe -bd-* fork extension; Tier4 §A.4.7 sidenote offset)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "paint"
+
+
 # moegoe F5 — Image recompression / DPI control. Six properties
 # governing how embedded images are processed when emitting PDF.
 # `image-resolution` is the W3C-standard surface (CSS Images 4 §6);
