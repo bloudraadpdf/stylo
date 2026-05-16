@@ -933,6 +933,21 @@ impl Color {
                     }
                 }
 
+                // F2 — moegoe `-bd-spot(<name>)` / `-bd-separation(<name>)`
+                // must survive to compute time so the IR conversion
+                // boundary can resolve the colorant against the
+                // document `@-bd-colour` registry. Eager resolution at
+                // this layer would collapse the named reference to
+                // `TRANSPARENT_BLACK` (see `resolve_to_absolute` for
+                // the fail-closed contract) and the colorant name
+                // would be unrecoverable.
+                if matches!(&**color_function, ColorFunction::BdSpot(..)) {
+                    let color_function = color_function.map_origin_color(|origin_color| {
+                        origin_color.to_computed_color(context)
+                    });
+                    return Some(ComputedColor::ColorFunction(Box::new(color_function)));
+                }
+
                 // Try to eagerly resolve the color function before making it a computed color.
                 if let Ok(absolute) = color_function.resolve_to_absolute() {
                     ComputedColor::Absolute(absolute)
