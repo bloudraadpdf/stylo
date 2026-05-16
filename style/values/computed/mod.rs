@@ -175,6 +175,7 @@ pub use self::bd_misc::{
 };
 pub use self::bd_sidenote::{BdFloatReferenceSidenote, BdSidenoteAlign, BdSidenoteAvoid, BdSidenoteOffset};
 pub use self::bd_tab_stops::{BdTabStop, BdTabStopAlignment, BdTabStopLeader, BdTabStops};
+pub use self::bd_text_decoration::{BdTextDecorationLineColour, BdTextDecorationLineStyle, BdTextDecorationLineThickness};
 pub use self::page::{
     Bleed, PageMarks, PageName, PageOrientation, PageSize, PageSizeOrientation, PaperSize,
 };
@@ -263,6 +264,7 @@ pub mod bd_pdf_tag;
 pub mod bd_pdf_viewer;
 pub mod bd_sidenote;
 pub mod bd_tab_stops;
+pub mod bd_text_decoration;
 pub mod border;
 #[path = "box.rs"]
 pub mod box_;

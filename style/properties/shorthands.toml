@@ -472,6 +472,21 @@ derive_serialize = true
 sub_properties = ["text-decoration-color", "text-decoration-line", "text-decoration-style", "text-decoration-thickness"]
 spec = "https://drafts.csswg.org/css-text-decor/#propdef-text-decoration"
 
+[-bd-text-overline]
+sub_properties = ["-bd-text-overline-color", "-bd-text-overline-style", "-bd-text-overline-thickness"]
+spec = "Nonstandard (moegoe -bd-* fork extension; Prince G text-overline shorthand)"
+derive_serialize = true
+
+[-bd-text-underline]
+sub_properties = ["-bd-text-underline-color", "-bd-text-underline-style", "-bd-text-underline-thickness"]
+spec = "Nonstandard (moegoe -bd-* fork extension; Prince G text-underline shorthand)"
+derive_serialize = true
+
+[-bd-text-linethrough]
+sub_properties = ["-bd-text-linethrough-color", "-bd-text-linethrough-style", "-bd-text-linethrough-thickness"]
+spec = "Nonstandard (moegoe -bd-* fork extension; Prince G text-line-through shorthand)"
+derive_serialize = true
+
 [font]
 sub_properties = [
   "font-style",
