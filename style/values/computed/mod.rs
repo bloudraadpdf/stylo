@@ -97,7 +97,7 @@ pub use self::bd_barcode::{
     BdBarcodeHrPosition, BdBarcodeReaderInit, BdBarcodeSize, BdBarcodeStructuredAppend,
     BdBarcodeType, BdQrEccLetter,
 };
-pub use self::bd_bfo::BdIndex;
+pub use self::bd_bfo::{BdIndex, BdIndexGrouping};
 pub use self::bd_bookmark::{BdPdfLinkType, BookmarkTarget};
 pub use self::bd_change_bar::{
     BdChangeBarAlign, BdChangeBarColour, BdChangeBarExclusion, BdChangeBarName,
