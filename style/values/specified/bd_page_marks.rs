@@ -39,11 +39,13 @@
 
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
-use crate::values::specified::length::NonNegativeLength;
+use crate::values::specified::length::{LengthPercentage, NonNegativeLength};
 use crate::values::specified::url::UrlOrNone;
 use crate::values::specified::Color;
-use cssparser::Parser;
-use style_traits::ParseError;
+use crate::OwnedSlice;
+use cssparser::{match_ignore_ascii_case, Parser};
+use std::fmt::{self, Write};
+use style_traits::{CssWriter, ParseError, ToCss};
 
 /// `<non-negative-length>` value for a mark dimension or offset.
 ///
@@ -253,6 +255,205 @@ impl BdPageMarkEnabled {
     #[inline]
     pub fn is_auto(self) -> bool {
         matches!(self, Self::Auto)
+    }
+}
+
+// ===== Tier 4 §A.4.7 — marker variants ==================================
+
+/// Specified value of `-bd-pdf-mark-registration-color`.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
+#[repr(C, u8)]
+pub enum BdRegistrationColour {
+    /// `auto`.
+    Auto,
+    /// `<color>`.
+    Colour(Color),
+}
+
+impl BdRegistrationColour {
+    /// Initial value (`auto`).
+    #[inline]
+    pub fn auto() -> Self {
+        Self::Auto
+    }
+    /// Whether the value is `auto`.
+    #[inline]
+    pub fn is_auto(&self) -> bool {
+        matches!(self, Self::Auto)
+    }
+}
+
+impl Parse for BdRegistrationColour {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
+            return Ok(Self::Auto);
+        }
+        Ok(Self::Colour(Color::parse(context, input)?))
+    }
+}
+
+/// Specified value of `-bd-pdf-mark-registration-position`.
+#[repr(u8)]
+#[derive(
+    Clone, Copy, Debug, Default, Eq, MallocSizeOf, Parse, PartialEq, SpecifiedValueInfo,
+    ToCss, ToComputedValue, ToResolvedValue, ToShmem, ToTyped,
+)]
+#[allow(missing_docs)]
+pub enum BdRegistrationPosition {
+    #[default]
+    AllCorners,
+    Top,
+    Bottom,
+    TopAndBottom,
+}
+
+/// Specified value of `-bd-pdf-mark-colour-bar-swatches`.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToShmem, ToTyped)]
+#[repr(C, u8)]
+pub enum BdColourBarSwatches {
+    /// `none`.
+    None,
+    /// One or more `<color>` swatches.
+    Colours(OwnedSlice<Color>),
+}
+
+impl Default for BdColourBarSwatches {
+    #[inline]
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+impl BdColourBarSwatches {
+    /// Initial value (`none`).
+    #[inline]
+    pub fn none() -> Self {
+        Self::None
+    }
+    /// Whether the value is `none`.
+    #[inline]
+    pub fn is_none(&self) -> bool {
+        matches!(self, Self::None)
+    }
+}
+
+impl ToCss for BdColourBarSwatches {
+    fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        match self {
+            Self::None => dest.write_str("none"),
+            Self::Colours(list) => {
+                let mut first = true;
+                for c in list.iter() {
+                    if !first {
+                        dest.write_str(" ")?;
+                    }
+                    first = false;
+                    c.to_css(dest)?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+impl Parse for BdColourBarSwatches {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
+            return Ok(Self::None);
+        }
+        let mut colours: Vec<Color> = Vec::new();
+        let first = Color::parse(context, input)?;
+        colours.push(first);
+        while let Ok(c) = input.try_parse(|i| Color::parse(context, i)) {
+            colours.push(c);
+        }
+        Ok(Self::Colours(OwnedSlice::from(colours)))
+    }
+}
+
+/// Specified value of `-bd-pdf-mark-colour-bar-position`.
+#[repr(u8)]
+#[derive(
+    Clone, Copy, Debug, Default, Eq, MallocSizeOf, Parse, PartialEq, SpecifiedValueInfo,
+    ToCss, ToComputedValue, ToResolvedValue, ToShmem, ToTyped,
+)]
+#[allow(missing_docs)]
+pub enum BdColourBarPositionSide {
+    #[default]
+    Top,
+    Bottom,
+    Left,
+    Right,
+}
+
+/// Specified value of `-bd-pdf-mark-sidenote-glyph`.
+///
+/// The computed value equals the specified value: keyword variants
+/// are `Copy` data, the `Literal(String)` variant inherits its data
+/// directly into computed style without further resolution.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue, ToResolvedValue, ToShmem, ToTyped)]
+#[repr(C, u8)]
+pub enum BdSidenoteGlyph {
+    /// `asterisk`.
+    Asterisk,
+    /// `dagger` (U+2020).
+    Dagger,
+    /// `double-dagger` (U+2021).
+    DoubleDagger,
+    /// `section` (U+00A7).
+    Section,
+    /// `numeric` — page-local note counter.
+    Numeric,
+    /// Authored literal string.
+    Literal(crate::OwnedStr),
+}
+
+impl Default for BdSidenoteGlyph {
+    #[inline]
+    fn default() -> Self {
+        Self::Numeric
+    }
+}
+
+impl Parse for BdSidenoteGlyph {
+    fn parse<'i, 't>(
+        _: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if let Ok(s) = input.try_parse(|i| i.expect_string().map(|s| s.as_ref().to_owned())) {
+            return Ok(Self::Literal(crate::OwnedStr::from(s)));
+        }
+        let location = input.current_source_location();
+        let ident = input.expect_ident()?.clone();
+        match_ignore_ascii_case! { &ident,
+            "asterisk" => Ok(Self::Asterisk),
+            "dagger" => Ok(Self::Dagger),
+            "double-dagger" => Ok(Self::DoubleDagger),
+            "section" => Ok(Self::Section),
+            "numeric" => Ok(Self::Numeric),
+            _ => Err(location.new_custom_error(
+                style_traits::StyleParseErrorKind::UnspecifiedError,
+            )),
+        }
+    }
+}
+
+/// Specified value of `-bd-pdf-mark-sidenote-offset`.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped, Parse)]
+#[repr(C)]
+pub struct BdSidenoteMarkerOffset(pub LengthPercentage);
+
+impl BdSidenoteMarkerOffset {
+    /// Initial value (`0`).
+    #[inline]
+    pub fn zero() -> Self {
+        Self(LengthPercentage::zero_percent())
     }
 }
 

@@ -17,7 +17,7 @@
 //! `Length`.
 
 use crate::derives::*;
-use crate::values::computed::length::NonNegativeLength;
+use crate::values::computed::length::{LengthPercentage, NonNegativeLength};
 use crate::values::computed::url::ComputedUrl;
 use crate::values::computed::{Color, Context, ToComputedValue};
 use crate::values::generics::url::GenericUrlOrNone;
@@ -25,7 +25,7 @@ use crate::values::specified::bd_page_marks as specified;
 use std::fmt::{self, Write};
 use style_traits::{CssWriter, ToCss};
 
-pub use specified::{BdPageMarkEnabled, BdPrintMarkSet};
+pub use specified::{BdColourBarPositionSide, BdPageMarkEnabled, BdPrintMarkSet, BdRegistrationPosition, BdSidenoteGlyph};
 
 /// Computed value of a `-bd-page-*-mark-length` / `-offset` property.
 #[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, ToCss, ToResolvedValue, ToShmem, ToTyped)]
@@ -159,3 +159,159 @@ impl ToComputedValue for specified::BdColorBarPosition {
 
 // `-bd-page-colorbar-offset` resolves to the predefined
 // `computed::Length` type directly.
+
+// ===== Tier 4 §A.4.7 — marker variants ==================================
+
+/// Computed value of `-bd-pdf-mark-registration-color`.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToResolvedValue, ToShmem, ToTyped)]
+#[repr(C, u8)]
+pub enum BdRegistrationColour {
+    /// `auto`.
+    Auto,
+    /// Concrete computed colour.
+    Colour(Color),
+}
+
+impl BdRegistrationColour {
+    /// Initial value (`auto`).
+    #[inline]
+    pub fn auto() -> Self {
+        Self::Auto
+    }
+    /// Whether the value is `auto`.
+    #[inline]
+    pub fn is_auto(&self) -> bool {
+        matches!(self, Self::Auto)
+    }
+}
+
+impl ToCss for BdRegistrationColour {
+    fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        match self {
+            Self::Auto => dest.write_str("auto"),
+            Self::Colour(c) => c.to_css(dest),
+        }
+    }
+}
+
+impl ToComputedValue for specified::BdRegistrationColour {
+    type ComputedValue = BdRegistrationColour;
+
+    fn to_computed_value(&self, ctx: &Context) -> Self::ComputedValue {
+        match self {
+            Self::Auto => BdRegistrationColour::Auto,
+            Self::Colour(c) => BdRegistrationColour::Colour(c.to_computed_value(ctx)),
+        }
+    }
+
+    fn from_computed_value(computed: &Self::ComputedValue) -> Self {
+        match computed {
+            BdRegistrationColour::Auto => Self::Auto,
+            BdRegistrationColour::Colour(c) => Self::Colour(ToComputedValue::from_computed_value(c)),
+        }
+    }
+}
+
+/// Computed value of `-bd-pdf-mark-colour-bar-swatches`.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToResolvedValue, ToTyped)]
+#[repr(C, u8)]
+pub enum BdColourBarSwatches {
+    /// `none`.
+    None,
+    /// One or more `<color>` swatches.
+    Colours(crate::OwnedSlice<Color>),
+}
+
+impl Default for BdColourBarSwatches {
+    #[inline]
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+impl BdColourBarSwatches {
+    /// Initial value (`none`).
+    #[inline]
+    pub fn none() -> Self {
+        Self::None
+    }
+    /// Whether the value is `none`.
+    #[inline]
+    pub fn is_none(&self) -> bool {
+        matches!(self, Self::None)
+    }
+}
+
+impl ToCss for BdColourBarSwatches {
+    fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        match self {
+            Self::None => dest.write_str("none"),
+            Self::Colours(list) => {
+                let mut first = true;
+                for c in list.iter() {
+                    if !first {
+                        dest.write_str(" ")?;
+                    }
+                    first = false;
+                    c.to_css(dest)?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+impl ToComputedValue for specified::BdColourBarSwatches {
+    type ComputedValue = BdColourBarSwatches;
+
+    fn to_computed_value(&self, ctx: &Context) -> Self::ComputedValue {
+        match self {
+            Self::None => BdColourBarSwatches::None,
+            Self::Colours(list) => {
+                let mut out: Vec<Color> = Vec::with_capacity(list.len());
+                for c in list.iter() {
+                    out.push(c.to_computed_value(ctx));
+                }
+                BdColourBarSwatches::Colours(crate::OwnedSlice::from(out))
+            }
+        }
+    }
+
+    fn from_computed_value(computed: &Self::ComputedValue) -> Self {
+        match computed {
+            BdColourBarSwatches::None => Self::None,
+            BdColourBarSwatches::Colours(list) => {
+                let mut out: Vec<crate::values::specified::Color> = Vec::with_capacity(list.len());
+                for c in list.iter() {
+                    out.push(ToComputedValue::from_computed_value(c));
+                }
+                Self::Colours(crate::OwnedSlice::from(out))
+            }
+        }
+    }
+}
+
+/// Computed value of `-bd-pdf-mark-sidenote-offset`.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToCss, ToResolvedValue, ToTyped)]
+#[repr(C)]
+pub struct BdSidenoteMarkerOffset(pub LengthPercentage);
+
+impl BdSidenoteMarkerOffset {
+    /// Initial value (`0`).
+    #[inline]
+    pub fn zero() -> Self {
+        Self(LengthPercentage::zero_percent())
+    }
+}
+
+impl ToComputedValue for specified::BdSidenoteMarkerOffset {
+    type ComputedValue = BdSidenoteMarkerOffset;
+
+    fn to_computed_value(&self, ctx: &Context) -> Self::ComputedValue {
+        BdSidenoteMarkerOffset(self.0.to_computed_value(ctx))
+    }
+
+    fn from_computed_value(computed: &Self::ComputedValue) -> Self {
+        Self(ToComputedValue::from_computed_value(&computed.0))
+    }
+}
