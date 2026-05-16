@@ -2368,6 +2368,56 @@ animation_type = "none"
 rule_types_allowed = ["page"]
 affects = "paint"
 
+# moegoe G9 — Distinct PDF page-box descriptors as MediaBox insets.
+# `-bd-pdf-{crop,art,trim,bleed}-box: auto | <length>{1,4}` defines
+# the named PDF page box (ISO 32000-2 §14.11.2) as a rectangle inset
+# from the MediaBox by the four edge values. `auto` defers to the
+# moegoe default (TrimBox = page content area, BleedBox = TrimBox +
+# `bleed`, CropBox = MediaBox, ArtBox = TrimBox).
+[-bd-pdf-crop-box]
+type = "BdPdfCropBox"
+initial = "computed::BdPdfCropBox::auto()"
+struct = "page"
+initial_specified_value = "specified::BdPdfCropBox::auto()"
+spec = "Nonstandard (moegoe -bd-* fork extension; G9 PDF CropBox insets)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+boxed = true
+affects = "paint"
+
+[-bd-pdf-art-box]
+type = "BdPdfArtBox"
+initial = "computed::BdPdfArtBox::auto()"
+struct = "page"
+initial_specified_value = "specified::BdPdfArtBox::auto()"
+spec = "Nonstandard (moegoe -bd-* fork extension; G9 PDF ArtBox insets)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+boxed = true
+affects = "paint"
+
+[-bd-pdf-trim-box]
+type = "BdPdfTrimBox"
+initial = "computed::BdPdfTrimBox::auto()"
+struct = "page"
+initial_specified_value = "specified::BdPdfTrimBox::auto()"
+spec = "Nonstandard (moegoe -bd-* fork extension; G9 PDF TrimBox insets)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+boxed = true
+affects = "paint"
+
+[-bd-pdf-bleed-box]
+type = "BdPdfBleedBox"
+initial = "computed::BdPdfBleedBox::auto()"
+struct = "page"
+initial_specified_value = "specified::BdPdfBleedBox::auto()"
+spec = "Nonstandard (moegoe -bd-* fork extension; G9 PDF BleedBox insets)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+boxed = true
+affects = "paint"
+
 # moegoe F4 — Per-mark tuning. Nine @page descriptors that
 # replace the historic hardcoded crop/cross/registration mark
 # constants. Each carries either a non-negative length (mark
