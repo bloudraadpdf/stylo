@@ -3320,6 +3320,111 @@ pub mod text_decoration {
     }
 }
 
+pub mod _bd_text_overline {
+    pub use crate::properties::shorthands_generated::_bd_text_overline::*;
+
+    use super::*;
+    use crate::properties::longhands::{
+        _bd_text_overline_color, _bd_text_overline_style, _bd_text_overline_thickness,
+    };
+
+    pub fn parse_value<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Longhands, ParseError<'i>> {
+        let mut color = None;
+        let mut style = None;
+        let mut thickness = None;
+        let mut parsed = 0;
+        loop {
+            parsed += 1;
+            try_parse_one!(context, input, color, _bd_text_overline_color::parse);
+            try_parse_one!(context, input, style, _bd_text_overline_style::parse);
+            try_parse_one!(context, input, thickness, _bd_text_overline_thickness::parse);
+            parsed -= 1;
+            break;
+        }
+        if parsed == 0 {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+        Ok(expanded! {
+            _bd_text_overline_color: unwrap_or_initial!(_bd_text_overline_color, color),
+            _bd_text_overline_style: unwrap_or_initial!(_bd_text_overline_style, style),
+            _bd_text_overline_thickness: unwrap_or_initial!(_bd_text_overline_thickness, thickness),
+        })
+    }
+}
+
+pub mod _bd_text_underline {
+    pub use crate::properties::shorthands_generated::_bd_text_underline::*;
+
+    use super::*;
+    use crate::properties::longhands::{
+        _bd_text_underline_color, _bd_text_underline_style, _bd_text_underline_thickness,
+    };
+
+    pub fn parse_value<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Longhands, ParseError<'i>> {
+        let mut color = None;
+        let mut style = None;
+        let mut thickness = None;
+        let mut parsed = 0;
+        loop {
+            parsed += 1;
+            try_parse_one!(context, input, color, _bd_text_underline_color::parse);
+            try_parse_one!(context, input, style, _bd_text_underline_style::parse);
+            try_parse_one!(context, input, thickness, _bd_text_underline_thickness::parse);
+            parsed -= 1;
+            break;
+        }
+        if parsed == 0 {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+        Ok(expanded! {
+            _bd_text_underline_color: unwrap_or_initial!(_bd_text_underline_color, color),
+            _bd_text_underline_style: unwrap_or_initial!(_bd_text_underline_style, style),
+            _bd_text_underline_thickness: unwrap_or_initial!(_bd_text_underline_thickness, thickness),
+        })
+    }
+}
+
+pub mod _bd_text_linethrough {
+    pub use crate::properties::shorthands_generated::_bd_text_linethrough::*;
+
+    use super::*;
+    use crate::properties::longhands::{
+        _bd_text_linethrough_color, _bd_text_linethrough_style, _bd_text_linethrough_thickness,
+    };
+
+    pub fn parse_value<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Longhands, ParseError<'i>> {
+        let mut color = None;
+        let mut style = None;
+        let mut thickness = None;
+        let mut parsed = 0;
+        loop {
+            parsed += 1;
+            try_parse_one!(context, input, color, _bd_text_linethrough_color::parse);
+            try_parse_one!(context, input, style, _bd_text_linethrough_style::parse);
+            try_parse_one!(context, input, thickness, _bd_text_linethrough_thickness::parse);
+            parsed -= 1;
+            break;
+        }
+        if parsed == 0 {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+        Ok(expanded! {
+            _bd_text_linethrough_color: unwrap_or_initial!(_bd_text_linethrough_color, color),
+            _bd_text_linethrough_style: unwrap_or_initial!(_bd_text_linethrough_style, style),
+            _bd_text_linethrough_thickness: unwrap_or_initial!(_bd_text_linethrough_thickness, thickness),
+        })
+    }
+}
+
 pub mod animation {
     pub use crate::properties::shorthands_generated::animation::*;
 

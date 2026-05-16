@@ -5030,6 +5030,97 @@ spec = "https://drafts.csswg.org/css-text-decor-4/#text-decoration-width-propert
 rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 affects = "overflow"
 
+# moegoe G (Prince) — per-position `text-decoration` longhands. Each
+# `-bd-text-{overline,underline,linethrough}-{color,style,thickness}`
+# longhand carries an `auto` initial that means "fall back to the standard
+# `text-decoration-{color,style,thickness}` cascade for this line". When
+# authored to a concrete value, the per-position override is honoured for
+# that line only — the standard `text-decoration-*` cascade still drives
+# the other lines on the same element.
+[-bd-text-overline-color]
+type = "BdTextDecorationLineColour"
+initial = "computed::BdTextDecorationLineColour::Auto"
+struct = "text"
+initial_specified_value = "specified::BdTextDecorationLineColour::Auto"
+ignored_when_colors_disabled = true
+spec = "Nonstandard (moegoe -bd-* fork extension; Prince G text-overline-color)"
+animation_type = "discrete"
+affects = "paint"
+
+[-bd-text-overline-style]
+type = "BdTextDecorationLineStyle"
+initial = "computed::BdTextDecorationLineStyle::Auto"
+struct = "text"
+initial_specified_value = "specified::BdTextDecorationLineStyle::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; Prince G text-overline-style)"
+animation_type = "discrete"
+affects = "overflow"
+
+[-bd-text-overline-thickness]
+type = "BdTextDecorationLineThickness"
+initial = "computed::BdTextDecorationLineThickness::auto()"
+struct = "text"
+initial_specified_value = "specified::BdTextDecorationLineThickness::auto()"
+spec = "Nonstandard (moegoe -bd-* fork extension; Prince G text-overline-thickness)"
+animation_type = "discrete"
+affects = "overflow"
+
+[-bd-text-underline-color]
+type = "BdTextDecorationLineColour"
+initial = "computed::BdTextDecorationLineColour::Auto"
+struct = "text"
+initial_specified_value = "specified::BdTextDecorationLineColour::Auto"
+ignored_when_colors_disabled = true
+spec = "Nonstandard (moegoe -bd-* fork extension; Prince G text-underline-color)"
+animation_type = "discrete"
+affects = "paint"
+
+[-bd-text-underline-style]
+type = "BdTextDecorationLineStyle"
+initial = "computed::BdTextDecorationLineStyle::Auto"
+struct = "text"
+initial_specified_value = "specified::BdTextDecorationLineStyle::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; Prince G text-underline-style)"
+animation_type = "discrete"
+affects = "overflow"
+
+[-bd-text-underline-thickness]
+type = "BdTextDecorationLineThickness"
+initial = "computed::BdTextDecorationLineThickness::auto()"
+struct = "text"
+initial_specified_value = "specified::BdTextDecorationLineThickness::auto()"
+spec = "Nonstandard (moegoe -bd-* fork extension; Prince G text-underline-thickness)"
+animation_type = "discrete"
+affects = "overflow"
+
+[-bd-text-linethrough-color]
+type = "BdTextDecorationLineColour"
+initial = "computed::BdTextDecorationLineColour::Auto"
+struct = "text"
+initial_specified_value = "specified::BdTextDecorationLineColour::Auto"
+ignored_when_colors_disabled = true
+spec = "Nonstandard (moegoe -bd-* fork extension; Prince G text-line-through-color)"
+animation_type = "discrete"
+affects = "paint"
+
+[-bd-text-linethrough-style]
+type = "BdTextDecorationLineStyle"
+initial = "computed::BdTextDecorationLineStyle::Auto"
+struct = "text"
+initial_specified_value = "specified::BdTextDecorationLineStyle::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; Prince G text-line-through-style)"
+animation_type = "discrete"
+affects = "overflow"
+
+[-bd-text-linethrough-thickness]
+type = "BdTextDecorationLineThickness"
+initial = "computed::BdTextDecorationLineThickness::auto()"
+struct = "text"
+initial_specified_value = "specified::BdTextDecorationLineThickness::auto()"
+spec = "Nonstandard (moegoe -bd-* fork extension; Prince G text-line-through-thickness)"
+animation_type = "discrete"
+affects = "overflow"
+
 [-x-span]
 type = "Integer"
 initial = "1"
