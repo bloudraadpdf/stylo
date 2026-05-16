@@ -576,7 +576,7 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
 
     #[inline]
     fn parse_nth_child_of(&self) -> bool {
-        false
+        true
     }
 
     #[inline]
