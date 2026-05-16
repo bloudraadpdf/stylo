@@ -9,5 +9,5 @@
 
 pub use crate::values::specified::bd_pdf_form::{
     BdPdfFormFieldFlags, BdPdfFormFieldMaxLength, BdPdfSignatureFieldLock,
-    BdPdfSignatureFieldName,
+    BdPdfSignatureFieldLockFields, BdPdfSignatureFieldName,
 };

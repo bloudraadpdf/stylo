@@ -24,7 +24,8 @@
 
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
-use crate::OwnedStr;
+use crate::values::CustomIdent;
+use crate::{OwnedSlice, OwnedStr};
 use cssparser::Parser;
 use std::fmt::Write;
 use style_traits::{ParseError, StyleParseErrorKind};
@@ -177,6 +178,73 @@ pub enum BdPdfSignatureFieldLock {
     All,
     Include,
     Exclude,
+}
+
+/// Specified value of `-bd-pdf-signature-field-lock-fields`.
+///
+/// `none` (initial) — no explicit field list; `<custom-ident>+` —
+/// space-separated list of fully qualified field names. The list is
+/// only meaningful when `-bd-pdf-signature-field-lock` is `include`
+/// or `exclude`; with `all` / `none` the list is ignored by the
+/// renderer per ISO 32000-2 §12.7.4.5 Table 232 (the `/Fields` entry
+/// is only emitted with `/Action /Include` or `/Action /Exclude`).
+#[derive(
+    Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue,
+    ToResolvedValue, ToShmem, ToTyped,
+)]
+#[repr(C, u8)]
+pub enum BdPdfSignatureFieldLockFields {
+    /// No explicit field list — projects as the empty `Vec<String>`
+    /// in the IR; the renderer emits `/Fields [ ]` for `Include` /
+    /// `Exclude` lock variants.
+    None,
+    /// `<custom-ident>+` — one or more space-separated field names.
+    Names(#[css(iterable)] OwnedSlice<CustomIdent>),
+}
+
+impl Default for BdPdfSignatureFieldLockFields {
+    #[inline]
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+impl BdPdfSignatureFieldLockFields {
+    /// Whether the value is `none`.
+    #[inline]
+    pub fn is_none(&self) -> bool {
+        matches!(self, Self::None)
+    }
+}
+
+impl Parse for BdPdfSignatureFieldLockFields {
+    fn parse<'i, 't>(
+        _: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if input
+            .try_parse(|i| i.expect_ident_matching("none"))
+            .is_ok()
+        {
+            return Ok(Self::None);
+        }
+        let mut names: Vec<CustomIdent> = Vec::new();
+        loop {
+            let result = input.try_parse(|i| -> Result<CustomIdent, ParseError<'i>> {
+                let location = i.current_source_location();
+                let ident = i.expect_ident()?.clone();
+                CustomIdent::from_ident(location, &ident, &["none"])
+            });
+            match result {
+                Ok(name) => names.push(name),
+                Err(_) => break,
+            }
+        }
+        if names.is_empty() {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+        Ok(Self::Names(OwnedSlice::from(names)))
+    }
 }
 
 /// Specified value of `-bd-pdf-signature-field-name`.

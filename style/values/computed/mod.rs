@@ -146,7 +146,7 @@ pub use self::bd_pdf_destination::{
 // computed `BdPdfAttachmentUrl` that contains `ComputedUrl`.
 pub use self::bd_pdf_form::{
     BdPdfFormFieldFlags, BdPdfFormFieldMaxLength, BdPdfSignatureFieldLock,
-    BdPdfSignatureFieldName,
+    BdPdfSignatureFieldLockFields, BdPdfSignatureFieldName,
 };
 pub use self::bd_pdf_format::BdPdfFormat;
 pub use self::bd_pdf_output::{

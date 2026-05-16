@@ -3040,6 +3040,20 @@ spec = "Nonstandard (moegoe -bd-* fork extension; G3 AcroForm signature widget �
 animation_type = "none"
 affects = ""
 
+# F27-2 — companion to `-bd-pdf-signature-field-lock`: the list of
+# fully qualified field names that select which fields participate in
+# the `/Lock /Action /Include` or `/Lock /Action /Exclude` rule (ISO
+# 32000-2 §12.7.4.5, Table 232). Ignored by the renderer when the
+# sibling lock keyword is `none` or `all`.
+[-bd-pdf-signature-field-lock-fields]
+type = "BdPdfSignatureFieldLockFields"
+initial = "computed::BdPdfSignatureFieldLockFields::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfSignatureFieldLockFields::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; G3 AcroForm signature widget — Family 26)"
+animation_type = "none"
+affects = ""
+
 # moegoe Family 16 — change-bar revision marks. Per-element; not
 # inherited. The paginator allocates a margin-side track and the
 # paint stage draws a vertical bar covering the fragment's vertical
