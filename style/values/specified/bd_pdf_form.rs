@@ -46,7 +46,7 @@ use style_traits::{ParseError, StyleParseErrorKind};
 )]
 #[css(bitflags(
     single = "none",
-    mixed = "read-only,required,no-export,multiline,password,do-not-spell-check,no-scroll,comb,rich-text",
+    mixed = "read-only,required,no-export,multiline,password,file-select,do-not-spell-check,no-scroll,comb,rich-text",
 ))]
 #[repr(C)]
 /// Specified value of `-bd-pdf-form-field-flags`.
@@ -68,6 +68,12 @@ bitflags! {
         const MULTILINE = 1 << 12;
         /// `password` — text input is rendered as bullets.
         const PASSWORD = 1 << 13;
+        /// `file-select` — text field's value is the pathname of a file
+        /// (ISO 32000-2 §12.7.4.4 Table 231, `Tx`-only). Mutually
+        /// exclusive with `multiline`, `password`, and `comb` at the
+        /// PDF level; the renderer projects the bit unconditionally and
+        /// leaves the exclusivity check to PDF consumers.
+        const FILE_SELECT = 1 << 20;
         /// `do-not-spell-check` — disables spell-check.
         const DO_NOT_SPELL_CHECK = 1 << 22;
         /// `no-scroll` — text fields disable scrolling.
