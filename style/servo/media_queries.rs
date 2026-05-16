@@ -501,8 +501,14 @@ impl Device {
         self.prefers_color_scheme
     }
 
-    pub(crate) fn is_dark_color_scheme(&self, _: ColorSchemeFlags) -> bool {
-        false
+    pub(crate) fn is_dark_color_scheme(&self, color_scheme: ColorSchemeFlags) -> bool {
+        let supports_light = color_scheme.contains(ColorSchemeFlags::LIGHT);
+        let supports_dark = color_scheme.contains(ColorSchemeFlags::DARK);
+        match (supports_light, supports_dark) {
+            (false, true) => true,
+            (true, true) => self.prefers_color_scheme == PrefersColorScheme::Dark,
+            _ => false,
+        }
     }
 
     /// Returns safe area insets
