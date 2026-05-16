@@ -34,8 +34,12 @@ impl BdFootnoteRuleLength {
 
 /// Specified value of `footnote-style-position`.
 ///
-/// Marker placement on the outer (binding side away) or inner
-/// (binding side near) edge. Inherits.
+/// Controls how the footnote marker is positioned relative to the
+/// footnote body's first line. `outside` (initial, per Prince's
+/// reference manual `prince.md:4208`) renders the marker as a
+/// hanging marker on the inline-start edge of the first body line;
+/// `inside` renders the marker as the first inline item in the
+/// body's flow. Inherits.
 #[repr(u8)]
 #[derive(
     Clone,
@@ -56,8 +60,8 @@ impl BdFootnoteRuleLength {
 #[allow(missing_docs)]
 pub enum FootnoteStylePosition {
     #[default]
-    Inside,
     Outside,
+    Inside,
 }
 
 /// Specified value of `-bd-footnote-fragmentation`.
