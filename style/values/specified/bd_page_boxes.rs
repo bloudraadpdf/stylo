@@ -21,7 +21,7 @@
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
 use crate::values::generics::size::Size2D;
-use crate::values::specified::length::NonNegativeLength;
+use crate::values::specified::length::{Length, NonNegativeLength};
 use crate::values::specified::page::PageSize;
 use cssparser::Parser;
 use std::fmt::{self, Write};
@@ -152,6 +152,256 @@ impl Parse for BdPdfArtSize {
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
         Ok(Self(BdPdfPageBoxSize::parse(context, input)?))
+    }
+}
+
+/// Per-edge insets (top, right, bottom, left) carried by the
+/// `-bd-pdf-{crop,art,trim,bleed}-box` descriptors.
+///
+/// The descriptor defines the named PDF page box as a rectangle
+/// inset from the MediaBox by the four edge values, mirroring the
+/// CSS `margin` shorthand expansion rules. All four lengths must be
+/// non-negative (a negative inset would push the box outside the
+/// MediaBox, which the PDF specification forbids).
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(C)]
+pub struct BdPdfPageBoxInsetsSides {
+    /// Top edge inset.
+    pub top: Length,
+    /// Right edge inset.
+    pub right: Length,
+    /// Bottom edge inset.
+    pub bottom: Length,
+    /// Left edge inset.
+    pub left: Length,
+}
+
+/// Specified value of `-bd-pdf-{crop,art,trim,bleed}-box`.
+///
+/// PDF defines five page-box rectangles (ISO 32000-2 §14.11.2). CSS
+/// Paged Media exposes `size` (→ TrimBox) and `bleed` (→ outset
+/// for BleedBox / MediaBox). The four box descriptors here let
+/// authors override the remaining boxes explicitly as **insets**
+/// from the MediaBox.
+///
+/// Grammar: `auto | <length>{1,4}`. The one-to-four length form
+/// follows the CSS shorthand expansion shared by `margin` and
+/// `padding`: one length applies to all four edges; two assign
+/// top/bottom = first and right/left = second; three assign
+/// top = first, right/left = second, bottom = third; four assign
+/// top, right, bottom, left in source order.
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(C, u8)]
+pub enum BdPdfPageBoxInsets {
+    /// `auto` — defer to the moegoe default for this box.
+    Auto,
+    /// Per-side insets after shorthand expansion.
+    Sides(BdPdfPageBoxInsetsSides),
+}
+
+impl BdPdfPageBoxInsets {
+    /// Initial value (`auto`).
+    #[inline]
+    pub fn auto() -> Self {
+        Self::Auto
+    }
+
+    /// Whether the value is `auto`.
+    #[inline]
+    pub fn is_auto(&self) -> bool {
+        matches!(self, Self::Auto)
+    }
+}
+
+impl ToCss for BdPdfPageBoxInsets {
+    fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        match self {
+            Self::Auto => dest.write_str("auto"),
+            Self::Sides(BdPdfPageBoxInsetsSides {
+                top,
+                right,
+                bottom,
+                left,
+            }) => {
+                top.to_css(dest)?;
+                dest.write_char(' ')?;
+                right.to_css(dest)?;
+                if bottom != top || left != right {
+                    dest.write_char(' ')?;
+                    bottom.to_css(dest)?;
+                    if left != right {
+                        dest.write_char(' ')?;
+                        left.to_css(dest)?;
+                    }
+                }
+                Ok(())
+            },
+        }
+    }
+}
+
+impl Parse for BdPdfPageBoxInsets {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if input
+            .try_parse(|i| i.expect_ident_matching("auto"))
+            .is_ok()
+        {
+            return Ok(Self::Auto);
+        }
+
+        let first = Length::parse(context, input)?;
+        let second = match input.try_parse(|i| Length::parse(context, i)) {
+            Ok(l) => l,
+            Err(_) => {
+                // One length — apply to all four edges.
+                return Ok(Self::Sides(BdPdfPageBoxInsetsSides {
+                    top: first.clone(),
+                    right: first.clone(),
+                    bottom: first.clone(),
+                    left: first,
+                }));
+            },
+        };
+        let third = input.try_parse(|i| Length::parse(context, i)).ok();
+        let fourth = match third.as_ref() {
+            Some(_) => input.try_parse(|i| Length::parse(context, i)).ok(),
+            None => None,
+        };
+        let (top, right, bottom, left) = match (third, fourth) {
+            (None, _) => {
+                // `<top/bottom> <right/left>`
+                (first.clone(), second.clone(), first, second)
+            },
+            (Some(third), None) => {
+                // `<top> <right/left> <bottom>`
+                (first, second.clone(), third, second)
+            },
+            (Some(third), Some(fourth)) => {
+                // `<top> <right> <bottom> <left>`
+                (first, second, third, fourth)
+            },
+        };
+        Ok(Self::Sides(BdPdfPageBoxInsetsSides {
+            top,
+            right,
+            bottom,
+            left,
+        }))
+    }
+}
+
+// Newtype wrappers per property so the cascade reader routes each
+// box descriptor distinctly. The inner inset payload is shared.
+
+/// Specified value of `-bd-pdf-crop-box`.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
+#[repr(C)]
+pub struct BdPdfCropBox(pub BdPdfPageBoxInsets);
+
+impl BdPdfCropBox {
+    /// Initial value (`auto`).
+    #[inline]
+    pub fn auto() -> Self {
+        Self(BdPdfPageBoxInsets::auto())
+    }
+}
+
+impl Parse for BdPdfCropBox {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        Ok(Self(BdPdfPageBoxInsets::parse(context, input)?))
+    }
+}
+
+/// Specified value of `-bd-pdf-art-box`.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
+#[repr(C)]
+pub struct BdPdfArtBox(pub BdPdfPageBoxInsets);
+
+impl BdPdfArtBox {
+    /// Initial value (`auto`).
+    #[inline]
+    pub fn auto() -> Self {
+        Self(BdPdfPageBoxInsets::auto())
+    }
+}
+
+impl Parse for BdPdfArtBox {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        Ok(Self(BdPdfPageBoxInsets::parse(context, input)?))
+    }
+}
+
+/// Specified value of `-bd-pdf-trim-box`.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
+#[repr(C)]
+pub struct BdPdfTrimBox(pub BdPdfPageBoxInsets);
+
+impl BdPdfTrimBox {
+    /// Initial value (`auto`).
+    #[inline]
+    pub fn auto() -> Self {
+        Self(BdPdfPageBoxInsets::auto())
+    }
+}
+
+impl Parse for BdPdfTrimBox {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        Ok(Self(BdPdfPageBoxInsets::parse(context, input)?))
+    }
+}
+
+/// Specified value of `-bd-pdf-bleed-box`.
+///
+/// Overrides the F20 automatic BleedBox computation (BleedBox =
+/// TrimBox + `bleed`) when authored. Useful for production
+/// workflows where the bleed extent is uneven (e.g. extra grip on
+/// the binding edge for trimming).
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
+#[repr(C)]
+pub struct BdPdfBleedBox(pub BdPdfPageBoxInsets);
+
+impl BdPdfBleedBox {
+    /// Initial value (`auto`).
+    #[inline]
+    pub fn auto() -> Self {
+        Self(BdPdfPageBoxInsets::auto())
+    }
+}
+
+impl Parse for BdPdfBleedBox {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        Ok(Self(BdPdfPageBoxInsets::parse(context, input)?))
     }
 }
 

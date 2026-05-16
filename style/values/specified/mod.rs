@@ -118,7 +118,8 @@ pub use self::bd_image::{
 pub use self::bd_line_grid::{BdBaselineGrid, BdLineGrid, BdLineSnap, BdLineStackingStrategy};
 pub use self::bd_link::{BdLink, BdLinkArea};
 pub use self::bd_page_boxes::{
-    BdPdfArtSize, BdPdfCropSize, BdPdfMediaSize, BdPdfPageBoxSize, BdPdfPageClip,
+    BdPdfArtBox, BdPdfArtSize, BdPdfBleedBox, BdPdfCropBox, BdPdfCropSize, BdPdfMediaSize,
+    BdPdfPageBoxInsets, BdPdfPageBoxInsetsSides, BdPdfPageBoxSize, BdPdfPageClip, BdPdfTrimBox,
 };
 pub use self::bd_page_group::BdPageGroup;
 pub use self::bd_page_margin::BdPageMarginEdge;
