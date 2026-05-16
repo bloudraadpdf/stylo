@@ -31,7 +31,8 @@ use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
 use crate::Atom;
 use cssparser::Parser;
-use style_traits::{ParseError, StyleParseErrorKind};
+use std::fmt;
+use style_traits::{CssWriter, ParseError, StyleParseErrorKind, ToCss};
 
 /// Computed (and specified) value of the internal `_-bd-color-function`
 /// longhand. `None` is the initial value; `Spot` carries the resolved
@@ -46,7 +47,6 @@ use style_traits::{ParseError, StyleParseErrorKind};
     SpecifiedValueInfo,
     ToAnimatedValue,
     ToComputedValue,
-    ToCss,
     ToResolvedValue,
     ToShmem,
     ToTyped,
@@ -87,6 +87,43 @@ impl BdColorFunction {
     #[inline]
     pub fn is_some(&self) -> bool {
         matches!(self, Self::Spot { .. })
+    }
+}
+
+impl ToCss for BdColorFunction {
+    /// Round-trip serialisation of the internal `_-bd-color-function`
+    /// companion. The longhand is never web-exposed, so this is
+    /// emitted only by debug tooling (computed-value dumps, devtools
+    /// inspectors). The serialised form mirrors the authoring
+    /// surface of the originating `color` value so a reader can
+    /// reconstruct intent at a glance.
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: fmt::Write,
+    {
+        match self {
+            Self::None => dest.write_str("none"),
+            Self::Spot {
+                name,
+                tint,
+                is_separation,
+            } => {
+                if *is_separation {
+                    dest.write_str("-bd-separation(")?;
+                } else {
+                    dest.write_str("-bd-spot(")?;
+                }
+                // Atoms don't impl `ToCss` because they aren't a CSS
+                // value type, but their string contents are a CSS
+                // ident in this surface — emit them raw.
+                dest.write_str(&name.to_string())?;
+                if (tint - 1.0).abs() > f32::EPSILON {
+                    dest.write_str(", ")?;
+                    tint.to_css(dest)?;
+                }
+                dest.write_char(')')
+            }
+        }
     }
 }
 
