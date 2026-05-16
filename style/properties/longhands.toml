@@ -2512,6 +2512,99 @@ animation_type = "none"
 rule_types_allowed = ["page"]
 affects = "paint"
 
+# moegoe G10 — per-side `bleed` longhands. Mirror PDFreactor's
+# `-ro-bleed-top` / Prince's `prince-bleed-top` per-side surfaces.
+# The standard `bleed` shorthand already accepts the 2/3/4-value
+# expansion, so these longhands provide author-facing per-side
+# precision plus a 1-to-1 mapping for the compat-translator's
+# PDFreactor / Prince spellings. All four are non-negative
+# `<length>` initial `0`; reuse `BdPageMarkLength` as the type
+# carrier (it is just `NonNegativeLength` underneath).
+[-bd-page-bleed-top]
+type = "BdPageMarkLength"
+initial = "computed::BdPageMarkLength::from_pt(0.0)"
+struct = "page"
+initial_specified_value = "specified::BdPageMarkLength::from_pt(0.0)"
+spec = "Nonstandard (moegoe -bd-* fork extension; G10 per-side bleed top)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "layout"
+
+[-bd-page-bleed-right]
+type = "BdPageMarkLength"
+initial = "computed::BdPageMarkLength::from_pt(0.0)"
+struct = "page"
+initial_specified_value = "specified::BdPageMarkLength::from_pt(0.0)"
+spec = "Nonstandard (moegoe -bd-* fork extension; G10 per-side bleed right)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "layout"
+
+[-bd-page-bleed-bottom]
+type = "BdPageMarkLength"
+initial = "computed::BdPageMarkLength::from_pt(0.0)"
+struct = "page"
+initial_specified_value = "specified::BdPageMarkLength::from_pt(0.0)"
+spec = "Nonstandard (moegoe -bd-* fork extension; G10 per-side bleed bottom)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "layout"
+
+[-bd-page-bleed-left]
+type = "BdPageMarkLength"
+initial = "computed::BdPageMarkLength::from_pt(0.0)"
+struct = "page"
+initial_specified_value = "specified::BdPageMarkLength::from_pt(0.0)"
+spec = "Nonstandard (moegoe -bd-* fork extension; G10 per-side bleed left)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "layout"
+
+# moegoe G10 — per-mark `enabled` flag. Mirrors PDFreactor's
+# `-ro-pdf-mark-{crop,registration,colour-bar,page-info}-enabled`
+# print-mark family toggles. `auto` (initial) defers to the
+# shorthand cascade — the historic `marks` keyword plus the
+# F20 print-mark-set. `yes` / `no` force the family on or off.
+[-bd-pdf-mark-crop-enabled]
+type = "BdPageMarkEnabled"
+initial = "computed::BdPageMarkEnabled::Auto"
+struct = "page"
+initial_specified_value = "specified::BdPageMarkEnabled::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; G10 crop-mark family enabled)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "paint"
+
+[-bd-pdf-mark-registration-enabled]
+type = "BdPageMarkEnabled"
+initial = "computed::BdPageMarkEnabled::Auto"
+struct = "page"
+initial_specified_value = "specified::BdPageMarkEnabled::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; G10 registration-mark family enabled)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "paint"
+
+[-bd-pdf-mark-colour-bar-enabled]
+type = "BdPageMarkEnabled"
+initial = "computed::BdPageMarkEnabled::Auto"
+struct = "page"
+initial_specified_value = "specified::BdPageMarkEnabled::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; G10 colour-bar family enabled)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "paint"
+
+[-bd-pdf-mark-page-info-enabled]
+type = "BdPageMarkEnabled"
+initial = "computed::BdPageMarkEnabled::Auto"
+struct = "page"
+initial_specified_value = "specified::BdPageMarkEnabled::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; G10 page-info-mark family enabled)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "paint"
+
 # moegoe F5 — Image recompression / DPI control. Six properties
 # governing how embedded images are processed when emitting PDF.
 # `image-resolution` is the W3C-standard surface (CSS Images 4 §6);

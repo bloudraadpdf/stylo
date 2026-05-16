@@ -592,6 +592,7 @@ class Longhand(Property):
                 "BdFloatTail",
                 "BdFlowIntoMode",
                 "BdIndexGrouping",
+                "BdPageMarkEnabled",
                 "BdPdfFormFieldFlags",
                 "BdPdfFormFieldMaxLength",
                 "BdPdfSignatureFieldLock",

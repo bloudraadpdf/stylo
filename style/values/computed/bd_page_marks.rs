@@ -25,7 +25,7 @@ use crate::values::specified::bd_page_marks as specified;
 use std::fmt::{self, Write};
 use style_traits::{CssWriter, ToCss};
 
-pub use specified::BdPrintMarkSet;
+pub use specified::{BdPageMarkEnabled, BdPrintMarkSet};
 
 /// Computed value of a `-bd-page-*-mark-length` / `-offset` property.
 #[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, ToCss, ToResolvedValue, ToShmem, ToTyped)]

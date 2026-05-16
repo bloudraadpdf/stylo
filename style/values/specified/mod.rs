@@ -124,7 +124,7 @@ pub use self::bd_page_boxes::{
 pub use self::bd_page_group::BdPageGroup;
 pub use self::bd_page_margin::BdPageMarginEdge;
 pub use self::bd_page_marks::{
-    BdColorBarPosition, BdPageMarkLength, BdPageMarksColour, BdPrintMarkSet,
+    BdColorBarPosition, BdPageMarkEnabled, BdPageMarkLength, BdPageMarksColour, BdPrintMarkSet,
 };
 pub use self::bd_page_rotation::{BdPdfPageRotation, BdRotateBody};
 pub use self::bd_pagination::{
