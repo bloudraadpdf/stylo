@@ -41,12 +41,24 @@ pub enum Overlay {
     Auto,
 }
 
-/// Specified value of `border-clip` (F21.13).
+/// Specified value of `-bd-border-clip` (Tier 5 §A.5.6).
 ///
-/// Prince proprietary — controls whether a border is clipped at the
-/// padding edge of the inner box. `normal` (initial) — standard
-/// behaviour; the border is drawn unclipped. `clip` — the border
-/// stroke is clipped to the padding-box outline.
+/// Native counterpart to Prince's `border-clip`. Controls the geometry
+/// used to join two adjacent border sides at a rounded corner when
+/// `border-radius` is non-zero. CSS Backgrounds 3 §7.7 does not
+/// prescribe a single shape for the join — Prince admits three:
+///
+/// - `square` (initial) — the corner is closed by a straight diagonal
+///   miter from the outer-radius arc endpoint to the inner-radius arc
+///   endpoint. Matches the default CSS Backgrounds 3 behaviour.
+/// - `round` — the corner is closed by an arc that follows the inner
+///   border radius, smoothing the colour/style transition.
+/// - `bevel` — the corner is closed by a flat cut perpendicular to the
+///   line bisecting the two adjacent sides.
+///
+/// The property only affects paint geometry when adjacent sides differ
+/// in colour or style; uniform-side borders draw a single rounded ring
+/// regardless of value.
 #[repr(u8)]
 #[derive(
     Clone,
@@ -65,9 +77,13 @@ pub enum Overlay {
 )]
 #[allow(missing_docs)]
 pub enum BorderClip {
+    /// Straight diagonal miter (CSS Backgrounds 3 default).
     #[default]
-    Normal,
-    Clip,
+    Square,
+    /// Arc following the inner border radius.
+    Round,
+    /// Flat cut perpendicular to the corner bisector.
+    Bevel,
 }
 
 /// Specified value of `mask-border-mode` (F21.8).

@@ -4954,13 +4954,23 @@ animation_type = "discrete"
 servo_restyle_damage = "repaint"
 affects = "paint"
 
-# F21.13 — border-clip (Prince proprietary).
-[border-clip]
+# moegoe -bd-border-clip (Tier 5 §A.5.6) — native counterpart to
+# Prince's `border-clip`. Controls the geometry used to close the
+# corner between two adjacent border sides when `border-radius` is
+# in effect. Distinct paint geometry per keyword:
+#
+# - `square` (initial) — straight diagonal miter (CSS default).
+# - `round` — arc following the inner border radius.
+# - `bevel` — flat cut perpendicular to the corner bisector.
+#
+# Only observable when adjacent sides differ in colour or style;
+# uniform borders draw a single rounded ring regardless of value.
+[-bd-border-clip]
 type = "BorderClip"
-initial = "computed::BorderClip::Normal"
+initial = "computed::BorderClip::Square"
 struct = "border"
-initial_specified_value = "specified::BorderClip::Normal"
-spec = "Nonstandard (Prince proprietary; F21.13 border-stroke clipping at the padding edge)"
+initial_specified_value = "specified::BorderClip::Square"
+spec = "Nonstandard (moegoe -bd-* fork extension; Tier 5 §A.5.6; Prince border-clip corner geometry)"
 animation_type = "discrete"
 servo_restyle_damage = "repaint"
 affects = "paint"
