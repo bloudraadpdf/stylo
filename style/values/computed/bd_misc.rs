@@ -13,7 +13,7 @@
 
 pub use crate::values::specified::bd_misc::{
     BdCaptionPage, BdFlow, BdLang, BdLineBreakOpportunity, BdObjectSlice, BdPositionOrigin,
-    BdReplacedElement, BdShrinkToFit, BdTargetCandidate, BdTruncateMarginAfterBreak,
+    BdReplacedElement, BdShrinkToFit, BdTabSnap, BdTargetCandidate, BdTruncateMarginAfterBreak,
 };
 
 pub use crate::values::specified::bd_misc::ComputedBdIntegerAuto as BdIntegerAuto;

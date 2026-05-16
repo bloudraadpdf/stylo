@@ -4667,6 +4667,21 @@ spec = "https://drafts.csswg.org/css-text-3/#tab-size-property"
 aliases = ["-moz-tab-size"]
 affects = "layout"
 
+# moegoe -bd-tab-snap (Tier 5 §A.5.9) — snap policy applied when a
+# tab character resolves against the `tab-size` interval. Native
+# counterpart to Prince's `-prince-tab-size: nearest`. The interval
+# itself continues to come from standard `tab-size`; this longhand
+# only carries the choice between CSS Text 3's "next-greater-than-
+# cursor" (default) and Prince's "nearest multiple" snap.
+[-bd-tab-snap]
+type = "BdTabSnap"
+initial = "computed::BdTabSnap::NextGreater"
+struct = "inherited_text"
+initial_specified_value = "specified::BdTabSnap::NextGreater"
+spec = "Nonstandard (moegoe -bd-* fork extension; Prince -prince-tab-size snap policy)"
+animation_type = "discrete"
+affects = "layout"
+
 # moegoe -bd-tab-stops — positional tab stops with alignment + leader.
 # Authored on the paragraph (per OOXML <w:tabs>); CSS `tab-size`
 # continues to define the interval used *between* positional stops.

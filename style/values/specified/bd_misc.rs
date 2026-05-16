@@ -70,6 +70,49 @@ impl Parse for BdLang {
     }
 }
 
+/// Specified value of `-bd-tab-snap` (T5 §A.5.9).
+///
+/// Native counterpart to Prince's `-prince-tab-size: nearest` /
+/// PDFreactor's `-ro-tab-size: nearest` extension. Modifies how the
+/// standard CSS `tab-size` interval is consumed at line layout:
+///
+/// - `next-greater` (CSS Text 3 §3 default) — a tab advances the
+///   cursor to the next multiple of `tab-size` strictly greater than
+///   the current inline position.
+/// - `nearest` — Prince-style — a tab advances the cursor to the
+///   nearest multiple of `tab-size`. When the cursor is already at a
+///   multiple of `tab-size`, the tab consumes one full interval.
+///
+/// The interval itself continues to come from standard `tab-size`.
+/// This longhand only carries the *policy*, so authors who set
+/// `-prince-tab-size: nearest` along with a numeric `tab-size` get
+/// the expected combined behaviour after compat translation.
+#[repr(u8)]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[allow(missing_docs)]
+pub enum BdTabSnap {
+    /// CSS Text 3 default — snap to the next multiple strictly greater
+    /// than the cursor.
+    #[default]
+    NextGreater,
+    /// Prince extension — snap to the nearest multiple of `tab-size`.
+    Nearest,
+}
+
 /// Specified value of `-bd-shrink-to-fit` (F32.2).
 ///
 /// `@page` descriptor mirroring Prince `-prince-shrink-to-fit`.
