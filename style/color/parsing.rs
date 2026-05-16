@@ -140,6 +140,8 @@ fn parse_color_function<'i, 't>(
         "oklch" => parse_lch_like(context, arguments, origin_color, ColorFunction::Oklch),
         "color" => parse_color_with_color_space(context, arguments, origin_color),
         "device-cmyk" => parse_device_cmyk(context, arguments, origin_color),
+        "-bd-spot" => parse_bd_spot(context, arguments, origin_color, false),
+        "-bd-separation" => parse_bd_spot(context, arguments, origin_color, true),
         _ => return Err(arguments.new_unexpected_token_error(Token::Ident(name))),
     }?;
 
@@ -425,6 +427,55 @@ fn parse_device_cmyk<'i, 't>(
         alpha,
         fallback.into(),
     ))
+}
+
+/// Parse `-bd-spot(<name>[, <tint>])` / `-bd-separation(<name>[, <tint>])`.
+///
+/// moegoe F2 — named-spot colour reference. The first argument is the
+/// colorant ident (matching an `@-bd-colour <name> { … }` block); the
+/// optional second argument is the tint, a number in `[0, 1]` or a
+/// percentage, defaulting to `1` (full ink coverage).
+///
+/// The relative-colour-syntax `from <origin>` prefix is rejected — spot
+/// colours have no resolvable channel components to mix against, so the
+/// prefix would be ambiguous (CSS Color 5 §4 limits `from` to colour
+/// functions that decompose into RGB-like channels).
+#[inline]
+fn parse_bd_spot<'i, 't>(
+    _context: &ParserContext,
+    arguments: &mut Parser<'i, 't>,
+    origin_color: Option<SpecifiedColor>,
+    is_separation: bool,
+) -> Result<ColorFunction<SpecifiedColor>, ParseError<'i>> {
+    if origin_color.is_some() {
+        return Err(arguments.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+    }
+
+    let name_location = arguments.current_source_location();
+    let name_ident = arguments.expect_ident()?.clone();
+    // Reject obvious bogus colorant idents up front; the @-bd-colour
+    // registry is case-sensitive (PDF 32000-2 §8.6.6.4) so the atom is
+    // built without normalisation.
+    if name_ident.is_empty() {
+        return Err(name_location.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+    }
+    let name = crate::Atom::from(&*name_ident);
+
+    let tint = if arguments.try_parse(|p| p.expect_comma()).is_ok() {
+        let value = ColorComponent::<NumberOrPercentageComponent>::parse(
+            _context,
+            arguments,
+            /* allow_none = */ false,
+        )?;
+        if !value.could_be_number() && !value.could_be_percentage() {
+            return Err(arguments.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+        value
+    } else {
+        ColorComponent::Value(NumberOrPercentageComponent::Number(1.0))
+    };
+
+    Ok(ColorFunction::BdSpot(name, tint, is_separation))
 }
 
 /// Either a percentage or a number.

@@ -649,7 +649,7 @@ impl StylesheetInvalidationSet {
                 // Do nothing, @font-face doesn't affect computed style information on it's own.
                 // We'll restyle when the font face loads, if needed.
             },
-            Page(..) | Margin(..) | Footnote(..) | Sidenote(..) => {
+            Page(..) | Margin(..) | Footnote(..) | Sidenote(..) | BdColour(..) => {
                 // Do nothing, we don't support OM mutations on print documents, and page rules
                 // can't affect anything else.
             },

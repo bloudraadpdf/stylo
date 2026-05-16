@@ -97,6 +97,34 @@ pub enum ColorFunction<OriginColor> {
         ColorComponent<NumberOrPercentageComponent>, // alpha
         Optional<Box<OriginColor>>,                  // fallback colour
     ),
+    /// moegoe F2 — `-bd-spot(<name>[, <tint>])` / `-bd-separation(<name>[, <tint>])`.
+    ///
+    /// A named-spot-colour reference resolved against the document's
+    /// `@-bd-colour` registry at the IR conversion boundary in
+    /// `moegoe-css/src/computed_to_ir/`. The Stylo cascade carries the
+    /// colorant name and authored tint opaquely; PDF emission renders
+    /// the spot via the Separation colour space (ISO 32000-2 §8.6.6.4)
+    /// or falls back to the alternate colour space when the registry
+    /// has no matching entry.
+    ///
+    /// The `is_separation` flag distinguishes the two authoring spellings:
+    /// `-bd-spot()` (PDFreactor / Prince ergonomic alias) carries
+    /// `false`, `-bd-separation()` (PDF terminology) carries `true`.
+    /// They produce identical PDF output today; the flag is kept so the
+    /// IR conversion can preserve the authored spelling for tooling and
+    /// serialisation round-trips.
+    ///
+    /// The colorant name is stored as a `crate::Atom` (rather than
+    /// `AtomIdent`) so the value derives `ToAnimatedValue` trivially —
+    /// `Atom` has a `trivial_to_animated_value!` impl in
+    /// `values/animated/mod.rs`, while `GenericAtomIdent` does not.
+    /// Round-tripping to/from `AtomIdent` happens at the parse and
+    /// to-css boundaries.
+    BdSpot(
+        crate::Atom,                                 // colorant name
+        ColorComponent<NumberOrPercentageComponent>, // tint
+        bool,                                        // is_separation
+    ),
 }
 
 impl ColorFunction<AbsoluteColor> {
@@ -357,6 +385,18 @@ impl ColorFunction<AbsoluteColor> {
                     alpha!(alpha, origin_color.as_ref()),
                 )
             },
+            ColorFunction::BdSpot(_name, _tint, _is_separation) => {
+                // F2 named-spot colours cannot resolve to an `AbsoluteColor`
+                // without the document `@-bd-colour` registry, which is not
+                // in scope at this layer. moegoe's IR-conversion boundary
+                // (`computed_to_ir/colour.rs`) intercepts the value before
+                // any consumer asks for an absolute resolution and resolves
+                // the colorant name to its registered alternate. Returning
+                // `TRANSPARENT_BLACK` here is the fail-closed default —
+                // it surfaces unresolved cascade leakage as transparent
+                // pixels rather than a wrong colour.
+                AbsoluteColor::TRANSPARENT_BLACK
+            },
             ColorFunction::DeviceCmyk(c, m, y, k, alpha, fallback) => {
                 if let Some(fallback) = fallback.as_ref() {
                     let mut fallback = **fallback;
@@ -405,13 +445,16 @@ impl ColorFunction<SpecifiedColor> {
             | Self::Oklch(origin_color, ..)
             | Self::Color(origin_color, ..) => origin_color.is_some(),
             Self::DeviceCmyk(..) => false,
+            Self::BdSpot(..) => false,
         }
     }
 
     /// Whether this function should remain a typed function at specified-value
     /// time rather than eagerly collapsing to an absolute colour.
     pub fn should_preserve_as_function(&self) -> bool {
-        self.has_origin_color() || matches!(self, Self::DeviceCmyk(..))
+        self.has_origin_color()
+            || matches!(self, Self::DeviceCmyk(..))
+            || matches!(self, Self::BdSpot(..))
     }
 
     /// Try to resolve the color function to an [`AbsoluteColor`] that does not
@@ -433,6 +476,16 @@ impl ColorFunction<SpecifiedColor> {
                     fallback.into(),
                 )
                 .resolve_to_absolute()
+            },
+            Self::BdSpot(name, tint, is_separation) => {
+                // moegoe F2 — the spot reference cannot resolve to an
+                // `AbsoluteColor` at this layer (the `@-bd-colour`
+                // registry lives on `IrDocument`, not Stylo). Construct
+                // the absolute-typed variant explicitly to disambiguate
+                // `resolve_to_absolute` from its sibling impls.
+                let absolute: ColorFunction<AbsoluteColor> =
+                    ColorFunction::BdSpot(name.clone(), tint.clone(), *is_separation);
+                absolute.resolve_to_absolute()
             },
             _ => {
                 // Map the color function to one with an absolute origin color.
@@ -488,6 +541,9 @@ impl<Color> ColorFunction<Color> {
                     .and_then(|value| f(value.as_ref()).map(Box::new))
                     .into(),
             ),
+            ColorFunction::BdSpot(name, tint, is_separation) => {
+                ColorFunction::BdSpot(name.clone(), tint.clone(), *is_separation)
+            },
         }
     }
 }
@@ -541,6 +597,28 @@ impl<C: style_traits::ToCss> style_traits::ToCss for ColorFunction<C> {
             return dest.write_str(")");
         }
 
+        if let Self::BdSpot(name, tint, is_separation) = self {
+            // F2 — serialise the authored spelling so OM round-trips match
+            // input. Tint defaults to 1.0 and is elided when authored as the
+            // identity transform (matches PDFreactor / Prince `-ro-spot()` /
+            // `-prince-color()` ergonomics).
+            if *is_separation {
+                dest.write_str("-bd-separation(")?;
+            } else {
+                dest.write_str("-bd-spot(")?;
+            }
+            crate::values::serialize_atom_identifier(name, dest)?;
+            let tint_is_unity = match tint {
+                ColorComponent::Value(v) => v.to_number(1.0) == 1.0,
+                _ => false,
+            };
+            if !tint_is_unity {
+                dest.write_str(", ")?;
+                tint.to_css(dest)?;
+            }
+            return dest.write_str(")");
+        }
+
         let (origin_color, alpha) = match self {
             Self::Rgb(origin_color, _, _, _, alpha) => {
                 dest.write_str("rgb(")?;
@@ -575,6 +653,7 @@ impl<C: style_traits::ToCss> style_traits::ToCss for ColorFunction<C> {
                 (origin_color, alpha)
             },
             Self::DeviceCmyk(..) => unreachable!("handled above"),
+            Self::BdSpot(..) => unreachable!("handled above"),
         };
 
         if let Optional::Some(origin_color) = origin_color {
@@ -648,6 +727,7 @@ impl<C: style_traits::ToCss> style_traits::ToCss for ColorFunction<C> {
                 serialize_alpha!(alpha);
             },
             Self::DeviceCmyk(..) => unreachable!("handled above"),
+            Self::BdSpot(..) => unreachable!("handled above"),
         }
 
         dest.write_str(")")

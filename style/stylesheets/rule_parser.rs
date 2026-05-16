@@ -283,6 +283,8 @@ pub enum AtRulePrelude {
     /// A nested `@-bd-sidenote` rule prelude (moegoe Family 7).
     /// Optional ident names a specific sidenote flow.
     Sidenote(Option<crate::values::AtomIdent>),
+    /// A top-level `@-bd-colour <name>` rule prelude (moegoe Family 2).
+    BdColour(crate::values::AtomIdent),
     /// A @namespace rule prelude.
     Namespace(Option<Prefix>, Namespace),
     /// A @layer rule prelude.
@@ -316,6 +318,7 @@ impl AtRulePrelude {
             Self::Margin(..) => "margin",
             Self::Footnote => "footnote",
             Self::Sidenote(..) => "-bd-sidenote",
+            Self::BdColour(..) => "-bd-colour",
             Self::Namespace(..) => "namespace",
             Self::Layer(..) => "layer",
             Self::Scope(..) => "scope",
@@ -547,7 +550,8 @@ impl<'a, 'i> NestedRuleParser<'a, 'i> {
             | AtRulePrelude::Page(..)
             | AtRulePrelude::Property(..)
             | AtRulePrelude::Import(..)
-            | AtRulePrelude::PositionTry(..) => !self.in_style_or_page_rule(),
+            | AtRulePrelude::PositionTry(..)
+            | AtRulePrelude::BdColour(..) => !self.in_style_or_page_rule(),
             AtRulePrelude::Margin(..)
             | AtRulePrelude::Footnote
             | AtRulePrelude::Sidenote(..) => self.in_page_rule(),
@@ -742,6 +746,15 @@ impl<'a, 'i> AtRuleParser<'i> for NestedRuleParser<'a, 'i> {
             "counter-style" => {
                 let name = parse_counter_style_name_definition(input)?;
                 AtRulePrelude::CounterStyle(name)
+            },
+            // moegoe Family 2 — `@-bd-colour <name> { … }` declares a
+            // named-spot colour in the document-level
+            // `SpotColourRegistry`. The prelude is a single
+            // case-sensitive ident (PDF 32000-2 §8.6.6.4 colorant names
+            // are case-sensitive); nested-rule preludes are forbidden.
+            "-bd-colour" => {
+                let name = crate::stylesheets::parse_bd_colour_name(input)?;
+                AtRulePrelude::BdColour(name)
             },
             "keyframes" | "-webkit-keyframes" | "-moz-keyframes" => {
                 let prefix = if starts_with_ignore_ascii_case(&*name, "-webkit-") {
@@ -982,6 +995,15 @@ impl<'a, 'i> AtRuleParser<'i> for NestedRuleParser<'a, 'i> {
                     source_location,
                 }))
             },
+            AtRulePrelude::BdColour(name) => self.nest_for_rule(CssRuleType::BdColour, |p| {
+                let rule = crate::stylesheets::parse_bd_colour_body(
+                    &p.context,
+                    name,
+                    input,
+                    source_location,
+                )?;
+                Ok::<CssRule, ParseError<'i>>(CssRule::BdColour(Arc::new(rule)))
+            })?,
             AtRulePrelude::CustomMedia(..)
             | AtRulePrelude::Import(..)
             | AtRulePrelude::Namespace(..) => {

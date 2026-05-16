@@ -4,6 +4,7 @@
 
 //! Style sheets and their CSS rules.
 
+mod bd_colour_rule;
 pub mod container_rule;
 mod counter_style_rule;
 mod document_rule;
@@ -53,6 +54,9 @@ use std::mem::{self, ManuallyDrop};
 use style_traits::{CssStringWriter, ParsingMode};
 use to_shmem::{SharedMemoryBuilder, ToShmem};
 
+pub use self::bd_colour_rule::{
+    parse_bd_colour_body, parse_bd_colour_name, BdColourAlternateKind, BdColourRule,
+};
 pub use self::container_rule::ContainerRule;
 pub use self::counter_style_rule::CounterStyleRule;
 pub use self::document_rule::DocumentRule;
@@ -349,6 +353,10 @@ pub enum CssRule {
     Footnote(Arc<FootnoteRule>),
     /// moegoe Family 7 — `@-bd-sidenote` nested page rule.
     Sidenote(Arc<SidenoteRule>),
+    /// moegoe Family 2 — `@-bd-colour <name> { … }` top-level rule
+    /// declaring a named-spot colour for downstream `-bd-spot()` /
+    /// `-bd-separation()` references.
+    BdColour(Arc<BdColourRule>),
     Supports(Arc<SupportsRule>),
     Page(Arc<Locked<PageRule>>),
     Property(Arc<PropertyRule>),
@@ -399,6 +407,9 @@ impl CssRule {
                 arc.unconditional_shallow_size_of(ops) + arc.size_of(guard, ops)
             },
             CssRule::Sidenote(ref arc) => {
+                arc.unconditional_shallow_size_of(ops) + arc.size_of(guard, ops)
+            },
+            CssRule::BdColour(ref arc) => {
                 arc.unconditional_shallow_size_of(ops) + arc.size_of(guard, ops)
             },
             CssRule::Supports(ref arc) => {
@@ -477,6 +488,8 @@ pub enum CssRuleRef<'a> {
     Footnote(&'a FootnoteRule),
     /// moegoe Family 7 — `@-bd-sidenote` reference.
     Sidenote(&'a SidenoteRule),
+    /// moegoe Family 2 — `@-bd-colour <name> { … }` reference.
+    BdColour(&'a BdColourRule),
     Supports(&'a SupportsRule),
     Page(&'a LockedPageRule),
     Property(&'a PropertyRule),
@@ -506,6 +519,7 @@ impl<'a> From<&'a CssRule> for CssRuleRef<'a> {
             CssRule::Margin(r) => CssRuleRef::Margin(r.as_ref()),
             CssRule::Footnote(r) => CssRuleRef::Footnote(r.as_ref()),
             CssRule::Sidenote(r) => CssRuleRef::Sidenote(r.as_ref()),
+            CssRule::BdColour(r) => CssRuleRef::BdColour(r.as_ref()),
             CssRule::Supports(r) => CssRuleRef::Supports(r.as_ref()),
             CssRule::Page(r) => CssRuleRef::Page(r.as_ref()),
             CssRule::Property(r) => CssRuleRef::Property(r.as_ref()),
@@ -566,6 +580,9 @@ pub enum CssRuleType {
     /// moegoe Family 7 — `@-bd-sidenote` rule type. Slots after the
     /// existing fork-private extension at 26.
     Sidenote = 27,
+    /// moegoe Family 2 — `@-bd-colour <name> { … }` rule type. Slots
+    /// after the existing fork-private extensions at 26 and 27.
+    BdColour = 28,
 }
 
 impl CssRuleType {
@@ -652,6 +669,7 @@ impl CssRule {
             CssRule::Margin(_) => CssRuleType::Margin,
             CssRule::Footnote(_) => CssRuleType::Footnote,
             CssRule::Sidenote(_) => CssRuleType::Sidenote,
+            CssRule::BdColour(_) => CssRuleType::BdColour,
             CssRule::Namespace(_) => CssRuleType::Namespace,
             CssRule::Supports(_) => CssRuleType::Supports,
             CssRule::Page(_) => CssRuleType::Page,
@@ -793,6 +811,9 @@ impl DeepCloneWithLock for CssRule {
             CssRule::Sidenote(ref arc) => {
                 CssRule::Sidenote(Arc::new(arc.deep_clone_with_lock(lock, guard)))
             },
+            CssRule::BdColour(ref arc) => {
+                CssRule::BdColour(Arc::new(arc.deep_clone_with_lock(lock, guard)))
+            },
             CssRule::Supports(ref arc) => {
                 CssRule::Supports(Arc::new(arc.deep_clone_with_lock(lock, guard)))
             },
@@ -845,6 +866,7 @@ impl ToCssWithGuard for CssRule {
             CssRule::Margin(ref rule) => rule.to_css(guard, dest),
             CssRule::Footnote(ref rule) => rule.to_css(guard, dest),
             CssRule::Sidenote(ref rule) => rule.to_css(guard, dest),
+            CssRule::BdColour(ref rule) => rule.to_css(guard, dest),
             CssRule::Media(ref rule) => rule.to_css(guard, dest),
             CssRule::CustomMedia(ref rule) => rule.to_css(guard, dest),
             CssRule::Supports(ref rule) => rule.to_css(guard, dest),

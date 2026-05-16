@@ -381,6 +381,7 @@ impl SanitizationKind {
             CssRule::Margin(..) |
             CssRule::Footnote(..) |
             CssRule::Sidenote(..) |
+            CssRule::BdColour(..) |
             CssRule::Property(..) |
             CssRule::FontFeatureValues(..) |
             CssRule::FontPaletteValues(..) |
@@ -2494,6 +2495,124 @@ mod tests {
             sidenotes[1].name.as_ref().map(|n| n.0.to_string()),
             Some("left".to_string()),
             "@-bd-sidenote left should carry the flow-name ident"
+        );
+    }
+
+    // moegoe Family 2 — `@-bd-colour <name> { colour-values: … }` parses
+    // as a top-level rule and records its declared values + alternate.
+    #[test]
+    fn servo_parses_bd_colour_at_rule() {
+        let stylesheet = parse_stylesheet(
+            r#"@-bd-colour PANTONE-185 {
+                colour-values: device-cmyk(0 1 0.55 0);
+                alternate: cmyk;
+            }"#,
+        );
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let bd_colour = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::BdColour(r) => Some(r.clone()),
+                _ => None,
+            })
+            .expect("expected @-bd-colour rule");
+        assert_eq!(
+            bd_colour.name.0.to_string(),
+            "PANTONE-185",
+            "preserved authored colorant case (PDF 32000-2 §8.6.6.4)"
+        );
+        assert!(
+            bd_colour.values.is_some(),
+            "colour-values descriptor parsed into Some(SpecifiedColor)"
+        );
+        assert!(
+            matches!(
+                bd_colour.alternate,
+                crate::stylesheets::BdColourAlternateKind::Cmyk
+            ),
+            "alternate descriptor parsed as Cmyk, got {:?}",
+            bd_colour.alternate
+        );
+    }
+
+    // moegoe Family 2 — `@-bd-colour` without `colour-values:` is a
+    // parse error (the registry entry would be unusable).
+    #[test]
+    fn servo_rejects_bd_colour_without_values() {
+        let stylesheet = parse_stylesheet(r#"@-bd-colour MissingValues { }"#);
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let found = rules
+            .iter()
+            .any(|rule| matches!(rule, CssRule::BdColour(_)));
+        assert!(
+            !found,
+            "@-bd-colour without colour-values: descriptor must not be admitted"
+        );
+    }
+
+    fn bd_spot_color_declaration(css: &str) -> Option<String> {
+        let stylesheet = parse_stylesheet(css);
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Style(s) => Some(s.read_with(&guard)),
+                _ => None,
+            })
+            .and_then(|style| {
+                style
+                    .block
+                    .read_with(&guard)
+                    .declaration_importance_iter()
+                    .find_map(|(decl, _)| match decl {
+                        PropertyDeclaration::Color(value) => Some(value.to_css_string()),
+                        _ => None,
+                    })
+            })
+    }
+
+    // moegoe Family 2 — author `-bd-spot(<name>)` round-trips as a
+    // typed colour function preserved through the cascade.
+    #[test]
+    fn servo_preserves_bd_spot_colour_function() {
+        let serialised = bd_spot_color_declaration("p { color: -bd-spot(PANTONE-185); }")
+            .expect("expected color declaration");
+        assert_eq!(
+            serialised, "-bd-spot(PANTONE-185)",
+            "default tint (1) elided per the BdSpot serialiser"
+        );
+    }
+
+    // moegoe Family 2 — author `-bd-spot(<name>, <tint>)` round-trips
+    // with explicit tint preserved.
+    #[test]
+    fn servo_preserves_bd_spot_with_tint() {
+        let serialised =
+            bd_spot_color_declaration("p { color: -bd-spot(PANTONE-185, 0.5); }")
+                .expect("expected color declaration");
+        assert_eq!(
+            serialised, "-bd-spot(PANTONE-185, 0.5)",
+            "explicit non-unity tint preserved through OM round-trip"
+        );
+    }
+
+    // moegoe Family 2 — `-bd-separation()` is a synonym for
+    // `-bd-spot()`; the authored spelling is preserved through OM
+    // round-trips.
+    #[test]
+    fn servo_preserves_bd_separation_colour_function() {
+        let serialised =
+            bd_spot_color_declaration("p { color: -bd-separation(PANTONE-185, 0.5); }")
+                .expect("expected color declaration");
+        assert_eq!(
+            serialised, "-bd-separation(PANTONE-185, 0.5)",
+            "authored -bd-separation spelling preserved through OM round-trip"
         );
     }
 
