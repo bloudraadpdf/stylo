@@ -2584,9 +2584,9 @@ affects = "layout"
 
 [footnote-style-position]
 type = "FootnoteStylePosition"
-initial = "computed::FootnoteStylePosition::Inside"
+initial = "computed::FootnoteStylePosition::Outside"
 struct = "inherited_text"
-initial_specified_value = "specified::FootnoteStylePosition::Inside"
+initial_specified_value = "specified::FootnoteStylePosition::Outside"
 spec = "Nonstandard (moegoe -bd-* fork extension; F6 footnote marker placement, Prince-named)"
 animation_type = "none"
 affects = "layout"
