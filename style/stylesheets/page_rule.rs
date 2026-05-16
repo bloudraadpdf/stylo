@@ -103,16 +103,29 @@ page_pseudo_classes! {
     /// `:blank` (the `g` bucket) since this is also a positional
     /// page-context pseudo with no direction component.
     FirstOfGroup => "first-of-group",
+    /// moegoe Family 23 — `:index` page pseudo-class.
+    ///
+    /// Matches pages synthesised by the GCPM book-index area
+    /// renderer (one or more `@-bd-index` rule sets). The paginator
+    /// sets the flag for every page emitted from the index back-
+    /// matter pass; no other page surface engages it. Specificity
+    /// is grouped with `:first` / `:blank` (the `g` bucket) since
+    /// this is also a positional page-context pseudo with no
+    /// direction component.
+    Index => "index",
 }
 
 bitflags! {
     /// Bit-flags for pseudo-class. This should only be used for querying if a
     /// page-rule applies.
     ///
+    /// Widened to `u16` in moegoe Family 23 to accommodate `:index` once
+    /// the eight `u8` bits were exhausted by the existing pseudos.
+    ///
     /// https://drafts.csswg.org/css-page-3/#page-selectors
     #[derive(Clone, Copy)]
     #[repr(C)]
-    pub struct PagePseudoClassFlags : u8 {
+    pub struct PagePseudoClassFlags : u16 {
         /// No pseudo-classes
         const NONE = 0;
         /// Flag for PagePseudoClass::First
@@ -131,6 +144,9 @@ bitflags! {
         const VERSO = 1 << 6;
         /// Flag for PagePseudoClass::FirstOfGroup (Family 30)
         const FIRST_OF_GROUP = 1 << 7;
+        /// Flag for PagePseudoClass::Index (Family 23 — book-index
+        /// back-matter pages synthesised by the GCPM index renderer).
+        const INDEX = 1 << 8;
     }
 }
 
@@ -146,6 +162,7 @@ impl PagePseudoClassFlags {
             PagePseudoClass::Recto => PagePseudoClassFlags::RECTO,
             PagePseudoClass::Verso => PagePseudoClassFlags::VERSO,
             PagePseudoClass::FirstOfGroup => PagePseudoClassFlags::FIRST_OF_GROUP,
+            PagePseudoClass::Index => PagePseudoClassFlags::INDEX,
         }
     }
     /// Checks if the given pseudo class applies to this set of flags.
@@ -265,7 +282,8 @@ impl PageSelector {
             match pc {
                 PagePseudoClass::First
                 | PagePseudoClass::Blank
-                | PagePseudoClass::FirstOfGroup => g += 1,
+                | PagePseudoClass::FirstOfGroup
+                | PagePseudoClass::Index => g += 1,
                 PagePseudoClass::Left
                 | PagePseudoClass::Right
                 | PagePseudoClass::Recto
