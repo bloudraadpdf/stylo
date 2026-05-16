@@ -382,6 +382,7 @@ impl SanitizationKind {
             CssRule::Footnote(..) |
             CssRule::Sidenote(..) |
             CssRule::BdColour(..) |
+            CssRule::Region(..) |
             CssRule::Property(..) |
             CssRule::FontFeatureValues(..) |
             CssRule::FontPaletteValues(..) |

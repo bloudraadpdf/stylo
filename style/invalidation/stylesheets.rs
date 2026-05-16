@@ -649,9 +649,10 @@ impl StylesheetInvalidationSet {
                 // Do nothing, @font-face doesn't affect computed style information on it's own.
                 // We'll restyle when the font face loads, if needed.
             },
-            Page(..) | Margin(..) | Footnote(..) | Sidenote(..) | BdColour(..) => {
+            Page(..) | Margin(..) | Footnote(..) | Sidenote(..) | BdColour(..) | Region(..) => {
                 // Do nothing, we don't support OM mutations on print documents, and page rules
-                // can't affect anything else.
+                // can't affect anything else. moegoe Family 17 `@region` is enumerated by the
+                // moegoe-css cascade reader, not by the standard invalidation path.
             },
             Keyframes(ref lock) => {
                 if is_generic_change {
