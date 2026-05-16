@@ -102,6 +102,7 @@ pub use self::bd_bookmark::{BdPdfLinkType, BookmarkTarget};
 pub use self::bd_change_bar::{
     BdChangeBarAlign, BdChangeBarColour, BdChangeBarExclusion, BdChangeBarName,
 };
+pub use self::bd_color_function::BdColorFunction;
 pub use self::bd_float::{
     BdFloatDeferColumn, BdFloatDeferPage, BdFloatDisplace, BdFloatModifier, BdFloatPolicy,
     BdFloatTail,
@@ -232,6 +233,7 @@ pub mod bd_barcode;
 pub mod bd_bfo;
 pub mod bd_bookmark;
 pub mod bd_change_bar;
+pub mod bd_color_function;
 pub mod bd_float;
 pub mod bd_flow;
 pub mod bd_footnote;

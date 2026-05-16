@@ -569,6 +569,86 @@ fn tweak_when_ignoring_colors(
         PropertyDeclaration::css_wide_keyword(longhand_id, CSSWideKeyword::Revert);
 }
 
+/// moegoe F2 — derive a `_-bd-color-function` companion declaration from
+/// a just-applied `color` declaration.
+///
+/// The internal companion longhand exists because the `color` longhand
+/// computes to `AbsoluteColor`, which cannot carry the colorant name
+/// of an authored `color: -bd-spot(<name>)` / `-bd-separation(<name>)`.
+/// The cascade applies the companion alongside `color` so the colorant
+/// name survives to the IR conversion boundary.
+///
+/// Mapping rules:
+///
+/// * `color: -bd-spot(name[, tint])` →
+///   `_-bd-color-function: <Spot { name, tint, is_separation: false }>`
+/// * `color: -bd-separation(name[, tint])` →
+///   `_-bd-color-function: <Spot { name, tint, is_separation: true }>`
+/// * any other colour value → `_-bd-color-function: <None>`
+/// * `color: <css-wide-keyword>` → companion follows the same keyword.
+///   `_-bd-color-function` is on the same `inherited_text` style struct
+///   as `color` and shares its inherited-by-default status, so
+///   inherit/initial/unset/revert semantics line up automatically.
+///
+/// Unresolved tints (calc values that don't simplify at parse time,
+/// `none`, alpha-omitted) fall back to the identity tint `1.0`, which
+/// matches `resolve_bd_spot_color` in `moegoe-css` and the PDF
+/// Separation tint-transform identity.
+fn synthesise_bd_color_function_companion(
+    color_declaration: &PropertyDeclaration,
+) -> PropertyDeclaration {
+    use crate::color::component::ColorComponent;
+    use crate::color::ColorFunction;
+    use crate::values::specified::BdColorFunction as SpecifiedBdColorFunction;
+
+    // CSS-wide keywords propagate verbatim — the keyword resolution
+    // path applies `inherit` / `initial` / `unset` / `revert` /
+    // `revert-layer` uniformly to both longhands.
+    if let Some(keyword) = color_declaration.get_css_wide_keyword() {
+        return PropertyDeclaration::css_wide_keyword(LonghandId::BdColorFunction, keyword);
+    }
+
+    let none_decl = || -> PropertyDeclaration {
+        PropertyDeclaration::BdColorFunction(SpecifiedBdColorFunction::None)
+    };
+
+    // Pull the specified colour out of the declaration. Anything that
+    // can't be downcast (variable-substituted values that haven't been
+    // resolved yet, etc.) falls through to the `None` companion — the
+    // value of the side channel doesn't matter when no spot reference
+    // is being authored.
+    let specified_color = match color_declaration {
+        PropertyDeclaration::Color(value) => &value.0,
+        _ => return none_decl(),
+    };
+
+    let color_function = match specified_color {
+        specified::Color::ColorFunction(boxed) => boxed.as_ref(),
+        _ => return none_decl(),
+    };
+
+    let (name, tint, is_separation) = match color_function {
+        ColorFunction::BdSpot(name, tint, is_separation) => (name, tint, *is_separation),
+        _ => return none_decl(),
+    };
+
+    // Resolve the authored tint to a numeric `f32`. Unresolved /
+    // omitted tints fall back to the identity (full ink coverage),
+    // matching the parser's default and `resolve_bd_spot_color` in
+    // `moegoe-css`.
+    let tint_value: f32 = match tint {
+        ColorComponent::Value(value) => value.to_number(1.0).clamp(0.0, 1.0),
+        _ => 1.0,
+    };
+
+    let spot = SpecifiedBdColorFunction::Spot {
+        name: name.clone(),
+        tint: tint_value,
+        is_separation,
+    };
+    PropertyDeclaration::BdColorFunction(spot)
+}
+
 /// We track the index only for prioritary properties. For other properties we can just iterate.
 type DeclarationIndex = u16;
 
@@ -1023,6 +1103,60 @@ impl<'b> Cascade<'b> {
             unsafe { self.do_apply_declaration(context, longhand_id, &declaration) }
             context.scope = old_scope;
         }
+
+        // moegoe F2 — `_-bd-color-function` is an internal companion of
+        // `color` whose computed value carries the colorant name of an
+        // authored `color: -bd-spot(...)` / `-bd-separation(...)`. The
+        // `color` longhand alone stores `AbsoluteColor`, which has no
+        // slot for a colorant name, so without this synthesis the IR
+        // conversion sees `TRANSPARENT_BLACK` instead of the
+        // colorant reference (see
+        // `ColorFunction::<AbsoluteColor>::resolve_to_absolute` for
+        // `BdSpot`). When `color` has just been applied, derive the
+        // matching companion declaration and apply it in lock-step so
+        // the side channel inherits and resets exactly when `color`
+        // does.
+        if longhand_id == LonghandId::Color
+            && !self.seen.contains(LonghandId::BdColorFunction)
+        {
+            let companion_decl = synthesise_bd_color_function_companion(&*declaration);
+            self.apply_synthesised_companion(
+                context,
+                LonghandId::BdColorFunction,
+                companion_decl,
+                priority,
+                origin,
+            );
+        }
+    }
+
+    /// Apply a synthesised companion declaration produced by another
+    /// longhand's cascade (currently used only by the `color` →
+    /// `_-bd-color-function` synthesis in [`apply_one_longhand`]).
+    ///
+    /// The companion is applied with the same priority/origin as its
+    /// originator so the `seen` / `author_specified` bookkeeping stays
+    /// in sync with the originator's effective cascade slot.
+    fn apply_synthesised_companion(
+        &mut self,
+        context: &mut computed::Context,
+        companion_id: LonghandId,
+        companion_decl: PropertyDeclaration,
+        priority: CascadePriority,
+        origin: Origin,
+    ) {
+        debug_assert!(!companion_id.is_logical());
+        self.seen.insert(companion_id);
+        if origin == Origin::Author {
+            self.author_specified.insert(companion_id);
+        }
+
+        let old_scope = context.scope;
+        context.scope = priority.cascade_level();
+        unsafe {
+            self.do_apply_declaration(context, companion_id, &companion_decl);
+        }
+        context.scope = old_scope;
     }
 
     #[inline]

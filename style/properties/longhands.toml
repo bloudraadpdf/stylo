@@ -636,6 +636,25 @@ rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "repaint"
 affects = "paint"
 
+# moegoe F2 — internal companion of `color`. The `color` longhand stores
+# `AbsoluteColor`, which cannot carry the colorant name of an authored
+# `color: -bd-spot(<name>)` / `-bd-separation(<name>)`. The cascade hook
+# (see `properties/cascade.rs::synthesise_bd_color_function_companion`)
+# applies this longhand alongside `color` so the colorant name survives
+# to the IR conversion boundary. Authors cannot set this longhand
+# directly (`enabled_in = ""`).
+[-bd-color-function]
+type = "BdColorFunction"
+initial = "computed::BdColorFunction::None"
+struct = "inherited_text"
+initial_specified_value = "specified::BdColorFunction::None"
+enabled_in = ""
+spec = "Nonstandard (moegoe -bd-* fork; F2 spot colour side channel for `color`)"
+animation_type = "none"
+ignored_when_colors_disabled = true
+servo_restyle_damage = "repaint"
+affects = "paint"
+
 [color-scheme]
 type = "ColorScheme"
 initial = "specified::color::ColorScheme::normal()"
