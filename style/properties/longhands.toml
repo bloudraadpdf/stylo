@@ -3104,6 +3104,55 @@ spec = "Nonstandard (moegoe -bd-* fork extension; F28 wrap-inside)"
 animation_type = "none"
 affects = ""
 
+# Tier 4 §A.4.5 — Prince-for-Books pagination tuning. Five additional
+# knobs that drive the post-pagination signature padding pass, the
+# per-element `keep-with-previous` attachment, and the per-element
+# `orphans-fragments` minimum-lines-on-previous-page constraint.
+#
+# `-bd-pdf-signature` and `-bd-blank-page-content` are document-level
+# knobs: only the value cascaded onto `:root` is consulted by the
+# paginator. They live on the `counters` struct (non-inherited;
+# matches the rest of the F28 family).
+[-bd-pdf-signature]
+type = "BdPdfSignature"
+initial = "computed::BdPdfSignature::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfSignature::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; Tier 4 §A.4.5 Prince-for-Books signature padding)"
+animation_type = "none"
+affects = "layout"
+
+[-bd-blank-page-content]
+type = "BdBlankPageContent"
+initial = "computed::BdBlankPageContent::Normal"
+struct = "counters"
+initial_specified_value = "specified::BdBlankPageContent::Normal"
+spec = "Nonstandard (moegoe -bd-* fork extension; Tier 4 §A.4.5 Prince-for-Books blank-page content)"
+animation_type = "none"
+affects = "layout"
+
+# `-bd-keep-with-previous` is per-element (non-inherited); mirrors
+# `prince-keep-with-next`'s reverse semantic.
+[-bd-keep-with-previous]
+type = "BdKeepWithPrevious"
+initial = "computed::BdKeepWithPrevious::Auto"
+struct = "box"
+initial_specified_value = "specified::BdKeepWithPrevious::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; Tier 4 §A.4.5 keep-with-previous)"
+animation_type = "none"
+affects = "layout"
+
+# `-bd-orphans-fragments` inherits — same struct as the standard
+# `orphans` longhand.
+[-bd-orphans-fragments]
+type = "BdOrphansFragments"
+initial = "computed::BdOrphansFragments::Auto"
+struct = "inherited_text"
+initial_specified_value = "specified::BdOrphansFragments::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; Tier 4 §A.4.5 orphans-fragments)"
+animation_type = "none"
+affects = "layout"
+
 # moegoe F29 — asymmetric / alternating page margins.
 [-bd-margin-inside]
 type = "BdPageMarginEdge"

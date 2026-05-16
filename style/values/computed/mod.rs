@@ -131,8 +131,9 @@ pub use self::bd_page_marks::{
 };
 pub use self::bd_page_rotation::{BdPdfPageRotation, BdRotateBody};
 pub use self::bd_pagination::{
-    BdChangeLineBreaksForPagination, BdForcedBreaks, BdLineBreakChoices, BdNLines, BdPageFill,
-    BdResizeAdjust, BdResizeOptions, BdSpreadLengthOptions, BdTextWrap, BdWrapInside,
+    BdBlankPageContent, BdChangeLineBreaksForPagination, BdForcedBreaks, BdKeepWithPrevious,
+    BdLineBreakChoices, BdNLines, BdOrphansFragments, BdPageFill, BdPdfSignature, BdResizeAdjust,
+    BdResizeOptions, BdSpreadLengthOptions, BdTextWrap, BdWrapInside,
 };
 pub use self::bd_pdf::BdPdfMetaValue;
 pub use self::bd_pdf_colour::{BdPdfOverprint, BdPdfOverprintContent, BdPdfPageColourSpace};
