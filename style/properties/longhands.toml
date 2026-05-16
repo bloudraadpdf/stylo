@@ -2081,6 +2081,48 @@ animation_type = "none"
 affects = ""
 boxed = true
 
+# moegoe Tier 3 §A.3.4 — `-bd-pdf-link-border-*` longhands. Mirror
+# PDFreactor's `-ro-link-border-{color,width,style}` and Prince's
+# `-prince-link` shorthand surface, with `auto` (initial) deferring
+# to the legacy `-bd-pdf-link-border` shorthand cascade or the
+# viewer default. The compat translator routes `-ro-link-*` /
+# `-prince-link*` aliases onto these native longhands.
+[-bd-pdf-link-border-color]
+type = "BdPdfLinkBorderColor"
+initial = "computed::BdPdfLinkBorderColor::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfLinkBorderColor::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; Tier 3 §A.3.4 PDF link border colour)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-link-border-width]
+type = "BdPdfLinkBorderWidth"
+initial = "computed::BdPdfLinkBorderWidth::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfLinkBorderWidth::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; Tier 3 §A.3.4 PDF link border width)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-link-border-style]
+type = "BdPdfLinkBorderStyle"
+initial = "computed::BdPdfLinkBorderStyle::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfLinkBorderStyle::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; Tier 3 §A.3.4 PDF link border style)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-link-area]
+type = "BdPdfLinkArea"
+initial = "computed::BdPdfLinkArea::BorderBox"
+struct = "counters"
+initial_specified_value = "specified::BdPdfLinkArea::BorderBox"
+spec = "Nonstandard (moegoe -bd-* fork extension; Tier 3 §A.3.4 PDF link hit area)"
+animation_type = "none"
+affects = ""
+
 [-bd-pdf-comment]
 type = "BdPdfCommentKind"
 initial = "computed::BdPdfCommentKind::None"
