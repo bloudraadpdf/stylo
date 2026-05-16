@@ -113,3 +113,103 @@ impl ToComputedValue for specified::BdPdfLinkBorder {
         }
     }
 }
+
+/// Computed value of `-bd-pdf-link-border-style`. Re-exports the
+/// specified enum — the keyword set is identity-mapped.
+pub use specified::BdPdfLinkBorderStyle;
+
+/// Computed value of `-bd-pdf-link-area`. Re-exports the
+/// specified enum — the keyword set is identity-mapped.
+pub use specified::BdPdfLinkArea;
+
+/// Computed value of `-bd-pdf-link-border-color`.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToCss, ToResolvedValue, ToShmem, ToTyped)]
+#[repr(C, u8)]
+pub enum BdPdfLinkBorderColor {
+    /// `auto` — defer to the shorthand or viewer default.
+    Auto,
+    /// Explicit colour value.
+    Colour(Color),
+}
+
+impl BdPdfLinkBorderColor {
+    /// Initial value (`auto`).
+    #[inline]
+    pub fn auto() -> Self {
+        Self::Auto
+    }
+
+    /// Whether the value is `auto`.
+    #[inline]
+    pub fn is_auto(&self) -> bool {
+        matches!(self, Self::Auto)
+    }
+}
+
+impl ToComputedValue for specified::BdPdfLinkBorderColor {
+    type ComputedValue = BdPdfLinkBorderColor;
+
+    fn to_computed_value(&self, ctx: &Context) -> Self::ComputedValue {
+        match self {
+            specified::BdPdfLinkBorderColor::Auto => BdPdfLinkBorderColor::Auto,
+            specified::BdPdfLinkBorderColor::Colour(c) => {
+                BdPdfLinkBorderColor::Colour(c.to_computed_value(ctx))
+            }
+        }
+    }
+
+    fn from_computed_value(computed: &Self::ComputedValue) -> Self {
+        match computed {
+            BdPdfLinkBorderColor::Auto => specified::BdPdfLinkBorderColor::Auto,
+            BdPdfLinkBorderColor::Colour(c) => {
+                specified::BdPdfLinkBorderColor::Colour(ToComputedValue::from_computed_value(c))
+            }
+        }
+    }
+}
+
+/// Computed value of `-bd-pdf-link-border-width`.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToCss, ToResolvedValue, ToShmem, ToTyped)]
+#[repr(C, u8)]
+pub enum BdPdfLinkBorderWidth {
+    /// `auto` — defer to the shorthand or `0` default.
+    Auto,
+    /// Explicit length value (non-negative).
+    Length(NonNegativeLength),
+}
+
+impl BdPdfLinkBorderWidth {
+    /// Initial value (`auto`).
+    #[inline]
+    pub fn auto() -> Self {
+        Self::Auto
+    }
+
+    /// Whether the value is `auto`.
+    #[inline]
+    pub fn is_auto(&self) -> bool {
+        matches!(self, Self::Auto)
+    }
+}
+
+impl ToComputedValue for specified::BdPdfLinkBorderWidth {
+    type ComputedValue = BdPdfLinkBorderWidth;
+
+    fn to_computed_value(&self, ctx: &Context) -> Self::ComputedValue {
+        match self {
+            specified::BdPdfLinkBorderWidth::Auto => BdPdfLinkBorderWidth::Auto,
+            specified::BdPdfLinkBorderWidth::Length(l) => {
+                BdPdfLinkBorderWidth::Length(l.to_computed_value(ctx))
+            }
+        }
+    }
+
+    fn from_computed_value(computed: &Self::ComputedValue) -> Self {
+        match computed {
+            BdPdfLinkBorderWidth::Auto => specified::BdPdfLinkBorderWidth::Auto,
+            BdPdfLinkBorderWidth::Length(l) => {
+                specified::BdPdfLinkBorderWidth::Length(ToComputedValue::from_computed_value(l))
+            }
+        }
+    }
+}

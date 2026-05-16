@@ -138,7 +138,8 @@ pub use self::bd_pdf::BdPdfMetaValue;
 pub use self::bd_pdf_colour::{BdPdfOverprint, BdPdfOverprintContent, BdPdfPageColourSpace};
 pub use self::bd_pdf_comment::{
     BdPdfCommentAuthor, BdPdfCommentColour, BdPdfCommentDate, BdPdfCommentIcon, BdPdfCommentKind,
-    BdPdfCommentPosition, BdPdfCommentState, BdPdfCommentString, BdPdfLinkBorder,
+    BdPdfCommentPosition, BdPdfCommentState, BdPdfCommentString, BdPdfLinkArea, BdPdfLinkBorder,
+    BdPdfLinkBorderColor, BdPdfLinkBorderStyle, BdPdfLinkBorderWidth,
 };
 pub use self::bd_pdf_conformance::{BdPdfConformanceValue, BdPdfVersionValue};
 pub use self::bd_pdf_destination::{
@@ -170,8 +171,8 @@ pub use self::bd_pdf_viewer::{
 pub use self::bd_gaps::{BorderClip, MaskBorderMode, Overlay};
 pub use self::bd_misc::{
     BdCaptionPage, BdFlow, BdIntegerAuto, BdLang, BdLineBreakOpportunity, BdObjectSlice,
-    BdPositionOrigin, BdReplacedElement, BdScaleContent, BdShrinkToFit, BdTargetCandidate,
-    BdTruncateMarginAfterBreak,
+    BdPositionOrigin, BdReplacedElement, BdScaleContent, BdShrinkToFit,
+    BdTargetCandidate, BdTruncateMarginAfterBreak,
 };
 pub use self::bd_sidenote::{BdFloatReferenceSidenote, BdSidenoteAlign, BdSidenoteAvoid, BdSidenoteOffset};
 pub use self::bd_tab_stops::{BdTabStop, BdTabStopAlignment, BdTabStopLeader, BdTabStops};

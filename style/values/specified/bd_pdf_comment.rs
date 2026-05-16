@@ -369,3 +369,182 @@ impl Parse for BdPdfLinkBorder {
         Ok(Self::Border { width, colour })
     }
 }
+
+/// Tier 3 §A.3.4 — `-bd-pdf-link-border-style` longhand.
+///
+/// Selects the line shape PDF emits in the `/BS << /S … >>` sub-
+/// dictionary on the resulting `/Link` annotation
+/// (ISO 32000-2 §12.5.4 Table 165). `none` (initial) suppresses
+/// the `/BS` slot entirely so the viewer falls back to the
+/// legacy `/Border` array. `solid` writes `/S /S`; `dashed`
+/// writes `/S /D` plus the default `/D [3 3]` dash pattern;
+/// `underline` writes `/S /U`; `inset` writes `/S /I`.
+#[repr(u8)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Eq,
+    Hash,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[allow(missing_docs)]
+pub enum BdPdfLinkBorderStyle {
+    #[default]
+    None,
+    Solid,
+    Dashed,
+    Underline,
+    Inset,
+}
+
+impl BdPdfLinkBorderStyle {
+    /// Whether the value is `none`.
+    #[inline]
+    pub fn is_none(self) -> bool {
+        matches!(self, Self::None)
+    }
+}
+
+/// Tier 3 §A.3.4 — `-bd-pdf-link-area` longhand.
+///
+/// Selects which rectangle the renderer emits as the `/Rect`
+/// (and `/QuadPoints`) of the resulting `/Link` annotation.
+/// `border-box` (initial) covers the full border-box including
+/// padding and borders; `content-box` shrinks to the content
+/// rectangle; `text` emits one quadrilateral per visual line
+/// (interaction with F23-3's per-line quad-points pipeline).
+#[repr(u8)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Eq,
+    Hash,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[allow(missing_docs)]
+pub enum BdPdfLinkArea {
+    #[default]
+    BorderBox,
+    ContentBox,
+    Text,
+}
+
+impl BdPdfLinkArea {
+    /// Whether the value is at its initial `border-box`.
+    #[inline]
+    pub fn is_border_box(self) -> bool {
+        matches!(self, Self::BorderBox)
+    }
+}
+
+/// Tier 3 §A.3.4 — `-bd-pdf-link-border-color` longhand.
+///
+/// Drives the `/C [r g b]` colour array on the `/Link`
+/// annotation dictionary (ISO 32000-2 §12.5.6.5). `auto` (the
+/// initial) leaves the slot empty so the renderer falls back to
+/// either the `-bd-pdf-link-border` shorthand's colour or the
+/// viewer default; an explicit `<color>` value flattens
+/// `currentcolor` / `color-mix()` via the cascade reader.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
+#[repr(C, u8)]
+pub enum BdPdfLinkBorderColor {
+    /// `auto` — defer to the shorthand or viewer default.
+    Auto,
+    /// Explicit `<color>` value.
+    Colour(Color),
+}
+
+impl BdPdfLinkBorderColor {
+    /// Initial value (`auto`).
+    #[inline]
+    pub fn auto() -> Self {
+        Self::Auto
+    }
+
+    /// Whether the value is `auto`.
+    #[inline]
+    pub fn is_auto(&self) -> bool {
+        matches!(self, Self::Auto)
+    }
+}
+
+impl Parse for BdPdfLinkBorderColor {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, style_traits::ParseError<'i>> {
+        if input
+            .try_parse(|i| i.expect_ident_matching("auto"))
+            .is_ok()
+        {
+            return Ok(Self::Auto);
+        }
+        Ok(Self::Colour(Color::parse(context, input)?))
+    }
+}
+
+/// Tier 3 §A.3.4 — `-bd-pdf-link-border-width` longhand.
+///
+/// Drives the third entry of the legacy `/Border [hr vr w]`
+/// array plus the `/BS << /W … >>` sub-dictionary on the
+/// `/Link` annotation (ISO 32000-2 §12.5.4 Table 165). `auto`
+/// (the initial) leaves the slot empty so the renderer falls
+/// back to the `-bd-pdf-link-border` shorthand's width or `0`;
+/// an explicit `<length>` overrides at the longhand level.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
+#[repr(C, u8)]
+pub enum BdPdfLinkBorderWidth {
+    /// `auto` — defer to the shorthand or `0` default.
+    Auto,
+    /// Explicit `<length>` value (non-negative).
+    Length(NonNegativeLength),
+}
+
+impl BdPdfLinkBorderWidth {
+    /// Initial value (`auto`).
+    #[inline]
+    pub fn auto() -> Self {
+        Self::Auto
+    }
+
+    /// Whether the value is `auto`.
+    #[inline]
+    pub fn is_auto(&self) -> bool {
+        matches!(self, Self::Auto)
+    }
+}
+
+impl Parse for BdPdfLinkBorderWidth {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, style_traits::ParseError<'i>> {
+        if input
+            .try_parse(|i| i.expect_ident_matching("auto"))
+            .is_ok()
+        {
+            return Ok(Self::Auto);
+        }
+        Ok(Self::Length(NonNegativeLength::parse(context, input)?))
+    }
+}

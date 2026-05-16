@@ -595,6 +595,8 @@ class Longhand(Property):
                 "BdPageMarkEnabled",
                 "BdPdfFormFieldFlags",
                 "BdPdfFormFieldMaxLength",
+                "BdPdfLinkArea",
+                "BdPdfLinkBorderStyle",
                 "BdPdfSignatureFieldLock",
                 "BdPrintMarkSet",
                 "AlignmentBaseline",
