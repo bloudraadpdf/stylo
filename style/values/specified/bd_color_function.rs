@@ -31,7 +31,7 @@ use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
 use crate::Atom;
 use cssparser::Parser;
-use std::fmt;
+use std::fmt::{self, Write};
 use style_traits::{CssWriter, ParseError, StyleParseErrorKind, ToCss};
 
 /// Computed (and specified) value of the internal `_-bd-color-function`
