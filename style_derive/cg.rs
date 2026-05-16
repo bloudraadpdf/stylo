@@ -367,7 +367,8 @@ pub(crate) fn value<'a>(
 
 /// Transforms "FooBar" to "foo-bar".
 ///
-/// If the first Camel segment is "Moz", "Webkit", or "Servo", the result string
+/// If the first Camel segment is "Moz", "Webkit", "Servo", or "Bd"
+/// (moegoe's bloudraad `-bd-*` fork-extension prefix), the result string
 /// is prepended with "-".
 pub(crate) fn to_css_identifier(mut camel_case: &str) -> String {
     camel_case = camel_case.trim_end_matches('_');
@@ -376,7 +377,7 @@ pub(crate) fn to_css_identifier(mut camel_case: &str) -> String {
     while let Some(segment) = split_camel_segment(&mut camel_case) {
         if first {
             match segment {
-                "Moz" | "Webkit" | "Servo" => first = false,
+                "Moz" | "Webkit" | "Servo" | "Bd" => first = false,
                 _ => {},
             }
         }
