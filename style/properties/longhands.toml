@@ -2177,6 +2177,21 @@ spec = "Nonstandard (moegoe -bd-* fork extension; G7 PDF annotations)"
 animation_type = "none"
 affects = ""
 
+# moegoe Tier 3 §A.3.6 — PDF annotation tooltip. Projects onto
+# link annotations (`/Contents`) and widget annotations (`/TU`)
+# per ISO 32000-2 §12.5.2 / §12.7.4.3. `auto` defers to the
+# element's text content / accessible name; `<string>` sets a
+# literal tooltip. Non-inherited: each annotation reads the
+# value at its own host element.
+[-bd-pdf-tooltip]
+type = "BdPdfTagStringAuto"
+initial = "computed::BdPdfTagStringAuto::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfTagStringAuto::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; Tier 3 §A.3.6 PDF tooltip)"
+animation_type = "none"
+affects = ""
+
 # moegoe G3 — AcroForm interactive form opt-in. `pdf` flags the
 # document as containing interactive form widgets (ISO 32000-2
 # §12.7). v1 ships the parse surface only; full widget emission
