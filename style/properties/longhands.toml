@@ -3342,6 +3342,20 @@ animation_type = "none"
 affects = ""
 boxed = true
 
+# moegoe Family 23 slice 4-A — book-index per-letter grouping.
+# Lives on `inherited_text` so the author can author once on `:root`
+# (or the document body) and every generated index area inherits
+# the value without `@page :index` selector support, which Stylo
+# does not yet surface as a named-page pseudo-class.
+[-bd-index-grouping]
+type = "BdIndexGrouping"
+initial = "computed::BdIndexGrouping::None"
+struct = "inherited_text"
+initial_specified_value = "specified::BdIndexGrouping::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; Family 23 BFO index)"
+animation_type = "none"
+affects = ""
+
 # moegoe Family 15 — barcodes. Per-element; not inherited; gated
 # on a backend symbol-generation crate (qrcode / barcoders).
 # Emits `RenderWarning::UnsupportedPdfFeature` until the
