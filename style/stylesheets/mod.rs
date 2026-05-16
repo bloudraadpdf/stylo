@@ -24,6 +24,7 @@ pub mod origin;
 mod page_rule;
 pub mod position_try_rule;
 mod property_rule;
+mod region_rule;
 mod rule_list;
 mod rule_parser;
 mod rules_iterator;
@@ -79,6 +80,7 @@ pub use self::origin::{Origin, OriginSet, OriginSetIterator, PerOrigin, PerOrigi
 pub use self::page_rule::{PagePseudoClassFlags, PageRule, PageSelector, PageSelectors};
 pub use self::position_try_rule::PositionTryRule;
 pub use self::property_rule::PropertyRule;
+pub use self::region_rule::RegionRule;
 pub use self::rule_list::CssRules;
 pub use self::rule_parser::{InsertRuleContext, State, TopLevelRuleParser};
 pub use self::rules_iterator::{AllRules, EffectiveRules};
@@ -357,6 +359,10 @@ pub enum CssRule {
     /// declaring a named-spot colour for downstream `-bd-spot()` /
     /// `-bd-separation()` references.
     BdColour(Arc<BdColourRule>),
+    /// moegoe Family 17 — `@region <selector> { … }` top-level rule
+    /// (CSS Regions L1 §6.4). Declarations scope to elements matching
+    /// the selector when they appear inside a region-chain descendant.
+    Region(Arc<RegionRule>),
     Supports(Arc<SupportsRule>),
     Page(Arc<Locked<PageRule>>),
     Property(Arc<PropertyRule>),
@@ -410,6 +416,9 @@ impl CssRule {
                 arc.unconditional_shallow_size_of(ops) + arc.size_of(guard, ops)
             },
             CssRule::BdColour(ref arc) => {
+                arc.unconditional_shallow_size_of(ops) + arc.size_of(guard, ops)
+            },
+            CssRule::Region(ref arc) => {
                 arc.unconditional_shallow_size_of(ops) + arc.size_of(guard, ops)
             },
             CssRule::Supports(ref arc) => {
@@ -490,6 +499,8 @@ pub enum CssRuleRef<'a> {
     Sidenote(&'a SidenoteRule),
     /// moegoe Family 2 — `@-bd-colour <name> { … }` reference.
     BdColour(&'a BdColourRule),
+    /// moegoe Family 17 — `@region <selector> { … }` reference.
+    Region(&'a RegionRule),
     Supports(&'a SupportsRule),
     Page(&'a LockedPageRule),
     Property(&'a PropertyRule),
@@ -520,6 +531,7 @@ impl<'a> From<&'a CssRule> for CssRuleRef<'a> {
             CssRule::Footnote(r) => CssRuleRef::Footnote(r.as_ref()),
             CssRule::Sidenote(r) => CssRuleRef::Sidenote(r.as_ref()),
             CssRule::BdColour(r) => CssRuleRef::BdColour(r.as_ref()),
+            CssRule::Region(r) => CssRuleRef::Region(r.as_ref()),
             CssRule::Supports(r) => CssRuleRef::Supports(r.as_ref()),
             CssRule::Page(r) => CssRuleRef::Page(r.as_ref()),
             CssRule::Property(r) => CssRuleRef::Property(r.as_ref()),
@@ -583,6 +595,10 @@ pub enum CssRuleType {
     /// moegoe Family 2 — `@-bd-colour <name> { … }` rule type. Slots
     /// after the existing fork-private extensions at 26 and 27.
     BdColour = 28,
+    /// moegoe Family 17 — `@region <selector> { … }` rule type
+    /// (CSS Regions L1 §6.4). Slots after the existing fork-private
+    /// extensions at 26, 27, and 28.
+    Region = 29,
 }
 
 impl CssRuleType {
@@ -670,6 +686,7 @@ impl CssRule {
             CssRule::Footnote(_) => CssRuleType::Footnote,
             CssRule::Sidenote(_) => CssRuleType::Sidenote,
             CssRule::BdColour(_) => CssRuleType::BdColour,
+            CssRule::Region(_) => CssRuleType::Region,
             CssRule::Namespace(_) => CssRuleType::Namespace,
             CssRule::Supports(_) => CssRuleType::Supports,
             CssRule::Page(_) => CssRuleType::Page,
@@ -814,6 +831,9 @@ impl DeepCloneWithLock for CssRule {
             CssRule::BdColour(ref arc) => {
                 CssRule::BdColour(Arc::new(arc.deep_clone_with_lock(lock, guard)))
             },
+            CssRule::Region(ref arc) => {
+                CssRule::Region(Arc::new(arc.deep_clone_with_lock(lock, guard)))
+            },
             CssRule::Supports(ref arc) => {
                 CssRule::Supports(Arc::new(arc.deep_clone_with_lock(lock, guard)))
             },
@@ -867,6 +887,7 @@ impl ToCssWithGuard for CssRule {
             CssRule::Footnote(ref rule) => rule.to_css(guard, dest),
             CssRule::Sidenote(ref rule) => rule.to_css(guard, dest),
             CssRule::BdColour(ref rule) => rule.to_css(guard, dest),
+            CssRule::Region(ref rule) => rule.to_css(guard, dest),
             CssRule::Media(ref rule) => rule.to_css(guard, dest),
             CssRule::CustomMedia(ref rule) => rule.to_css(guard, dest),
             CssRule::Supports(ref rule) => rule.to_css(guard, dest),

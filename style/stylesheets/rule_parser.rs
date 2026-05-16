@@ -30,8 +30,8 @@ use crate::stylesheets::{
     AllowImportRules, CorsMode, CssRule, CssRuleType, CssRuleTypes, CssRules, CustomMediaCondition,
     CustomMediaRule, DocumentRule, FontFeatureValuesRule, FontPaletteValuesRule, FootnoteRule,
     KeyframesRule, MarginRule, MarginRuleType, MediaRule, NamespaceRule, NestedDeclarationsRule,
-    PageRule, PageSelectors, PositionTryRule, RulesMutateError, SidenoteRule, StartingStyleRule,
-    StyleRule, StylesheetLoader, SupportsRule,
+    PageRule, PageSelectors, PositionTryRule, RegionRule, RulesMutateError, SidenoteRule,
+    StartingStyleRule, StyleRule, StylesheetLoader, SupportsRule,
 };
 use crate::values::computed::font::FamilyName;
 use crate::values::{CssUrl, CustomIdent, DashedIdent, KeyframesName};
@@ -285,6 +285,10 @@ pub enum AtRulePrelude {
     Sidenote(Option<crate::values::AtomIdent>),
     /// A top-level `@-bd-colour <name>` rule prelude (moegoe Family 2).
     BdColour(crate::values::AtomIdent),
+    /// A top-level `@region <selector>` rule prelude (moegoe Family 17,
+    /// CSS Regions L1 §6.4). Carries the parsed selector list so the
+    /// declaration block can be associated with it in `parse_block`.
+    Region(SelectorList<SelectorImpl>),
     /// A @namespace rule prelude.
     Namespace(Option<Prefix>, Namespace),
     /// A @layer rule prelude.
@@ -319,6 +323,7 @@ impl AtRulePrelude {
             Self::Footnote => "footnote",
             Self::Sidenote(..) => "-bd-sidenote",
             Self::BdColour(..) => "-bd-colour",
+            Self::Region(..) => "region",
             Self::Namespace(..) => "namespace",
             Self::Layer(..) => "layer",
             Self::Scope(..) => "scope",
@@ -551,7 +556,8 @@ impl<'a, 'i> NestedRuleParser<'a, 'i> {
             | AtRulePrelude::Property(..)
             | AtRulePrelude::Import(..)
             | AtRulePrelude::PositionTry(..)
-            | AtRulePrelude::BdColour(..) => !self.in_style_or_page_rule(),
+            | AtRulePrelude::BdColour(..)
+            | AtRulePrelude::Region(..) => !self.in_style_or_page_rule(),
             AtRulePrelude::Margin(..)
             | AtRulePrelude::Footnote
             | AtRulePrelude::Sidenote(..) => self.in_page_rule(),
@@ -755,6 +761,23 @@ impl<'a, 'i> AtRuleParser<'i> for NestedRuleParser<'a, 'i> {
             "-bd-colour" => {
                 let name = crate::stylesheets::parse_bd_colour_name(input)?;
                 AtRulePrelude::BdColour(name)
+            },
+            // moegoe Family 17 — `@region <selector> { … }` (CSS
+            // Regions L1 §6.4). The prelude is a standard CSS selector
+            // list; the body is a property declaration list. The rule
+            // is otherwise opaque to the standard cascade — moegoe-css
+            // walks the rule stream and scopes the declarations to
+            // region-chain descendants at IR-conversion time.
+            "region" => {
+                let selector_parser = SelectorParser {
+                    stylesheet_origin: self.context.stylesheet_origin,
+                    namespaces: &self.context.namespaces,
+                    url_data: self.context.url_data,
+                    for_supports_rule: false,
+                };
+                let selectors =
+                    SelectorList::parse(&selector_parser, input, ParseRelative::No)?;
+                AtRulePrelude::Region(selectors)
             },
             "keyframes" | "-webkit-keyframes" | "-moz-keyframes" => {
                 let prefix = if starts_with_ignore_ascii_case(&*name, "-webkit-") {
@@ -1004,6 +1027,24 @@ impl<'a, 'i> AtRuleParser<'i> for NestedRuleParser<'a, 'i> {
                 )?;
                 Ok::<CssRule, ParseError<'i>>(CssRule::BdColour(Arc::new(rule)))
             })?,
+            AtRulePrelude::Region(selectors) => {
+                // moegoe Family 17 — `@region` body is a flat property
+                // declaration list (CSS Regions L1 §6.4). Parse the
+                // body inside `CssRuleType::Style` because the
+                // declarations apply to elements (like a regular style
+                // rule), not to a special at-rule scope like `@page`
+                // or `@keyframes`. This sidesteps the per-longhand
+                // `rule_types_allowed` allowlist — any property valid
+                // in a style rule is valid inside `@region`.
+                let declarations = self.nest_for_rule(CssRuleType::Style, |p| {
+                    parse_property_declaration_list(&p.context, input, &[])
+                });
+                CssRule::Region(Arc::new(RegionRule {
+                    selectors,
+                    block: Arc::new(self.shared_lock.wrap(declarations)),
+                    source_location,
+                }))
+            },
             AtRulePrelude::CustomMedia(..)
             | AtRulePrelude::Import(..)
             | AtRulePrelude::Namespace(..) => {
