@@ -1137,6 +1137,14 @@ impl<'b> Cascade<'b> {
     /// The companion is applied with the same priority/origin as its
     /// originator so the `seen` / `author_specified` bookkeeping stays
     /// in sync with the originator's effective cascade slot.
+    ///
+    /// Honours the same `can_skip_apply` short-circuit
+    /// [`apply_one_longhand`] uses for CSS-wide keywords: e.g.
+    /// `color: inherit` on an inherited longhand must NOT call the
+    /// generated `cascade_property` body (which would `debug_crash`
+    /// because the inheritance is implicit at the style-builder level
+    /// for inherited longhands). The keyword still goes into `seen`
+    /// so subsequent applications of the companion are blocked.
     fn apply_synthesised_companion(
         &mut self,
         context: &mut computed::Context,
@@ -1146,17 +1154,39 @@ impl<'b> Cascade<'b> {
         origin: Origin,
     ) {
         debug_assert!(!companion_id.is_logical());
+
+        let can_skip_apply = match companion_decl.get_css_wide_keyword() {
+            Some(keyword) => {
+                // `revert` / `revert-layer` are not pushed into `reverted` for
+                // the companion because the cascade applies them once via the
+                // originator's path; if `color` was reverted, the companion
+                // simply inherits implicitly as for `Inherit`/`Unset`.
+                let inherited = companion_id.inherited();
+                let zoomed = !context.builder.effective_zoom_for_inheritance.is_one()
+                    && companion_id.zoom_dependent();
+                match keyword {
+                    CSSWideKeyword::Revert | CSSWideKeyword::RevertLayer => true,
+                    CSSWideKeyword::Unset => !zoomed || !inherited,
+                    CSSWideKeyword::Inherit => inherited && !zoomed,
+                    CSSWideKeyword::Initial => !inherited,
+                }
+            }
+            None => false,
+        };
+
         self.seen.insert(companion_id);
         if origin == Origin::Author {
             self.author_specified.insert(companion_id);
         }
 
-        let old_scope = context.scope;
-        context.scope = priority.cascade_level();
-        unsafe {
-            self.do_apply_declaration(context, companion_id, &companion_decl);
+        if !can_skip_apply {
+            let old_scope = context.scope;
+            context.scope = priority.cascade_level();
+            unsafe {
+                self.do_apply_declaration(context, companion_id, &companion_decl);
+            }
+            context.scope = old_scope;
         }
-        context.scope = old_scope;
     }
 
     #[inline]
