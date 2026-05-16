@@ -2581,6 +2581,10 @@ initial_specified_value = "specified::BdFootnoteRuleLength::full()"
 spec = "Nonstandard (moegoe -bd-* fork extension; F6 footnote rule length)"
 animation_type = "none"
 affects = "layout"
+# moegoe F6 — `-bd-footnote-rule-length` is authored *inside* `@footnote`
+# blocks (the page footnote area), so the parser must accept it there
+# in addition to the default `style` rule context.
+rule_types_allowed = ["style", "keyframe", "scope", "footnote"]
 
 [footnote-style-position]
 type = "FootnoteStylePosition"
