@@ -165,8 +165,8 @@ pub use self::bd_pdf_viewer::{
 pub use self::bd_gaps::{BorderClip, MaskBorderMode, Overlay};
 pub use self::bd_misc::{
     BdCaptionPage, BdFlow, BdIntegerAuto, BdLang, BdLineBreakOpportunity, BdObjectSlice,
-    BdPositionOrigin, BdReplacedElement, BdScaleContent, BdShrinkToFit, BdTargetCandidate,
-    BdTruncateMarginAfterBreak,
+    BdPositionOrigin, BdReplacedElement, BdScaleContent, BdShrinkToFit, BdTabSnap,
+    BdTargetCandidate, BdTruncateMarginAfterBreak,
 };
 pub use self::bd_sidenote::{BdFloatReferenceSidenote, BdSidenoteAlign, BdSidenoteAvoid, BdSidenoteOffset};
 pub use self::bd_tab_stops::{BdTabStop, BdTabStopAlignment, BdTabStopLeader, BdTabStops};
