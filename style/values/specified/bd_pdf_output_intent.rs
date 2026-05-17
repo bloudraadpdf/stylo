@@ -28,10 +28,15 @@
 //!   the renderer how to project source colours into the output
 //!   intent's working space. (Prince
 //!   `-prince-pdf-color-conversion`, `prince.md:8582`.)
-//! * `-bd-pdf-colour-options` — `[ use-true-black | use-true-white
-//!   | preserve-overprint | preserve-black ]#`. Per-flag PDF/X
-//!   colour handling options. (Prince
-//!   `-prince-pdf-color-options`, `prince.md:8647`.)
+//! * `-bd-pdf-colour-options` — `[ use-true-black | preserve-black ]#`.
+//!   Per-flag PDF/X colour handling options. `use-true-black` carries
+//!   the Prince spec warrant (`-prince-pdf-color-options`,
+//!   `prince.md:8647`); `preserve-black` is the moegoe extension that
+//!   prevents black-channel conversion in the colour-management
+//!   pipeline. `use-true-white` and `preserve-overprint` were dropped
+//!   on 2026-05-17 — the former had no upstream warrant in any
+//!   reference renderer, and the latter collided with the dedicated
+//!   `-bd-pdf-overprint: preserve` longhand (one fact, one place).
 
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
@@ -215,8 +220,6 @@ pub enum BdPdfColourConversion {
 #[allow(missing_docs)]
 pub enum BdPdfColourOption {
     UseTrueBlack,
-    UseTrueWhite,
-    PreserveOverprint,
     PreserveBlack,
 }
 
@@ -279,8 +282,6 @@ impl ToCss for BdPdfColourOptions {
         let mut first = true;
         for option in [
             BdPdfColourOption::UseTrueBlack,
-            BdPdfColourOption::UseTrueWhite,
-            BdPdfColourOption::PreserveOverprint,
             BdPdfColourOption::PreserveBlack,
         ] {
             if self.contains(option) {
@@ -355,13 +356,10 @@ mod tests {
         for (css, expected) in [
             ("none", "none"),
             ("use-true-black", "use-true-black"),
+            ("preserve-black", "preserve-black"),
             (
-                "preserve-overprint, preserve-black",
-                "preserve-overprint, preserve-black",
-            ),
-            (
-                "use-true-black, use-true-white, preserve-overprint, preserve-black",
-                "use-true-black, use-true-white, preserve-overprint, preserve-black",
+                "use-true-black, preserve-black",
+                "use-true-black, preserve-black",
             ),
         ] {
             let value = parse_options(css);
