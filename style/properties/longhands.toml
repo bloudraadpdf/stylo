@@ -1858,6 +1858,24 @@ spec = "Nonstandard (moegoe -bd-* fork extension; G6 PDF document metadata)"
 animation_type = "none"
 affects = ""
 
+[-bd-pdf-creator]
+type = "BdPdfMetaValue"
+initial = "computed::BdPdfMetaValue::none()"
+struct = "counters"
+initial_specified_value = "specified::BdPdfMetaValue::none()"
+spec = "Nonstandard (moegoe -bd-* fork extension; G6 PDF document metadata)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-producer]
+type = "BdPdfMetaValue"
+initial = "computed::BdPdfMetaValue::none()"
+struct = "counters"
+initial_specified_value = "specified::BdPdfMetaValue::none()"
+spec = "Nonstandard (moegoe -bd-* fork extension; G6 PDF document metadata)"
+animation_type = "none"
+affects = ""
+
 # moegoe G4 — PDF/A and PDF/UA conformance. Document-level; the
 # renderer honours only `:root` declarations.
 [-bd-pdf-conformance]
