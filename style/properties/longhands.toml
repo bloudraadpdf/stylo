@@ -2706,6 +2706,16 @@ animation_type = "none"
 rule_types_allowed = ["page"]
 affects = "paint"
 
+[-bd-pdf-mark-bleed-color]
+type = "BdBleedColour"
+initial = "computed::BdBleedColour::Auto"
+struct = "page"
+initial_specified_value = "specified::BdBleedColour::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; Tier4 §A.4.7 bleed-mark colour)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "paint"
+
 [-bd-pdf-mark-registration-position]
 type = "BdRegistrationPosition"
 initial = "computed::BdRegistrationPosition::AllCorners"

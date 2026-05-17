@@ -262,6 +262,56 @@ impl ToComputedValue for specified::BdCropColour {
     }
 }
 
+/// Computed value of `-bd-pdf-mark-bleed-color`.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToResolvedValue, ToShmem, ToTyped)]
+#[repr(C, u8)]
+pub enum BdBleedColour {
+    /// `auto`.
+    Auto,
+    /// Concrete computed colour.
+    Colour(Color),
+}
+
+impl BdBleedColour {
+    /// Initial value (`auto`).
+    #[inline]
+    pub fn auto() -> Self {
+        Self::Auto
+    }
+    /// Whether the value is `auto`.
+    #[inline]
+    pub fn is_auto(&self) -> bool {
+        matches!(self, Self::Auto)
+    }
+}
+
+impl ToCss for BdBleedColour {
+    fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        match self {
+            Self::Auto => dest.write_str("auto"),
+            Self::Colour(c) => c.to_css(dest),
+        }
+    }
+}
+
+impl ToComputedValue for specified::BdBleedColour {
+    type ComputedValue = BdBleedColour;
+
+    fn to_computed_value(&self, ctx: &Context) -> Self::ComputedValue {
+        match self {
+            Self::Auto => BdBleedColour::Auto,
+            Self::Colour(c) => BdBleedColour::Colour(c.to_computed_value(ctx)),
+        }
+    }
+
+    fn from_computed_value(computed: &Self::ComputedValue) -> Self {
+        match computed {
+            BdBleedColour::Auto => Self::Auto,
+            BdBleedColour::Colour(c) => Self::Colour(ToComputedValue::from_computed_value(c)),
+        }
+    }
+}
+
 /// Computed value of `-bd-pdf-mark-colour-bar-swatches`.
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, ToResolvedValue, ToTyped)]
 #[repr(C, u8)]
