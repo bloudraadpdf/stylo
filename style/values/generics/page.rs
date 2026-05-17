@@ -103,6 +103,16 @@ pub enum PageOrientation {
 
 /// Page marks descriptor value.
 ///
+/// Standard CSS Paged Media Level 3 defines two keywords: `crop` and
+/// `cross`. The moegoe fork extends the shorthand grammar to also
+/// accept `bleed` and `registration`, matching PDFreactor's
+/// `-ro-marks` vocabulary (PDFreactor User Manual §16279 lists the
+/// full `crop | cross | bleed | registration` set, any combination).
+/// `registration` is treated as a synonym for the colour-separation
+/// mark family driven by the F4 `-bd-page-registration-mark-*`
+/// longhands; `bleed` enables the bleed-trim indicator marks driven
+/// by the F4 `-bd-page-bleed-mark-*` longhands.
+///
 /// https://drafts.csswg.org/css-page-3/#marks
 #[derive(
     Clone,
@@ -122,6 +132,10 @@ pub struct GenericPageMarks {
     pub crop: bool,
     /// Whether cross marks are enabled.
     pub cross: bool,
+    /// Whether bleed marks are enabled (moegoe extension).
+    pub bleed: bool,
+    /// Whether registration marks are enabled (moegoe extension).
+    pub registration: bool,
 }
 
 pub use self::GenericPageMarks as PageMarks;
@@ -133,13 +147,15 @@ impl PageMarks {
         Self {
             crop: false,
             cross: false,
+            bleed: false,
+            registration: false,
         }
     }
 
     /// Whether this value is `none`.
     #[inline]
     pub fn is_none(&self) -> bool {
-        !self.crop && !self.cross
+        !self.crop && !self.cross && !self.bleed && !self.registration
     }
 }
 
@@ -151,14 +167,26 @@ impl ToCss for PageMarks {
         if self.is_none() {
             return dest.write_str("none");
         }
-        if self.crop {
-            dest.write_str("crop")?;
-            if self.cross {
-                dest.write_str(" ")?;
+        // Canonical order: crop, cross, bleed, registration.
+        let mut first = true;
+        let mut emit = |w: &mut CssWriter<W>, name: &str| -> fmt::Result {
+            if !first {
+                w.write_str(" ")?;
             }
+            first = false;
+            w.write_str(name)
+        };
+        if self.crop {
+            emit(dest, "crop")?;
         }
         if self.cross {
-            dest.write_str("cross")?;
+            emit(dest, "cross")?;
+        }
+        if self.bleed {
+            emit(dest, "bleed")?;
+        }
+        if self.registration {
+            emit(dest, "registration")?;
         }
         Ok(())
     }

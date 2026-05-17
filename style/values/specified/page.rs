@@ -207,13 +207,50 @@ impl Parse for PageMarks {
             return Ok(PageMarks::none());
         }
 
+        // moegoe extension: accept the PDFreactor-aligned vocabulary
+        // (`crop | cross | bleed | registration`, any combination) in
+        // addition to the standard CSS Paged Media Level 3 keywords.
+        // The order of keywords does not affect the computed value;
+        // any keyword may appear at most once.
         let mut crop = false;
         let mut cross = false;
+        let mut bleed = false;
+        let mut registration = false;
         while !input.is_exhausted() {
             let ident = input.expect_ident()?;
             match_ignore_ascii_case! { ident,
-                "crop" => crop = true,
-                "cross" => cross = true,
+                "crop" => {
+                    if crop {
+                        return Err(input.new_custom_error(
+                            style_traits::StyleParseErrorKind::UnspecifiedError,
+                        ));
+                    }
+                    crop = true;
+                },
+                "cross" => {
+                    if cross {
+                        return Err(input.new_custom_error(
+                            style_traits::StyleParseErrorKind::UnspecifiedError,
+                        ));
+                    }
+                    cross = true;
+                },
+                "bleed" => {
+                    if bleed {
+                        return Err(input.new_custom_error(
+                            style_traits::StyleParseErrorKind::UnspecifiedError,
+                        ));
+                    }
+                    bleed = true;
+                },
+                "registration" => {
+                    if registration {
+                        return Err(input.new_custom_error(
+                            style_traits::StyleParseErrorKind::UnspecifiedError,
+                        ));
+                    }
+                    registration = true;
+                },
                 _ => {
                     let ident = ident.clone();
                     return Err(input.new_custom_error(
@@ -223,11 +260,16 @@ impl Parse for PageMarks {
             }
         }
 
-        if !crop && !cross {
+        if !crop && !cross && !bleed && !registration {
             return Err(input.new_custom_error(style_traits::StyleParseErrorKind::UnspecifiedError));
         }
 
-        Ok(PageMarks { crop, cross })
+        Ok(PageMarks {
+            crop,
+            cross,
+            bleed,
+            registration,
+        })
     }
 }
 
