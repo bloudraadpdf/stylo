@@ -2642,6 +2642,26 @@ animation_type = "none"
 rule_types_allowed = ["page"]
 affects = "paint"
 
+[-bd-pdf-mark-bleed-enabled]
+type = "BdPageMarkEnabled"
+initial = "computed::BdPageMarkEnabled::Auto"
+struct = "page"
+initial_specified_value = "specified::BdPageMarkEnabled::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; G10 bleed-mark family enabled)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "paint"
+
+[-bd-pdf-mark-corner-registration-enabled]
+type = "BdPageMarkEnabled"
+initial = "computed::BdPageMarkEnabled::Auto"
+struct = "page"
+initial_specified_value = "specified::BdPageMarkEnabled::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; G10 corner-registration-mark family enabled)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "paint"
+
 [-bd-pdf-mark-colour-bar-enabled]
 type = "BdPageMarkEnabled"
 initial = "computed::BdPageMarkEnabled::Auto"
