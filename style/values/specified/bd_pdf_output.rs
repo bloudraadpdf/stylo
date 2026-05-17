@@ -70,9 +70,25 @@ pub enum BdPdfTextRendering {
 
 /// `-bd-paint-reordering`.
 ///
-/// PDFreactor reorders draw calls so that text always paints
-/// last; `none` disables the reordering and emits content in
-/// source order.
+/// Per the PDFreactor manual §`-ro-paint-reordering`, this property
+/// controls the **CSS painting-layer assignment** of floated,
+/// positioned, and transformed elements. The value space is
+/// `normal | avoid` (mirrored from PDFreactor's `-ro-paint-reordering`).
+///
+/// - `normal` (initial): default CSS 2.1 / CSS Position stacking rules
+///   apply. Floats without stacking-context styles paint in layer 4;
+///   positioned/transformed elements with `z-index: 0|auto` paint in
+///   layer 6.
+/// - `avoid`: those same elements paint in their natural in-flow
+///   layer (layer 3 for non-inline parts, layer 5 for inline parts)
+///   when no higher-priority stacking-context style is present
+///   (explicit `z-index`, CSS filter, opacity < 1, etc.). The
+///   intent is to keep text in its natural layer so PDF viewer
+///   text selection / extraction reads correctly.
+///
+/// `text-last` (a moegoe-invented variant) was removed in the
+/// 2026-05-17 spec correction — it had no PDFreactor counterpart
+/// and implied a content-stream reordering pass that does not exist.
 #[repr(u8)]
 #[derive(
     Clone,
@@ -92,10 +108,8 @@ pub enum BdPdfTextRendering {
 #[allow(missing_docs)]
 pub enum BdPaintReordering {
     #[default]
-    Auto,
-    None,
-    /// `text-last` — paint text on top of everything else.
-    TextLast,
+    Normal,
+    Avoid,
 }
 
 /// `-bd-font-embedding-type`.

@@ -2274,9 +2274,9 @@ affects = "paint"
 
 [-bd-paint-reordering]
 type = "BdPaintReordering"
-initial = "computed::BdPaintReordering::Auto"
+initial = "computed::BdPaintReordering::Normal"
 struct = "counters"
-initial_specified_value = "specified::BdPaintReordering::Auto"
+initial_specified_value = "specified::BdPaintReordering::Normal"
 spec = "Nonstandard (moegoe -bd-* fork extension; F27 paint reordering)"
 animation_type = "none"
 affects = "paint"
