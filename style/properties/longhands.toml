@@ -2676,6 +2676,16 @@ animation_type = "none"
 rule_types_allowed = ["page"]
 affects = "paint"
 
+[-bd-pdf-mark-crop-color]
+type = "BdCropColour"
+initial = "computed::BdCropColour::Auto"
+struct = "page"
+initial_specified_value = "specified::BdCropColour::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; Tier4 §A.4.7 crop-mark colour)"
+animation_type = "none"
+rule_types_allowed = ["page"]
+affects = "paint"
+
 [-bd-pdf-mark-registration-position]
 type = "BdRegistrationPosition"
 initial = "computed::BdRegistrationPosition::AllCorners"

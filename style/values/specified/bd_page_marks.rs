@@ -295,6 +295,46 @@ impl Parse for BdRegistrationColour {
     }
 }
 
+/// Specified value of `-bd-pdf-mark-crop-color`.
+///
+/// Symmetric to [`BdRegistrationColour`]: lets authors override the
+/// crop-mark colour independently of the shared
+/// `-bd-page-marks-colour` shorthand. `auto` defers to the shared
+/// colour (and ultimately to the Separation `All` fallback).
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
+#[repr(C, u8)]
+pub enum BdCropColour {
+    /// `auto`.
+    Auto,
+    /// `<color>`.
+    Colour(Color),
+}
+
+impl BdCropColour {
+    /// Initial value (`auto`).
+    #[inline]
+    pub fn auto() -> Self {
+        Self::Auto
+    }
+    /// Whether the value is `auto`.
+    #[inline]
+    pub fn is_auto(&self) -> bool {
+        matches!(self, Self::Auto)
+    }
+}
+
+impl Parse for BdCropColour {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
+            return Ok(Self::Auto);
+        }
+        Ok(Self::Colour(Color::parse(context, input)?))
+    }
+}
+
 /// Specified value of `-bd-pdf-mark-registration-position`.
 #[repr(u8)]
 #[derive(
