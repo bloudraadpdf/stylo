@@ -14,7 +14,8 @@ use crate::values::specified::bd_pdf_output as specified;
 
 pub use crate::values::specified::bd_pdf_output::{
     BdFontEmbeddingType, BdGlyphLayoutMode, BdPaintReordering, BdPdfBookmarksEnabled,
-    BdPdfPassdownStyles, BdPdfShapeOptimization, BdPdfTextRendering, BdRasterization,
+    BdPdfPassdownStyles, BdPdfRasterAccessibility, BdPdfShapeOptimization, BdPdfTextRendering,
+    BdRasterization,
 };
 
 /// Computed value of `-bd-rasterization-max-size`.

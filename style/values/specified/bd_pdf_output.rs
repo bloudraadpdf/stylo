@@ -23,6 +23,7 @@
 //! | `-bd-rasterization` | `-ro-rasterization` 17799 |
 //! | `-bd-rasterization-max-size` | `-ro-rasterization-max-size` 17824 |
 //! | `-bd-rasterization-supersampling` | `-ro-rasterization-supersampling` 17848 |
+//! | `-bd-pdf-raster-accessibility` | moegoe-native (F27 R6b ActualText overlay) |
 //! | `-bd-pdf-shape-optimization` | `-ro-pdf-shape-optimization` 17259 |
 //! | `-bd-pdf-passdown-styles` | `-ro-passdown-styles` 17038 |
 //! | `-bd-pdf-bookmarks-enabled` | `-ro-bookmarks-enabled` 13330 |
@@ -203,6 +204,49 @@ pub enum BdRasterization {
     Auto,
     Always,
     Never,
+}
+
+/// `-bd-pdf-raster-accessibility`.
+///
+/// Controls whether captured text under a force-rasterised element
+/// (cascade resolved `-bd-rasterization: always`) is re-emitted as
+/// an invisible ActualText overlay after the rasterised image (PDF
+/// text rendering mode 3 — `Tr 3`, ISO 32000-2 §9.3.6 Table 105).
+///
+/// - `none` (initial): the rasterised image is the sole output for
+///   the element subtree — text is pixels-only, not selectable /
+///   extractable / searchable. Mirrors PDFreactor's default raster
+///   behaviour.
+/// - `actual-text`: after the rasterised image is emitted, every
+///   captured `DrawText` command from the element subtree is
+///   re-played onto the PDF surface with `TextRendering::Invisible`
+///   (krilla 71e71db59). The glyphs remain in the content stream
+///   for accessibility tools, text selection, and search per
+///   ISO 32000-2 §14.9.4 ("ActualText" accessibility overlay).
+///
+/// No PDFreactor counterpart — this is a moegoe-native fork
+/// extension (F27 R6b).
+#[repr(u8)]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[allow(missing_docs)]
+pub enum BdPdfRasterAccessibility {
+    #[default]
+    None,
+    ActualText,
 }
 
 /// `-bd-pdf-shape-optimization`.

@@ -2344,6 +2344,15 @@ spec = "Nonstandard (moegoe -bd-* fork extension; F27 rasterisation supersamplin
 animation_type = "none"
 affects = "paint"
 
+[-bd-pdf-raster-accessibility]
+type = "BdPdfRasterAccessibility"
+initial = "computed::BdPdfRasterAccessibility::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfRasterAccessibility::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; F27 R6b rasterisation ActualText overlay)"
+animation_type = "none"
+affects = "paint"
+
 [-bd-pdf-shape-optimization]
 type = "BdPdfShapeOptimization"
 initial = "computed::BdPdfShapeOptimization::Auto"
