@@ -54,12 +54,25 @@ pub enum BdBarcodeType {
     DataMatrix,
     Pdf417,
     Aztec,
+    // PDFreactor canonicalises the hyphenated forms (`code-39`, etc.) —
+    // see docs/reference-manuals/pdfreactor.md §Barcodes (lines
+    // 13021+ in the 2026-Q1 manual). Accept both spellings so authored
+    // CSS works whether it targets moegoe's native `-bd-barcode-*`
+    // surface directly or comes in via the PDFreactor compat
+    // translator.
+    #[parse(aliases = "code-39")]
     Code39,
+    #[parse(aliases = "code-93")]
     Code93,
+    #[parse(aliases = "code-128")]
     Code128,
+    #[parse(aliases = "ean-8")]
     Ean8,
+    #[parse(aliases = "ean-13")]
     Ean13,
+    #[parse(aliases = "upc-a")]
     Upca,
+    #[parse(aliases = "upc-e")]
     Upce,
     Itf,
     Codabar,
