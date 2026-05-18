@@ -2328,10 +2328,10 @@ affects = "paint"
 
 [-bd-rasterization-max-size]
 type = "BdRasterizationMaxSize"
-initial = "computed::BdRasterizationMaxSize::zero()"
+initial = "computed::BdRasterizationMaxSize::initial()"
 struct = "counters"
-initial_specified_value = "specified::BdRasterizationMaxSize::zero()"
-spec = "Nonstandard (moegoe -bd-* fork extension; F27 rasterisation size threshold)"
+initial_specified_value = "specified::BdRasterizationMaxSize::initial()"
+spec = "Nonstandard (moegoe -bd-* fork extension; F27 rasterisation megapixel ceiling — auto | none | <number>)"
 animation_type = "none"
 affects = "paint"
 

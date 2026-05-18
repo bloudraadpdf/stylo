@@ -6,8 +6,8 @@
 //!
 //! Per-element / inherited knobs that govern how the PDF backend
 //! emits content. Most are keyword enums backed by trivial Stylo
-//! types; one (`-bd-rasterization-max-size`) carries a positive
-//! `<length>` and one (`-bd-rasterization-supersampling`) carries a
+//! types; `-bd-rasterization-max-size` carries `auto | none | <number>`
+//! (megapixels), and `-bd-rasterization-supersampling` carries a
 //! positive `<number>`. The renderer surface (krilla) consumes them
 //! at the paint-to-PDF boundary.
 //!
@@ -30,9 +30,7 @@
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
 use crate::values::generics::NonNegative;
-use crate::values::specified::length::NonNegativeLength;
 use crate::values::specified::{NonNegativeNumber, Number};
-use crate::Zero;
 use cssparser::Parser;
 use style_traits::ParseError;
 
@@ -296,18 +294,34 @@ pub enum BdPdfBookmarksEnabled {
 
 /// `-bd-rasterization-max-size`.
 ///
-/// Length threshold above which the renderer prefers rasterising
-/// to vector emission. Zero (initial) disables the threshold —
-/// the renderer never rasterises for size reasons.
+/// Per PDFreactor §`pdf-rasterization-max-size` (`-ro-rasterization-max-size`
+/// id 17824) the value space is `auto | none | <number>` where `<number>`
+/// is a megapixel ceiling clamping the rasterised pixmap. The unit is
+/// **megapixels** — a bare dimensionless number, *not* a CSS `<length>`.
+///
+/// - `auto` (initial): the renderer chooses (defers to its built-in
+///   default — 2 megapixels in moegoe).
+/// - `none`: no megapixel clamp — the renderer never reduces a raster
+///   buffer for size reasons (a hard pixel-dimension backstop in the
+///   renderer still applies).
+/// - `<number>`: clamp each pixmap side so the resulting buffer holds
+///   at most `<number>` megapixels.
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
-#[repr(C)]
-pub struct BdRasterizationMaxSize(pub NonNegativeLength);
+#[repr(C, u8)]
+pub enum BdRasterizationMaxSize {
+    /// `auto` — defer to the renderer's built-in megapixel default.
+    Auto,
+    /// `none` — never apply a megapixel ceiling.
+    None,
+    /// `<number>` — megapixel ceiling.
+    Megapixels(NonNegativeNumber),
+}
 
 impl BdRasterizationMaxSize {
-    /// Initial value (zero — no threshold).
+    /// Initial value (`auto`).
     #[inline]
-    pub fn zero() -> Self {
-        Self(NonNegativeLength::zero())
+    pub fn initial() -> Self {
+        BdRasterizationMaxSize::Auto
     }
 }
 
@@ -316,7 +330,23 @@ impl Parse for BdRasterizationMaxSize {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        Ok(Self(NonNegativeLength::parse(context, input)?))
+        // `auto | none | <number>`. The number form must come last so
+        // identifiers parse as keywords first.
+        if let Ok(value) = input.try_parse(|input| {
+            input.expect_ident_matching("auto")?;
+            Ok::<_, ParseError<'i>>(BdRasterizationMaxSize::Auto)
+        }) {
+            return Ok(value);
+        }
+        if let Ok(value) = input.try_parse(|input| {
+            input.expect_ident_matching("none")?;
+            Ok::<_, ParseError<'i>>(BdRasterizationMaxSize::None)
+        }) {
+            return Ok(value);
+        }
+        Ok(BdRasterizationMaxSize::Megapixels(
+            NonNegativeNumber::parse(context, input)?,
+        ))
     }
 }
 
@@ -379,6 +409,49 @@ mod tests {
         for css in ["auto", "text-as-glyphs", "text-as-vector"] {
             let value = parse_text_rendering(css);
             assert_eq!(value.to_css_string(), css);
+        }
+    }
+
+    fn parse_rasterization_max_size(css: &str) -> BdRasterizationMaxSize {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input = ParserInput::new(css);
+        let mut parser = Parser::new(&mut input);
+        parser
+            .parse_entirely(|input| BdRasterizationMaxSize::parse(&context, input))
+            .expect("rasterization-max-size value should parse")
+    }
+
+    #[test]
+    fn rasterization_max_size_accepts_auto_none_and_number() {
+        assert!(matches!(
+            parse_rasterization_max_size("auto"),
+            BdRasterizationMaxSize::Auto
+        ));
+        assert!(matches!(
+            parse_rasterization_max_size("none"),
+            BdRasterizationMaxSize::None
+        ));
+        match parse_rasterization_max_size("2") {
+            BdRasterizationMaxSize::Megapixels(n) => {
+                assert!((n.0.get() - 2.0).abs() < f32::EPSILON);
+            }
+            other => panic!("expected Megapixels(2), got {other:?}"),
+        }
+        match parse_rasterization_max_size("0.5") {
+            BdRasterizationMaxSize::Megapixels(n) => {
+                assert!((n.0.get() - 0.5).abs() < f32::EPSILON);
+            }
+            other => panic!("expected Megapixels(0.5), got {other:?}"),
         }
     }
 }

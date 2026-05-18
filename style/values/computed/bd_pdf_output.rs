@@ -5,14 +5,12 @@
 //! Computed values for the F27 PDF output tuning properties.
 //!
 //! The keyword enums are identity-computed (re-exported). The two
-//! length / number-bearing properties compute their inner value
-//! through the standard length / number walk via a derive.
+//! number-bearing properties compute their inner value through the
+//! standard number walk.
 
 use crate::derives::*;
-use crate::values::computed::length::NonNegativeLength;
 use crate::values::computed::{Context, NonNegativeNumber, ToComputedValue};
 use crate::values::specified::bd_pdf_output as specified;
-use crate::Zero;
 
 pub use crate::values::specified::bd_pdf_output::{
     BdFontEmbeddingType, BdGlyphLayoutMode, BdPaintReordering, BdPdfBookmarksEnabled,
@@ -20,15 +18,25 @@ pub use crate::values::specified::bd_pdf_output::{
 };
 
 /// Computed value of `-bd-rasterization-max-size`.
+///
+/// Mirrors the specified `auto | none | <number>` value space; the
+/// number is megapixels (PDFreactor `pdf-rasterization-max-size`).
 #[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, ToCss, ToResolvedValue, ToShmem, ToTyped)]
-#[repr(C)]
-pub struct BdRasterizationMaxSize(pub NonNegativeLength);
+#[repr(C, u8)]
+pub enum BdRasterizationMaxSize {
+    /// `auto` — defer to the renderer's built-in megapixel default.
+    Auto,
+    /// `none` — never apply a megapixel ceiling.
+    None,
+    /// `<number>` — megapixel ceiling.
+    Megapixels(NonNegativeNumber),
+}
 
 impl BdRasterizationMaxSize {
-    /// Initial value (zero — no threshold).
+    /// Initial value (`auto`).
     #[inline]
-    pub fn zero() -> Self {
-        Self(NonNegativeLength::zero())
+    pub fn initial() -> Self {
+        BdRasterizationMaxSize::Auto
     }
 }
 
@@ -36,11 +44,23 @@ impl ToComputedValue for specified::BdRasterizationMaxSize {
     type ComputedValue = BdRasterizationMaxSize;
 
     fn to_computed_value(&self, ctx: &Context) -> Self::ComputedValue {
-        BdRasterizationMaxSize(self.0.to_computed_value(ctx))
+        match self {
+            specified::BdRasterizationMaxSize::Auto => BdRasterizationMaxSize::Auto,
+            specified::BdRasterizationMaxSize::None => BdRasterizationMaxSize::None,
+            specified::BdRasterizationMaxSize::Megapixels(n) => {
+                BdRasterizationMaxSize::Megapixels(n.to_computed_value(ctx))
+            }
+        }
     }
 
     fn from_computed_value(computed: &Self::ComputedValue) -> Self {
-        Self(ToComputedValue::from_computed_value(&computed.0))
+        match computed {
+            BdRasterizationMaxSize::Auto => specified::BdRasterizationMaxSize::Auto,
+            BdRasterizationMaxSize::None => specified::BdRasterizationMaxSize::None,
+            BdRasterizationMaxSize::Megapixels(n) => specified::BdRasterizationMaxSize::Megapixels(
+                ToComputedValue::from_computed_value(n),
+            ),
+        }
     }
 }
 
