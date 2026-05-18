@@ -10,7 +10,10 @@ use crate::values::computed::url::ComputedUrl;
 use crate::values::computed::{Context, ToComputedValue};
 use crate::values::specified::bd_pdf_destination as specified;
 
-pub use specified::{BdDestinationArea, BdPdfAttachmentLocation, BdPdfStringSlot};
+pub use specified::{
+    BdDestinationArea, BdPdfAttachmentLocation, BdPdfAttachmentModificationDate,
+    BdPdfAttachmentRelationship, BdPdfStringSlot,
+};
 
 /// Computed value of `-bd-pdf-attachment-url`.
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, ToCss, ToResolvedValue, ToTyped)]

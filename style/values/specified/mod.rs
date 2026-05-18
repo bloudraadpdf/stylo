@@ -143,7 +143,8 @@ pub use self::bd_pdf_comment::{
 };
 pub use self::bd_pdf_conformance::{BdPdfConformanceValue, BdPdfVersionValue};
 pub use self::bd_pdf_destination::{
-    BdDestinationArea, BdPdfAttachmentLocation, BdPdfAttachmentUrl, BdPdfStringSlot,
+    BdDestinationArea, BdPdfAttachmentLocation, BdPdfAttachmentModificationDate,
+    BdPdfAttachmentRelationship, BdPdfAttachmentUrl, BdPdfStringSlot,
 };
 pub use self::bd_pdf_form::{
     BdPdfFormFieldFlags, BdPdfFormFieldMaxLength, BdPdfSignatureFieldLock,

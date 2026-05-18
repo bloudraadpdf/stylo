@@ -110,6 +110,88 @@ pub enum BdPdfAttachmentLocation {
     After,
 }
 
+/// Specified value of `-bd-pdf-attachment-relationship` (F9).
+///
+/// Mirrors ISO 32000-2 §14.13 Table 357 `/AFRelationship` keyword
+/// space — selects how the embedded file relates to the host PDF
+/// document. Cascaded onto each `-bd-pdf-attachment-url` element
+/// and projected into the PDF file-spec `/AFRelationship` slot at
+/// finalise time.
+#[repr(u8)]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    Eq,
+    Hash,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[allow(missing_docs)]
+pub enum BdPdfAttachmentRelationship {
+    Source,
+    Data,
+    Alternative,
+    Supplement,
+    EncryptedPayload,
+    FormData,
+    Schema,
+    #[default]
+    Unspecified,
+}
+
+/// Specified value of `-bd-pdf-attachment-modification-date` (F9).
+///
+/// Cascaded ISO 8601 string projected onto the embedded file's
+/// `/Params /ModDate` slot (ISO 32000-2 §7.11.3, Table 45). `Auto`
+/// keeps the renderer's document-level fallback in play so PDF/A-3
+/// finalisation stays green when no per-file date is authored.
+#[derive(
+    Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue,
+    ToResolvedValue, ToShmem, ToTyped,
+)]
+#[repr(C, u8)]
+pub enum BdPdfAttachmentModificationDate {
+    /// `auto` — defer to the document-level creation date.
+    Auto,
+    /// `<string>` — literal ISO 8601 timestamp.
+    Literal(OwnedStr),
+}
+
+impl BdPdfAttachmentModificationDate {
+    /// Initial value (`auto`).
+    #[inline]
+    pub fn auto() -> Self {
+        Self::Auto
+    }
+
+    /// Whether the value is `auto`.
+    #[inline]
+    pub fn is_auto(&self) -> bool {
+        matches!(self, Self::Auto)
+    }
+}
+
+impl Parse for BdPdfAttachmentModificationDate {
+    fn parse<'i, 't>(
+        _: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
+            return Ok(Self::Auto);
+        }
+        let s = input.expect_string()?;
+        Ok(Self::Literal(s.as_ref().to_owned().into()))
+    }
+}
+
 /// Specified value of `-bd-pdf-attachment-url`.
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
 #[repr(C, u8)]

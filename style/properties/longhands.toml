@@ -3001,6 +3001,24 @@ spec = "Nonstandard (moegoe -bd-* fork extension; F9 PDF attachment location)"
 animation_type = "none"
 affects = ""
 
+[-bd-pdf-attachment-relationship]
+type = "BdPdfAttachmentRelationship"
+initial = "computed::BdPdfAttachmentRelationship::Unspecified"
+struct = "counters"
+initial_specified_value = "specified::BdPdfAttachmentRelationship::Unspecified"
+spec = "Nonstandard (moegoe -bd-* fork extension; F9 PDF attachment AFRelationship; ISO 32000-2 §14.13 Table 357)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-attachment-modification-date]
+type = "BdPdfAttachmentModificationDate"
+initial = "computed::BdPdfAttachmentModificationDate::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfAttachmentModificationDate::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F9 PDF attachment modification date; ISO 32000-2 §7.11.3)"
+animation_type = "none"
+affects = ""
+
 [-bd-pdf-attachment-mime-type]
 type = "BdPdfStringSlot"
 initial = "computed::BdPdfStringSlot::Auto"
