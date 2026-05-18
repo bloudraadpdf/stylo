@@ -2,17 +2,19 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! Side-channel typed payload for `color: -bd-spot(...)` / `-bd-separation(...)`
-//! cascade values (moegoe F2).
+//! Side-channel typed payload for `color: -bd-spot(...)` /
+//! `color: -bd-separation(...)` / `color: device-cmyk(...)` cascade values
+//! (moegoe F2).
 //!
 //! The `color` longhand stores its computed value as
 //! [`AbsoluteColor`](crate::color::AbsoluteColor) — a fixed RGBA quad with
-//! no slot for a colorant name. An authored `color: -bd-spot(PANTONE-185)`
-//! would therefore collapse to the fail-closed
-//! `AbsoluteColor::TRANSPARENT_BLACK` returned by
+//! no slot for a colorant name or a CMYK ink-coverage quad. An authored
+//! `color: -bd-spot(PANTONE-185)` would therefore collapse to the
+//! fail-closed `AbsoluteColor::TRANSPARENT_BLACK` returned by
 //! `ColorFunction::<AbsoluteColor>::resolve_to_absolute` for `BdSpot`,
-//! losing the colorant name before any downstream consumer can resolve
-//! it against the document `@-bd-colour` registry.
+//! and a `color: device-cmyk(0 1 1 0)` would collapse to its naive sRGB
+//! projection (CSS Color 4 §10.2.2) before any downstream consumer could
+//! resolve it against a CMYK-aware backend.
 //!
 //! `BdColorFunction` is an internal-only longhand on the same
 //! `inherited_text` style struct as `color`. The cascade hooks
@@ -20,9 +22,12 @@
 //! application so that whenever `color` is set the matching
 //! `_-bd-color-function` longhand is set alongside it — either
 //! `BdColorFunction::Spot { ... }` when the specified colour is a
-//! `ColorFunction::BdSpot`, or `BdColorFunction::None` otherwise. The
-//! moegoe IR conversion boundary reads this companion field and
-//! preserves the colorant name through to PDF Separation emission.
+//! `ColorFunction::BdSpot`, `BdColorFunction::DeviceCmyk { ... }` when
+//! the specified colour is a fallback-free `ColorFunction::DeviceCmyk`,
+//! or `BdColorFunction::None` otherwise. The moegoe IR conversion
+//! boundary reads this companion field and preserves either the
+//! colorant name (Separation emission) or the CMYK quad (`k`/`K`
+//! operator emission) through to PDF.
 //!
 //! The longhand is not author-exposed (`enabled_in = ""`); the only
 //! supply path is the internal cascade hook.
@@ -38,7 +43,9 @@ use style_traits::{CssWriter, ParseError, StyleParseErrorKind, ToCss};
 /// longhand. `None` is the initial value; `Spot` carries the resolved
 /// colorant name and tint produced by the cascade hook for
 /// `color: -bd-spot(<name>[, <tint>])` /
-/// `color: -bd-separation(<name>[, <tint>])`.
+/// `color: -bd-separation(<name>[, <tint>])`; `DeviceCmyk` carries the
+/// resolved CMYK + alpha quad produced by the cascade hook for
+/// `color: device-cmyk(c m y k[ / a])` when no fallback is authored.
 #[derive(
     Clone,
     Debug,
@@ -53,9 +60,10 @@ use style_traits::{CssWriter, ParseError, StyleParseErrorKind, ToCss};
 )]
 #[repr(C, u8)]
 pub enum BdColorFunction {
-    /// No `-bd-spot()` / `-bd-separation()` companion for the `color`
-    /// longhand. This is the initial value and also the value the
-    /// cascade hook stores when `color` is set to any non-spot colour.
+    /// No `-bd-spot()` / `-bd-separation()` / fallback-free
+    /// `device-cmyk()` companion for the `color` longhand. This is the
+    /// initial value and also the value the cascade hook stores when
+    /// `color` is set to any colour without a fork-typed side channel.
     None,
     /// `color: -bd-spot(<name>[, <tint>])` (or `-bd-separation(...)`).
     /// `tint` is the 0..=1 resolved scalar (the cascade resolves
@@ -74,6 +82,38 @@ pub enum BdColorFunction {
         /// tooling and round-trip serialisation.
         is_separation: bool,
     },
+    /// `color: device-cmyk(<c> <m> <y> <k>[ / <alpha>])` with NO
+    /// authored fallback. Carried through the cascade as a typed quad
+    /// so the moegoe IR boundary can preserve it onto
+    /// `Color::DeviceCmyk` and emit the four-component `k` / `K` PDF
+    /// operators (ISO 32000-2 §8.6.3 Table 75) rather than the naive
+    /// sRGB projection (CSS Color 4 §10.2.2) that
+    /// `ColorPropertyValue::to_computed_value` would otherwise produce.
+    ///
+    /// When the author supplies an explicit fallback
+    /// (`device-cmyk(0 1 1 0, red)`) the companion remains `None`: CSS
+    /// Color 6 §2 says the fallback drives the in-cascade colour space,
+    /// so the `color` longhand's sRGB resolution is correct and the
+    /// side channel must NOT override it.
+    DeviceCmyk {
+        /// Cyan ink coverage. Author-resolved scalar (numbers and
+        /// percentages alike are normalised to a number-on-[0,1] range
+        /// by `ColorComponent::resolve(None)`). Out-of-gamut values
+        /// are preserved verbatim because the PDF `k` / `K` operator
+        /// accepts the full real-number range; the renderer clamps at
+        /// emission time per backend convention.
+        c: f32,
+        /// Magenta ink coverage.
+        m: f32,
+        /// Yellow ink coverage.
+        y: f32,
+        /// Key (black) ink coverage.
+        k: f32,
+        /// Alpha component. The CSS `device-cmyk()` `alpha-omitted`
+        /// form (`device-cmyk(c m y k)`) yields `1.0` — matching CSS
+        /// Color 4 §10.2.2.
+        alpha: f32,
+    },
 }
 
 impl BdColorFunction {
@@ -83,10 +123,11 @@ impl BdColorFunction {
         Self::None
     }
 
-    /// Whether this value carries a spot reference.
+    /// Whether this value carries a spot reference or a typed CMYK quad
+    /// (i.e. anything other than [`Self::None`]).
     #[inline]
     pub fn is_some(&self) -> bool {
-        matches!(self, Self::Spot { .. })
+        !matches!(self, Self::None)
     }
 }
 
@@ -120,6 +161,21 @@ impl ToCss for BdColorFunction {
                 if (tint - 1.0).abs() > f32::EPSILON {
                     dest.write_str(", ")?;
                     tint.to_css(dest)?;
+                }
+                dest.write_char(')')
+            }
+            Self::DeviceCmyk { c, m, y, k, alpha } => {
+                dest.write_str("device-cmyk(")?;
+                c.to_css(dest)?;
+                dest.write_char(' ')?;
+                m.to_css(dest)?;
+                dest.write_char(' ')?;
+                y.to_css(dest)?;
+                dest.write_char(' ')?;
+                k.to_css(dest)?;
+                if (alpha - 1.0).abs() > f32::EPSILON {
+                    dest.write_str(" / ")?;
+                    alpha.to_css(dest)?;
                 }
                 dest.write_char(')')
             }

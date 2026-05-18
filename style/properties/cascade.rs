@@ -573,10 +573,11 @@ fn tweak_when_ignoring_colors(
 /// a just-applied `color` declaration.
 ///
 /// The internal companion longhand exists because the `color` longhand
-/// computes to `AbsoluteColor`, which cannot carry the colorant name
-/// of an authored `color: -bd-spot(<name>)` / `-bd-separation(<name>)`.
-/// The cascade applies the companion alongside `color` so the colorant
-/// name survives to the IR conversion boundary.
+/// computes to `AbsoluteColor`, which cannot carry either the colorant
+/// name of an authored `color: -bd-spot(<name>)` / `-bd-separation(<name>)`
+/// or the typed CMYK quad of an authored `color: device-cmyk(c m y k)`.
+/// The cascade applies the companion alongside `color` so both survive
+/// to the IR conversion boundary.
 ///
 /// Mapping rules:
 ///
@@ -584,20 +585,27 @@ fn tweak_when_ignoring_colors(
 ///   `_-bd-color-function: <Spot { name, tint, is_separation: false }>`
 /// * `color: -bd-separation(name[, tint])` →
 ///   `_-bd-color-function: <Spot { name, tint, is_separation: true }>`
+/// * `color: device-cmyk(c m y k[ / a])` with NO fallback →
+///   `_-bd-color-function: <DeviceCmyk { c, m, y, k, alpha }>`
+/// * `color: device-cmyk(c m y k[ / a], <fallback>)` → companion stays
+///   `None` so the cascade's fallback-driven sRGB resolution wins (CSS
+///   Color 6 §2 says the fallback drives the in-cascade colour space).
 /// * any other colour value → `_-bd-color-function: <None>`
 /// * `color: <css-wide-keyword>` → companion follows the same keyword.
 ///   `_-bd-color-function` is on the same `inherited_text` style struct
 ///   as `color` and shares its inherited-by-default status, so
 ///   inherit/initial/unset/revert semantics line up automatically.
 ///
-/// Unresolved tints (calc values that don't simplify at parse time,
-/// `none`, alpha-omitted) fall back to the identity tint `1.0`, which
-/// matches `resolve_bd_spot_color` in `moegoe-css` and the PDF
-/// Separation tint-transform identity.
+/// Unresolved tints / CMYK components (calc values that don't simplify
+/// at parse time, channel keywords, `none`) for the spot path fall back
+/// to the identity tint `1.0`; on the CMYK path an unresolved component
+/// drops the companion to `None` so the sRGB collapse is used as a
+/// fail-safe rather than emitting silently-wrong ink coverage.
 fn synthesise_bd_color_function_companion(
     color_declaration: &PropertyDeclaration,
 ) -> PropertyDeclaration {
     use crate::color::component::ColorComponent;
+    use crate::color::parsing::NumberOrPercentageComponent;
     use crate::color::ColorFunction;
     use crate::values::specified::BdColorFunction as SpecifiedBdColorFunction;
 
@@ -608,15 +616,19 @@ fn synthesise_bd_color_function_companion(
         return PropertyDeclaration::css_wide_keyword(LonghandId::BdColorFunction, keyword);
     }
 
+    // The `_-bd-color-function` longhand is `boxed = true` in
+    // `longhands.toml` so its specified value lives behind a `Box`
+    // (the `DeviceCmyk` variant pushes the in-place size above
+    // `BOX_THRESHOLD`). Every constructor here wraps in `Box::new`.
     let none_decl = || -> PropertyDeclaration {
-        PropertyDeclaration::BdColorFunction(SpecifiedBdColorFunction::None)
+        PropertyDeclaration::BdColorFunction(Box::new(SpecifiedBdColorFunction::None))
     };
 
     // Pull the specified colour out of the declaration. Anything that
     // can't be downcast (variable-substituted values that haven't been
     // resolved yet, etc.) falls through to the `None` companion — the
-    // value of the side channel doesn't matter when no spot reference
-    // is being authored.
+    // value of the side channel doesn't matter when no fork-typed
+    // reference is being authored.
     let specified_color = match color_declaration {
         PropertyDeclaration::Color(value) => &value.0,
         _ => return none_decl(),
@@ -627,26 +639,65 @@ fn synthesise_bd_color_function_companion(
         _ => return none_decl(),
     };
 
-    let (name, tint, is_separation) = match color_function {
-        ColorFunction::BdSpot(name, tint, is_separation) => (name, tint, *is_separation),
-        _ => return none_decl(),
-    };
+    match color_function {
+        ColorFunction::BdSpot(name, tint, is_separation) => {
+            // Resolve the authored tint to a numeric `f32`. Unresolved /
+            // omitted tints fall back to the identity (full ink
+            // coverage), matching the parser's default and
+            // `resolve_bd_spot_color` in `moegoe-css`.
+            let tint_value: f32 = match tint {
+                ColorComponent::Value(value) => value.to_number(1.0).clamp(0.0, 1.0),
+                _ => 1.0,
+            };
+            PropertyDeclaration::BdColorFunction(Box::new(SpecifiedBdColorFunction::Spot {
+                name: name.clone(),
+                tint: tint_value,
+                is_separation: *is_separation,
+            }))
+        }
+        ColorFunction::DeviceCmyk(c, m, y, k, alpha, fallback) => {
+            // F2 — only carry CMYK on the side channel when the author
+            // did NOT supply an explicit fallback. With a fallback,
+            // `ColorPropertyValue::to_computed_value` resolves to the
+            // fallback's sRGB colour by design and the companion must
+            // stay `None` so the IR boundary uses the absolute colour.
+            if fallback.is_some() {
+                return none_decl();
+            }
 
-    // Resolve the authored tint to a numeric `f32`. Unresolved /
-    // omitted tints fall back to the identity (full ink coverage),
-    // matching the parser's default and `resolve_bd_spot_color` in
-    // `moegoe-css`.
-    let tint_value: f32 = match tint {
-        ColorComponent::Value(value) => value.to_number(1.0).clamp(0.0, 1.0),
-        _ => 1.0,
-    };
+            // Resolve each component to a concrete `f32`. Numbers and
+            // percentages both normalise via `ColorComponent::resolve`
+            // with `None` as the origin colour (CMYK has no
+            // relative-syntax origin in CSS Color 6 §2). Anything that
+            // does not resolve drops the companion to `None` so the
+            // sRGB collapse runs as a fail-safe.
+            let resolve = |comp: &ColorComponent<NumberOrPercentageComponent>| -> Option<f32> {
+                comp.resolve(None)
+                    .ok()?
+                    .map(|value| value.to_number(1.0))
+            };
+            let (cy, ma, ye, ke) = match (resolve(c), resolve(m), resolve(y), resolve(k)) {
+                (Some(cy), Some(ma), Some(ye), Some(ke)) => (cy, ma, ye, ke),
+                _ => return none_decl(),
+            };
+            let alpha_value = match alpha {
+                ColorComponent::AlphaOmitted => 1.0,
+                other => match resolve(other) {
+                    Some(v) => v,
+                    None => return none_decl(),
+                },
+            };
 
-    let spot = SpecifiedBdColorFunction::Spot {
-        name: name.clone(),
-        tint: tint_value,
-        is_separation,
-    };
-    PropertyDeclaration::BdColorFunction(spot)
+            PropertyDeclaration::BdColorFunction(Box::new(SpecifiedBdColorFunction::DeviceCmyk {
+                c: cy,
+                m: ma,
+                y: ye,
+                k: ke,
+                alpha: alpha_value,
+            }))
+        }
+        _ => none_decl(),
+    }
 }
 
 /// We track the index only for prioritary properties. For other properties we can just iterate.

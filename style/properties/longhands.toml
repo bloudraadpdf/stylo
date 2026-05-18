@@ -650,11 +650,17 @@ struct = "inherited_text"
 initial_specified_value = "specified::BdColorFunction::None"
 enabled_in = ""
 has_effect_on_gecko_scrollbars = false
-spec = "Nonstandard (moegoe -bd-* fork; F2 spot colour side channel for `color`)"
+spec = "Nonstandard (moegoe -bd-* fork; F2 spot colour / device-cmyk side channel for `color`)"
 animation_type = "none"
 ignored_when_colors_disabled = true
 servo_restyle_damage = "repaint"
 affects = "paint"
+# `BdColorFunction::DeviceCmyk { c, m, y, k, alpha: f32 }` (20 bytes of
+# payload, with the enum aligned to the 8-byte `Atom` pointer carried by
+# the `Spot` variant) pushes the in-place size above the 24-byte
+# BOX_THRESHOLD. Box the longhand so the side-channel grows without
+# forcing every other inherited_text longhand to be boxed.
+boxed = true
 
 [color-scheme]
 type = "ColorScheme"
