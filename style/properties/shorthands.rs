@@ -3425,6 +3425,62 @@ pub mod _bd_text_linethrough {
     }
 }
 
+/// `-bd-change-bar` shorthand.
+///
+/// Mirrors PDFreactor's `-ro-change-bar`
+/// (`docs/reference-manuals/pdfreactor.md:13805`): four components
+/// in any order — `<colour>`, `<align>`, `<offset>`, `<width>` —
+/// followed by an optional `/<name>` segment that selects a track
+/// class. At least one component must appear.
+pub mod _bd_change_bar {
+    pub use crate::properties::shorthands_generated::_bd_change_bar::*;
+
+    use super::*;
+    use crate::properties::longhands::{
+        _bd_change_bar_align, _bd_change_bar_colour, _bd_change_bar_name, _bd_change_bar_offset,
+        _bd_change_bar_width,
+    };
+
+    pub fn parse_value<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Longhands, ParseError<'i>> {
+        let mut colour = None;
+        let mut align = None;
+        let mut offset = None;
+        let mut width = None;
+        let mut parsed = 0;
+        // Order-independent loop. Each `try_parse_one!` advances
+        // `parsed` only when it consumes input and the slot was
+        // empty. We exit the first iteration that consumes nothing.
+        loop {
+            parsed += 1;
+            try_parse_one!(context, input, colour, _bd_change_bar_colour::parse);
+            try_parse_one!(context, input, align, _bd_change_bar_align::parse);
+            try_parse_one!(context, input, offset, _bd_change_bar_offset::parse);
+            try_parse_one!(context, input, width, _bd_change_bar_width::parse);
+            parsed -= 1;
+            break;
+        }
+        if parsed == 0 {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+        // Optional `/<name>` segment.
+        let name = if input.try_parse(|i| i.expect_delim('/')).is_ok() {
+            Some(_bd_change_bar_name::parse(context, input)?)
+        } else {
+            None
+        };
+        Ok(expanded! {
+            _bd_change_bar_colour: unwrap_or_initial!(_bd_change_bar_colour, colour),
+            _bd_change_bar_align: unwrap_or_initial!(_bd_change_bar_align, align),
+            _bd_change_bar_offset: unwrap_or_initial!(_bd_change_bar_offset, offset),
+            _bd_change_bar_width: unwrap_or_initial!(_bd_change_bar_width, width),
+            _bd_change_bar_name: unwrap_or_initial!(_bd_change_bar_name, name),
+        })
+    }
+}
+
 pub mod animation {
     pub use crate::properties::shorthands_generated::animation::*;
 

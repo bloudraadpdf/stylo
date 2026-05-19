@@ -13,7 +13,10 @@
 //! All longhands apply to all elements; they are not inherited.
 
 use crate::derives::*;
+use crate::values::computed::Percentage;
+use crate::values::specified::border::LineWidth;
 use crate::values::specified::color::Color;
+use crate::values::specified::length::LengthPercentage;
 use crate::OwnedStr;
 
 /// Specified value of `-bd-change-bar-align`.
@@ -162,7 +165,47 @@ impl crate::parser::Parse for BdChangeBarName {
     }
 }
 
-// Note: `-bd-change-bar-offset` and `-bd-change-bar-width` reuse
-// the existing `Length` / `NonNegativeLength` predefined types in
-// `longhands.toml` directly — no `BdChangeBarOffset` /
-// `BdChangeBarWidth` alias is required.
+/// Specified value of `-bd-change-bar-offset`.
+///
+/// Signed distance from the column / page edge expressed as a length
+/// or a percentage. Per PDFreactor's reference manual the initial
+/// value is `25%` of the page-margin width (or, for column-anchored
+/// bars, of the column gap). Negative values pull the bar inside the
+/// margin track.
+#[derive(
+    Clone, Debug, MallocSizeOf, PartialEq, Parse, SpecifiedValueInfo, ToCss, ToShmem, ToTyped,
+)]
+#[repr(C)]
+pub struct BdChangeBarOffset(pub LengthPercentage);
+
+impl BdChangeBarOffset {
+    /// Initial value (`25%`).
+    ///
+    /// Resolved against the page-margin width (or column gap) at
+    /// allocation time in `moegoe_page::change_bars`.
+    #[inline]
+    pub fn quarter_percent() -> Self {
+        Self(LengthPercentage::Percentage(Percentage(0.25)))
+    }
+}
+
+/// Specified value of `-bd-change-bar-width`.
+///
+/// Mirrors the CSS Backgrounds & Borders `<line-width>` grammar:
+/// the `thin` / `medium` / `thick` keywords (1px / 3px / 5px per
+/// CSS-Backgrounds-3 §3.1) or an explicit `<length>`. PDFreactor's
+/// `-ro-change-bar-width` accepts the same set
+/// (`docs/reference-manuals/pdfreactor.md:13921`).
+#[derive(
+    Clone, Debug, MallocSizeOf, PartialEq, Parse, SpecifiedValueInfo, ToCss, ToShmem, ToTyped,
+)]
+#[repr(C)]
+pub struct BdChangeBarWidth(pub LineWidth);
+
+impl BdChangeBarWidth {
+    /// Initial value (`medium`).
+    #[inline]
+    pub fn medium() -> Self {
+        Self(LineWidth::Medium)
+    }
+}

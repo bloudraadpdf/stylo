@@ -98,7 +98,8 @@ pub use self::bd_bfo::{BdIndex, BdIndexGrouping};
 pub use self::bd_bookmark::{BdPdfLinkType, BookmarkTarget};
 pub use self::bd_color_function::BdColorFunction;
 pub use self::bd_change_bar::{
-    BdChangeBarAlign, BdChangeBarColour, BdChangeBarExclusion, BdChangeBarName,
+    BdChangeBarAlign, BdChangeBarColour, BdChangeBarExclusion, BdChangeBarName, BdChangeBarOffset,
+    BdChangeBarWidth,
 };
 pub use self::bd_float::{
     BdFloatDeferColumn, BdFloatDeferPage, BdFloatDisplace, BdFloatModifier, BdFloatPolicy,
