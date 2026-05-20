@@ -52,6 +52,7 @@ pub enum BdPdfConformanceValue {
     A4e,
     A4f,
     Ua1,
+    Ua2,
     // F1 — PDF/X pre-press conformance levels. PDF/X-1a (greyscale +
     // CMYK + spot only, ISO 15930-1/4), PDF/X-3 (adds RGB/Lab,
     // ISO 15930-3/6), PDF/X-4 (adds transparency + layers,
@@ -71,6 +72,10 @@ pub enum BdPdfConformanceValue {
     PdfX4,
     #[css(keyword = "pdf-x-4p")]
     PdfX4P,
+    // Well-Tagged PDF — PDF Association profile (krilla
+    // `Validator::WTPDF`). Structural tagging subset of PDF/UA
+    // without the full UA accessibility conformance gate.
+    Wtpdf,
 }
 
 impl BdPdfConformanceValue {
