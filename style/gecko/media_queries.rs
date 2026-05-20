@@ -134,7 +134,7 @@ impl Device {
             used_font_metrics: AtomicBool::new(false),
             used_viewport_size: AtomicBool::new(false),
             used_dynamic_viewport_size: AtomicBool::new(false),
-            environment: CssEnvironment,
+            environment: CssEnvironment::default(),
         }
     }
 

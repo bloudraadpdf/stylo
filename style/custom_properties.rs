@@ -43,12 +43,61 @@ use std::ops::{Index, IndexMut};
 use std::{cmp, num};
 use style_traits::{CssWriter, ParseError, StyleParseErrorKind, ToCss};
 
+/// CSS env-1 §3 paged-media environment variables, in CSS pixels.
+///
+/// Carried by [`CssEnvironment`] so that an embedder (moegoe's paginator)
+/// can supply per-@page used dimensions before the cascade resolves
+/// `env(page-width)` / `env(page-height)` / `env(page-margin-*)` calls
+/// embedded in `@page` declarations or `@page` margin-box content.
+///
+/// `None` for any field means "no override authored at this resolution
+/// site"; the env evaluator returns the default `0px` so authored
+/// fallbacks (or the property's initial) take effect.
+#[derive(Clone, Copy, Debug, Default, MallocSizeOf, PartialEq)]
+pub struct PagedMediaEnvOverrides {
+    /// `env(page-width)`, in CSS pixels.
+    pub page_width: Option<f32>,
+    /// `env(page-height)`, in CSS pixels.
+    pub page_height: Option<f32>,
+    /// `env(page-margin-top)`, in CSS pixels.
+    pub page_margin_top: Option<f32>,
+    /// `env(page-margin-right)`, in CSS pixels.
+    pub page_margin_right: Option<f32>,
+    /// `env(page-margin-bottom)`, in CSS pixels.
+    pub page_margin_bottom: Option<f32>,
+    /// `env(page-margin-left)`, in CSS pixels.
+    pub page_margin_left: Option<f32>,
+}
+
 /// The environment from which to get `env` function values.
 ///
-/// TODO(emilio): If this becomes a bit more complex we should probably move it
-/// to the `media_queries` module, or something.
-#[derive(Debug, MallocSizeOf)]
-pub struct CssEnvironment;
+/// Carries an interior-mutable override slot for the CSS env-1 §3
+/// paged-media variables (`page-width`, `page-height`,
+/// `page-margin-*`). Embedders that drive paged-media cascade (moegoe)
+/// install per-@page used geometry here before re-resolving env() so
+/// authored `env(page-*)` references collapse to real lengths instead
+/// of the static `0px` defaults.
+#[derive(Debug, Default, MallocSizeOf)]
+pub struct CssEnvironment {
+    /// CSS env-1 §3 paged-media overrides; `None` means "no override
+    /// installed", in which case the static evaluators return `0px`.
+    #[ignore_malloc_size_of = "Trivial copy in RwLock"]
+    paged_media_overrides: parking_lot::RwLock<Option<PagedMediaEnvOverrides>>,
+}
+
+impl CssEnvironment {
+    /// Install per-@page paged-media env-var overrides. Pass `None` to
+    /// clear; the override slot is interior-mutable so this can be
+    /// flipped per-@page without taking a `&mut Device`.
+    pub fn set_paged_media_overrides(&self, overrides: Option<PagedMediaEnvOverrides>) {
+        *self.paged_media_overrides.write() = overrides;
+    }
+
+    /// Read the currently installed paged-media env-var overrides.
+    pub fn paged_media_overrides(&self) -> Option<PagedMediaEnvOverrides> {
+        *self.paged_media_overrides.read()
+    }
+}
 
 /// Controls how `env()` references are handled during variable substitution.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -58,6 +107,16 @@ pub enum EnvironmentResolutionMode {
     /// Treat `env()` references as unavailable so authored fallbacks, if any,
     /// are used instead.
     TreatAsMissing,
+    /// Resolve only the CSS env-1 §3 paged-media variables
+    /// (`page-width`, `page-height`, `page-margin-*`) against the
+    /// device's installed [`PagedMediaEnvOverrides`]. Every other
+    /// `env()` name is treated as unavailable so authored fallbacks
+    /// (e.g. `env(safe-area-inset-top, 36pt)`) still win.
+    ///
+    /// Used by moegoe's `@page` rule re-cascade to substitute the
+    /// per-@page used size and margins into authored `env(page-*)`
+    /// calls without disturbing the safe-area-inset fallback path.
+    ResolvePagedMediaEnvOnly,
 }
 
 type EnvironmentEvaluator = fn(device: &Device, url_data: &UrlExtraData) -> VariableValue;
@@ -95,33 +154,60 @@ fn get_safearea_inset_right(device: &Device, url_data: &UrlExtraData) -> Variabl
 // CSS env() variables for paged media (CSS env-1 §3.1).
 //
 // These resolve to the dimensions of the current @page area on
-// per-page evaluation. moegoe will plumb the live values from the
-// paginator at resolve time; for the Stylo cascade the defaults
-// resolve to 0px so that `env(page-width, fallback)` parses and
-// authored fallbacks take effect. The runtime substitution that
-// returns real per-page values is moegoe-side.
-fn get_page_width(_device: &Device, url_data: &UrlExtraData) -> VariableValue {
-    VariableValue::pixels(0.0, url_data)
+// per-page evaluation. Embedders that drive paged-media cascade
+// (moegoe's paginator) install per-@page used geometry through
+// [`CssEnvironment::set_paged_media_overrides`] before re-cascading
+// the @page rule. When no override is installed the default `0px`
+// flows through so `env(page-width, fallback)` parses and authored
+// fallbacks take effect on the first pass.
+fn paged_media_override_or_zero(
+    device: &Device,
+    select: fn(&PagedMediaEnvOverrides) -> Option<f32>,
+    url_data: &UrlExtraData,
+) -> VariableValue {
+    let value = device
+        .environment()
+        .paged_media_overrides()
+        .and_then(|overrides| select(&overrides))
+        .unwrap_or(0.0);
+    VariableValue::pixels(value, url_data)
 }
 
-fn get_page_height(_device: &Device, url_data: &UrlExtraData) -> VariableValue {
-    VariableValue::pixels(0.0, url_data)
+fn get_page_width(device: &Device, url_data: &UrlExtraData) -> VariableValue {
+    paged_media_override_or_zero(device, |o| o.page_width, url_data)
 }
 
-fn get_page_margin_top(_device: &Device, url_data: &UrlExtraData) -> VariableValue {
-    VariableValue::pixels(0.0, url_data)
+fn get_page_height(device: &Device, url_data: &UrlExtraData) -> VariableValue {
+    paged_media_override_or_zero(device, |o| o.page_height, url_data)
 }
 
-fn get_page_margin_right(_device: &Device, url_data: &UrlExtraData) -> VariableValue {
-    VariableValue::pixels(0.0, url_data)
+fn get_page_margin_top(device: &Device, url_data: &UrlExtraData) -> VariableValue {
+    paged_media_override_or_zero(device, |o| o.page_margin_top, url_data)
 }
 
-fn get_page_margin_bottom(_device: &Device, url_data: &UrlExtraData) -> VariableValue {
-    VariableValue::pixels(0.0, url_data)
+fn get_page_margin_right(device: &Device, url_data: &UrlExtraData) -> VariableValue {
+    paged_media_override_or_zero(device, |o| o.page_margin_right, url_data)
 }
 
-fn get_page_margin_left(_device: &Device, url_data: &UrlExtraData) -> VariableValue {
-    VariableValue::pixels(0.0, url_data)
+fn get_page_margin_bottom(device: &Device, url_data: &UrlExtraData) -> VariableValue {
+    paged_media_override_or_zero(device, |o| o.page_margin_bottom, url_data)
+}
+
+fn get_page_margin_left(device: &Device, url_data: &UrlExtraData) -> VariableValue {
+    paged_media_override_or_zero(device, |o| o.page_margin_left, url_data)
+}
+
+/// CSS env-1 §3 paged-media variable atoms. `CssEnvironment::get` uses
+/// this set to filter what [`EnvironmentResolutionMode::ResolvePagedMediaEnvOnly`]
+/// admits: only these names resolve under that mode; everything else
+/// (notably `safe-area-inset-*`) falls back to authored values.
+fn is_paged_media_env_name(name: &Atom) -> bool {
+    *name == atom!("page-width")
+        || *name == atom!("page-height")
+        || *name == atom!("page-margin-top")
+        || *name == atom!("page-margin-right")
+        || *name == atom!("page-margin-bottom")
+        || *name == atom!("page-margin-left")
 }
 
 #[cfg(feature = "gecko")]
@@ -2252,6 +2338,22 @@ fn substitute_one_reference<'a>(
                         .map(Substitution::from_value)
                 }
                 EnvironmentResolutionMode::TreatAsMissing => None,
+                EnvironmentResolutionMode::ResolvePagedMediaEnvOnly => {
+                    // CSS env-1 §3 paged-media path: only the six
+                    // paged-media variable names resolve; every other
+                    // env() (notably safe-area-inset-*) falls through
+                    // to its authored fallback, matching the previous
+                    // `TreatAsMissing` behaviour for those names.
+                    if is_paged_media_env_name(&reference.name) {
+                        let device = stylist.device();
+                        device
+                            .environment()
+                            .get(&reference.name, device, url_data)
+                            .map(Substitution::from_value)
+                    } else {
+                        None
+                    }
+                }
             }
         },
         // https://drafts.csswg.org/css-values-5/#attr-substitution

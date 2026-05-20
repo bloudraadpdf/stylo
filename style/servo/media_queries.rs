@@ -160,7 +160,7 @@ impl Device {
             used_font_metrics: AtomicBool::new(false),
             used_viewport_units: AtomicBool::new(false),
             prefers_color_scheme,
-            environment: CssEnvironment,
+            environment: CssEnvironment::default(),
             font_metrics_provider,
             default_computed_values,
         }
