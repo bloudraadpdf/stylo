@@ -72,6 +72,7 @@ pub use self::counters::{
 };
 pub use self::easing::TimingFunction;
 pub use self::effects::{BoxShadow, Filter, SimpleShadow};
+pub use self::exclusions_1::WrapFlow;
 pub use self::flex::FlexBasis;
 pub use self::font::{FontFamily, FontLanguageOverride, FontPalette, FontStyle};
 pub use self::font::{FontFeatureSettings, FontVariantLigatures, FontVariantNumeric};
@@ -90,6 +91,7 @@ pub use self::list::ListStyleType;
 pub use self::list::Quotes;
 pub use self::motion::{OffsetPath, OffsetPosition, OffsetRotate};
 pub use self::outline::OutlineStyle;
+pub use self::overflow_4::{BlockEllipsis, Continue, LeadingTrim, MaxLines, StandardLineClamp};
 pub use self::bd_a11y::{BdTextReplace, BdTooltip};
 pub use self::bd_barcode::{
     BdBarcodeAffix, BdBarcodeCheckDigitMode, BdBarcodeColour, BdBarcodeCompositeType,
@@ -150,6 +152,9 @@ pub use self::bd_pdf_destination::{
     BdDestinationArea, BdPdfAttachmentLocation, BdPdfAttachmentModificationDate,
     BdPdfAttachmentRelationship, BdPdfAttachmentUrl, BdPdfStringSlot,
 };
+pub use self::bd_pdf_output_condition::BdPdfOutputCondition;
+pub use self::bd_pdf_output_registry_name::BdPdfOutputRegistryName;
+pub use self::bd_pdf_trapped::BdPdfTrapped;
 // re-export by computed path; bd_pdf_destination now declares its own
 // computed `BdPdfAttachmentUrl` that contains `ComputedUrl`.
 pub use self::bd_pdf_form::{
@@ -203,6 +208,8 @@ pub use self::position::{PositionArea, PositionAreaKeyword};
 pub use self::ratio::Ratio;
 pub use self::rect::NonNegativeLengthOrNumberRect;
 pub use self::resolution::Resolution;
+pub use self::ruby_1::{RubyMerge, RubyOverhang};
+pub use self::sizing_4::MinIntrinsicSizing;
 pub use self::svg::{DProperty, MozContextProperties};
 pub use self::svg::{SVGLength, SVGOpacity, SVGPaint, SVGPaintKind};
 pub use self::svg::{SVGPaintOrder, SVGStrokeDashArray, SVGWidth, VectorEffect};
@@ -265,8 +272,11 @@ pub mod bd_pdf_destination;
 pub mod bd_pdf_form;
 pub mod bd_pdf_format;
 pub mod bd_pdf_output;
+pub mod bd_pdf_output_condition;
 pub mod bd_pdf_output_intent;
+pub mod bd_pdf_output_registry_name;
 pub mod bd_pdf_tag;
+pub mod bd_pdf_trapped;
 pub mod bd_pdf_viewer;
 pub mod bd_sidenote;
 pub mod bd_tab_stops;
@@ -279,6 +289,7 @@ pub mod column;
 pub mod counters;
 pub mod easing;
 pub mod effects;
+pub mod exclusions_1;
 pub mod flex;
 pub mod font;
 pub mod image;
@@ -287,12 +298,15 @@ pub mod length_percentage;
 pub mod list;
 pub mod motion;
 pub mod outline;
+pub mod overflow_4;
 pub mod page;
 pub mod percentage;
 pub mod position;
 pub mod ratio;
 pub mod rect;
 pub mod resolution;
+pub mod ruby_1;
+pub mod sizing_4;
 pub mod svg;
 pub mod table;
 pub mod text;

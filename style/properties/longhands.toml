@@ -103,6 +103,47 @@ struct = "box"
 spec = "https://drafts.csswg.org/css-overflow-3/#line-clamp"
 affects = "layout"
 
+# CSS Overflow 4 §5 — block-container line cap. `line-clamp` is the
+# shorthand-style standardised counterpart of `-webkit-line-clamp`;
+# it accepts an optional ellipsis `<string>` and cascades through
+# `inherited_text` so descendants observe the cap policy.
+[line-clamp]
+type = "StandardLineClamp"
+initial = "computed::StandardLineClamp::None"
+struct = "inherited_text"
+initial_specified_value = "specified::StandardLineClamp::None"
+spec = "https://drafts.csswg.org/css-overflow-4/#line-clamp"
+animation_type = "discrete"
+boxed = true
+affects = "layout"
+
+[block-ellipsis]
+type = "BlockEllipsis"
+initial = "computed::BlockEllipsis::None"
+struct = "inherited_text"
+initial_specified_value = "specified::BlockEllipsis::None"
+spec = "https://drafts.csswg.org/css-overflow-4/#block-ellipsis"
+animation_type = "discrete"
+affects = "layout"
+
+[max-lines]
+type = "MaxLines"
+initial = "computed::MaxLines::None"
+struct = "inherited_text"
+initial_specified_value = "specified::MaxLines::None"
+spec = "https://drafts.csswg.org/css-overflow-4/#max-lines"
+animation_type = "discrete"
+affects = "layout"
+
+[continue]
+type = "Continue"
+initial = "computed::Continue::Auto"
+struct = "inherited_text"
+initial_specified_value = "specified::Continue::Auto"
+spec = "https://drafts.csswg.org/css-overflow-4/#continue"
+animation_type = "discrete"
+affects = "layout"
+
 [-x-lang]
 type = "XLang"
 initial = "computed::XLang::get_initial_value()"
@@ -420,6 +461,17 @@ spec = "https://drafts.csswg.org/css-inline-3/#baseline-source"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
+# CSS Inline 3 §6 — first/last line half-leading trim. Inherits so
+# nested block containers observe the trimming policy consistently.
+[leading-trim]
+type = "LeadingTrim"
+initial = "computed::LeadingTrim::Normal"
+struct = "inherited_text"
+initial_specified_value = "specified::LeadingTrim::Normal"
+spec = "https://drafts.csswg.org/css-inline-3/#leading-trim"
+animation_type = "discrete"
+affects = "layout"
+
 [block-size]
 type = "Size"
 initial = "computed::Size::auto()"
@@ -621,7 +673,6 @@ servo_restyle_damage = "repaint"
 type = "FillRule"
 initial = "Default::default()"
 struct = "inherited_svg"
-engine = "gecko"
 animation_type = "discrete"
 spec = "https://svgwg.org/svg2-draft/masking.html#ClipRuleProperty"
 affects = "paint"
@@ -743,7 +794,6 @@ affects = "layout"
 type = "ContainIntrinsicSize"
 initial = "computed::ContainIntrinsicSize::None"
 struct = "position"
-engine = "gecko"
 logical_group = "contain-intrinsic-size"
 logical = true
 spec = "https://drafts.csswg.org/css-sizing-4/#intrinsic-size-override"
@@ -753,7 +803,6 @@ affects = "layout"
 type = "ContainIntrinsicSize"
 initial = "computed::ContainIntrinsicSize::None"
 struct = "position"
-engine = "gecko"
 logical_group = "contain-intrinsic-size"
 spec = "https://drafts.csswg.org/css-sizing-4/#intrinsic-size-override"
 affects = "layout"
@@ -762,7 +811,6 @@ affects = "layout"
 type = "ContainIntrinsicSize"
 initial = "computed::ContainIntrinsicSize::None"
 struct = "position"
-engine = "gecko"
 logical_group = "contain-intrinsic-size"
 logical = true
 spec = "https://drafts.csswg.org/css-sizing-4/#intrinsic-size-override"
@@ -772,7 +820,6 @@ affects = "layout"
 type = "ContainIntrinsicSize"
 initial = "computed::ContainIntrinsicSize::None"
 struct = "position"
-engine = "gecko"
 logical_group = "contain-intrinsic-size"
 spec = "https://drafts.csswg.org/css-sizing-4/#intrinsic-size-override"
 affects = "layout"
@@ -1533,6 +1580,18 @@ rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
+# CSS Sizing 4 §5.4 — modulates the box's intrinsic-size
+# contribution to its containing block when the box has scrollable
+# overflow or its size is extrinsic.
+[min-intrinsic-sizing]
+type = "MinIntrinsicSizing"
+initial = "computed::MinIntrinsicSizing::legacy()"
+struct = "box"
+initial_specified_value = "specified::MinIntrinsicSizing::legacy()"
+spec = "https://drafts.csswg.org/css-sizing-4/#intrinsic-contribution-override"
+animation_type = "discrete"
+affects = "layout"
+
 [object-position]
 type = "Position"
 initial = "computed::Position::center()"
@@ -1899,6 +1958,38 @@ initial = "computed::BdPdfVersionValue::Auto"
 struct = "counters"
 initial_specified_value = "specified::BdPdfVersionValue::Auto"
 spec = "Nonstandard (moegoe -bd-* fork extension; G4 PDF/A conformance)"
+animation_type = "none"
+affects = ""
+
+# moegoe K7 — PDF info-dictionary `/Trapped` flag. Document-level;
+# the renderer honours only `:root` declarations.
+[-bd-pdf-trapped]
+type = "BdPdfTrapped"
+initial = "computed::BdPdfTrapped::Unknown"
+struct = "counters"
+initial_specified_value = "specified::BdPdfTrapped::Unknown"
+spec = "Nonstandard (moegoe -bd-* fork extension; K7 PDF info-dictionary /Trapped, ISO 32000-2 §14.11.3)"
+animation_type = "none"
+affects = ""
+
+# moegoe K10 — PDF output-intent OutputCondition / RegistryName
+# descriptors (ISO 32000-2 §14.11.5). Document-level; the renderer
+# honours only `:root` declarations.
+[-bd-pdf-output-condition]
+type = "BdPdfOutputCondition"
+initial = "computed::BdPdfOutputCondition::none()"
+struct = "counters"
+initial_specified_value = "specified::BdPdfOutputCondition::none()"
+spec = "Nonstandard (moegoe -bd-* fork extension; K10 PDF output-intent OutputCondition, ISO 32000-2 §14.11.5)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-output-registry-name]
+type = "BdPdfOutputRegistryName"
+initial = "computed::BdPdfOutputRegistryName::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfOutputRegistryName::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; K10 PDF output-intent RegistryName, ISO 32000-2 §14.11.5)"
 animation_type = "none"
 affects = ""
 
@@ -4069,7 +4160,6 @@ affects = "layout"
 type = "Resize"
 initial = "computed::Resize::None"
 struct = "box"
-engine = "gecko"
 animation_type = "discrete"
 gecko_ffi_name = "mResize"
 spec = "https://drafts.csswg.org/css-ui/#propdef-resize"
@@ -4213,6 +4303,17 @@ type = "basic_shape::ShapeOutside"
 initial = "generics::basic_shape::ShapeOutside::None"
 struct = "box"
 spec = "https://drafts.csswg.org/css-shapes/#shape-outside-property"
+affects = "layout"
+
+# CSS Exclusions 1 §5.1 — selects how inline content flows around an
+# exclusion-flagged box.
+[wrap-flow]
+type = "WrapFlow"
+initial = "computed::WrapFlow::Auto"
+struct = "box"
+initial_specified_value = "specified::WrapFlow::Auto"
+spec = "https://drafts.csswg.org/css-exclusions-1/#propdef-wrap-flow"
+animation_type = "discrete"
 affects = "layout"
 
 [size]
@@ -4371,7 +4472,6 @@ affects = "overflow"
 type = "TransformBox"
 initial = "computed::TransformBox::ViewBox"
 struct = "box"
-engine = "gecko"
 spec = "https://drafts.csswg.org/css-transforms/#transform-box"
 animation_type = "discrete"
 affects = "overflow"
@@ -4876,6 +4976,24 @@ type = "RubyPosition"
 initial = "computed::RubyPosition::AlternateOver"
 struct = "inherited_text"
 spec = "https://drafts.csswg.org/css-ruby/#ruby-position-property"
+animation_type = "discrete"
+affects = "layout"
+
+[ruby-merge]
+type = "RubyMerge"
+initial = "computed::RubyMerge::Separate"
+struct = "inherited_text"
+initial_specified_value = "specified::RubyMerge::Separate"
+spec = "https://drafts.csswg.org/css-ruby-1/#rubymerge"
+animation_type = "discrete"
+affects = "layout"
+
+[ruby-overhang]
+type = "RubyOverhang"
+initial = "computed::RubyOverhang::Auto"
+struct = "inherited_text"
+initial_specified_value = "specified::RubyOverhang::Auto"
+spec = "https://drafts.csswg.org/css-ruby-1/#rubyoverhang"
 animation_type = "discrete"
 affects = "layout"
 

@@ -134,7 +134,7 @@ def rule_values_from_arg(rule_types):
 
 def to_rust_ident(name):
     name = name.replace("-", "_")
-    if name in ["static", "super", "box", "move"]:  # Rust keywords
+    if name in ["static", "super", "box", "move", "continue"]:  # Rust keywords
         name += "_"
     return name
 
@@ -601,6 +601,7 @@ class Longhand(Property):
                 "BdPdfLinkBorderStyle",
                 "BdPdfSignatureFieldLock",
                 "BdPrintMarkSet",
+                "BdPdfTrapped",
                 "AlignmentBaseline",
                 "Appearance",
                 "AnimationComposition",
@@ -624,6 +625,7 @@ class Longhand(Property):
                 "Contain",
                 "ContentVisibility",
                 "ContainerType",
+                "Continue",
                 "Display",
                 "FillRule",
                 "Float",
@@ -654,9 +656,12 @@ class Longhand(Property):
                 "ItemPlacement",
                 "SelfAlignment",
                 "JustifyItems",
+                "LeadingTrim",
                 "LineBreak",
                 "LineClamp",
                 "MasonryAutoFlow",
+                "MaxLines",
+                "MinIntrinsicSizing",
                 "MozTheme",
                 "BoolInteger",
                 "text::MozControlCharacterVisibility",
@@ -681,6 +686,8 @@ class Longhand(Property):
                 "PrintColorAdjust",
                 "ForcedColorAdjust",
                 "Resize",
+                "RubyMerge",
+                "RubyOverhang",
                 "RubyPosition",
                 "SVGOpacity",
                 "SVGPaintOrder",
@@ -705,6 +712,7 @@ class Longhand(Property):
                 "VectorEffect",
                 "WordBreak",
                 "WordSpaceTransform",
+                "WrapFlow",
                 "WritingModeProperty",
                 "XSpan",
                 "XTextScale",
