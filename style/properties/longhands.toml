@@ -220,7 +220,6 @@ affects = "layout"
 type = "AnchorName"
 initial = "computed::AnchorName::none()"
 struct = "box"
-engine = "gecko"
 animation_type = "discrete"
 gecko_pref = "layout.css.anchor-positioning.enabled"
 spec = "https://drafts.csswg.org/css-anchor-position-1/#propdef-anchor-name"
@@ -230,7 +229,6 @@ affects = ""
 type = "AnchorScope"
 initial = "computed::AnchorScope::none()"
 struct = "box"
-engine = "gecko"
 animation_type = "discrete"
 gecko_pref = "layout.css.anchor-positioning.enabled"
 spec = "https://drafts.csswg.org/css-anchor-position-1/#propdef-scope"
@@ -482,6 +480,45 @@ parse_method = "parse_size_for_width_or_height"
 spec = "https://drafts.csswg.org/css-logical-props/#propdef-block-size"
 rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "rebuild_box"
+affects = "layout"
+
+# CSS Rhythmic Sizing Module Level 1 — quantises a box's block-axis
+# size to a multiple of `block-step-size`. The four sub-properties are
+# composed by the `block-step` shorthand (see shorthands.rs).
+[block-step-size]
+type = "BlockStepSize"
+initial = "computed::BlockStepSize::None"
+struct = "box"
+initial_specified_value = "specified::BlockStepSize::None"
+spec = "https://drafts.csswg.org/css-rhythm-1/#block-step-size"
+animation_type = "discrete"
+affects = "layout"
+
+[block-step-insert]
+type = "BlockStepInsert"
+initial = "computed::BlockStepInsert::MarginBox"
+struct = "box"
+initial_specified_value = "specified::BlockStepInsert::MarginBox"
+spec = "https://drafts.csswg.org/css-rhythm-1/#block-step-insert"
+animation_type = "discrete"
+affects = "layout"
+
+[block-step-align]
+type = "BlockStepAlign"
+initial = "computed::BlockStepAlign::Auto"
+struct = "box"
+initial_specified_value = "specified::BlockStepAlign::Auto"
+spec = "https://drafts.csswg.org/css-rhythm-1/#block-step-align"
+animation_type = "discrete"
+affects = "layout"
+
+[block-step-round]
+type = "BlockStepRound"
+initial = "computed::BlockStepRound::Up"
+struct = "box"
+initial_specified_value = "specified::BlockStepRound::Up"
+spec = "https://drafts.csswg.org/css-rhythm-1/#block-step-round"
+animation_type = "discrete"
 affects = "layout"
 
 [border-spacing]
@@ -1669,6 +1706,26 @@ struct = "position"
 extra_prefixes = ["webkit"]
 spec = "https://drafts.csswg.org/css-flexbox/#order-property"
 servo_restyle_damage = "rebuild_box"
+affects = "layout"
+
+# CSS Display Module Level 4 §3 — sequential-navigation order. The
+# two properties cascade through `inherited_box` so descendants
+# observe the traversal policy without having to re-declare it.
+[reading-flow]
+type = "ReadingFlow"
+initial = "computed::ReadingFlow::Normal"
+struct = "inherited_box"
+initial_specified_value = "specified::ReadingFlow::Normal"
+spec = "https://drafts.csswg.org/css-display-4/#reading-flow"
+animation_type = "discrete"
+affects = "layout"
+
+[reading-order]
+type = "Integer"
+initial = "0"
+struct = "inherited_box"
+spec = "https://drafts.csswg.org/css-display-4/#reading-order"
+animation_type = "discrete"
 affects = "layout"
 
 [outline-color]
@@ -3632,6 +3689,29 @@ spec = "Nonstandard (moegoe -bd-* fork extension; Family 16 change-bar)"
 animation_type = "none"
 affects = ""
 
+# CSS Regions Module Level 1 — standard `flow-into` / `flow-from`.
+# The moegoe `-bd-flow-from` / `-bd-flow-into` shims below remain in
+# place to round-trip PDFreactor's `-ro-*` surface, but authored
+# content using the W3C-spec property names parses through here.
+[flow-into]
+type = "FlowInto"
+initial = "computed::FlowInto::None"
+struct = "box"
+initial_specified_value = "specified::FlowInto::None"
+spec = "https://drafts.csswg.org/css-regions-1/#flow-into"
+animation_type = "discrete"
+affects = "layout"
+boxed = true
+
+[flow-from]
+type = "FlowFrom"
+initial = "computed::FlowFrom::None"
+struct = "box"
+initial_specified_value = "specified::FlowFrom::None"
+spec = "https://drafts.csswg.org/css-regions-1/#flow-from"
+animation_type = "discrete"
+affects = "layout"
+
 # moegoe Family 17 — CSS Regions (SHELVED — thin parse shim).
 # Renderer emits `RenderWarning::UnsupportedCssFeature` until the
 # paginator gains a re-flow loop.
@@ -4086,7 +4166,6 @@ affects = "layout"
 type = "PositionAnchor"
 initial = "computed::PositionAnchor::none()"
 struct = "position"
-engine = "gecko"
 animation_type = "discrete"
 rule_types_allowed = ["style", "keyframe", "scope", "position-try"]
 gecko_pref = "layout.css.anchor-positioning.enabled"
@@ -5165,6 +5244,20 @@ struct = "counters"
 initial_specified_value = "specified::BdPositionOrigin::Border"
 spec = "Nonstandard (moegoe -bd-* fork extension; F32.13 absolute-positioning reference box)"
 animation_type = "none"
+affects = "layout"
+
+# moegoe `-bd-running-copy` — replaces the prior
+# `--moegoe-running-copy` custom-property hatch with a first-class
+# Stylo longhand. When set to `keep` on a `position: running(<name>)`
+# element, the source element stays in normal flow *and* feeds
+# margin-box `element(<name>)` references.
+[-bd-running-copy]
+type = "BdRunningCopy"
+initial = "computed::BdRunningCopy::None"
+struct = "box"
+initial_specified_value = "specified::BdRunningCopy::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; GCPM §1.2.1 spec-note running-element copy)"
+animation_type = "discrete"
 affects = "layout"
 
 # F32.14 — explicit line-break opportunity

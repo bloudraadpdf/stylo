@@ -62,6 +62,7 @@ pub use self::column::ColumnCount;
 pub use self::counters::{
     BookmarkLabel, Content, ContentItem, CounterIncrement, CounterReset, CounterSet, StringSet,
 };
+pub use self::display_4::ReadingFlow;
 pub use self::easing::TimingFunction;
 pub use self::effects::{BoxShadow, Filter, SimpleShadow};
 pub use self::exclusions_1::WrapFlow;
@@ -179,6 +180,7 @@ pub use self::bd_misc::{
     BdPositionOrigin, BdReplacedElement, BdScaleContent, BdShrinkToFit, BdTabSnap,
     BdTargetCandidate, BdTruncateMarginAfterBreak,
 };
+pub use self::bd_running_copy::BdRunningCopy;
 pub use self::bd_sidenote::{BdFloatReferenceSidenote, BdSidenoteAlign, BdSidenoteAvoid, BdSidenoteOffset};
 pub use self::bd_tab_stops::{BdTabStop, BdTabStopAlignment, BdTabStopLeader, BdTabStops};
 pub use self::bd_text_decoration::{BdTextDecorationLineColour, BdTextDecorationLineStyle, BdTextDecorationLineThickness};
@@ -204,7 +206,9 @@ pub use self::position::{PositionArea, PositionAreaKeyword};
 pub use self::position::{PositionComponent, ZIndex};
 pub use self::ratio::Ratio;
 pub use self::rect::NonNegativeLengthOrNumberRect;
+pub use self::regions_1::{FlowFrom, FlowInto, FlowIntoMode};
 pub use self::resolution::Resolution;
+pub use self::rhythm_1::{BlockStepAlign, BlockStepInsert, BlockStepRound, BlockStepSize};
 pub use self::ruby_1::{RubyMerge, RubyOverhang};
 pub use self::sizing_4::MinIntrinsicSizing;
 pub use self::svg::{DProperty, MozContextProperties};
@@ -275,6 +279,7 @@ pub mod bd_pdf_output_registry_name;
 pub mod bd_pdf_tag;
 pub mod bd_pdf_trapped;
 pub mod bd_pdf_viewer;
+pub mod bd_running_copy;
 pub mod bd_sidenote;
 pub mod bd_tab_stops;
 pub mod bd_text_decoration;
@@ -285,6 +290,7 @@ pub mod calc;
 pub mod color;
 pub mod column;
 pub mod counters;
+pub mod display_4;
 pub mod easing;
 pub mod effects;
 pub mod exclusions_1;
@@ -303,7 +309,9 @@ pub mod percentage;
 pub mod position;
 pub mod ratio;
 pub mod rect;
+pub mod regions_1;
 pub mod resolution;
+pub mod rhythm_1;
 pub mod ruby_1;
 pub mod sizing_4;
 pub mod source_size_list;

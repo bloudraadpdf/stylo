@@ -1564,6 +1564,117 @@ pub mod flex_flow {
     }
 }
 
+/// CSS Rhythmic Sizing 1 §3 — `block-step` shorthand.
+///
+/// Grammar: `<'block-step-size'> || <'block-step-insert'> ||
+/// <'block-step-align'> || <'block-step-round'>`. Authors may give
+/// up to four sub-values in any order; omitted sub-values reset to
+/// their initial value, as is convention for `||` shorthands.
+pub mod block_step {
+    pub use crate::properties::shorthands_generated::block_step::*;
+
+    use super::*;
+    use crate::properties::longhands::{
+        block_step_align, block_step_insert, block_step_round, block_step_size,
+    };
+
+    pub fn parse_value<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Longhands, ParseError<'i>> {
+        let mut size = None;
+        let mut insert = None;
+        let mut align = None;
+        let mut round = None;
+        loop {
+            if size.is_none() {
+                if let Ok(value) =
+                    input.try_parse(|input| block_step_size::parse(context, input))
+                {
+                    size = Some(value);
+                    continue;
+                }
+            }
+            if insert.is_none() {
+                if let Ok(value) =
+                    input.try_parse(|input| block_step_insert::parse(context, input))
+                {
+                    insert = Some(value);
+                    continue;
+                }
+            }
+            if align.is_none() {
+                if let Ok(value) =
+                    input.try_parse(|input| block_step_align::parse(context, input))
+                {
+                    align = Some(value);
+                    continue;
+                }
+            }
+            if round.is_none() {
+                if let Ok(value) =
+                    input.try_parse(|input| block_step_round::parse(context, input))
+                {
+                    round = Some(value);
+                    continue;
+                }
+            }
+            break;
+        }
+
+        if size.is_none() && insert.is_none() && align.is_none() && round.is_none() {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+        Ok(expanded! {
+            block_step_size: unwrap_or_initial!(block_step_size, size),
+            block_step_insert: unwrap_or_initial!(block_step_insert, insert),
+            block_step_align: unwrap_or_initial!(block_step_align, align),
+            block_step_round: unwrap_or_initial!(block_step_round, round),
+        })
+    }
+
+    impl<'a> ToCss for LonghandsToSerialize<'a> {
+        fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+        where
+            W: fmt::Write,
+        {
+            // Emit only the sub-values that differ from their initial
+            // values; if every sub-value is the initial, fall back to
+            // emitting `none` (the initial of `block-step-size`).
+            let mut wrote_any = false;
+            if *self.block_step_size != block_step_size::get_initial_specified_value() {
+                self.block_step_size.to_css(dest)?;
+                wrote_any = true;
+            }
+            if *self.block_step_insert != block_step_insert::get_initial_specified_value() {
+                if wrote_any {
+                    dest.write_char(' ')?;
+                }
+                self.block_step_insert.to_css(dest)?;
+                wrote_any = true;
+            }
+            if *self.block_step_align != block_step_align::get_initial_specified_value() {
+                if wrote_any {
+                    dest.write_char(' ')?;
+                }
+                self.block_step_align.to_css(dest)?;
+                wrote_any = true;
+            }
+            if *self.block_step_round != block_step_round::get_initial_specified_value() {
+                if wrote_any {
+                    dest.write_char(' ')?;
+                }
+                self.block_step_round.to_css(dest)?;
+                wrote_any = true;
+            }
+            if !wrote_any {
+                dest.write_str("none")?;
+            }
+            Ok(())
+        }
+    }
+}
+
 pub mod flex {
     pub use crate::properties::shorthands_generated::flex::*;
 

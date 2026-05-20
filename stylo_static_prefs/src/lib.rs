@@ -9,6 +9,9 @@ macro_rules! pref {
     ("layout.css.contrast-color.enabled") => {
         true
     };
+    ("layout.css.anchor-positioning.enabled") => {
+        true
+    };
     ("layout.css.fit-content-function.enabled") => {
         true
     };

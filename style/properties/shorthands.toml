@@ -336,6 +336,10 @@ sub_properties = ["contain-intrinsic-width", "contain-intrinsic-height"]
 spec = "https://drafts.csswg.org/css-sizing-4/#intrinsic-size-override"
 kind = "two_properties"
 
+[block-step]
+sub_properties = ["block-step-size", "block-step-insert", "block-step-align", "block-step-round"]
+spec = "https://drafts.csswg.org/css-rhythm-1/#block-step"
+
 [flex-flow]
 sub_properties = ["flex-direction", "flex-wrap"]
 spec = "https://drafts.csswg.org/css-flexbox/#flex-flow-property"

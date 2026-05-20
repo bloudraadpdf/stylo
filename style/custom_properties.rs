@@ -92,6 +92,38 @@ fn get_safearea_inset_right(device: &Device, url_data: &UrlExtraData) -> Variabl
     VariableValue::pixels(device.safe_area_insets().right, url_data)
 }
 
+// CSS env() variables for paged media (CSS env-1 §3.1).
+//
+// These resolve to the dimensions of the current @page area on
+// per-page evaluation. moegoe will plumb the live values from the
+// paginator at resolve time; for the Stylo cascade the defaults
+// resolve to 0px so that `env(page-width, fallback)` parses and
+// authored fallbacks take effect. The runtime substitution that
+// returns real per-page values is moegoe-side.
+fn get_page_width(_device: &Device, url_data: &UrlExtraData) -> VariableValue {
+    VariableValue::pixels(0.0, url_data)
+}
+
+fn get_page_height(_device: &Device, url_data: &UrlExtraData) -> VariableValue {
+    VariableValue::pixels(0.0, url_data)
+}
+
+fn get_page_margin_top(_device: &Device, url_data: &UrlExtraData) -> VariableValue {
+    VariableValue::pixels(0.0, url_data)
+}
+
+fn get_page_margin_right(_device: &Device, url_data: &UrlExtraData) -> VariableValue {
+    VariableValue::pixels(0.0, url_data)
+}
+
+fn get_page_margin_bottom(_device: &Device, url_data: &UrlExtraData) -> VariableValue {
+    VariableValue::pixels(0.0, url_data)
+}
+
+fn get_page_margin_left(_device: &Device, url_data: &UrlExtraData) -> VariableValue {
+    VariableValue::pixels(0.0, url_data)
+}
+
 #[cfg(feature = "gecko")]
 fn get_content_preferred_color_scheme(device: &Device, url_data: &UrlExtraData) -> VariableValue {
     use crate::queries::values::PrefersColorScheme;
@@ -127,11 +159,19 @@ fn get_hairline(device: &Device, url_data: &UrlExtraData) -> VariableValue {
     )
 }
 
-static ENVIRONMENT_VARIABLES: [EnvironmentVariable; 4] = [
+static ENVIRONMENT_VARIABLES: [EnvironmentVariable; 10] = [
     make_variable!(atom!("safe-area-inset-top"), get_safearea_inset_top),
     make_variable!(atom!("safe-area-inset-bottom"), get_safearea_inset_bottom),
     make_variable!(atom!("safe-area-inset-left"), get_safearea_inset_left),
     make_variable!(atom!("safe-area-inset-right"), get_safearea_inset_right),
+    // CSS env-1 §3 paged-media variables (default to 0px until
+    // moegoe's paginator substitutes the live per-@page values).
+    make_variable!(atom!("page-width"), get_page_width),
+    make_variable!(atom!("page-height"), get_page_height),
+    make_variable!(atom!("page-margin-top"), get_page_margin_top),
+    make_variable!(atom!("page-margin-right"), get_page_margin_right),
+    make_variable!(atom!("page-margin-bottom"), get_page_margin_bottom),
+    make_variable!(atom!("page-margin-left"), get_page_margin_left),
 ];
 
 #[cfg(feature = "gecko")]

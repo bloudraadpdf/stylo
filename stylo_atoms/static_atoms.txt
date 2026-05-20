@@ -132,6 +132,12 @@ safe-area-inset-top
 safe-area-inset-bottom
 safe-area-inset-left
 safe-area-inset-right
+page-width
+page-height
+page-margin-top
+page-margin-right
+page-margin-bottom
+page-margin-left
 scan
 screen
 scroll-position

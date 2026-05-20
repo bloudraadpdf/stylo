@@ -94,7 +94,7 @@ impl ToComputedValue for specified::BdTabStop {
         BdTabStop {
             position: self.position.to_computed_value(ctx),
             alignment: self.alignment,
-            leader: self.leader,
+            leader: self.leader.clone(),
         }
     }
 
@@ -102,7 +102,7 @@ impl ToComputedValue for specified::BdTabStop {
         specified::BdTabStop {
             position: ToComputedValue::from_computed_value(&computed.position),
             alignment: computed.alignment,
-            leader: computed.leader,
+            leader: computed.leader.clone(),
         }
     }
 }
