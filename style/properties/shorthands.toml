@@ -331,7 +331,6 @@ rule_types_allowed = ["style", "keyframe", "margin", "scope", "position-try"]
 kind = "two_properties"
 
 [contain-intrinsic-size]
-engine = "gecko"
 sub_properties = ["contain-intrinsic-width", "contain-intrinsic-height"]
 spec = "https://drafts.csswg.org/css-sizing-4/#intrinsic-size-override"
 kind = "two_properties"

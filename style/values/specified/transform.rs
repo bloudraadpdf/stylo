@@ -36,19 +36,12 @@ pub type TransformOrigin = generic::TransformOrigin<
     Length,
 >;
 
-#[cfg(feature = "gecko")]
-fn all_transform_boxes_are_enabled(_context: &ParserContext) -> bool {
-    true
-}
-
-#[cfg(feature = "servo")]
-fn all_transform_boxes_are_enabled(_context: &ParserContext) -> bool {
-    false
-}
-
 /// The specified value of `transform-box`.
 /// https://drafts.csswg.org/css-transforms-1/#transform-box
-// Note: Once we ship everything, we can drop this and just use single_keyword for tranform-box.
+//
+// All five keywords are spec-defined in CSS Transforms 1; the parser condition
+// previously gating `content-box` / `stroke-box` behind the Gecko build flag
+// has been dropped so the Servo build accepts them too.
 #[allow(missing_docs)]
 #[derive(
     Animate,
@@ -71,11 +64,9 @@ fn all_transform_boxes_are_enabled(_context: &ParserContext) -> bool {
 )]
 #[repr(u8)]
 pub enum TransformBox {
-    #[parse(condition = "all_transform_boxes_are_enabled")]
     ContentBox,
     BorderBox,
     FillBox,
-    #[parse(condition = "all_transform_boxes_are_enabled")]
     StrokeBox,
     ViewBox,
 }
