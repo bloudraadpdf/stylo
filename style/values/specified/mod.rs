@@ -58,6 +58,8 @@ pub use self::box_::{
 pub use self::color::{
     Color, ColorOrAuto, ColorPropertyValue, ColorScheme, ForcedColorAdjust, PrintColorAdjust,
 };
+pub use self::color_5::{OutputColorModel, PredefinedOutputColourSpace};
+pub use self::color_hdr_1::DynamicRangeLimit;
 pub use self::column::ColumnCount;
 pub use self::counters::{
     BookmarkLabel, Content, ContentItem, CounterIncrement, CounterReset, CounterSet, StringSet,
@@ -65,7 +67,7 @@ pub use self::counters::{
 pub use self::display_4::ReadingFlow;
 pub use self::easing::TimingFunction;
 pub use self::effects::{BoxShadow, Filter, SimpleShadow};
-pub use self::exclusions_1::WrapFlow;
+pub use self::exclusions_1::{WrapFlow, WrapThrough};
 pub use self::flex::FlexBasis;
 pub use self::font::{FontFamily, FontLanguageOverride, FontPalette, FontStyle};
 pub use self::font::{FontFeatureSettings, FontVariantLigatures, FontVariantNumeric};
@@ -85,6 +87,7 @@ pub use self::length::{NoCalcLength, ViewportPercentageLength, ViewportVariant};
 pub use self::length::{
     NonNegativeLength, NonNegativeLengthPercentage, NonNegativeLengthPercentageOrAuto,
 };
+pub use self::line_grid_1::{BoxSnap, LineGrid};
 pub use self::list::ListStyleType;
 pub use self::list::Quotes;
 pub use self::motion::{OffsetPath, OffsetPosition, OffsetRotate};
@@ -183,7 +186,10 @@ pub use self::bd_misc::{
 pub use self::bd_running_copy::BdRunningCopy;
 pub use self::bd_sidenote::{BdFloatReferenceSidenote, BdSidenoteAlign, BdSidenoteAvoid, BdSidenoteOffset};
 pub use self::bd_tab_stops::{BdTabStop, BdTabStopAlignment, BdTabStopLeader, BdTabStops};
-pub use self::bd_text_decoration::{BdTextDecorationLineColour, BdTextDecorationLineStyle, BdTextDecorationLineThickness};
+pub use self::bd_text_decoration::{
+    BdTextDecorationLineColour, BdTextDecorationLineStyle, BdTextDecorationLineThickness,
+    BdTextUnderlineOffset, BdTextUnderlinePosition,
+};
 pub use self::page::{
     Bleed, PageMarks, PageName, PageOrientation, PageSize, PageSizeOrientation, PaperSize,
 };
@@ -206,7 +212,7 @@ pub use self::position::{PositionArea, PositionAreaKeyword};
 pub use self::position::{PositionComponent, ZIndex};
 pub use self::ratio::Ratio;
 pub use self::rect::NonNegativeLengthOrNumberRect;
-pub use self::regions_1::{FlowFrom, FlowInto, FlowIntoMode};
+pub use self::regions_1::{FlowFrom, FlowInto, FlowIntoMode, RegionFragment};
 pub use self::resolution::Resolution;
 pub use self::rhythm_1::{BlockStepAlign, BlockStepInsert, BlockStepRound, BlockStepSize};
 pub use self::ruby_1::{RubyMerge, RubyOverhang};
@@ -228,6 +234,9 @@ pub use self::text::{TextAlignKeyword, TextDecorationLine, TextOverflow, WordSpa
 pub use self::text::{TextAlignLast, TextAutospace, TextUnderlinePosition};
 pub use self::text::{
     TextDecorationInset, TextDecorationLength, TextDecorationSkipInk, TextJustify, TextTransform,
+};
+pub use self::text_decor_4::{
+    TextDecorationSkipKind, TextDecorationTrim, TextEmphasisSkip,
 };
 pub use self::time::Time;
 pub use self::transform::{Rotate, Scale, Transform};
@@ -288,6 +297,8 @@ pub mod border;
 pub mod box_;
 pub mod calc;
 pub mod color;
+pub mod color_5;
+pub mod color_hdr_1;
 pub mod column;
 pub mod counters;
 pub mod display_4;
@@ -300,6 +311,7 @@ pub mod grid;
 pub mod image;
 pub mod intersection_observer;
 pub mod length;
+pub mod line_grid_1;
 pub mod list;
 pub mod motion;
 pub mod outline;
@@ -319,6 +331,7 @@ pub mod svg;
 pub mod svg_path;
 pub mod table;
 pub mod text;
+pub mod text_decor_4;
 pub mod time;
 pub mod transform;
 pub mod ui;

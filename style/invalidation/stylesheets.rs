@@ -649,10 +649,13 @@ impl StylesheetInvalidationSet {
                 // Do nothing, @font-face doesn't affect computed style information on it's own.
                 // We'll restyle when the font face loads, if needed.
             },
-            Page(..) | Margin(..) | Footnote(..) | Sidenote(..) | BdColour(..) | Region(..) => {
+            Page(..) | Margin(..) | Footnote(..) | Sidenote(..) | BdColour(..)
+            | ColorProfile(..) | Region(..) => {
                 // Do nothing, we don't support OM mutations on print documents, and page rules
                 // can't affect anything else. moegoe Family 17 `@region` is enumerated by the
-                // moegoe-css cascade reader, not by the standard invalidation path.
+                // moegoe-css cascade reader, not by the standard invalidation path. CSS Color 5
+                // `@color-profile` is consumed at the colour-resolution boundary, not by the
+                // cascade-invalidation path.
             },
             Keyframes(ref lock) => {
                 if is_generic_change {

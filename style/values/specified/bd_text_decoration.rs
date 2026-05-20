@@ -149,3 +149,97 @@ impl Parse for BdTextDecorationLineThickness {
         Ok(Self(GenericTextDecorationLength::parse(context, input)?))
     }
 }
+
+/// Specified value of `-bd-text-underline-offset`.
+///
+/// `auto` (initial) — defer to the standard `text-underline-offset`
+/// cascade. `<length>` — explicit offset between the underline and the
+/// alphabetic baseline for the underline line position only.
+///
+/// Newtype wrapper around the same generic `text-underline-offset`
+/// payload (`LengthPercentageOrAuto`) used by the standard property,
+/// so the cascade reader can distinguish per-position overrides from
+/// the global value and apply Prince's per-position semantics.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
+#[repr(C)]
+pub struct BdTextUnderlineOffset(pub crate::values::specified::LengthPercentageOrAuto);
+
+impl BdTextUnderlineOffset {
+    /// Initial value (`auto`).
+    #[inline]
+    pub fn auto() -> Self {
+        Self(crate::values::specified::LengthPercentageOrAuto::Auto)
+    }
+
+    /// Whether the value is `auto`.
+    #[inline]
+    pub fn is_auto(&self) -> bool {
+        matches!(
+            self.0,
+            crate::values::specified::LengthPercentageOrAuto::Auto
+        )
+    }
+}
+
+impl Parse for BdTextUnderlineOffset {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, style_traits::ParseError<'i>> {
+        Ok(Self(crate::values::specified::LengthPercentageOrAuto::parse(
+            context, input,
+        )?))
+    }
+}
+
+/// Specified value of `-bd-text-underline-position`.
+///
+/// `auto` (initial) — defer to the standard `text-underline-position`
+/// cascade. The remaining keywords mirror the standard property's
+/// `from-font | under | [ left | right ]` set, applied to the
+/// `-bd-text-underline-*` per-position triple. The standard property
+/// uses bitflags to model `from-font || left`, etc.; the per-position
+/// surface keeps the simpler enum because per-position overrides are
+/// authored explicitly (one value at a time).
+#[repr(u8)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+pub enum BdTextUnderlinePosition {
+    /// `auto` — defer to `text-underline-position` (initial).
+    Auto,
+    /// `from-font` — use the underline metrics declared by the font.
+    FromFont,
+    /// `under` — place the underline below the glyph box.
+    Under,
+    /// `left` — in vertical text, place to the left of the run.
+    Left,
+    /// `right` — in vertical text, place to the right of the run.
+    Right,
+}
+
+impl BdTextUnderlinePosition {
+    /// Initial value (`auto`).
+    #[inline]
+    pub fn auto() -> Self {
+        Self::Auto
+    }
+
+    /// Whether the value is `auto`.
+    #[inline]
+    pub fn is_auto(&self) -> bool {
+        matches!(self, Self::Auto)
+    }
+}

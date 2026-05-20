@@ -201,3 +201,37 @@ impl Parse for FlowFrom {
         Ok(Self::Named(ident.into()))
     }
 }
+
+/// Specified value of the standard `region-fragment` property
+/// (<https://drafts.csswg.org/css-regions-1/#region-fragment>).
+///
+/// `auto` (initial) — content overflows the last region in the chain
+/// and remains visible. `break` — content past the last region's
+/// capacity is dropped. The moegoe-native `-bd-region-fragment`
+/// longhand (`bd_flow.rs`) carries the same two-keyword grammar; this
+/// type is the standard-spec twin so authored content using the
+/// W3C-spec property name parses correctly.
+#[repr(u8)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+pub enum RegionFragment {
+    /// `auto` — content overflows the last region visibly (initial).
+    #[default]
+    Auto,
+    /// `break` — content past the last region's capacity is dropped.
+    Break,
+}

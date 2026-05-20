@@ -475,6 +475,22 @@ derive_serialize = true
 sub_properties = ["text-decoration-color", "text-decoration-line", "text-decoration-style", "text-decoration-thickness"]
 spec = "https://drafts.csswg.org/css-text-decor/#propdef-text-decoration"
 
+# CSS Text Decoration 4 §5 — informational shorthand for the four
+# `text-decoration-skip-*` longhands. The shorthand grammar is
+# intentionally permissive: any subset of the four longhand values may
+# be authored, and any absent longhand is reset to its per-aspect
+# initial. The hand-rolled parser in `shorthands.rs` reuses the
+# `TextDecorationSkipKind` Parse impl per slot.
+[text-decoration-skip]
+sub_properties = [
+  "text-decoration-skip-self",
+  "text-decoration-skip-box",
+  "text-decoration-skip-inset",
+  "text-decoration-skip-spaces",
+]
+spec = "https://drafts.csswg.org/css-text-decor-4/#text-decoration-skip-property"
+derive_serialize = true
+
 [-bd-text-overline]
 sub_properties = ["-bd-text-overline-color", "-bd-text-overline-style", "-bd-text-overline-thickness"]
 spec = "Nonstandard (moegoe -bd-* fork extension; Prince G text-overline shorthand)"

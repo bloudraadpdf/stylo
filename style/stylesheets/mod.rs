@@ -5,6 +5,7 @@
 //! Style sheets and their CSS rules.
 
 mod bd_colour_rule;
+mod color_profile_rule;
 pub mod container_rule;
 mod counter_style_rule;
 mod document_rule;
@@ -57,6 +58,10 @@ use to_shmem::{SharedMemoryBuilder, ToShmem};
 
 pub use self::bd_colour_rule::{
     parse_bd_colour_body, parse_bd_colour_name, BdColourAlternateKind, BdColourRule,
+};
+pub use self::color_profile_rule::{
+    parse_color_profile_body, parse_color_profile_name, ColorProfileRenderingIntent,
+    ColorProfileRule,
 };
 pub use self::container_rule::ContainerRule;
 pub use self::counter_style_rule::CounterStyleRule;
@@ -359,6 +364,11 @@ pub enum CssRule {
     /// declaring a named-spot colour for downstream `-bd-spot()` /
     /// `-bd-separation()` references.
     BdColour(Arc<BdColourRule>),
+    /// CSS Color 5 §7 — `@color-profile --name { … }` top-level rule
+    /// declaring an ICC profile against a `<dashed-ident>` so
+    /// downstream `color(<dashed-ident> ...)` references and the
+    /// `output-color-model: <dashed-ident>` value resolve against it.
+    ColorProfile(Arc<ColorProfileRule>),
     /// moegoe Family 17 — `@region <selector> { … }` top-level rule
     /// (CSS Regions L1 §6.4). Declarations scope to elements matching
     /// the selector when they appear inside a region-chain descendant.
@@ -416,6 +426,9 @@ impl CssRule {
                 arc.unconditional_shallow_size_of(ops) + arc.size_of(guard, ops)
             },
             CssRule::BdColour(ref arc) => {
+                arc.unconditional_shallow_size_of(ops) + arc.size_of(guard, ops)
+            },
+            CssRule::ColorProfile(ref arc) => {
                 arc.unconditional_shallow_size_of(ops) + arc.size_of(guard, ops)
             },
             CssRule::Region(ref arc) => {
@@ -499,6 +512,8 @@ pub enum CssRuleRef<'a> {
     Sidenote(&'a SidenoteRule),
     /// moegoe Family 2 — `@-bd-colour <name> { … }` reference.
     BdColour(&'a BdColourRule),
+    /// CSS Color 5 §7 — `@color-profile --name { … }` reference.
+    ColorProfile(&'a ColorProfileRule),
     /// moegoe Family 17 — `@region <selector> { … }` reference.
     Region(&'a RegionRule),
     Supports(&'a SupportsRule),
@@ -531,6 +546,7 @@ impl<'a> From<&'a CssRule> for CssRuleRef<'a> {
             CssRule::Footnote(r) => CssRuleRef::Footnote(r.as_ref()),
             CssRule::Sidenote(r) => CssRuleRef::Sidenote(r.as_ref()),
             CssRule::BdColour(r) => CssRuleRef::BdColour(r.as_ref()),
+            CssRule::ColorProfile(r) => CssRuleRef::ColorProfile(r.as_ref()),
             CssRule::Region(r) => CssRuleRef::Region(r.as_ref()),
             CssRule::Supports(r) => CssRuleRef::Supports(r.as_ref()),
             CssRule::Page(r) => CssRuleRef::Page(r.as_ref()),
@@ -599,6 +615,9 @@ pub enum CssRuleType {
     /// (CSS Regions L1 §6.4). Slots after the existing fork-private
     /// extensions at 26, 27, and 28.
     Region = 29,
+    /// CSS Color 5 §7 — `@color-profile --name { … }` rule type.
+    /// Slots after the existing fork-private extensions at 26–29.
+    ColorProfile = 30,
 }
 
 impl CssRuleType {
@@ -686,6 +705,7 @@ impl CssRule {
             CssRule::Footnote(_) => CssRuleType::Footnote,
             CssRule::Sidenote(_) => CssRuleType::Sidenote,
             CssRule::BdColour(_) => CssRuleType::BdColour,
+            CssRule::ColorProfile(_) => CssRuleType::ColorProfile,
             CssRule::Region(_) => CssRuleType::Region,
             CssRule::Namespace(_) => CssRuleType::Namespace,
             CssRule::Supports(_) => CssRuleType::Supports,
@@ -831,6 +851,9 @@ impl DeepCloneWithLock for CssRule {
             CssRule::BdColour(ref arc) => {
                 CssRule::BdColour(Arc::new(arc.deep_clone_with_lock(lock, guard)))
             },
+            CssRule::ColorProfile(ref arc) => {
+                CssRule::ColorProfile(Arc::new(arc.deep_clone_with_lock(lock, guard)))
+            },
             CssRule::Region(ref arc) => {
                 CssRule::Region(Arc::new(arc.deep_clone_with_lock(lock, guard)))
             },
@@ -887,6 +910,7 @@ impl ToCssWithGuard for CssRule {
             CssRule::Footnote(ref rule) => rule.to_css(guard, dest),
             CssRule::Sidenote(ref rule) => rule.to_css(guard, dest),
             CssRule::BdColour(ref rule) => rule.to_css(guard, dest),
+            CssRule::ColorProfile(ref rule) => rule.to_css(guard, dest),
             CssRule::Region(ref rule) => rule.to_css(guard, dest),
             CssRule::Media(ref rule) => rule.to_css(guard, dest),
             CssRule::CustomMedia(ref rule) => rule.to_css(guard, dest),

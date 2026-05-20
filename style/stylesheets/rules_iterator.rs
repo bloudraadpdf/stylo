@@ -86,6 +86,7 @@ where
             | CssRule::Footnote(_)
             | CssRule::Sidenote(_)
             | CssRule::BdColour(_)
+            | CssRule::ColorProfile(_)
             | CssRule::Region(_)
             | CssRule::Property(_)
             | CssRule::LayerStatement(_)

@@ -3431,6 +3431,56 @@ pub mod text_decoration {
     }
 }
 
+/// CSS Text Decoration 4 §5 — informational `text-decoration-skip`
+/// shorthand. The spec leaves the shorthand grammar deliberately
+/// loose; per §5, authors may write any subset of the four longhand
+/// values, in any order, and each unspecified longhand resets to its
+/// per-aspect initial. This implementation accepts each of the four
+/// `text-decoration-skip-*` longhands' values up to once and applies
+/// them slot-by-slot. The `TextDecorationSkipKind` Parse impl is
+/// permissive (every keyword is valid for every longhand), so an
+/// ambiguous keyword like `none` lands in the first unused slot. The
+/// spec defers tie-breaking to the implementation; this ordering is
+/// stable and round-trips through the `derive_serialize` serialiser.
+pub mod text_decoration_skip {
+    pub use crate::properties::shorthands_generated::text_decoration_skip::*;
+
+    use super::*;
+    use crate::properties::longhands::{
+        text_decoration_skip_box, text_decoration_skip_inset, text_decoration_skip_self,
+        text_decoration_skip_spaces,
+    };
+
+    pub fn parse_value<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Longhands, ParseError<'i>> {
+        let mut s_self = None;
+        let mut s_box = None;
+        let mut s_inset = None;
+        let mut s_spaces = None;
+        let mut parsed = 0;
+        loop {
+            parsed += 1;
+            try_parse_one!(context, input, s_self, text_decoration_skip_self::parse);
+            try_parse_one!(context, input, s_box, text_decoration_skip_box::parse);
+            try_parse_one!(context, input, s_inset, text_decoration_skip_inset::parse);
+            try_parse_one!(context, input, s_spaces, text_decoration_skip_spaces::parse);
+            parsed -= 1;
+            break;
+        }
+        if parsed == 0 {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+        Ok(expanded! {
+            text_decoration_skip_self: unwrap_or_initial!(text_decoration_skip_self, s_self),
+            text_decoration_skip_box: unwrap_or_initial!(text_decoration_skip_box, s_box),
+            text_decoration_skip_inset: unwrap_or_initial!(text_decoration_skip_inset, s_inset),
+            text_decoration_skip_spaces: unwrap_or_initial!(text_decoration_skip_spaces, s_spaces),
+        })
+    }
+}
+
 pub mod _bd_text_overline {
     pub use crate::properties::shorthands_generated::_bd_text_overline::*;
 

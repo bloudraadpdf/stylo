@@ -12,7 +12,7 @@ use crate::values::generics::text::GenericTextDecorationLength;
 use crate::values::specified::bd_text_decoration as specified;
 use to_shmem::ToShmem;
 
-pub use specified::BdTextDecorationLineStyle;
+pub use specified::{BdTextDecorationLineStyle, BdTextUnderlinePosition};
 
 /// Computed value of `-bd-text-{position}-color`.
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, ToCss, ToResolvedValue, ToShmem, ToTyped)]
@@ -102,6 +102,49 @@ impl ToComputedValue for specified::BdTextDecorationLineThickness {
 // caller's allocator, which is the only correctness requirement for
 // transparent newtype wrappers around `Copy`-equivalent payloads.
 impl ToShmem for BdTextDecorationLineThickness {
+    fn to_shmem(&self, _: &mut to_shmem::SharedMemoryBuilder) -> to_shmem::Result<Self> {
+        Ok(std::mem::ManuallyDrop::new(self.clone()))
+    }
+}
+
+/// Computed value of `-bd-text-underline-offset`.
+///
+/// Wraps the computed `LengthPercentageOrAuto` so the cascade reader
+/// can distinguish the per-position override from the global
+/// `text-underline-offset` computed value.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToCss, ToResolvedValue, ToTyped)]
+#[repr(C)]
+pub struct BdTextUnderlineOffset(pub crate::values::computed::LengthPercentageOrAuto);
+
+impl BdTextUnderlineOffset {
+    /// `auto` value.
+    #[inline]
+    pub fn auto() -> Self {
+        Self(crate::values::computed::LengthPercentageOrAuto::Auto)
+    }
+
+    /// Whether the value is `auto`.
+    #[inline]
+    pub fn is_auto(&self) -> bool {
+        matches!(self.0, crate::values::computed::LengthPercentageOrAuto::Auto)
+    }
+}
+
+impl ToComputedValue for specified::BdTextUnderlineOffset {
+    type ComputedValue = BdTextUnderlineOffset;
+
+    fn to_computed_value(&self, ctx: &Context) -> Self::ComputedValue {
+        BdTextUnderlineOffset(self.0.to_computed_value(ctx))
+    }
+
+    fn from_computed_value(computed: &Self::ComputedValue) -> Self {
+        specified::BdTextUnderlineOffset(ToComputedValue::from_computed_value(&computed.0))
+    }
+}
+
+// `ToShmem` is implemented manually for the same reason as
+// `BdTextDecorationLineThickness` above.
+impl ToShmem for BdTextUnderlineOffset {
     fn to_shmem(&self, _: &mut to_shmem::SharedMemoryBuilder) -> to_shmem::Result<Self> {
         Ok(std::mem::ManuallyDrop::new(self.clone()))
     }

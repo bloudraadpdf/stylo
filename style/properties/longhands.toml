@@ -521,6 +521,18 @@ spec = "https://drafts.csswg.org/css-rhythm-1/#block-step-round"
 animation_type = "discrete"
 affects = "layout"
 
+# CSS Rhythmic Sizing Module Level 1 §2 — `line-height-step` sets the
+# block-axis step size each line box snaps to. `<length>`; the `0`
+# initial means no stepping.
+[line-height-step]
+type = "NonNegativeLength"
+initial = "computed::NonNegativeLength::zero()"
+struct = "inherited_text"
+initial_specified_value = "specified::NonNegativeLength::zero()"
+spec = "https://drafts.csswg.org/css-rhythm-1/#line-height-step"
+animation_type = "discrete"
+affects = "layout"
+
 [border-spacing]
 type = "BorderSpacing"
 initial = "computed::BorderSpacing::zero()"
@@ -756,6 +768,32 @@ initial = "specified::color::ColorScheme::normal()"
 struct = "inherited_ui"
 servo_pref = "layout.unimplemented"
 spec = "https://drafts.csswg.org/css-color-adjust/#color-scheme-prop"
+animation_type = "discrete"
+ignored_when_colors_disabled = true
+affects = "paint"
+
+# CSS Color HDR Module Level 1 §4 — `dynamic-range-limit` selects the
+# tone-mapping cap applied to descendant content.
+[dynamic-range-limit]
+type = "DynamicRangeLimit"
+initial = "computed::DynamicRangeLimit::Standard"
+struct = "box"
+initial_specified_value = "specified::DynamicRangeLimit::Standard"
+spec = "https://drafts.csswg.org/css-color-hdr-1/#dynamic-range-limit"
+animation_type = "discrete"
+ignored_when_colors_disabled = true
+affects = "paint"
+
+# CSS Color Module Level 5 §7 — `output-color-model` selects the
+# preferred output colour space for the rendered document. Resolves
+# either to a well-known predefined colour-space token or to a
+# document-declared `@color-profile --name { … }` block.
+[output-color-model]
+type = "OutputColorModel"
+initial = "computed::OutputColorModel::auto()"
+struct = "box"
+initial_specified_value = "specified::OutputColorModel::auto()"
+spec = "https://drafts.csswg.org/css-color-5/#output-color-model"
 animation_type = "discrete"
 ignored_when_colors_disabled = true
 affects = "paint"
@@ -3136,6 +3174,31 @@ spec = "Nonstandard (moegoe -bd-* fork extension; F8 line stacking strategy)"
 animation_type = "none"
 affects = ""
 
+# CSS Line Grid Module Level 1 §3 — standard `line-grid` property.
+# The moegoe-native `-bd-line-grid` longhand above carries a superset
+# (`none | match-parent | create`); the standard variant tracked here
+# is the spec-aligned two-keyword grammar `match-parent | create` so
+# authored content using the W3C-spec property name parses correctly.
+[line-grid]
+type = "LineGrid"
+initial = "computed::LineGrid::MatchParent"
+struct = "box"
+initial_specified_value = "specified::LineGrid::MatchParent"
+spec = "https://drafts.csswg.org/css-line-grid-1/#line-grid"
+animation_type = "none"
+affects = "layout"
+
+# CSS Line Grid Module Level 1 §6 — `box-snap` selects which box edge
+# / baseline snaps to the line grid.
+[box-snap]
+type = "BoxSnap"
+initial = "computed::BoxSnap::None"
+struct = "box"
+initial_specified_value = "specified::BoxSnap::None"
+spec = "https://drafts.csswg.org/css-line-grid-1/#box-snap"
+animation_type = "none"
+affects = "layout"
+
 # moegoe F9 — PDF attachments + destination + page label + anchor.
 [-bd-pdf-attachment-description]
 type = "BdPdfStringSlot"
@@ -3709,6 +3772,20 @@ initial = "computed::FlowFrom::None"
 struct = "box"
 initial_specified_value = "specified::FlowFrom::None"
 spec = "https://drafts.csswg.org/css-regions-1/#flow-from"
+animation_type = "discrete"
+affects = "layout"
+
+# CSS Regions L1 §6.5 — standard `region-fragment` property. The
+# moegoe-native `-bd-region-fragment` longhand (below) carries the
+# same `auto | break` grammar; this entry is the standard-spec twin
+# so authored content using the W3C-spec property name parses
+# correctly.
+[region-fragment]
+type = "RegionFragment"
+initial = "computed::RegionFragment::Auto"
+struct = "box"
+initial_specified_value = "specified::RegionFragment::Auto"
+spec = "https://drafts.csswg.org/css-regions-1/#region-fragment"
 animation_type = "discrete"
 affects = "layout"
 
@@ -4392,6 +4469,18 @@ initial = "computed::WrapFlow::Auto"
 struct = "box"
 initial_specified_value = "specified::WrapFlow::Auto"
 spec = "https://drafts.csswg.org/css-exclusions-1/#propdef-wrap-flow"
+animation_type = "discrete"
+affects = "layout"
+
+# CSS Exclusions 1 §5.2 — selects whether the element inherits its
+# ancestor exclusion wrapping context (`wrap`, initial) or ignores it
+# (`none`).
+[wrap-through]
+type = "WrapThrough"
+initial = "computed::WrapThrough::Wrap"
+struct = "box"
+initial_specified_value = "specified::WrapThrough::Wrap"
+spec = "https://drafts.csswg.org/css-exclusions-1/#propdef-wrap-through"
 animation_type = "discrete"
 affects = "layout"
 
@@ -5421,6 +5510,69 @@ animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-text-decor-4/#text-decoration-skip-ink-property"
 affects = "overflow"
 
+# CSS Text Decoration 4 §5 — `text-decoration-skip-{self,box,inset,
+# spaces}` longhands. Composed by the (informational) `text-decoration-
+# -skip` shorthand. Each carries the same `TextDecorationSkipKind`
+# value enum; only the initial value differs per aspect.
+[text-decoration-skip-self]
+type = "TextDecorationSkipKind"
+initial = "computed::TextDecorationSkipKind::objects()"
+struct = "inherited_text"
+initial_specified_value = "specified::TextDecorationSkipKind::objects()"
+spec = "https://drafts.csswg.org/css-text-decor-4/#text-decoration-skip-property"
+animation_type = "discrete"
+affects = "overflow"
+
+[text-decoration-skip-box]
+type = "TextDecorationSkipKind"
+initial = "computed::TextDecorationSkipKind::none()"
+struct = "inherited_text"
+initial_specified_value = "specified::TextDecorationSkipKind::none()"
+spec = "https://drafts.csswg.org/css-text-decor-4/#text-decoration-skip-property"
+animation_type = "discrete"
+affects = "overflow"
+
+[text-decoration-skip-inset]
+type = "TextDecorationSkipKind"
+initial = "computed::TextDecorationSkipKind::none()"
+struct = "inherited_text"
+initial_specified_value = "specified::TextDecorationSkipKind::none()"
+spec = "https://drafts.csswg.org/css-text-decor-4/#text-decoration-skip-property"
+animation_type = "discrete"
+affects = "overflow"
+
+[text-decoration-skip-spaces]
+type = "TextDecorationSkipKind"
+initial = "computed::TextDecorationSkipKind::start_end()"
+struct = "inherited_text"
+initial_specified_value = "specified::TextDecorationSkipKind::start_end()"
+spec = "https://drafts.csswg.org/css-text-decor-4/#text-decoration-skip-property"
+animation_type = "discrete"
+affects = "overflow"
+
+# CSS Text Decoration 4 — `text-decoration-trim` controls the trim
+# distance at each end of the painted decoration line.
+[text-decoration-trim]
+type = "TextDecorationTrim"
+initial = "computed::TextDecorationTrim::auto()"
+struct = "text"
+initial_specified_value = "specified::TextDecorationTrim::auto()"
+spec = "https://drafts.csswg.org/css-text-decor-4/#text-decoration-trim"
+animation_type = "discrete"
+affects = "overflow"
+boxed = true
+
+# CSS Text Decoration 4 §3.5 — `text-emphasis-skip` controls which
+# character categories are skipped when drawing emphasis marks.
+[text-emphasis-skip]
+type = "TextEmphasisSkip"
+initial = "computed::TextEmphasisSkip::initial()"
+struct = "inherited_text"
+initial_specified_value = "specified::TextEmphasisSkip::initial()"
+spec = "https://drafts.csswg.org/css-text-decor-4/#text-emphasis-skip"
+animation_type = "discrete"
+affects = "paint"
+
 [text-emphasis-color]
 type = "Color"
 initial = "computed_value::T::currentcolor()"
@@ -5681,6 +5833,33 @@ initial = "computed::BdTextDecorationLineThickness::auto()"
 struct = "text"
 initial_specified_value = "specified::BdTextDecorationLineThickness::auto()"
 spec = "Nonstandard (moegoe -bd-* fork extension; Prince G text-underline-thickness)"
+animation_type = "discrete"
+affects = "overflow"
+
+# moegoe G (Prince) — per-position underline offset companion to the
+# `-bd-text-underline-{color,style,thickness}` triple. `auto` defers to
+# the standard `text-underline-offset` cascade; an explicit length
+# overrides the underline offset for this line position only.
+[-bd-text-underline-offset]
+type = "BdTextUnderlineOffset"
+initial = "computed::BdTextUnderlineOffset::auto()"
+struct = "inherited_text"
+initial_specified_value = "specified::BdTextUnderlineOffset::auto()"
+spec = "Nonstandard (moegoe -bd-* fork extension; Prince G text-underline-offset)"
+animation_type = "discrete"
+affects = "overflow"
+
+# moegoe G (Prince) — per-position underline position companion to the
+# `-bd-text-underline-{color,style,thickness}` triple. `auto` defers to
+# the standard `text-underline-position` cascade; the remaining
+# keywords (`from-font`, `under`, `left`, `right`) override the
+# underline placement for this line position only.
+[-bd-text-underline-position]
+type = "BdTextUnderlinePosition"
+initial = "computed::BdTextUnderlinePosition::Auto"
+struct = "inherited_text"
+initial_specified_value = "specified::BdTextUnderlinePosition::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; Prince G text-underline-position)"
 animation_type = "discrete"
 affects = "overflow"
 

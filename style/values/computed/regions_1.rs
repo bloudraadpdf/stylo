@@ -4,7 +4,7 @@
 
 //! Computed values for CSS Regions Module Level 1 longhands.
 //!
-//! Both `flow-into` and `flow-from` are identity-computed; the
-//! specified types derive `ToComputedValue`.
+//! `flow-into`, `flow-from` and `region-fragment` are identity-computed;
+//! the specified types derive `ToComputedValue`.
 
-pub use crate::values::specified::regions_1::{FlowFrom, FlowInto, FlowIntoMode};
+pub use crate::values::specified::regions_1::{FlowFrom, FlowInto, FlowIntoMode, RegionFragment};

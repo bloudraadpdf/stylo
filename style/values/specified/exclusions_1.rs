@@ -2,13 +2,11 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! CSS Exclusions Module Level 1 — `wrap-flow` (§5.1).
+//! CSS Exclusions Module Level 1 — `wrap-flow` (§5.1) and
+//! `wrap-through` (§5.2).
 //!
 //! <https://drafts.csswg.org/css-exclusions-1/#propdef-wrap-flow>
-//!
-//! Grammar: `auto | both | start | end | minimum | maximum | clear`.
-//! Selects how inline content wraps around an exclusion element
-//! (a block-level box with `position: absolute` or a float).
+//! <https://drafts.csswg.org/css-exclusions-1/#propdef-wrap-through>
 
 use crate::derives::*;
 
@@ -50,4 +48,34 @@ pub enum WrapFlow {
     /// `clear` — content does not flow alongside; forced to the next
     /// available band below the exclusion.
     Clear,
+}
+
+/// Specified value of the `wrap-through` property (§5.2).
+///
+/// `wrap` (initial) — the element inherits the wrapping context from
+/// its ancestor exclusions. `none` — the element ignores its ancestor
+/// exclusions, so descendants flow over the exclusion area.
+#[repr(u8)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+pub enum WrapThrough {
+    /// `wrap` — inherit the wrapping context (initial).
+    #[default]
+    Wrap,
+    /// `none` — ignore ancestor exclusions.
+    None,
 }
