@@ -268,3 +268,105 @@ impl Parse for BdPdfTagStringPlain {
         Ok(Self::Literal(s.as_ref().to_owned().into()))
     }
 }
+
+/// Specified value of `-bd-pdf-tag-namespace` (K6).
+///
+/// PDF 2.0 (ISO 32000-2 §14.8.6) lets a structure element bind to
+/// a declared namespace so structure-element names carry meaning
+/// relative to a vocabulary. krilla projects this onto its
+/// `TagNamespace` enum.
+///
+/// `auto` — pick the default for the element's HTML namespace:
+/// `<math>` and descendants resolve to `mathml`, every other
+/// element resolves to the PDF 2.0 standard structure namespace
+/// (no override is set on the per-tag `/NS` slot). `pdf2-ssn` and
+/// `krilla` pin the explicit krilla-built-in namespaces; `html`
+/// and `mathml` request the well-known external namespace URIs
+/// (`http://www.w3.org/1999/xhtml` and
+/// `http://www.w3.org/1998/Math/MathML` respectively).
+/// `<custom-ident>` reserves a slot for a future
+/// per-`@-bd-pdf-namespace` registry; v1 of the renderer treats
+/// unknown idents the same as `auto` and emits a diagnostic.
+///
+/// Initial `auto`. Per-element; not inherited (the renderer walks
+/// the cascade per-element, and a `<math>` ancestor that already
+/// carries a `mathml` binding does not force descendants into the
+/// same namespace — descendants pick it up via their own HTML
+/// namespace).
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(C, u8)]
+pub enum BdPdfTagNamespace {
+    /// `auto` (initial) — defer to the element's HTML namespace.
+    /// `<math>` -> MathML; everything else -> default (no `/NS`).
+    Auto,
+    /// `pdf2-ssn` — bind to the PDF 2.0 standard structure
+    /// namespace (krilla `TagNamespace::Pdf2Ssn`). Useful when a
+    /// custom-ident role is being rewritten back to its standard
+    /// name and the author wants to force the SSN binding.
+    Pdf2Ssn,
+    /// `krilla` — bind to krilla's custom namespace
+    /// (`TagNamespace::Krilla`). Reserved for krilla-defined
+    /// custom names (`Datetime`, `Terms`, `Title`, &c.).
+    Krilla,
+    /// `mathml` — MathML 3 namespace URI
+    /// (`http://www.w3.org/1998/Math/MathML`). The renderer
+    /// registers the URI on the krilla `Document` once per
+    /// document and reuses the resulting handle for every
+    /// element flagged `mathml`.
+    MathMl,
+    /// `html` — HTML 4 namespace URI
+    /// (`http://www.w3.org/1999/xhtml`). Same registration
+    /// behaviour as `mathml`.
+    Html,
+    /// `<custom-ident>` — author-named namespace key. Reserved
+    /// for a future per-`@-bd-pdf-namespace` URI registry. v1 of
+    /// the renderer treats unknown idents the same as `auto` and
+    /// emits a diagnostic.
+    Custom(CustomIdent),
+}
+
+impl BdPdfTagNamespace {
+    /// Initial value (`auto`).
+    #[inline]
+    pub fn auto() -> Self {
+        Self::Auto
+    }
+}
+
+impl Parse for BdPdfTagNamespace {
+    fn parse<'i, 't>(
+        _: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, style_traits::ParseError<'i>> {
+        if let Ok(value) = input.try_parse(|i| {
+            let ident = i.expect_ident()?;
+            match_ignore_ascii_case! { ident,
+                "auto" => Ok(Self::Auto),
+                "pdf2-ssn" => Ok(Self::Pdf2Ssn),
+                "krilla" => Ok(Self::Krilla),
+                "mathml" => Ok(Self::MathMl),
+                "html" => Ok(Self::Html),
+                _ => Err(i.new_custom_error::<_, style_traits::StyleParseErrorKind>(
+                    style_traits::StyleParseErrorKind::UnspecifiedError,
+                )),
+            }
+        }) {
+            return Ok(value);
+        }
+        Ok(Self::Custom(CustomIdent::parse(
+            input,
+            &["auto", "pdf2-ssn", "krilla", "mathml", "html"],
+        )?))
+    }
+}

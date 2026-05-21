@@ -2471,6 +2471,18 @@ spec = "Nonstandard (moegoe -bd-* fork extension; G8 tagged-PDF role overrides)"
 animation_type = "none"
 affects = ""
 
+# moegoe K6 — PDF 2.0 `/NS` per-element namespace override
+# (ISO 32000-2 §14.8.6). `auto` follows the element's HTML
+# namespace (MathML for `<math>` subtrees; default elsewhere).
+[-bd-pdf-tag-namespace]
+type = "BdPdfTagNamespace"
+initial = "computed::BdPdfTagNamespace::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfTagNamespace::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; K6 tagged-PDF /NS namespace override)"
+animation_type = "none"
+affects = ""
+
 # moegoe F27 — PDF output tuning. Per-element / inherited knobs
 # governing how the PDF backend (krilla) emits content.
 [-bd-pdf-text-rendering]
