@@ -595,6 +595,7 @@ class Longhand(Property):
                 "BdColourBarPositionSide",
                 "BdPageMarkEnabled",
                 "BdRegistrationPosition",
+                "BdPdfAnnotationHidden",
                 "BdPdfFormFieldFlags",
                 "BdPdfFormFieldMaxLength",
                 "BdPdfLinkArea",

@@ -8,6 +8,6 @@
 //! Specified-to-computed is the identity for every variant.
 
 pub use crate::values::specified::bd_pdf_form::{
-    BdPdfFormFieldFlags, BdPdfFormFieldMaxLength, BdPdfSignatureFieldLock,
+    BdPdfAnnotationHidden, BdPdfFormFieldFlags, BdPdfFormFieldMaxLength, BdPdfSignatureFieldLock,
     BdPdfSignatureFieldLockFields, BdPdfSignatureFieldName,
 };

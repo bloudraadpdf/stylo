@@ -157,7 +157,7 @@ pub use self::bd_pdf_output_condition::BdPdfOutputCondition;
 pub use self::bd_pdf_output_registry_name::BdPdfOutputRegistryName;
 pub use self::bd_pdf_trapped::BdPdfTrapped;
 pub use self::bd_pdf_form::{
-    BdPdfFormFieldFlags, BdPdfFormFieldMaxLength, BdPdfSignatureFieldLock,
+    BdPdfAnnotationHidden, BdPdfFormFieldFlags, BdPdfFormFieldMaxLength, BdPdfSignatureFieldLock,
     BdPdfSignatureFieldLockFields, BdPdfSignatureFieldName,
 };
 pub use self::bd_pdf_format::BdPdfFormat;

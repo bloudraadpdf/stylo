@@ -151,6 +151,52 @@ impl Parse for BdPdfFormFieldMaxLength {
     }
 }
 
+/// Specified value of `-bd-pdf-annotation-hidden`.
+///
+/// Mirrors the annotation-level `/F 2` (`HIDDEN`) flag per
+/// ISO 32000-2 §12.5.3 Table 165. Distinct from the widget *field*
+/// flags carried by [`BdPdfFormFieldFlags`] (which write `/Ff`).
+///
+/// `auto` (initial) — the annotation's hidden bit is derived from
+/// HTML semantics. For widget annotations the existing
+/// `<input type="hidden">` path stays unchanged.
+/// `hidden` — force `/F 2` on the annotation regardless of source
+/// markup. On widget annotations the field still participates in
+/// `/AcroForm /Fields` and carries `/V`, but the viewer renders no
+/// appearance.
+#[repr(u8)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[allow(missing_docs)]
+pub enum BdPdfAnnotationHidden {
+    #[default]
+    Auto,
+    Hidden,
+}
+
+impl BdPdfAnnotationHidden {
+    /// Whether the keyword is `auto` (the initial value, derives the
+    /// hidden bit from HTML semantics).
+    #[inline]
+    pub fn is_auto(&self) -> bool {
+        matches!(self, Self::Auto)
+    }
+}
+
 /// Specified value of `-bd-pdf-signature-field-lock`.
 ///
 /// Mirrors ISO 32000-2 §12.8.2.3 SigFieldLock /Action entries.

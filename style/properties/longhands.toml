@@ -3719,6 +3719,23 @@ spec = "Nonstandard (moegoe -bd-* fork extension; G3 AcroForm signature widget �
 animation_type = "none"
 affects = ""
 
+# moegoe Family 26 (annotation-level) — `/F 2` (`HIDDEN`) per
+# ISO 32000-2 §12.5.3 Table 165. Cascade opt-in distinct from the
+# widget *field* flags above (which write `/Ff`). The initial value
+# `auto` defers to HTML semantics (`<input type="hidden">`); `hidden`
+# forces the annotation flag regardless of the source markup so an
+# authored element still participates in `/AcroForm /Fields` and
+# carries `/V` without rendering an appearance. Per-element; not
+# inherited.
+[-bd-pdf-annotation-hidden]
+type = "BdPdfAnnotationHidden"
+initial = "computed::BdPdfAnnotationHidden::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfAnnotationHidden::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; G3 annotation /F HIDDEN flag — Family 26)"
+animation_type = "none"
+affects = ""
+
 # moegoe Family 16 — change-bar revision marks. Per-element; not
 # inherited. The paginator allocates a margin-side track and the
 # paint stage draws a vertical bar covering the fragment's vertical
