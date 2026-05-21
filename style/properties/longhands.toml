@@ -212,6 +212,9 @@ type = "AlignmentBaseline"
 initial = "computed::AlignmentBaseline::Baseline"
 struct = "box"
 animation_type = "discrete"
+# css-page-3 Appendix A: vertical-align longhand applicable inside @page
+# and margin boxes.
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 spec = "https://drafts.csswg.org/css-inline-3/#alignment-baseline"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
@@ -449,6 +452,9 @@ struct = "box"
 spec = "https://drafts.csswg.org/css-inline-3/#baseline-shift"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
+# css-page-3 Appendix A: vertical-align longhand applicable inside @page
+# and margin boxes.
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 
 [baseline-source]
 type = "BaselineSource"
@@ -458,6 +464,9 @@ animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-inline-3/#baseline-source"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
+# css-page-3 Appendix A: vertical-align longhand applicable inside @page
+# and margin boxes.
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 
 # CSS Inline 3 §6 — first/last line half-leading trim. Inherits so
 # nested block containers observe the trimming policy consistently.
@@ -1227,6 +1236,9 @@ animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-fonts/#propdef-font-variant-alternates"
 gecko_ffi_name = "mFont.variantAlternates"
 affects = "layout"
+# css-page-3 Appendix A: font-variant longhand applicable inside @page
+# and margin boxes.
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 
 [font-variant-east-asian]
 type = "FontVariantEastAsian"
@@ -1237,6 +1249,9 @@ animation_type = "discrete"
 gecko_ffi_name = "mFont.variantEastAsian"
 spec = "https://drafts.csswg.org/css-fonts/#propdef-font-variant-east-asian"
 affects = "layout"
+# css-page-3 Appendix A: font-variant longhand applicable inside @page
+# and margin boxes.
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 
 [font-variant-ligatures]
 type = "FontVariantLigatures"
@@ -1247,6 +1262,9 @@ animation_type = "discrete"
 gecko_ffi_name = "mFont.variantLigatures"
 spec = "https://drafts.csswg.org/css-fonts/#propdef-font-variant-ligatures"
 affects = "layout"
+# css-page-3 Appendix A: font-variant longhand applicable inside @page
+# and margin boxes.
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 
 [font-variant-numeric]
 type = "FontVariantNumeric"
@@ -1257,6 +1275,9 @@ animation_type = "discrete"
 gecko_ffi_name = "mFont.variantNumeric"
 spec = "https://drafts.csswg.org/css-fonts/#propdef-font-variant-numeric"
 affects = "layout"
+# css-page-3 Appendix A: font-variant longhand applicable inside @page
+# and margin boxes.
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 
 [font-variation-settings]
 type = "FontVariationSettings"
@@ -1488,6 +1509,8 @@ struct = "inherited_text"
 spec = "https://drafts.csswg.org/css-text/#propdef-letter-spacing"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
+# css-page-3 Appendix A: applicable inside @page and margin boxes.
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 
 [lighting-color]
 type = "Color"
@@ -1775,6 +1798,9 @@ ignored_when_colors_disabled = true
 spec = "https://drafts.csswg.org/css-ui/#propdef-outline-color"
 servo_restyle_damage = "repaint"
 affects = "paint"
+# css-page-3 Appendix A: outline longhand applicable inside @page and margin
+# boxes.
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 
 [outline-offset]
 type = "BorderSideOffset"
@@ -1783,6 +1809,9 @@ struct = "outline"
 spec = "https://drafts.csswg.org/css-ui/#propdef-outline-offset"
 servo_restyle_damage = "repaint"
 affects = "overflow"
+# css-page-3 Appendix A: outline longhand applicable inside @page and margin
+# boxes.
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 
 [outline-style]
 type = "OutlineStyle"
@@ -1793,6 +1822,9 @@ animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-ui/#propdef-outline-style"
 servo_restyle_damage = "repaint"
 affects = "overflow"
+# css-page-3 Appendix A: outline longhand applicable inside @page and margin
+# boxes.
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 
 [outline-width]
 type = "BorderSideWidth"
@@ -1802,6 +1834,9 @@ initial_specified_value = "specified::BorderSideWidth::medium()"
 spec = "https://drafts.csswg.org/css-ui/#propdef-outline-width"
 servo_restyle_damage = "repaint"
 affects = "overflow"
+# css-page-3 Appendix A: outline longhand applicable inside @page and margin
+# boxes.
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 
 [overflow-anchor]
 type = "OverflowAnchor"
@@ -4352,6 +4387,8 @@ struct = "list"
 animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-content/#propdef-quotes"
 servo_restyle_damage = "rebuild_box"
+# css-page-3 Appendix A: applicable inside @page and margin boxes.
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 affects = "layout"
 
 [resize]
@@ -4619,6 +4656,8 @@ struct = "inherited_text"
 spec = "https://drafts.csswg.org/css-text/#propdef-text-indent"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
+# css-page-3 Appendix A: applicable inside @page and margin boxes.
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 
 [text-justify]
 type = "TextJustify"
@@ -4646,6 +4685,8 @@ animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-text/#propdef-text-transform"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
+# css-page-3 Appendix A: applicable inside @page and margin boxes.
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 
 [top]
 type = "Inset"
@@ -5085,6 +5126,8 @@ struct = "inherited_text"
 spec = "https://drafts.csswg.org/css-text/#propdef-word-spacing"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
+# css-page-3 Appendix A: applicable inside @page and margin boxes.
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 
 [word-space-transform]
 type = "WordSpaceTransform"
@@ -6835,6 +6878,9 @@ animation_type = "discrete"
 affects = "layout"
 gecko_ffi_name = "mFont.variantCaps"
 servo_restyle_damage = "rebuild_box"
+# css-page-3 Appendix A: font-variant longhand applicable inside @page
+# and margin boxes.
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 
 [font-variant-caps.keyword]
 values = ["normal", "small-caps", "all-small-caps", "petite-caps", "all-petite-caps", "unicase", "titling-caps"]
@@ -6856,6 +6902,9 @@ affects = "layout"
 gecko_ffi_name = "mFont.variantEmoji"
 gecko_pref = "layout.css.font-variant-emoji.enabled"
 has_effect_on_gecko_scrollbars = false
+# css-page-3 Appendix A: font-variant longhand applicable inside @page
+# and margin boxes.
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 keyword = { values = ["normal", "text", "emoji", "unicode"] }
 
 [font-variant-position]
@@ -6864,6 +6913,9 @@ spec = "https://drafts.csswg.org/css-fonts/#propdef-font-variant-position"
 animation_type = "discrete"
 affects = "layout"
 gecko_ffi_name = "mFont.variantPosition"
+# css-page-3 Appendix A: font-variant longhand applicable inside @page
+# and margin boxes.
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 keyword = { values = ["normal", "sub", "super"], gecko_constant_prefix = "NS_FONT_VARIANT_POSITION" }
 
 [font-optical-sizing]
@@ -7062,6 +7114,9 @@ spec = "https://drafts.csswg.org/css-text-4/#propdef-text-wrap-mode"
 animation_type = "discrete"
 affects = "layout"
 servo_restyle_damage = "rebuild_box"
+# css-page-3 Appendix A: white-space longhand applicable inside @page
+# and margin boxes.
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 keyword = { values = ["wrap", "nowrap"] }
 
 [text-wrap-style]
@@ -7308,4 +7363,7 @@ spec = "https://drafts.csswg.org/css-text-4/#propdef-white-space-collapse"
 animation_type = "discrete"
 affects = "layout"
 servo_restyle_damage = "rebuild_box"
+# css-page-3 Appendix A: white-space longhand applicable inside @page
+# and margin boxes.
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 keyword = { values = ["collapse", "preserve", "preserve-breaks", "break-spaces"], extra_gecko_values = ["preserve-spaces"], gecko_aliases = ["-moz-pre-space=preserve-spaces"] }
