@@ -176,7 +176,8 @@ pub use self::bd_pdf_output_intent::{
     BdPdfOutputIntent,
 };
 pub use self::bd_pdf_tag::{
-    BdPdfStandardRole, BdPdfTagNamespace, BdPdfTagStringAuto, BdPdfTagStringPlain, BdPdfTagValue,
+    BdPdfArtifactKind, BdPdfStandardRole, BdPdfTagNamespace, BdPdfTagStringAuto,
+    BdPdfTagStringPlain, BdPdfTagValue,
 };
 pub use self::bd_pdf_viewer::{
     BdPdfTriState, BdPdfViewerDirection, BdPdfViewerDuplex, BdPdfViewerNonFullscreenPageMode,

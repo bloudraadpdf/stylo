@@ -86,13 +86,62 @@ pub enum BdPdfStandardRole {
     Em,
 }
 
+/// Artifact subtype keyword for `-bd-pdf-tag: artifact(<kind>)`.
+///
+/// ISO 32000-2 §14.8.2.2 classifies artifacts into four broad
+/// categories. The bare `artifact` keyword resolves to `Layout`
+/// (the most common case for purely decorative typography or
+/// design elements).
+///
+/// Maps onto krilla's `ArtifactType` at the PDF emission boundary:
+/// `Layout` -> `ArtifactType::Layout`, `Page` -> `ArtifactType::Page`,
+/// `Background` -> `ArtifactType::Background`, `Pagination` ->
+/// `ArtifactType::PaginationOther` (the generic pagination kind;
+/// per-margin-box `Header` / `Footer` / `PageNumber` subtypes are
+/// chosen by the renderer, not the author).
+#[repr(u8)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+pub enum BdPdfArtifactKind {
+    /// `layout` — cosmetic typographical or design element. Default
+    /// for the bare `artifact` keyword.
+    #[default]
+    Layout,
+    /// `page` — page artifact (cut marks, colour bars, &c.).
+    Page,
+    /// `background` — background of a page or graphical element.
+    Background,
+    /// `pagination` — pagination-related (headers, footers, page
+    /// numbers). Per-subtype attribution (`Header` / `Footer` /
+    /// `PageNumber`) is chosen by the renderer based on the
+    /// margin-box position; CSS authors only select the generic
+    /// kind here.
+    Pagination,
+}
+
 /// Specified value of `-bd-pdf-tag`.
 ///
 /// `auto` (initial) — derive from HTML semantics. `none` — this
 /// element produces no structure entry but descendants attach to
-/// the parent group (transparent wrapper). `artifact` — exclude
-/// this element and its subtree from the structure tree.
-/// `<standard-role>` — explicit krilla `TagKind`.
+/// the parent group (transparent wrapper). `artifact` (or
+/// `artifact(layout|page|background|pagination)`) — exclude this
+/// element and its subtree from the structure tree and mark the
+/// content as a PDF `/Artifact` of the named kind (`layout` by
+/// default). `<standard-role>` — explicit krilla `TagKind`.
 /// `<custom-ident>` — author-named role; falls back to `Span` or
 /// `Div` (block-display) with a warning until the krilla
 /// `RoleMap` API lands.
@@ -114,8 +163,11 @@ pub enum BdPdfTagValue {
     Auto,
     /// `none` — emit no structure entry for this element.
     None,
-    /// `artifact` — exclude from the structure tree.
-    Artifact,
+    /// `artifact(<kind>)` — exclude from the structure tree and
+    /// mark as a PDF artifact of the named kind. The bare
+    /// `artifact` keyword resolves to
+    /// [`BdPdfArtifactKind::Layout`].
+    Artifact(BdPdfArtifactKind),
     /// `<standard-role>` — explicit standard role.
     Standard(BdPdfStandardRole),
     /// `<custom-ident>` — custom role name.
@@ -141,12 +193,30 @@ impl Parse for BdPdfTagValue {
         _context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, style_traits::ParseError<'i>> {
+        // `artifact(<kind>)` — functional notation with one
+        // BdPdfArtifactKind keyword argument.
+        if let Ok(value) = input.try_parse(|i| {
+            let location = i.current_source_location();
+            let function = i.expect_function()?.clone();
+            if !function.eq_ignore_ascii_case("artifact") {
+                return Err(location.new_custom_error::<_, style_traits::StyleParseErrorKind>(
+                    style_traits::StyleParseErrorKind::UnexpectedFunction(function.clone()),
+                ));
+            }
+            i.parse_nested_block(|i| {
+                let kind = BdPdfArtifactKind::parse(i)?;
+                Ok(Self::Artifact(kind))
+            })
+        }) {
+            return Ok(value);
+        }
+        // Bare keywords: auto | none | artifact (= artifact(layout)).
         if let Ok(value) = input.try_parse(|i| {
             let ident = i.expect_ident()?;
             match_ignore_ascii_case! { ident,
                 "auto" => Ok(Self::Auto),
                 "none" => Ok(Self::None),
-                "artifact" => Ok(Self::Artifact),
+                "artifact" => Ok(Self::Artifact(BdPdfArtifactKind::Layout)),
                 _ => Err(i.new_custom_error::<_, style_traits::StyleParseErrorKind>(
                     style_traits::StyleParseErrorKind::UnspecifiedError,
                 )),
