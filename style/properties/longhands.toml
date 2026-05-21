@@ -2483,6 +2483,19 @@ spec = "Nonstandard (moegoe -bd-* fork extension; K6 tagged-PDF /NS namespace ov
 animation_type = "none"
 affects = ""
 
+# moegoe K3 — Optional Content Group (OCG) opt-in (ISO 32000-2
+# §8.11). Per-element; not inherited. `<custom-ident>` assigns the
+# element subtree to the named PDF layer; distinct names register
+# distinct OCGs in the document catalogue. Initial `none` opts out.
+[-bd-pdf-layer]
+type = "BdPdfLayer"
+initial = "computed::BdPdfLayer::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfLayer::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; K3 PDF Optional Content Groups)"
+animation_type = "none"
+affects = "paint"
+
 # moegoe F27 — PDF output tuning. Per-element / inherited knobs
 # governing how the PDF backend (krilla) emits content.
 [-bd-pdf-text-rendering]

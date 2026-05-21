@@ -161,6 +161,7 @@ pub use self::bd_pdf_form::{
     BdPdfSignatureFieldLockFields, BdPdfSignatureFieldName,
 };
 pub use self::bd_pdf_format::BdPdfFormat;
+pub use self::bd_pdf_layer::BdPdfLayer;
 pub use self::bd_pdf_output::{
     BdFontEmbeddingType, BdGlyphLayoutMode, BdPaintReordering, BdPdfBookmarksEnabled,
     BdPdfPassdownStyles, BdPdfRasterAccessibility, BdPdfShapeOptimization, BdPdfTextRendering,
@@ -282,6 +283,7 @@ pub mod bd_pdf_conformance;
 pub mod bd_pdf_destination;
 pub mod bd_pdf_form;
 pub mod bd_pdf_format;
+pub mod bd_pdf_layer;
 pub mod bd_pdf_output;
 pub mod bd_pdf_output_condition;
 pub mod bd_pdf_output_intent;
