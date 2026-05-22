@@ -232,13 +232,82 @@ fn eval_font_tech(flag: &FontFaceSourceTechFlags) -> bool {
 }
 
 #[cfg(feature = "servo")]
-fn eval_font_format(_: &FontFaceSourceFormatKeyword) -> bool {
-    false
+fn eval_font_format(kw: &FontFaceSourceFormatKeyword) -> bool {
+    // Servo build positive-evaluation table for moegoe (jacquesg/stylo
+    // fork): a keyword returns `true` only when the downstream consumer
+    // genuinely loads, decodes, shapes, and embeds that container
+    // format end-to-end. Anything we cannot confirm stays `false` and
+    // degrades to CSS Conditional 4 §2's unknown -> false contract
+    // (which `not (font-format(<unsupported>))` then flips to `true`,
+    // preserving authorial fallback intent).
+    //
+    // - `Truetype` / `Opentype`: native rustybuzz shaping path and
+    //   krilla CFF/glyf embedding. Always supported.
+    // - `Woff` / `Woff2`: allsorts decompresses these containers down
+    //   to SFNT before they reach rustybuzz / krilla. Always supported.
+    // - `EmbeddedOpentype`: legacy IE-only `.eot`; no consumer wiring.
+    // - `Svg`: SVG-as-font (deprecated container); no consumer wiring.
+    //   Distinct from `color-svg` glyph tables, which is handled by
+    //   `eval_font_tech`.
+    // - `Collection`: TrueType / OpenType Collections (`ttcf`) are
+    //   explicitly rejected by moegoe's font-ingestion precision
+    //   pipeline (`moegoe_fonts::precision::PrecisionError::FontCollection`).
+    // - `None` / `Unknown`: sentinels never authored in a `@supports`
+    //   predicate.
+    match *kw {
+        FontFaceSourceFormatKeyword::Truetype |
+        FontFaceSourceFormatKeyword::Opentype |
+        FontFaceSourceFormatKeyword::Woff |
+        FontFaceSourceFormatKeyword::Woff2 => true,
+        FontFaceSourceFormatKeyword::EmbeddedOpentype |
+        FontFaceSourceFormatKeyword::Svg |
+        FontFaceSourceFormatKeyword::Collection |
+        FontFaceSourceFormatKeyword::None |
+        FontFaceSourceFormatKeyword::Unknown => false,
+    }
 }
 
 #[cfg(feature = "servo")]
-fn eval_font_tech(_: &FontFaceSourceTechFlags) -> bool {
-    false
+fn eval_font_tech(flag: &FontFaceSourceTechFlags) -> bool {
+    // Servo build positive-evaluation table for moegoe (jacquesg/stylo
+    // fork). A tech flag returns `true` only when the downstream
+    // consumer can honour the named technology end-to-end. Anything we
+    // cannot confirm stays `false` per CSS Conditional 4 §2 (unknown
+    // features have support status `false`).
+    //
+    // `font-tech()` in CSS Fonts 4 §4.5 is a *set* of required
+    // technologies; the evaluator must therefore be true iff EVERY bit
+    // present in the requested flag set is one we support. We model
+    // this by intersecting against the moegoe-supported mask and
+    // demanding equality with the input.
+    //
+    // - `FEATURES_OPENTYPE`: rustybuzz is an OpenType shaper
+    //   (GSUB/GPOS feature application is the engine's primary
+    //   responsibility).
+    // - `VARIATIONS`: parley/fontique register variable fonts via
+    //   `fontique::FontInfoOverride` and render at the default
+    //   instance, which is sufficient for the spec predicate ("does
+    //   the UA accept variation fonts?"). Axis-override authoring via
+    //   `font-variation-settings` is a separate capability.
+    // - `COLOR_COLRV0` / `COLOR_COLRV1`: krilla's colour-font emission
+    //   path renders COLR layer trees; moegoe ships `Noto Color Emoji`
+    //   (COLRv1) as a bundled face.
+    // - `FEATURES_AAT`: Apple Advanced Typography state machines are
+    //   not implemented by rustybuzz.
+    // - `FEATURES_GRAPHITE`: SIL Graphite is not implemented anywhere
+    //   in the moegoe pipeline.
+    // - `COLOR_SVG` / `COLOR_SBIX` / `COLOR_CBDT`: no consumer wiring
+    //   for SVG glyph tables or bitmap glyph containers.
+    // - `PALETTES`: `font-palette` cascading and CPAL palette
+    //   selection are not wired into moegoe's text pipeline.
+    // - `INCREMENTAL`: no Incremental Font Transfer support.
+    const MOEGOE_SUPPORTED_TECHS: FontFaceSourceTechFlags =
+        FontFaceSourceTechFlags::FEATURES_OPENTYPE
+            .union(FontFaceSourceTechFlags::VARIATIONS)
+            .union(FontFaceSourceTechFlags::COLOR_COLRV0)
+            .union(FontFaceSourceTechFlags::COLOR_COLRV1);
+
+    !flag.is_empty() && (flag.difference(MOEGOE_SUPPORTED_TECHS)).is_empty()
 }
 
 /// supports_condition | declaration
