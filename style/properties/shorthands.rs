@@ -218,6 +218,55 @@ pub mod border_radius {
     }
 }
 
+/// CSS Backgrounds and Borders Module Level 4 §5.5 — `corner-shape`
+/// shorthand.
+///
+/// Sets the four `corner-*-shape` longhands at once. The grammar
+/// mirrors `border-radius`: one value applies to all four corners;
+/// two values pair TL+BR / TR+BL; three values apply TL / TR+BL / BR;
+/// four values apply TL / TR / BR / BL.
+pub mod corner_shape {
+    pub use crate::properties::shorthands_generated::corner_shape::*;
+
+    use super::*;
+    use crate::values::specified::corner_shape::CornerShapeRect;
+
+    pub fn parse_value<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Longhands, ParseError<'i>> {
+        let rect = CornerShapeRect::parse(context, input)?;
+        Ok(expanded! {
+            corner_top_left_shape: rect.top_left,
+            corner_top_right_shape: rect.top_right,
+            corner_bottom_right_shape: rect.bottom_right,
+            corner_bottom_left_shape: rect.bottom_left,
+        })
+    }
+
+    impl<'a> ToCss for LonghandsToSerialize<'a> {
+        fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+        where
+            W: fmt::Write,
+        {
+            let LonghandsToSerialize {
+                corner_top_left_shape: tl,
+                corner_top_right_shape: tr,
+                corner_bottom_right_shape: br,
+                corner_bottom_left_shape: bl,
+            } = *self;
+            let rect = CornerShapeRect {
+                top_left: *tl,
+                top_right: *tr,
+                bottom_right: *br,
+                bottom_left: *bl,
+            };
+            <CornerShapeRect as ToCss>::to_css(&rect, dest)
+        }
+    }
+
+}
+
 pub mod border_image {
     pub use crate::properties::shorthands_generated::border_image::*;
 

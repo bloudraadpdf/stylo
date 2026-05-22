@@ -6356,6 +6356,52 @@ logical_group = "border-radius"
 logical = true
 affects = "paint"
 
+# CSS Backgrounds 4 §5.5 — `corner-shape` per-corner longhands. Each
+# longhand pairs with the matching `border-*-radius` slot and selects
+# the geometric profile of that corner (round | bevel | scoop | notch
+# | square | superellipse(<number>)). Initial value `round` reproduces
+# the existing CSS Backgrounds 3 quarter-ellipse behaviour.
+#
+# CSS Backgrounds 4 §5.5 (2025-09-25 ED) does not (yet) define
+# logical corner-shape longhands (`corner-start-start-shape` etc.) —
+# only the four physical corners. They therefore do NOT share a
+# Stylo logical_group; Stylo's group-balance invariant requires every
+# logical_group to have a 1:1 physical/logical pairing (see
+# `properties/data.py::PropertiesData.__init__`), which would
+# otherwise fail at build time. Add `logical_group = "corner-shape"`
+# back when the spec adds the logical longhand quartet.
+[corner-top-left-shape]
+type = "CornerShape"
+initial = "computed::CornerShape::Round"
+struct = "border"
+spec = "https://drafts.csswg.org/css-backgrounds-4/#corner-top-left-shape"
+animation_type = "none"
+affects = "paint"
+
+[corner-top-right-shape]
+type = "CornerShape"
+initial = "computed::CornerShape::Round"
+struct = "border"
+spec = "https://drafts.csswg.org/css-backgrounds-4/#corner-top-right-shape"
+animation_type = "none"
+affects = "paint"
+
+[corner-bottom-right-shape]
+type = "CornerShape"
+initial = "computed::CornerShape::Round"
+struct = "border"
+spec = "https://drafts.csswg.org/css-backgrounds-4/#corner-bottom-right-shape"
+animation_type = "none"
+affects = "paint"
+
+[corner-bottom-left-shape]
+type = "CornerShape"
+initial = "computed::CornerShape::Round"
+struct = "border"
+spec = "https://drafts.csswg.org/css-backgrounds-4/#corner-bottom-left-shape"
+animation_type = "none"
+affects = "paint"
+
 [margin-top]
 type = "Margin"
 initial = "computed::Margin::zero()"

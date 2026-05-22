@@ -456,6 +456,13 @@ sub_properties = ["border-top-left-radius", "border-top-right-radius", "border-b
 spec = "https://drafts.csswg.org/css-backgrounds/#border-radius"
 extra_prefixes = ["webkit"]
 
+# CSS Backgrounds 4 §5.5 — `corner-shape` shorthand sets all four
+# per-corner shape longhands at once. Grammar mirrors `border-radius`
+# (1, 2, 3, or 4 values applying TL TR BR BL with the canonical tile).
+[corner-shape]
+sub_properties = ["corner-top-left-shape", "corner-top-right-shape", "corner-bottom-right-shape", "corner-bottom-left-shape"]
+spec = "https://drafts.csswg.org/css-backgrounds-4/#corner-shape"
+
 [outline]
 sub_properties = ["outline-color", "outline-style", "outline-width"]
 spec = "https://drafts.csswg.org/css-ui/#propdef-outline"

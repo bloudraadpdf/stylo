@@ -69,6 +69,7 @@ pub use self::color::{
 pub use self::color_5::{OutputColorModel, PredefinedOutputColourSpace};
 pub use self::color_hdr_1::DynamicRangeLimit;
 pub use self::column::ColumnCount;
+pub use self::corner_shape::CornerShape;
 pub use self::counters::{
     BookmarkLabel, Content, ContentItem, CounterIncrement, CounterReset, CounterSet, StringSet,
 };
@@ -305,6 +306,7 @@ pub mod color;
 pub mod color_5;
 pub mod color_hdr_1;
 pub mod column;
+pub mod corner_shape;
 pub mod counters;
 pub mod display_4;
 pub mod easing;

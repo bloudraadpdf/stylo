@@ -636,6 +636,7 @@ class Longhand(Property):
                 "ContentVisibility",
                 "ContainerType",
                 "Continue",
+                "CornerShape",
                 "Display",
                 "FillRule",
                 "Float",
