@@ -3248,6 +3248,20 @@ spec = "https://drafts.csswg.org/css-line-grid-1/#line-grid"
 animation_type = "none"
 affects = "layout"
 
+# CSS Line Grid Module Level 1 §6.1 — `line-snap` controls how line
+# boxes inside a block container snap to its line grid. The moegoe
+# fork's `-bd-line-snap` longhand above shares the same three-keyword
+# grammar; both surfaces project onto the same downstream IR variant
+# so the layout pass only consumes one signal.
+[line-snap]
+type = "LineSnap"
+initial = "computed::LineSnap::None"
+struct = "inherited_text"
+initial_specified_value = "specified::LineSnap::None"
+spec = "https://drafts.csswg.org/css-line-grid-1/#line-snap-property"
+animation_type = "none"
+affects = "layout"
+
 # CSS Line Grid Module Level 1 §6 — `box-snap` selects which box edge
 # / baseline snaps to the line grid.
 [box-snap]

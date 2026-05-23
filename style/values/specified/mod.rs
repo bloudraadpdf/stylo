@@ -88,7 +88,7 @@ pub use self::length::{NoCalcLength, ViewportPercentageLength, ViewportVariant};
 pub use self::length::{
     NonNegativeLength, NonNegativeLengthPercentage, NonNegativeLengthPercentageOrAuto,
 };
-pub use self::line_grid_1::{BoxSnap, LineGrid};
+pub use self::line_grid_1::{BoxSnap, LineGrid, LineSnap};
 pub use self::list::ListStyleType;
 pub use self::list::Quotes;
 pub use self::motion::{OffsetPath, OffsetPosition, OffsetRotate};

@@ -4,7 +4,7 @@
 
 //! Computed values for CSS Line Grid Level 1 standard longhands.
 //!
-//! `line-grid` and `box-snap` are identity-computed; the specified
-//! types derive `ToComputedValue`.
+//! `line-grid`, `line-snap`, and `box-snap` are identity-computed; the
+//! specified types derive `ToComputedValue`.
 
-pub use crate::values::specified::line_grid_1::{BoxSnap, LineGrid};
+pub use crate::values::specified::line_grid_1::{BoxSnap, LineGrid, LineSnap};
