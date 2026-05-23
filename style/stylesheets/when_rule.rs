@@ -39,7 +39,7 @@ use crate::parser::ParserContext;
 use crate::shared_lock::{DeepCloneWithLock, Locked};
 use crate::shared_lock::{SharedRwLock, SharedRwLockReadGuard, ToCssWithGuard};
 use crate::stylesheets::supports_rule::SupportsCondition;
-use crate::stylesheets::{CssRules, CustomMediaEvaluator, CustomMediaMap};
+use crate::stylesheets::{CssRuleType, CssRules, CustomMediaEvaluator, CustomMediaMap};
 use cssparser::{match_ignore_ascii_case, Parser, SourceLocation, Token};
 #[cfg(feature = "gecko")]
 use malloc_size_of::{MallocSizeOfOps, MallocUnconditionalShallowSizeOf};
@@ -98,10 +98,16 @@ impl WhenCondition {
     ///
     /// <https://drafts.csswg.org/css-conditional-5/#typedef-when-condition>
     ///
+    /// `context` is taken by `&mut` so that the eager evaluation of
+    /// `supports(...)` leaves can run inside
+    /// `ParserContext::nest_for_rule(CssRuleType::Style, …)` — the
+    /// same nesting `SupportsRule::eval` already requires (see
+    /// `style/stylesheets/supports_rule.rs::Declaration::eval`).
+    ///
     /// `shared_lock` is the stylesheet's `SharedRwLock`, required to
     /// wrap the inner `MediaList` produced by `media(...)` leaves.
     pub fn parse<'i, 't>(
-        context: &ParserContext,
+        context: &mut ParserContext,
         shared_lock: &SharedRwLock,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
@@ -154,7 +160,7 @@ impl WhenCondition {
     /// `<general-enclosed>` block so the surrounding rule remains
     /// valid per CSS Syntax 3 forwards-compatible parsing.
     fn parse_in_parens<'i, 't>(
-        context: &ParserContext,
+        context: &mut ParserContext,
         shared_lock: &SharedRwLock,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
@@ -173,37 +179,49 @@ impl WhenCondition {
                 }
             },
             Token::Function(ref name) => {
-                let leaf = match_ignore_ascii_case! { name,
-                    "supports" => Some(input.try_parse(|input| {
-                        input.parse_nested_block(|input| {
-                            let condition = SupportsCondition::parse(input)?;
-                            // Eagerly resolve `supports(...)` per the
-                            // contract that mirrors `SupportsRule.enabled`:
-                            // the predicate tests syntactic support
-                            // (which is device-independent) and the
-                            // `ParserContext` we hold is the freshest
-                            // available reflection of the current UA.
-                            let result = condition.eval(context);
-                            Ok(WhenCondition::Supports { condition, result })
-                        })
-                    })),
-                    "media" => Some(input.try_parse(|input| {
-                        input.parse_nested_block(|input| {
-                            // `media(<media-condition>)` per the
-                            // Level 5 grammar — a boolean expression,
-                            // no media-type, no comma list. We model
-                            // it as a one-entry MediaList so the
-                            // existing evaluator and serialiser paths
-                            // can be reused intact.
-                            let list = MediaList::parse(context, input);
-                            Ok(WhenCondition::Media(Arc::new(
+                let function_name = name.clone();
+                let leaf = match_ignore_ascii_case! { &function_name,
+                    "supports" => {
+                        let parsed = input.try_parse(|input| {
+                            input.parse_nested_block(|input| SupportsCondition::parse(input))
+                        });
+                        match parsed {
+                            Ok(condition) => {
+                                // Eager evaluation matches the
+                                // `SupportsRule.enabled` contract:
+                                // syntactic support is
+                                // device-independent and the
+                                // `ParserContext` we hold is the
+                                // freshest UA snapshot available.
+                                // `Declaration::eval` requires
+                                // `CssRuleType::Style` in the
+                                // nesting context (see
+                                // `supports_rule.rs::Declaration::eval`'s
+                                // debug-assert), so we nest just as
+                                // `SupportsRule` does.
+                                let result = context.nest_for_rule(
+                                    CssRuleType::Style,
+                                    |ctx| condition.eval(ctx),
+                                );
+                                Some(WhenCondition::Supports { condition, result })
+                            },
+                            Err(_) => None,
+                        }
+                    },
+                    "media" => {
+                        let parsed = input.try_parse(|input| -> Result<MediaList, ParseError<'i>> {
+                            input.parse_nested_block(|input| Ok(MediaList::parse(context, input)))
+                        });
+                        match parsed {
+                            Ok(list) => Some(WhenCondition::Media(Arc::new(
                                 shared_lock.wrap(list),
-                            )))
-                        })
-                    })),
+                            ))),
+                            Err(_) => None,
+                        }
+                    },
                     _ => None,
                 };
-                if let Some(Ok(leaf)) = leaf {
+                if let Some(leaf) = leaf {
                     return Ok(leaf);
                 }
             },

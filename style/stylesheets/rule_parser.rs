@@ -747,7 +747,8 @@ impl<'a, 'i> AtRuleParser<'i> for NestedRuleParser<'a, 'i> {
             // functional leaves with `not` / `and` / `or` combinators.
             // See `style/stylesheets/when_rule.rs`.
             "when" => {
-                let cond = WhenCondition::parse(&self.context, &self.shared_lock, input)?;
+                let top = &mut **self;
+                let cond = WhenCondition::parse(&mut top.context, &top.shared_lock, input)?;
                 AtRulePrelude::When(cond)
             },
             // CSS Conditional 5 §3.2 — `@else [ <when-condition> ]? { … }`.
@@ -755,9 +756,10 @@ impl<'a, 'i> AtRuleParser<'i> for NestedRuleParser<'a, 'i> {
             // unconditional fallback. Chain membership is validated
             // structurally in `parse_block`, not here.
             "else" => {
+                let top = &mut **self;
                 let cond = input
                     .try_parse(|input| {
-                        WhenCondition::parse(&self.context, &self.shared_lock, input)
+                        WhenCondition::parse(&mut top.context, &top.shared_lock, input)
                     })
                     .ok();
                 AtRulePrelude::Else(cond)
