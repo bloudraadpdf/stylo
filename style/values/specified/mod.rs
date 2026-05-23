@@ -179,7 +179,8 @@ pub use self::bd_pdf_tag::{
     BdPdfTagStringPlain, BdPdfTagValue,
 };
 pub use self::bd_pdf_viewer::{
-    BdPdfTriState, BdPdfViewerDirection, BdPdfViewerDuplex, BdPdfViewerNonFullscreenPageMode,
+    BdFirstPageSide, BdInitialPage, BdInitialZoom, BdPagesCounterOffset, BdPdfTriState,
+    BdPdfViewerDirection, BdPdfViewerDuplex, BdPdfViewerNonFullscreenPageMode,
     BdPdfViewerPageLayout, BdPdfViewerPageMode, BdPdfViewerPrintScaling,
 };
 pub use self::bd_gaps::{BorderClip, MaskBorderMode, Overlay};

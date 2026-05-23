@@ -2398,6 +2398,59 @@ spec = "Nonstandard (moegoe -bd-* fork extension; G5 PDF viewer preferences)"
 animation_type = "none"
 affects = ""
 
+# moegoe G5b — PDFreactor `@-ro-preferences` parity surface. These
+# five longhands are document-level (read off `:root` only) and have
+# no direct `/ViewerPreferences` dictionary slot: they govern sheet-
+# side resolution (`-bd-first-page-side`, `-bd-first-page-side-view`),
+# the document open action (`-bd-initial-page`, `-bd-initial-zoom`),
+# and the CSS Paged Media `pages` counter total
+# (`-bd-pages-counter-offset`). See `bd_pdf_viewer.rs` module docs
+# for the per-property semantics and PDFreactor cross-references.
+[-bd-first-page-side]
+type = "BdFirstPageSide"
+initial = "computed::BdFirstPageSide::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdFirstPageSide::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; G5b PDFreactor first-page-side parity)"
+animation_type = "none"
+affects = ""
+
+[-bd-first-page-side-view]
+type = "BdFirstPageSide"
+initial = "computed::BdFirstPageSide::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdFirstPageSide::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; G5b PDFreactor first-page-side-view parity)"
+animation_type = "none"
+affects = ""
+
+[-bd-initial-page]
+type = "BdInitialPage"
+initial = "computed::BdInitialPage::one()"
+struct = "counters"
+initial_specified_value = "specified::BdInitialPage::one()"
+spec = "Nonstandard (moegoe -bd-* fork extension; G5b PDFreactor initial-page parity)"
+animation_type = "none"
+affects = ""
+
+[-bd-initial-zoom]
+type = "BdInitialZoom"
+initial = "computed::BdInitialZoom::auto()"
+struct = "counters"
+initial_specified_value = "specified::BdInitialZoom::auto()"
+spec = "Nonstandard (moegoe -bd-* fork extension; G5b PDFreactor initial-zoom parity)"
+animation_type = "none"
+affects = ""
+
+[-bd-pages-counter-offset]
+type = "BdPagesCounterOffset"
+initial = "computed::BdPagesCounterOffset::zero()"
+struct = "counters"
+initial_specified_value = "specified::BdPagesCounterOffset::zero()"
+spec = "Nonstandard (moegoe -bd-* fork extension; G5b PDFreactor pages-counter-offset parity)"
+animation_type = "none"
+affects = ""
+
 # moegoe G7 — PDF annotations (Link border + Comment family).
 # Per-element. Initial `none` / `auto` (no annotation).
 [-bd-pdf-link-border]
