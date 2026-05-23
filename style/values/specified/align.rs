@@ -710,3 +710,113 @@ fn parse_legacy<'i, 't>(input: &mut Parser<'i, 't>) -> Result<AlignFlags, ParseE
 fn list_legacy_keywords(f: KeywordsCollectFn) {
     f(&["legacy", "left", "right", "center"]);
 }
+
+/// The specified value of the `align-tracks` property.
+///
+/// <https://drafts.csswg.org/css-grid-3/#track-alignment>
+///
+/// Grammar: `<align-content>#` — a comma-separated list of
+/// `align-content` values, one per masonry track. The initial value
+/// is `normal`, stored here as an empty slice so that
+/// `is_initial()` is an O(1) sentinel check (mirrors the
+/// `ImplicitGridTracks::auto()` discipline).
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[css(comma)]
+#[repr(transparent)]
+pub struct AlignTracks(
+    #[css(iterable, if_empty = "normal")]
+    pub crate::OwnedSlice<ContentDistribution>,
+);
+
+impl AlignTracks {
+    /// Returns the initial value (`normal`), encoded as the empty
+    /// slice.
+    #[inline]
+    pub fn normal() -> Self {
+        Self(Default::default())
+    }
+
+    /// Returns true iff this value is the initial `normal`.
+    #[inline]
+    pub fn is_initial(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+impl Parse for AlignTracks {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        let values = input.parse_comma_separated(|i| {
+            ContentDistribution::parse_block(context, i)
+        })?;
+        Ok(AlignTracks(crate::OwnedSlice::from(values)))
+    }
+}
+
+/// The specified value of the `justify-tracks` property.
+///
+/// <https://drafts.csswg.org/css-grid-3/#track-alignment>
+///
+/// Grammar: `<align-content>#` parsed on the inline axis (so
+/// `left`/`right` are accepted, baseline keywords are not). See
+/// [`AlignTracks`] for the initial-value-as-empty-slice rationale.
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[css(comma)]
+#[repr(transparent)]
+pub struct JustifyTracks(
+    #[css(iterable, if_empty = "normal")]
+    pub crate::OwnedSlice<ContentDistribution>,
+);
+
+impl JustifyTracks {
+    /// Returns the initial value (`normal`), encoded as the empty
+    /// slice.
+    #[inline]
+    pub fn normal() -> Self {
+        Self(Default::default())
+    }
+
+    /// Returns true iff this value is the initial `normal`.
+    #[inline]
+    pub fn is_initial(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+impl Parse for JustifyTracks {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        let values = input.parse_comma_separated(|i| {
+            ContentDistribution::parse_inline(context, i)
+        })?;
+        Ok(JustifyTracks(crate::OwnedSlice::from(values)))
+    }
+}

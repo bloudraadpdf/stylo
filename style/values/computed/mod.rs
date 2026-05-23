@@ -40,7 +40,9 @@ use std::cmp;
 use std::f32;
 use std::ops::{Add, Sub};
 
-pub use self::align::{ContentDistribution, ItemPlacement, JustifyItems, SelfAlignment};
+pub use self::align::{
+    AlignTracks, ContentDistribution, ItemPlacement, JustifyItems, JustifyTracks, SelfAlignment,
+};
 pub use self::angle::Angle;
 pub use self::animation::{
     AnimationComposition, AnimationDirection, AnimationDuration, AnimationFillMode,

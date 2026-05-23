@@ -207,6 +207,16 @@ animation_type = "discrete"
 rule_types_allowed = ["style", "keyframe", "scope", "position-try"]
 affects = "layout"
 
+[align-tracks]
+type = "AlignTracks"
+initial = "specified::AlignTracks::normal()"
+struct = "position"
+gecko_pref = "layout.css.grid-template-masonry-value.enabled"
+servo_pref = "layout.unimplemented"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-grid-3/#track-alignment"
+affects = ""
+
 [alignment-baseline]
 type = "AlignmentBaseline"
 initial = "computed::AlignmentBaseline::Baseline"
@@ -1491,6 +1501,16 @@ spec = "https://drafts.csswg.org/css-align/#justify-self-property"
 animation_type = "discrete"
 rule_types_allowed = ["style", "keyframe", "scope", "position-try"]
 affects = "layout"
+
+[justify-tracks]
+type = "JustifyTracks"
+initial = "specified::JustifyTracks::normal()"
+struct = "position"
+gecko_pref = "layout.css.grid-template-masonry-value.enabled"
+servo_pref = "layout.unimplemented"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-grid-3/#track-alignment"
+affects = ""
 
 [left]
 type = "Inset"

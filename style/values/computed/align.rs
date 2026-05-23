@@ -10,7 +10,9 @@ use crate::derives::*;
 use crate::values::computed::{Context, ToComputedValue};
 use crate::values::specified;
 
-pub use super::specified::{ContentDistribution, ItemPlacement, SelfAlignment};
+pub use super::specified::{
+    AlignTracks, ContentDistribution, ItemPlacement, JustifyTracks, SelfAlignment,
+};
 
 /// The computed value for the `justify-items` property.
 ///

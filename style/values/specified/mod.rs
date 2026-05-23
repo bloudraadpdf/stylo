@@ -31,7 +31,9 @@ use style_traits::{
     ToTyped, TypedValue,
 };
 
-pub use self::align::{ContentDistribution, ItemPlacement, JustifyItems, SelfAlignment};
+pub use self::align::{
+    AlignTracks, ContentDistribution, ItemPlacement, JustifyItems, JustifyTracks, SelfAlignment,
+};
 pub use self::angle::{AllowUnitlessZeroAngle, Angle};
 pub use self::animation::{
     AnimationComposition, AnimationDirection, AnimationDuration, AnimationFillMode,
