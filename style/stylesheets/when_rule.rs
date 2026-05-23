@@ -113,17 +113,27 @@ impl WhenCondition {
         let first = Self::parse_in_parens(context, shared_lock, input)?;
 
         let location = input.current_source_location();
-        let (keyword, wrapper) = match input.next() {
-            Err(..) => return Ok(first),
-            Ok(&Token::Ident(ref ident)) => match_ignore_ascii_case! { &ident,
-                "and" => ("and", |v: Vec<WhenCondition>| WhenCondition::And(v.into_boxed_slice())),
-                "or" => ("or", |v: Vec<WhenCondition>| WhenCondition::Or(v.into_boxed_slice())),
-                _ => return Err(location.new_custom_error(
-                    StyleParseErrorKind::UnspecifiedError,
-                )),
-            },
-            Ok(t) => return Err(location.new_unexpected_token_error(t.clone())),
-        };
+        // Closures used as `match`-arm values lose their identity to
+        // each other, so we have to coerce each one to a function
+        // pointer with an explicit signature.
+        fn build_and(v: Vec<WhenCondition>) -> WhenCondition {
+            WhenCondition::And(v.into_boxed_slice())
+        }
+        fn build_or(v: Vec<WhenCondition>) -> WhenCondition {
+            WhenCondition::Or(v.into_boxed_slice())
+        }
+        let (keyword, wrapper): (&str, fn(Vec<WhenCondition>) -> WhenCondition) =
+            match input.next() {
+                Err(..) => return Ok(first),
+                Ok(&Token::Ident(ref ident)) => match_ignore_ascii_case! { &ident,
+                    "and" => ("and", build_and),
+                    "or" => ("or", build_or),
+                    _ => return Err(location.new_custom_error(
+                        StyleParseErrorKind::UnspecifiedError,
+                    )),
+                },
+                Ok(t) => return Err(location.new_unexpected_token_error(t.clone())),
+            };
 
         let mut conditions: Vec<WhenCondition> = Vec::with_capacity(2);
         conditions.push(first);

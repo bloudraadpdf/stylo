@@ -8,7 +8,7 @@ use crate::context::QuirksMode;
 use crate::derives::*;
 use crate::media_queries::Device;
 use crate::shared_lock::SharedRwLockReadGuard;
-use crate::stylesheets::{CustomMediaMap, DocumentRule, ImportRule, MediaRule};
+use crate::stylesheets::{CustomMediaMap, DocumentRule, ElseRule, ImportRule, MediaRule, WhenRule};
 use crate::stylesheets::{NestedRuleIterationCondition, StylesheetContents, SupportsRule};
 use rustc_hash::FxHashSet;
 
@@ -134,5 +134,34 @@ impl NestedRuleIterationCondition for PotentiallyEffectiveMediaRules {
     ) -> bool {
         use crate::stylesheets::EffectiveRules;
         EffectiveRules::process_supports(guard, device, quirks_mode, rule)
+    }
+
+    /// CSS Conditional 5 §3.1 — descend into `@when` if its branch
+    /// is the active chain member for the current device. The
+    /// potentially-effective walker mirrors the standard
+    /// `EffectiveRules` decision so the media-query cache stays in
+    /// step with the live evaluation.
+    fn process_when(
+        guard: &SharedRwLockReadGuard,
+        device: &Device,
+        quirks_mode: QuirksMode,
+        custom_media_map: &CustomMediaMap,
+        rule: &WhenRule,
+    ) -> bool {
+        use crate::stylesheets::EffectiveRules;
+        EffectiveRules::process_when(guard, device, quirks_mode, custom_media_map, rule)
+    }
+
+    /// CSS Conditional 5 §3.2 — descend into `@else` only if its
+    /// branch wins chain evaluation against the current device.
+    fn process_else(
+        guard: &SharedRwLockReadGuard,
+        device: &Device,
+        quirks_mode: QuirksMode,
+        custom_media_map: &CustomMediaMap,
+        rule: &ElseRule,
+    ) -> bool {
+        use crate::stylesheets::EffectiveRules;
+        EffectiveRules::process_else(guard, device, quirks_mode, custom_media_map, rule)
     }
 }
