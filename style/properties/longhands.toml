@@ -225,6 +225,7 @@ initial = "computed::AnchorName::none()"
 struct = "box"
 animation_type = "discrete"
 gecko_pref = "layout.css.anchor-positioning.enabled"
+servo_pref = "layout.unimplemented"
 spec = "https://drafts.csswg.org/css-anchor-position-1/#propdef-anchor-name"
 affects = ""
 
@@ -234,6 +235,7 @@ initial = "computed::AnchorScope::none()"
 struct = "box"
 animation_type = "discrete"
 gecko_pref = "layout.css.anchor-positioning.enabled"
+servo_pref = "layout.unimplemented"
 spec = "https://drafts.csswg.org/css-anchor-position-1/#propdef-scope"
 affects = ""
 
@@ -4398,6 +4400,7 @@ struct = "position"
 animation_type = "discrete"
 rule_types_allowed = ["style", "keyframe", "scope", "position-try"]
 gecko_pref = "layout.css.anchor-positioning.enabled"
+servo_pref = "layout.unimplemented"
 spec = "https://drafts.csswg.org/css-anchor-position-1/#propdef-position-anchor"
 affects = "layout"
 
