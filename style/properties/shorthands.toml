@@ -378,6 +378,7 @@ derive_serialize = true
 
 [gap]
 sub_properties = ["row-gap", "column-gap"]
+rule_types_allowed = ["style", "keyframe", "scope", "page", "sidenote"]
 spec = "https://drafts.csswg.org/css-align-3/#gap-shorthand"
 aliases = ["grid-gap"]
 
