@@ -100,9 +100,7 @@ pub use self::stylesheet::{AllowImportRules, SanitizationData, SanitizationKind}
 pub use self::stylesheet::{DocumentStyleSheet, Namespaces, Stylesheet};
 pub use self::stylesheet::{StylesheetContents, StylesheetInDocument, UserAgentStylesheets};
 pub use self::supports_rule::SupportsRule;
-pub use self::when_rule::{
-    chain_member_is_enabled, ChainConditions, ElseRule, WhenCondition, WhenRule,
-};
+pub use self::when_rule::{ChainConditions, ElseRule, WhenCondition, WhenRule};
 
 /// The CORS mode used for a CSS load.
 #[repr(u8)]
