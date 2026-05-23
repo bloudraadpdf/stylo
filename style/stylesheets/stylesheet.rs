@@ -359,6 +359,8 @@ impl SanitizationKind {
             CssRule::Media(..) |
             CssRule::CustomMedia(..) |
             CssRule::Supports(..) |
+            CssRule::When(..) |
+            CssRule::Else(..) |
             CssRule::Import(..) |
             CssRule::Container(..) |
             // TODO(emilio): Perhaps Layer should not be always sanitized? But

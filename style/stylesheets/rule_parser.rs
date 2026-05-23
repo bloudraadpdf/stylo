@@ -26,6 +26,7 @@ use crate::stylesheets::keyframes_rule::parse_keyframe_list;
 use crate::stylesheets::layer_rule::{LayerBlockRule, LayerName, LayerStatementRule};
 use crate::stylesheets::scope_rule::{ScopeBounds, ScopeRule};
 use crate::stylesheets::supports_rule::SupportsCondition;
+use crate::stylesheets::when_rule::{ChainConditions, ElseRule, WhenCondition, WhenRule};
 use crate::stylesheets::{
     AllowImportRules, CorsMode, CssRule, CssRuleType, CssRuleTypes, CssRules, CustomMediaCondition,
     CustomMediaRule, DocumentRule, FontFeatureValuesRule, FontPaletteValuesRule, FootnoteRule,
@@ -305,6 +306,11 @@ pub enum AtRulePrelude {
     PositionTry(DashedIdent),
     /// A @custom-media prelude.
     CustomMedia(DashedIdent, CustomMediaCondition),
+    /// CSS Conditional 5 §3.1 — `@when <when-condition>` prelude.
+    When(WhenCondition),
+    /// CSS Conditional 5 §3.2 — `@else [ <when-condition> ]?` prelude.
+    /// `None` is the trailing unconditional fallback form.
+    Else(Option<WhenCondition>),
 }
 
 impl AtRulePrelude {
@@ -334,6 +340,8 @@ impl AtRulePrelude {
             Self::Scope(..) => "scope",
             Self::StartingStyle => "starting-style",
             Self::PositionTry(..) => "position-try",
+            Self::When(..) => "when",
+            Self::Else(..) => "else",
         }
     }
 }
@@ -549,7 +557,9 @@ impl<'a, 'i> NestedRuleParser<'a, 'i> {
             | AtRulePrelude::Layer(..)
             | AtRulePrelude::CustomMedia(..)
             | AtRulePrelude::Scope(..)
-            | AtRulePrelude::StartingStyle => true,
+            | AtRulePrelude::StartingStyle
+            | AtRulePrelude::When(..)
+            | AtRulePrelude::Else(..) => true,
 
             AtRulePrelude::Namespace(..)
             | AtRulePrelude::FontFace
@@ -731,6 +741,26 @@ impl<'a, 'i> AtRuleParser<'i> for NestedRuleParser<'a, 'i> {
             "supports" => {
                 let cond = SupportsCondition::parse(input)?;
                 AtRulePrelude::Supports(cond)
+            },
+            // CSS Conditional 5 §3.1 — `@when <when-condition> { … }`.
+            // The condition mixes `supports(...)` and `media(...)`
+            // functional leaves with `not` / `and` / `or` combinators.
+            // See `style/stylesheets/when_rule.rs`.
+            "when" => {
+                let cond = WhenCondition::parse(&self.context, &self.shared_lock, input)?;
+                AtRulePrelude::When(cond)
+            },
+            // CSS Conditional 5 §3.2 — `@else [ <when-condition> ]? { … }`.
+            // An optional guard, with absence representing the trailing
+            // unconditional fallback. Chain membership is validated
+            // structurally in `parse_block`, not here.
+            "else" => {
+                let cond = input
+                    .try_parse(|input| {
+                        WhenCondition::parse(&self.context, &self.shared_lock, input)
+                    })
+                    .ok();
+                AtRulePrelude::Else(cond)
             },
             "font-face" => {
                 AtRulePrelude::FontFace
@@ -1094,6 +1124,109 @@ impl<'a, 'i> AtRuleParser<'i> for NestedRuleParser<'a, 'i> {
                     block: Arc::new(self.shared_lock.wrap(declarations)),
                     source_location,
                 })))
+            },
+            AtRulePrelude::When(condition) => {
+                // CSS Conditional 5 §3.1 — the body is a flat rule
+                // list parsed under the synthesised `When` rule type
+                // so nested at-rule allow-lists know we're inside a
+                // conditional-group rule.
+                let rules = self.parse_nested_rules(input, CssRuleType::When);
+                // A `@when` opens a fresh chain; the chain has a
+                // single entry (this rule's own condition).
+                let chain: Arc<Box<ChainConditions>> =
+                    Arc::new(vec![Some(condition.clone())].into_boxed_slice());
+                CssRule::When(Arc::new(WhenRule {
+                    condition,
+                    rules,
+                    chain,
+                    source_location,
+                }))
+            },
+            AtRulePrelude::Else(condition) => {
+                // CSS Conditional 5 §3.2 — chain validity: the rule
+                // immediately preceding (skipping
+                // `NestedDeclarations`, which the spec treats as
+                // transparent to chain detection because nested
+                // declaration rules carry no selector context) must
+                // be `@when` or `@else`. Otherwise the rule is
+                // invalid per the spec and we drop it via parse-block
+                // recovery (`AtRuleBodyInvalid`).
+                let preceding_idx = self
+                    .rules
+                    .iter()
+                    .enumerate()
+                    .rfind(|(_, r)| {
+                        !matches!(r, CssRule::NestedDeclarations(..))
+                    })
+                    .and_then(|(i, r)| match r {
+                        CssRule::When(..) | CssRule::Else(..) => Some(i),
+                        _ => None,
+                    });
+                let Some(preceding_idx) = preceding_idx else {
+                    return Err(input.new_error(BasicParseErrorKind::AtRuleBodyInvalid));
+                };
+
+                // Build the extended chain from the preceding member's
+                // chain plus this rule's condition.
+                let preceding_chain = match &self.rules[preceding_idx] {
+                    CssRule::When(arc) => arc.chain.clone(),
+                    CssRule::Else(arc) => arc.chain.clone(),
+                    _ => unreachable!("preceding_idx guarantees @when/@else"),
+                };
+                let mut extended: Vec<Option<WhenCondition>> =
+                    preceding_chain.iter().cloned().collect();
+                extended.push(condition.clone());
+                let new_chain: Arc<Box<ChainConditions>> =
+                    Arc::new(extended.into_boxed_slice());
+                let new_position = (new_chain.len() - 1) as u32;
+
+                // Parse the body now that chain validity is
+                // established. Use the synthesised `Else` rule type
+                // so nested rule allow-lists treat us as a
+                // conditional-group rule.
+                let rules = self.parse_nested_rules(input, CssRuleType::Else);
+
+                // Rewrite every chain member preceding this `@else`
+                // with the new (longer) chain so the lookback
+                // invariant in `chain_member_is_enabled` still holds.
+                let mut walk = preceding_idx;
+                loop {
+                    match &self.rules[walk] {
+                        CssRule::When(arc) => {
+                            let updated = WhenRule {
+                                condition: arc.condition.clone(),
+                                rules: arc.rules.clone(),
+                                chain: new_chain.clone(),
+                                source_location: arc.source_location.clone(),
+                            };
+                            self.rules[walk] = CssRule::When(Arc::new(updated));
+                            break;
+                        },
+                        CssRule::Else(arc) => {
+                            let updated = ElseRule {
+                                condition: arc.condition.clone(),
+                                rules: arc.rules.clone(),
+                                chain: new_chain.clone(),
+                                chain_position: arc.chain_position,
+                                source_location: arc.source_location.clone(),
+                            };
+                            self.rules[walk] = CssRule::Else(Arc::new(updated));
+                            if walk == 0 {
+                                break;
+                            }
+                            walk -= 1;
+                        },
+                        _ => break,
+                    }
+                }
+
+                CssRule::Else(Arc::new(ElseRule {
+                    condition,
+                    rules,
+                    chain: new_chain,
+                    chain_position: new_position,
+                    source_location,
+                }))
             },
         };
         self.rules.push(rule);

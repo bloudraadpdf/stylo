@@ -35,6 +35,7 @@ mod starting_style_rule;
 mod style_rule;
 mod stylesheet;
 pub mod supports_rule;
+pub mod when_rule;
 
 use crate::derives::*;
 #[cfg(feature = "gecko")]
@@ -99,6 +100,9 @@ pub use self::stylesheet::{AllowImportRules, SanitizationData, SanitizationKind}
 pub use self::stylesheet::{DocumentStyleSheet, Namespaces, Stylesheet};
 pub use self::stylesheet::{StylesheetContents, StylesheetInDocument, UserAgentStylesheets};
 pub use self::supports_rule::SupportsRule;
+pub use self::when_rule::{
+    chain_member_is_enabled, ChainConditions, ElseRule, WhenCondition, WhenRule,
+};
 
 /// The CORS mode used for a CSS load.
 #[repr(u8)]
@@ -374,6 +378,17 @@ pub enum CssRule {
     /// the selector when they appear inside a region-chain descendant.
     Region(Arc<RegionRule>),
     Supports(Arc<SupportsRule>),
+    /// CSS Conditional 5 §3.1 — `@when <when-condition> { … }`. The
+    /// rule contributes its body to the cascade iff its branch is the
+    /// active member of its `@when` / `@else` chain. Chain membership
+    /// is encoded by a shared `Arc<ChainConditions>` plus the rule's
+    /// `chain_position` (always 0 for `@when`).
+    When(Arc<WhenRule>),
+    /// CSS Conditional 5 §3.2 — `@else [ <when-condition> ]? { … }`.
+    /// Chains immediately after a preceding `@when` (or another
+    /// `@else`). A trailing `@else` with no condition is the
+    /// unconditional fallback branch.
+    Else(Arc<ElseRule>),
     Page(Arc<Locked<PageRule>>),
     Property(Arc<PropertyRule>),
     Document(Arc<DocumentRule>),
@@ -435,6 +450,12 @@ impl CssRule {
                 arc.unconditional_shallow_size_of(ops) + arc.size_of(guard, ops)
             },
             CssRule::Supports(ref arc) => {
+                arc.unconditional_shallow_size_of(ops) + arc.size_of(guard, ops)
+            },
+            CssRule::When(ref arc) => {
+                arc.unconditional_shallow_size_of(ops) + arc.size_of(guard, ops)
+            },
+            CssRule::Else(ref arc) => {
                 arc.unconditional_shallow_size_of(ops) + arc.size_of(guard, ops)
             },
             CssRule::Page(ref lock) => {
@@ -517,6 +538,10 @@ pub enum CssRuleRef<'a> {
     /// moegoe Family 17 — `@region <selector> { … }` reference.
     Region(&'a RegionRule),
     Supports(&'a SupportsRule),
+    /// CSS Conditional 5 §3.1 — `@when` rule reference.
+    When(&'a WhenRule),
+    /// CSS Conditional 5 §3.2 — `@else` rule reference.
+    Else(&'a ElseRule),
     Page(&'a LockedPageRule),
     Property(&'a PropertyRule),
     Document(&'a DocumentRule),
@@ -549,6 +574,8 @@ impl<'a> From<&'a CssRule> for CssRuleRef<'a> {
             CssRule::ColorProfile(r) => CssRuleRef::ColorProfile(r.as_ref()),
             CssRule::Region(r) => CssRuleRef::Region(r.as_ref()),
             CssRule::Supports(r) => CssRuleRef::Supports(r.as_ref()),
+            CssRule::When(r) => CssRuleRef::When(r.as_ref()),
+            CssRule::Else(r) => CssRuleRef::Else(r.as_ref()),
             CssRule::Page(r) => CssRuleRef::Page(r.as_ref()),
             CssRule::Property(r) => CssRuleRef::Property(r.as_ref()),
             CssRule::Document(r) => CssRuleRef::Document(r.as_ref()),
@@ -569,7 +596,13 @@ impl<'a> From<&'a CssRule> for CssRuleRef<'a> {
 pub enum CssRuleType {
     // https://drafts.csswg.org/cssom/#the-cssrule-interface
     Style = 1,
-    // Charset = 2, // Historical
+    // Charset historically lived at value 2; CSSOM removed
+    // CSSCharsetRule (https://drafts.csswg.org/cssom/#changes-from-5-december-2013),
+    // so the slot was free. We reuse it for CSS Conditional 5 §3.1
+    // `@when`. The numeric ordering does not feed any external IDL
+    // and `CssRuleTypes` is a `u32` bitfield — every discriminant
+    // must stay strictly less than 32.
+    When = 2,
     Import = 3,
     Media = 4,
     FontFace = 5,
@@ -588,6 +621,11 @@ pub enum CssRuleType {
     Document = 13,
     // https://drafts.csswg.org/css-fonts/#om-fontfeaturevalues
     FontFeatureValues = 14,
+    // CSS Conditional 5 §3.2 `@else`. Slot 15 was historically
+    // unallocated (Viewport occupied a different range), and we
+    // need to keep every discriminant strictly less than 32 so
+    // `CssRuleTypes`' `u32` bitfield can address it.
+    Else = 15,
     // After viewport, all rules should return 0 from the API, but we still need
     // a constant somewhere.
     LayerBlock = 16,
@@ -709,6 +747,8 @@ impl CssRule {
             CssRule::Region(_) => CssRuleType::Region,
             CssRule::Namespace(_) => CssRuleType::Namespace,
             CssRule::Supports(_) => CssRuleType::Supports,
+            CssRule::When(_) => CssRuleType::When,
+            CssRule::Else(_) => CssRuleType::Else,
             CssRule::Page(_) => CssRuleType::Page,
             CssRule::Property(_) => CssRuleType::Property,
             CssRule::Document(_) => CssRuleType::Document,
@@ -860,6 +900,12 @@ impl DeepCloneWithLock for CssRule {
             CssRule::Supports(ref arc) => {
                 CssRule::Supports(Arc::new(arc.deep_clone_with_lock(lock, guard)))
             },
+            CssRule::When(ref arc) => {
+                CssRule::When(Arc::new(arc.deep_clone_with_lock(lock, guard)))
+            },
+            CssRule::Else(ref arc) => {
+                CssRule::Else(Arc::new(arc.deep_clone_with_lock(lock, guard)))
+            },
             CssRule::Page(ref arc) => {
                 let rule = arc.read_with(guard);
                 CssRule::Page(Arc::new(lock.wrap(rule.deep_clone_with_lock(lock, guard))))
@@ -915,6 +961,8 @@ impl ToCssWithGuard for CssRule {
             CssRule::Media(ref rule) => rule.to_css(guard, dest),
             CssRule::CustomMedia(ref rule) => rule.to_css(guard, dest),
             CssRule::Supports(ref rule) => rule.to_css(guard, dest),
+            CssRule::When(ref rule) => rule.to_css(guard, dest),
+            CssRule::Else(ref rule) => rule.to_css(guard, dest),
             CssRule::Page(ref lock) => lock.read_with(guard).to_css(guard, dest),
             CssRule::Property(ref rule) => rule.to_css(guard, dest),
             CssRule::Document(ref rule) => rule.to_css(guard, dest),

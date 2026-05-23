@@ -8,8 +8,8 @@ use crate::context::QuirksMode;
 use crate::media_queries::Device;
 use crate::shared_lock::SharedRwLockReadGuard;
 use crate::stylesheets::{
-    CssRule, CssRuleRef, CustomMediaEvaluator, CustomMediaMap, DocumentRule, ImportRule, MediaRule,
-    SupportsRule,
+    CssRule, CssRuleRef, CustomMediaEvaluator, CustomMediaMap, DocumentRule, ElseRule, ImportRule,
+    MediaRule, SupportsRule, WhenRule,
 };
 use smallvec::SmallVec;
 use std::ops::Deref;
@@ -138,6 +138,20 @@ where
                 }
                 Some(supports_rule.rules.read_with(guard).0.iter())
             },
+            CssRule::When(ref when_rule) => {
+                if !C::process_when(guard, device, quirks_mode, custom_media_map, when_rule) {
+                    *effective = false;
+                    return None;
+                }
+                Some(when_rule.rules.read_with(guard).0.iter())
+            },
+            CssRule::Else(ref else_rule) => {
+                if !C::process_else(guard, device, quirks_mode, custom_media_map, else_rule) {
+                    *effective = false;
+                    return None;
+                }
+                Some(else_rule.rules.read_with(guard).0.iter())
+            },
             CssRule::LayerBlock(ref layer_rule) => Some(layer_rule.rules.read_with(guard).0.iter()),
             CssRule::Scope(ref rule) => Some(rule.rules.read_with(guard).0.iter()),
             CssRule::StartingStyle(ref rule) => Some(rule.rules.read_with(guard).0.iter()),
@@ -228,6 +242,30 @@ pub trait NestedRuleIterationCondition {
         quirks_mode: QuirksMode,
         rule: &SupportsRule,
     ) -> bool;
+
+    /// Whether we should process the nested rules in a given
+    /// `@when` rule. CSS Conditional 5 §3.1 — the rule contributes
+    /// iff its branch is the active member of its chain.
+    fn process_when(
+        guard: &SharedRwLockReadGuard,
+        device: &Device,
+        quirks_mode: QuirksMode,
+        custom_media_map: &CustomMediaMap,
+        rule: &WhenRule,
+    ) -> bool;
+
+    /// Whether we should process the nested rules in a given
+    /// `@else` rule. CSS Conditional 5 §3.2 — the rule contributes
+    /// iff none of the earlier chain members matched AND this
+    /// rule's own condition matches (or it is the trailing
+    /// unconditional `@else`).
+    fn process_else(
+        guard: &SharedRwLockReadGuard,
+        device: &Device,
+        quirks_mode: QuirksMode,
+        custom_media_map: &CustomMediaMap,
+        rule: &ElseRule,
+    ) -> bool;
 }
 
 /// A struct that represents the condition that a rule applies to the document.
@@ -255,6 +293,12 @@ impl EffectiveRules {
             },
             CssRuleRef::Supports(supports_rule) => {
                 Self::process_supports(guard, device, quirks_mode, supports_rule)
+            },
+            CssRuleRef::When(when_rule) => {
+                Self::process_when(guard, device, quirks_mode, custom_media_map, when_rule)
+            },
+            CssRuleRef::Else(else_rule) => {
+                Self::process_else(guard, device, quirks_mode, custom_media_map, else_rule)
             },
             _ => true,
         }
@@ -310,6 +354,26 @@ impl NestedRuleIterationCondition for EffectiveRules {
     ) -> bool {
         rule.enabled
     }
+
+    fn process_when(
+        guard: &SharedRwLockReadGuard,
+        device: &Device,
+        quirks_mode: QuirksMode,
+        custom_media_map: &CustomMediaMap,
+        rule: &WhenRule,
+    ) -> bool {
+        rule.enabled(device, quirks_mode, custom_media_map, guard)
+    }
+
+    fn process_else(
+        guard: &SharedRwLockReadGuard,
+        device: &Device,
+        quirks_mode: QuirksMode,
+        custom_media_map: &CustomMediaMap,
+        rule: &ElseRule,
+    ) -> bool {
+        rule.enabled(device, quirks_mode, custom_media_map, guard)
+    }
 }
 
 /// A filter that processes all the rules in a rule list.
@@ -350,6 +414,26 @@ impl NestedRuleIterationCondition for AllRules {
         _: &Device,
         _: QuirksMode,
         _: &SupportsRule,
+    ) -> bool {
+        true
+    }
+
+    fn process_when(
+        _: &SharedRwLockReadGuard,
+        _: &Device,
+        _: QuirksMode,
+        _: &CustomMediaMap,
+        _: &WhenRule,
+    ) -> bool {
+        true
+    }
+
+    fn process_else(
+        _: &SharedRwLockReadGuard,
+        _: &Device,
+        _: QuirksMode,
+        _: &CustomMediaMap,
+        _: &ElseRule,
     ) -> bool {
         true
     }
