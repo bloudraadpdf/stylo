@@ -6,13 +6,17 @@
 
 use crate::derives::*;
 use crate::values::computed::color::Color;
-use crate::values::computed::length::LengthPercentage;
+use crate::values::computed::length::{Length, LengthPercentage};
 use crate::values::computed::{Context, ToComputedValue};
 use crate::values::generics::text::GenericTextDecorationLength;
 use crate::values::specified::bd_text_decoration as specified;
+use crate::OwnedSlice;
 use to_shmem::ToShmem;
 
-pub use specified::{BdTextDecorationLineStyle, BdTextUnderlinePosition};
+pub use specified::{
+    BdTextDecorationLineStyle, BdTextDecorationSkipCategory, BdTextEmphasisSkip,
+    BdTextUnderlinePosition,
+};
 
 /// Computed value of `-bd-text-{position}-color`.
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, ToCss, ToResolvedValue, ToShmem, ToTyped)]
@@ -147,5 +151,144 @@ impl ToComputedValue for specified::BdTextUnderlineOffset {
 impl ToShmem for BdTextUnderlineOffset {
     fn to_shmem(&self, _: &mut to_shmem::SharedMemoryBuilder) -> to_shmem::Result<Self> {
         Ok(std::mem::ManuallyDrop::new(self.clone()))
+    }
+}
+
+/// Computed value of `-bd-text-decoration-trim` (moegoe fork).
+///
+/// The specified `Length` payload resolves to a computed-side
+/// `Length`. `ToShmem` is implemented manually because the computed
+/// `Length` does not implement `ToShmem` (cf. the existing
+/// `BdTextDecorationLineThickness` pattern).
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToCss, ToResolvedValue, ToTyped)]
+#[repr(C, u8)]
+pub enum BdTextDecorationTrim {
+    /// `auto` — defer to `text-decoration-trim` (initial).
+    Auto,
+    /// `none` — explicitly disable trimming on this element.
+    None,
+    /// `<length>` — apply symmetric trim of this length.
+    Length(Length),
+}
+
+impl BdTextDecorationTrim {
+    /// `auto` value.
+    #[inline]
+    pub fn auto() -> Self {
+        Self::Auto
+    }
+
+    /// Whether the value is `auto`.
+    #[inline]
+    pub fn is_auto(&self) -> bool {
+        matches!(self, Self::Auto)
+    }
+}
+
+impl ToComputedValue for specified::BdTextDecorationTrim {
+    type ComputedValue = BdTextDecorationTrim;
+
+    fn to_computed_value(&self, ctx: &Context) -> Self::ComputedValue {
+        match self {
+            specified::BdTextDecorationTrim::Auto => BdTextDecorationTrim::Auto,
+            specified::BdTextDecorationTrim::None => BdTextDecorationTrim::None,
+            specified::BdTextDecorationTrim::Length(len) => {
+                BdTextDecorationTrim::Length(len.to_computed_value(ctx))
+            }
+        }
+    }
+
+    fn from_computed_value(computed: &Self::ComputedValue) -> Self {
+        match computed {
+            BdTextDecorationTrim::Auto => specified::BdTextDecorationTrim::Auto,
+            BdTextDecorationTrim::None => specified::BdTextDecorationTrim::None,
+            BdTextDecorationTrim::Length(len) => {
+                specified::BdTextDecorationTrim::Length(ToComputedValue::from_computed_value(len))
+            }
+        }
+    }
+}
+
+// `Length` (computed) does not implement `ToShmem`, so the auto-derive
+// cannot fire. The clone is safe — `Length` is a `Copy`-equivalent
+// payload.
+impl ToShmem for BdTextDecorationTrim {
+    fn to_shmem(&self, _: &mut to_shmem::SharedMemoryBuilder) -> to_shmem::Result<Self> {
+        Ok(std::mem::ManuallyDrop::new(self.clone()))
+    }
+}
+
+/// Computed value of `-bd-text-decoration-skip` (moegoe fork).
+///
+/// Identity-computed mirror of the specified-side enum — the contained
+/// `OwnedSlice<BdTextDecorationSkipCategory>` already lives on the
+/// shared allocator and the per-category enum is `Copy`-equivalent, so
+/// `ToComputedValue` is a structural clone. `ToCss` is hand-rolled
+/// because the derive cannot synthesise a serialiser for `OwnedSlice`.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToResolvedValue, ToShmem, ToTyped)]
+#[repr(C, u8)]
+pub enum BdTextDecorationSkip {
+    /// `none` — defer to the standard `text-decoration-skip-*` cascade.
+    None,
+    /// Comma-separated category list authored by `-bd-`.
+    Categories(OwnedSlice<BdTextDecorationSkipCategory>),
+}
+
+impl BdTextDecorationSkip {
+    /// `none` value (initial).
+    #[inline]
+    pub fn none() -> Self {
+        Self::None
+    }
+
+    /// Whether the value is `none`.
+    #[inline]
+    pub fn is_none(&self) -> bool {
+        matches!(self, Self::None)
+    }
+}
+
+impl style_traits::ToCss for BdTextDecorationSkip {
+    fn to_css<W>(&self, dest: &mut style_traits::CssWriter<W>) -> std::fmt::Result
+    where
+        W: std::fmt::Write,
+    {
+        use std::fmt::Write;
+        match self {
+            Self::None => dest.write_str("none"),
+            Self::Categories(cats) => {
+                let mut first = true;
+                for cat in cats.iter() {
+                    if !first {
+                        dest.write_str(", ")?;
+                    }
+                    cat.to_css(dest)?;
+                    first = false;
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+impl ToComputedValue for specified::BdTextDecorationSkip {
+    type ComputedValue = BdTextDecorationSkip;
+
+    fn to_computed_value(&self, _: &Context) -> Self::ComputedValue {
+        match self {
+            specified::BdTextDecorationSkip::None => BdTextDecorationSkip::None,
+            specified::BdTextDecorationSkip::Categories(cats) => {
+                BdTextDecorationSkip::Categories(cats.clone())
+            }
+        }
+    }
+
+    fn from_computed_value(computed: &Self::ComputedValue) -> Self {
+        match computed {
+            BdTextDecorationSkip::None => specified::BdTextDecorationSkip::None,
+            BdTextDecorationSkip::Categories(cats) => {
+                specified::BdTextDecorationSkip::Categories(cats.clone())
+            }
+        }
     }
 }

@@ -604,6 +604,7 @@ class Longhand(Property):
                 "BdPrintMarkSet",
                 "BdPdfTrapped",
                 "BdRunningCopy",
+                "BdTextEmphasisSkip",
                 "BdTextUnderlinePosition",
                 "BlockStepAlign",
                 "BlockStepInsert",

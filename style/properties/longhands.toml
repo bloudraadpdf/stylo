@@ -5990,6 +5990,50 @@ spec = "Nonstandard (moegoe -bd-* fork extension; Prince G text-line-through-thi
 animation_type = "discrete"
 affects = "overflow"
 
+# moegoe -bd- companion to CSS Text Decoration 4 §1.3
+# `text-decoration-trim`. Author-facing single-length form (`none | auto
+# | <length>`); the cascade reader projects a non-`auto` value onto the
+# IR `TextDecorationTrim` field as a symmetric per-edge trim. `auto`
+# (initial) defers to the standard `text-decoration-trim`.
+[-bd-text-decoration-trim]
+type = "BdTextDecorationTrim"
+initial = "computed::BdTextDecorationTrim::auto()"
+struct = "text"
+initial_specified_value = "specified::BdTextDecorationTrim::auto()"
+spec = "Nonstandard (moegoe -bd-* fork extension; companion to css-text-decor-4 text-decoration-trim)"
+animation_type = "discrete"
+affects = "overflow"
+
+# moegoe -bd- companion to the CSS Text Decoration 4 §1.4.1
+# `text-decoration-skip-{self,box,inset,spaces}` longhand quartet.
+# Author-facing comma-separated category form (`none | <category>#`);
+# the cascade reader fans the category set onto the IR
+# `TextDecoration::bd_skip` field. `none` (initial) defers to the
+# standard per-aspect cascade.
+[-bd-text-decoration-skip]
+type = "BdTextDecorationSkip"
+initial = "computed::BdTextDecorationSkip::none()"
+struct = "inherited_text"
+initial_specified_value = "specified::BdTextDecorationSkip::none()"
+spec = "Nonstandard (moegoe -bd-* fork extension; companion to css-text-decor-4 text-decoration-skip)"
+animation_type = "discrete"
+affects = "overflow"
+
+# moegoe -bd- companion to CSS Text Decoration 4 §1.7.3
+# `text-emphasis-skip`. Author-facing single-keyword form (`auto | none
+# | spaces | punctuation | symbols | narrow`); the cascade reader
+# projects a non-`auto` value onto the IR `TextEmphasisSkip` field as a
+# single-category bitmask override. `auto` (initial) defers to the
+# standard `text-emphasis-skip` bitflags.
+[-bd-text-emphasis-skip]
+type = "BdTextEmphasisSkip"
+initial = "computed::BdTextEmphasisSkip::Auto"
+struct = "inherited_text"
+initial_specified_value = "specified::BdTextEmphasisSkip::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; companion to css-text-decor-4 text-emphasis-skip)"
+animation_type = "discrete"
+affects = "paint"
+
 [-x-span]
 type = "Integer"
 initial = "1"

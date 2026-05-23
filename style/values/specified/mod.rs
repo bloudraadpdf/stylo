@@ -191,6 +191,7 @@ pub use self::bd_sidenote::{BdFloatReferenceSidenote, BdSidenoteAlign, BdSidenot
 pub use self::bd_tab_stops::{BdTabStop, BdTabStopAlignment, BdTabStopLeader, BdTabStops};
 pub use self::bd_text_decoration::{
     BdTextDecorationLineColour, BdTextDecorationLineStyle, BdTextDecorationLineThickness,
+    BdTextDecorationSkip, BdTextDecorationSkipCategory, BdTextDecorationTrim, BdTextEmphasisSkip,
     BdTextUnderlineOffset, BdTextUnderlinePosition,
 };
 pub use self::page::{
