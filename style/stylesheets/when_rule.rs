@@ -38,7 +38,7 @@ use crate::media_queries::{Device, MediaList};
 use crate::parser::ParserContext;
 use crate::shared_lock::{DeepCloneWithLock, Locked};
 use crate::shared_lock::{SharedRwLock, SharedRwLockReadGuard, ToCssWithGuard};
-use crate::stylesheets::supports_rule::SupportsCondition;
+use crate::stylesheets::supports_rule::{parse_condition_or_declaration, SupportsCondition};
 use crate::stylesheets::{CssRuleType, CssRules, CustomMediaEvaluator, CustomMediaMap};
 use cssparser::{match_ignore_ascii_case, Parser, SourceLocation, Token};
 #[cfg(feature = "gecko")]
@@ -111,14 +111,12 @@ impl WhenCondition {
         shared_lock: &SharedRwLock,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        eprintln!("WHEN-DBG: WhenCondition::parse entered");
         if input.try_parse(|i| i.expect_ident_matching("not")).is_ok() {
             let inner = Self::parse_in_parens(context, shared_lock, input)?;
             return Ok(WhenCondition::Not(Box::new(inner)));
         }
 
         let first = Self::parse_in_parens(context, shared_lock, input)?;
-        eprintln!("WHEN-DBG: WhenCondition::parse first={:?}", std::mem::discriminant(&first));
 
         let location = input.current_source_location();
         // Closures used as `match`-arm values lose their identity to
@@ -169,7 +167,6 @@ impl WhenCondition {
         input.skip_whitespace();
         let start = input.position();
         let location = input.current_source_location();
-        eprintln!("WHEN-DBG: parse_in_parens at pos={:?}", start);
         match *input.next()? {
             Token::ParenthesisBlock => {
                 let nested = input.try_parse(|input| {
@@ -183,11 +180,19 @@ impl WhenCondition {
             },
             Token::Function(ref name) => {
                 let function_name = name.clone();
-                eprintln!("WHEN-DBG: saw Function('{}')", function_name);
                 let leaf = match_ignore_ascii_case! { &function_name,
                     "supports" => {
+                        // The CSS Conditional 5 §3.1 `supports(...)`
+                        // leaf accepts either a fully-parenthesised
+                        // `<supports-condition>` (`supports((color:
+                        // red))`) or a bare `<declaration>`
+                        // (`supports(color: red)`). The existing
+                        // `parse_condition_or_declaration` helper
+                        // covers both shapes, matching how
+                        // `@import supports(...)` is already parsed
+                        // by Stylo.
                         let parsed = input.try_parse(|input| {
-                            input.parse_nested_block(|input| SupportsCondition::parse(input))
+                            input.parse_nested_block(parse_condition_or_declaration)
                         });
                         match parsed {
                             Ok(condition) => {
@@ -206,11 +211,6 @@ impl WhenCondition {
                                 let result = context.nest_for_rule(
                                     CssRuleType::Style,
                                     |ctx| condition.eval(ctx),
-                                );
-                                eprintln!(
-                                    "WHEN-DBG: supports(...) -> {} (rule_types_post_style={})",
-                                    result,
-                                    context.rule_types().contains(CssRuleType::Style),
                                 );
                                 Some(WhenCondition::Supports { condition, result })
                             },
