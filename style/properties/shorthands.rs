@@ -4875,3 +4875,294 @@ pub mod mask_border {
         }
     }
 }
+
+// CSS Overflow 4 §3.4 — `overflow-clip-margin` shorthand and its
+// per-axis logical companions. Each shorthand parses
+// `<visual-box> || <length [0,∞]>{N}` where N is 1–4 for the
+// physical shorthand and 1–2 for the logical axis shorthands. A single
+// optional `<visual-box>` keyword may appear at either end of the
+// length list and applies uniformly to every expanded sub-property.
+
+fn parse_overflow_clip_margin_values<'i, 't>(
+    context: &ParserContext,
+    input: &mut Parser<'i, 't>,
+    max_lengths: usize,
+) -> Result<
+    (
+        crate::values::generics::box_::OverflowClipMarginBox,
+        Vec<crate::values::specified::length::NonNegativeLength>,
+    ),
+    ParseError<'i>,
+> {
+    use crate::values::generics::box_::OverflowClipMarginBox;
+    use crate::values::specified::length::NonNegativeLength;
+    let mut visual_box: Option<OverflowClipMarginBox> = None;
+    let mut offsets: Vec<NonNegativeLength> = Vec::with_capacity(max_lengths);
+    loop {
+        if visual_box.is_none() {
+            if let Ok(vb) = input.try_parse(OverflowClipMarginBox::parse) {
+                visual_box = Some(vb);
+                continue;
+            }
+        }
+        if offsets.len() < max_lengths {
+            if let Ok(off) = input.try_parse(|i| NonNegativeLength::parse(context, i)) {
+                offsets.push(off);
+                continue;
+            }
+        }
+        break;
+    }
+    if offsets.is_empty() && visual_box.is_none() {
+        return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+    }
+    Ok((
+        visual_box.unwrap_or(OverflowClipMarginBox::PaddingBox),
+        offsets,
+    ))
+}
+
+fn make_overflow_clip_margin(
+    visual_box: crate::values::generics::box_::OverflowClipMarginBox,
+    offset: crate::values::specified::length::NonNegativeLength,
+) -> crate::values::specified::box_::OverflowClipMargin {
+    crate::values::specified::box_::OverflowClipMargin { offset, visual_box }
+}
+
+fn serialize_overflow_clip_margin_sides<W>(
+    dest: &mut CssWriter<W>,
+    sides: &[&crate::values::specified::box_::OverflowClipMargin],
+) -> fmt::Result
+where
+    W: fmt::Write,
+{
+    use crate::values::generics::box_::OverflowClipMarginBox;
+    use crate::Zero;
+    debug_assert!(!sides.is_empty());
+    // All sides must share the same visual-box for the shorthand to
+    // round-trip. If they diverge we still emit the first side's box
+    // and rely on the longhand to_css for full fidelity; callers
+    // serialise per-longhand when the values disagree.
+    let shared_box = sides[0].visual_box;
+    let all_share_box = sides.iter().all(|s| s.visual_box == shared_box);
+    if !all_share_box {
+        // Fall back: emit each side independently using its longhand
+        // syntax (matches the per-longhand `to_css`).
+        let mut first = true;
+        for side in sides {
+            if !first {
+                dest.write_char(' ')?;
+            }
+            first = false;
+            side.to_css(dest)?;
+        }
+        return Ok(());
+    }
+    if shared_box != OverflowClipMarginBox::PaddingBox {
+        shared_box.to_css(dest)?;
+    }
+    let any_nonzero = sides.iter().any(|s| !s.offset.is_zero());
+    if !any_nonzero {
+        // All sides at the initial offset; the visual-box keyword (if
+        // non-default) is sufficient. For an entirely-initial value
+        // we still need to emit at least one token; `to_css` on the
+        // first side handles that.
+        if shared_box == OverflowClipMarginBox::PaddingBox {
+            return sides[0].offset.to_css(dest);
+        }
+        return Ok(());
+    }
+    // Emit the length list using the standard 4-side / 2-side
+    // compression. The caller passes sides in their canonical order
+    // (top, right, bottom, left for the physical shorthand;
+    // start, end for the axis shorthands).
+    if shared_box != OverflowClipMarginBox::PaddingBox {
+        dest.write_char(' ')?;
+    }
+    if sides.len() == 4 {
+        let (t, r, b, l) = (&sides[0].offset, &sides[1].offset, &sides[2].offset, &sides[3].offset);
+        t.to_css(dest)?;
+        let lr_same = l == r;
+        let tb_same = t == b;
+        if tb_same && lr_same && t == l {
+            return Ok(());
+        }
+        dest.write_char(' ')?;
+        r.to_css(dest)?;
+        if tb_same && lr_same {
+            return Ok(());
+        }
+        dest.write_char(' ')?;
+        b.to_css(dest)?;
+        if lr_same {
+            return Ok(());
+        }
+        dest.write_char(' ')?;
+        l.to_css(dest)
+    } else {
+        // 2-side axis shorthand: start, end.
+        let (s, e) = (&sides[0].offset, &sides[1].offset);
+        s.to_css(dest)?;
+        if s == e {
+            return Ok(());
+        }
+        dest.write_char(' ')?;
+        e.to_css(dest)
+    }
+}
+
+pub mod overflow_clip_margin {
+    pub use crate::properties::shorthands_generated::overflow_clip_margin::*;
+
+    use super::*;
+
+    pub fn parse_value<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Longhands, ParseError<'i>> {
+        let (visual_box, offsets) =
+            parse_overflow_clip_margin_values(context, input, 4)?;
+        // Distribute lengths per the standard 1-2-3-4 CSS pattern.
+        let (top, right, bottom, left) = match offsets.len() {
+            0 => {
+                use crate::Zero;
+                use crate::values::specified::length::NonNegativeLength;
+                let zero = NonNegativeLength::zero();
+                (zero.clone(), zero.clone(), zero.clone(), zero)
+            }
+            1 => (
+                offsets[0].clone(),
+                offsets[0].clone(),
+                offsets[0].clone(),
+                offsets[0].clone(),
+            ),
+            2 => (
+                offsets[0].clone(),
+                offsets[1].clone(),
+                offsets[0].clone(),
+                offsets[1].clone(),
+            ),
+            3 => (
+                offsets[0].clone(),
+                offsets[1].clone(),
+                offsets[2].clone(),
+                offsets[1].clone(),
+            ),
+            _ => (
+                offsets[0].clone(),
+                offsets[1].clone(),
+                offsets[2].clone(),
+                offsets[3].clone(),
+            ),
+        };
+        Ok(expanded! {
+            overflow_clip_margin_top: make_overflow_clip_margin(visual_box, top),
+            overflow_clip_margin_right: make_overflow_clip_margin(visual_box, right),
+            overflow_clip_margin_bottom: make_overflow_clip_margin(visual_box, bottom),
+            overflow_clip_margin_left: make_overflow_clip_margin(visual_box, left),
+        })
+    }
+
+    impl<'a> ToCss for LonghandsToSerialize<'a> {
+        fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+        where
+            W: fmt::Write,
+        {
+            serialize_overflow_clip_margin_sides(
+                dest,
+                &[
+                    self.overflow_clip_margin_top,
+                    self.overflow_clip_margin_right,
+                    self.overflow_clip_margin_bottom,
+                    self.overflow_clip_margin_left,
+                ],
+            )
+        }
+    }
+}
+
+pub mod overflow_clip_margin_block {
+    pub use crate::properties::shorthands_generated::overflow_clip_margin_block::*;
+
+    use super::*;
+
+    pub fn parse_value<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Longhands, ParseError<'i>> {
+        let (visual_box, offsets) =
+            parse_overflow_clip_margin_values(context, input, 2)?;
+        let (start, end) = match offsets.len() {
+            0 => {
+                use crate::Zero;
+                use crate::values::specified::length::NonNegativeLength;
+                let zero = NonNegativeLength::zero();
+                (zero.clone(), zero)
+            }
+            1 => (offsets[0].clone(), offsets[0].clone()),
+            _ => (offsets[0].clone(), offsets[1].clone()),
+        };
+        Ok(expanded! {
+            overflow_clip_margin_block_start: make_overflow_clip_margin(visual_box, start),
+            overflow_clip_margin_block_end: make_overflow_clip_margin(visual_box, end),
+        })
+    }
+
+    impl<'a> ToCss for LonghandsToSerialize<'a> {
+        fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+        where
+            W: fmt::Write,
+        {
+            serialize_overflow_clip_margin_sides(
+                dest,
+                &[
+                    self.overflow_clip_margin_block_start,
+                    self.overflow_clip_margin_block_end,
+                ],
+            )
+        }
+    }
+}
+
+pub mod overflow_clip_margin_inline {
+    pub use crate::properties::shorthands_generated::overflow_clip_margin_inline::*;
+
+    use super::*;
+
+    pub fn parse_value<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Longhands, ParseError<'i>> {
+        let (visual_box, offsets) =
+            parse_overflow_clip_margin_values(context, input, 2)?;
+        let (start, end) = match offsets.len() {
+            0 => {
+                use crate::Zero;
+                use crate::values::specified::length::NonNegativeLength;
+                let zero = NonNegativeLength::zero();
+                (zero.clone(), zero)
+            }
+            1 => (offsets[0].clone(), offsets[0].clone()),
+            _ => (offsets[0].clone(), offsets[1].clone()),
+        };
+        Ok(expanded! {
+            overflow_clip_margin_inline_start: make_overflow_clip_margin(visual_box, start),
+            overflow_clip_margin_inline_end: make_overflow_clip_margin(visual_box, end),
+        })
+    }
+
+    impl<'a> ToCss for LonghandsToSerialize<'a> {
+        fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+        where
+            W: fmt::Write,
+        {
+            serialize_overflow_clip_margin_sides(
+                dest,
+                &[
+                    self.overflow_clip_margin_inline_start,
+                    self.overflow_clip_margin_inline_end,
+                ],
+            )
+        }
+    }
+}

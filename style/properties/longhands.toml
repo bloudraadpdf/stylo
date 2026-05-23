@@ -1860,11 +1860,72 @@ spec = "https://drafts.csswg.org/css-overflow-3/#propdef-overflow-block"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
-[overflow-clip-margin]
+[overflow-clip-margin-top]
 type = "OverflowClipMargin"
 initial = "computed::OverflowClipMargin::zero()"
 struct = "margin"
-spec = "https://drafts.csswg.org/css-overflow/#propdef-overflow-clip-margin"
+logical_group = "overflow-clip-margin"
+spec = "https://drafts.csswg.org/css-overflow-4/#overflow-clip-margin-shorthand"
+affects = "overflow"
+
+[overflow-clip-margin-right]
+type = "OverflowClipMargin"
+initial = "computed::OverflowClipMargin::zero()"
+struct = "margin"
+logical_group = "overflow-clip-margin"
+spec = "https://drafts.csswg.org/css-overflow-4/#overflow-clip-margin-shorthand"
+affects = "overflow"
+
+[overflow-clip-margin-bottom]
+type = "OverflowClipMargin"
+initial = "computed::OverflowClipMargin::zero()"
+struct = "margin"
+logical_group = "overflow-clip-margin"
+spec = "https://drafts.csswg.org/css-overflow-4/#overflow-clip-margin-shorthand"
+affects = "overflow"
+
+[overflow-clip-margin-left]
+type = "OverflowClipMargin"
+initial = "computed::OverflowClipMargin::zero()"
+struct = "margin"
+logical_group = "overflow-clip-margin"
+spec = "https://drafts.csswg.org/css-overflow-4/#overflow-clip-margin-shorthand"
+affects = "overflow"
+
+[overflow-clip-margin-block-start]
+type = "OverflowClipMargin"
+initial = "computed::OverflowClipMargin::zero()"
+struct = "margin"
+logical = true
+logical_group = "overflow-clip-margin"
+spec = "https://drafts.csswg.org/css-overflow-4/#overflow-clip-margin-block-start"
+affects = "overflow"
+
+[overflow-clip-margin-block-end]
+type = "OverflowClipMargin"
+initial = "computed::OverflowClipMargin::zero()"
+struct = "margin"
+logical = true
+logical_group = "overflow-clip-margin"
+spec = "https://drafts.csswg.org/css-overflow-4/#overflow-clip-margin-block-end"
+affects = "overflow"
+
+[overflow-clip-margin-inline-start]
+type = "OverflowClipMargin"
+initial = "computed::OverflowClipMargin::zero()"
+struct = "margin"
+logical = true
+logical_group = "overflow-clip-margin"
+spec = "https://drafts.csswg.org/css-overflow-4/#overflow-clip-margin-inline-start"
+affects = "overflow"
+
+[overflow-clip-margin-inline-end]
+type = "OverflowClipMargin"
+initial = "computed::OverflowClipMargin::zero()"
+struct = "margin"
+logical = true
+logical_group = "overflow-clip-margin"
+spec = "https://drafts.csswg.org/css-overflow-4/#overflow-clip-margin-inline-end"
 affects = "overflow"
 
 [overflow-inline]

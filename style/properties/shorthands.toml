@@ -223,6 +223,32 @@ spec="https://drafts.csswg.org/css-overflow/#propdef-overflow"
 kind = "two_properties"
 rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 
+# CSS Overflow 4 §3.4 — `overflow-clip-margin` shorthand. Spec syntax
+# `<visual-box> || <length [0,∞]>{1,4}`: an optional reference-box
+# keyword that applies uniformly across all four sides, plus 1–4
+# length values distributed per the standard 4-side pattern
+# (1 -> all; 2 -> v/h; 3 -> top/h/bottom; 4 -> top/right/bottom/left).
+# Custom expander lives in shorthands.rs.
+[overflow-clip-margin]
+sub_properties = ["overflow-clip-margin-top", "overflow-clip-margin-right", "overflow-clip-margin-bottom", "overflow-clip-margin-left"]
+spec = "https://drafts.csswg.org/css-overflow-4/#overflow-clip-margin-shorthand"
+
+# CSS Overflow 4 §3.4 — `overflow-clip-margin-block` shorthand. Spec
+# syntax `<visual-box> || <length [0,∞]>{1,2}`. One length applies to
+# both block-start and block-end; two lengths set start / end. The
+# optional reference-box keyword is shared across both sides.
+[overflow-clip-margin-block]
+sub_properties = ["overflow-clip-margin-block-start", "overflow-clip-margin-block-end"]
+spec = "https://drafts.csswg.org/css-overflow-4/#overflow-clip-margin-block"
+
+# CSS Overflow 4 §3.4 — `overflow-clip-margin-inline` shorthand. Spec
+# syntax `<visual-box> || <length [0,∞]>{1,2}`. One length applies to
+# both inline-start and inline-end; two lengths set start / end. The
+# optional reference-box keyword is shared across both sides.
+[overflow-clip-margin-inline]
+sub_properties = ["overflow-clip-margin-inline-start", "overflow-clip-margin-inline-end"]
+spec = "https://drafts.csswg.org/css-overflow-4/#overflow-clip-margin-inline"
+
 [overscroll-behavior]
 engine = "gecko"
 sub_properties = ["overscroll-behavior-x", "overscroll-behavior-y"]
