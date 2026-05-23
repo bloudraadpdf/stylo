@@ -111,12 +111,14 @@ impl WhenCondition {
         shared_lock: &SharedRwLock,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
+        eprintln!("WHEN-DBG: WhenCondition::parse entered");
         if input.try_parse(|i| i.expect_ident_matching("not")).is_ok() {
             let inner = Self::parse_in_parens(context, shared_lock, input)?;
             return Ok(WhenCondition::Not(Box::new(inner)));
         }
 
         let first = Self::parse_in_parens(context, shared_lock, input)?;
+        eprintln!("WHEN-DBG: WhenCondition::parse first={:?}", std::mem::discriminant(&first));
 
         let location = input.current_source_location();
         // Closures used as `match`-arm values lose their identity to
@@ -167,6 +169,7 @@ impl WhenCondition {
         input.skip_whitespace();
         let start = input.position();
         let location = input.current_source_location();
+        eprintln!("WHEN-DBG: parse_in_parens at pos={:?}", start);
         match *input.next()? {
             Token::ParenthesisBlock => {
                 let nested = input.try_parse(|input| {
@@ -180,6 +183,7 @@ impl WhenCondition {
             },
             Token::Function(ref name) => {
                 let function_name = name.clone();
+                eprintln!("WHEN-DBG: saw Function('{}')", function_name);
                 let leaf = match_ignore_ascii_case! { &function_name,
                     "supports" => {
                         let parsed = input.try_parse(|input| {
