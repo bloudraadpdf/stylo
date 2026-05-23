@@ -203,6 +203,11 @@ impl WhenCondition {
                                     CssRuleType::Style,
                                     |ctx| condition.eval(ctx),
                                 );
+                                eprintln!(
+                                    "WHEN-DBG: supports(...) -> {} (rule_types_post_style={})",
+                                    result,
+                                    context.rule_types().contains(CssRuleType::Style),
+                                );
                                 Some(WhenCondition::Supports { condition, result })
                             },
                             Err(_) => None,
