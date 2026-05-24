@@ -19,6 +19,34 @@ use crate::values::{
 };
 use cssparser::color::{clamp_floor_256_f32, OPAQUE};
 
+/// moegoe F2 — one `(colorant-name, tint)` pair inside a
+/// [`ColorFunction::BdDeviceN`] colour function.
+///
+/// Wrapping the pair in a named struct (rather than the
+/// `(Atom, ColorComponent<...>)` tuple it represents) carries two
+/// concrete benefits:
+///
+/// * `Vec<(A, B)>` does not implement `ToAnimatedValue` without a
+///   blanket tuple impl, which Stylo does not provide. A named
+///   struct with `#[derive(ToAnimatedValue)]` is the supported path
+///   for compound payloads inside the `Vec<T>` blanket impl
+///   ([`crate::values::animated::ToAnimatedValue for Vec<T>`]).
+/// * Field names make the cascade and serialisation arms
+///   self-documenting (`pair.colorant` vs `pair.0`).
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToAnimatedValue, ToShmem)]
+#[repr(C)]
+pub struct BdDeviceNComponent {
+    /// The colorant name as a `crate::Atom` (matching the colorant
+    /// identifier authored on the `@-bd-colour` block that registers
+    /// this DeviceN component). Kept as `Atom` for the same reason as
+    /// `BdSpot`: `Atom` has a `trivial_to_animated_value!` impl.
+    pub colorant: crate::Atom,
+    /// The authored tint component (number or percentage on `[0,1]`).
+    /// Out-of-gamut values are preserved verbatim; the renderer
+    /// clamps at emission time per backend convention.
+    pub tint: ColorComponent<NumberOrPercentageComponent>,
+}
+
 /// Represents a specified color function.
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, ToAnimatedValue, ToShmem)]
 #[repr(u8)]
@@ -124,6 +152,35 @@ pub enum ColorFunction<OriginColor> {
         crate::Atom,                                 // colorant name
         ColorComponent<NumberOrPercentageComponent>, // tint
         bool,                                        // is_separation
+    ),
+    /// moegoe F2 — `device-n(<name> <tint>, … , <fallback>)` /
+    /// `-bd-devicen(<name> <tint>, … , <fallback>)`.
+    ///
+    /// A multi-colorant DeviceN colour authored as N (colorant-name,
+    /// tint-component) pairs plus a mandatory sRGB fallback colour.
+    /// PDF emission renders this via the DeviceN colour space (ISO
+    /// 32000-2 §8.6.6.5); the fallback is consumed when DeviceN is
+    /// unavailable on the target backend or when the document is being
+    /// projected to a colour space that has no compatible DeviceN
+    /// resource (e.g. PDF/A-1 — see Stage A of the krilla wire-through
+    /// at krilla commit `e93295e29c`).
+    ///
+    /// The colorant names are stored as `crate::Atom` for the same
+    /// reason as [`Self::BdSpot`] — the variant must derive
+    /// `ToAnimatedValue`, and `Atom` has the trivial impl.
+    ///
+    /// The fallback is stored as `Optional<Box<OriginColor>>` (not
+    /// `Box<OriginColor>` directly) to keep [`Self::map_origin_color`]
+    /// total: that helper's mapping closure returns `Option<U>`, and
+    /// a fallback that becomes unmappable mid-pipeline must collapse
+    /// gracefully rather than panicking. Author-supplied DeviceN
+    /// always parses with `Some(...)`; CSS Color 5 §4 requires the
+    /// fallback because no naïve projection exists for the
+    /// open-ended set of DeviceN colorants. The `None` slot is
+    /// therefore an internal pipeline state, never an authored value.
+    BdDeviceN(
+        Vec<BdDeviceNComponent>,    // (colorant, tint) pairs
+        Optional<Box<OriginColor>>, // sRGB fallback (always Some at parse time)
     ),
 }
 
@@ -397,6 +454,19 @@ impl ColorFunction<AbsoluteColor> {
                 // pixels rather than a wrong colour.
                 AbsoluteColor::TRANSPARENT_BLACK
             },
+            ColorFunction::BdDeviceN(_pairs, fallback) => {
+                // F2 DeviceN colours: when no DeviceN-aware backend is
+                // resolving the value, fall back to the authored sRGB
+                // fallback colour. CSS Color 5 §4 mandates that DeviceN
+                // carry a usable fallback for exactly this case (unlike
+                // `device-cmyk()`, which can derive a naïve sRGB
+                // projection from its four components). The fallback is
+                // already an `AbsoluteColor` at this `impl` slot.
+                match fallback {
+                    Optional::Some(fallback) => **fallback,
+                    Optional::None => AbsoluteColor::TRANSPARENT_BLACK,
+                }
+            },
             ColorFunction::DeviceCmyk(c, m, y, k, alpha, fallback) => {
                 if let Some(fallback) = fallback.as_ref() {
                     let mut fallback = **fallback;
@@ -446,6 +516,7 @@ impl ColorFunction<SpecifiedColor> {
             | Self::Color(origin_color, ..) => origin_color.is_some(),
             Self::DeviceCmyk(..) => false,
             Self::BdSpot(..) => false,
+            Self::BdDeviceN(..) => false,
         }
     }
 
@@ -455,6 +526,7 @@ impl ColorFunction<SpecifiedColor> {
         self.has_origin_color()
             || matches!(self, Self::DeviceCmyk(..))
             || matches!(self, Self::BdSpot(..))
+            || matches!(self, Self::BdDeviceN(..))
     }
 
     /// Try to resolve the color function to an [`AbsoluteColor`] that does not
@@ -485,6 +557,21 @@ impl ColorFunction<SpecifiedColor> {
                 // `resolve_to_absolute` from its sibling impls.
                 let absolute: ColorFunction<AbsoluteColor> =
                     ColorFunction::BdSpot(name.clone(), tint.clone(), *is_separation);
+                absolute.resolve_to_absolute()
+            },
+            Self::BdDeviceN(pairs, fallback) => {
+                // moegoe F2 — resolve the fallback colour eagerly so
+                // the absolute-typed variant carries the projected sRGB
+                // value the renderer should use whenever the DeviceN
+                // colour space is unavailable. `Optional::as_ref()`
+                // returns `std::option::Option`, mirroring the
+                // `DeviceCmyk` arm above.
+                let fallback = match fallback.as_ref() {
+                    Some(fallback) => Some(Box::new(fallback.resolve_to_absolute().ok_or(())?)),
+                    None => None,
+                };
+                let absolute: ColorFunction<AbsoluteColor> =
+                    ColorFunction::BdDeviceN(pairs.clone(), fallback.into());
                 absolute.resolve_to_absolute()
             },
             _ => {
@@ -544,6 +631,13 @@ impl<Color> ColorFunction<Color> {
             ColorFunction::BdSpot(name, tint, is_separation) => {
                 ColorFunction::BdSpot(name.clone(), tint.clone(), *is_separation)
             },
+            ColorFunction::BdDeviceN(pairs, fallback) => ColorFunction::BdDeviceN(
+                pairs.clone(),
+                fallback
+                    .as_ref()
+                    .and_then(|value| f(value.as_ref()).map(Box::new))
+                    .into(),
+            ),
         }
     }
 }
@@ -619,6 +713,32 @@ impl<C: style_traits::ToCss> style_traits::ToCss for ColorFunction<C> {
             return dest.write_str(")");
         }
 
+        if let Self::BdDeviceN(pairs, fallback) = self {
+            // F2 — serialise as `device-n(<name> <tint>, … , <fallback>)`.
+            // The authored spelling is always preserved (the alias
+            // `-bd-devicen(...)` is normalised to `device-n(...)` at
+            // serialise time so OM round-trips of either form
+            // produce a canonical output, matching the CSS Color 5
+            // recommendation that vendor aliases serialise to the
+            // standardised spelling).
+            dest.write_str("device-n(")?;
+            for (index, pair) in pairs.iter().enumerate() {
+                if index != 0 {
+                    dest.write_str(", ")?;
+                }
+                crate::values::serialize_atom_identifier(&pair.colorant, dest)?;
+                dest.write_str(" ")?;
+                pair.tint.to_css(dest)?;
+            }
+            if let Optional::Some(fallback) = fallback {
+                if !pairs.is_empty() {
+                    dest.write_str(", ")?;
+                }
+                fallback.to_css(dest)?;
+            }
+            return dest.write_str(")");
+        }
+
         let (origin_color, alpha) = match self {
             Self::Rgb(origin_color, _, _, _, alpha) => {
                 dest.write_str("rgb(")?;
@@ -654,6 +774,7 @@ impl<C: style_traits::ToCss> style_traits::ToCss for ColorFunction<C> {
             },
             Self::DeviceCmyk(..) => unreachable!("handled above"),
             Self::BdSpot(..) => unreachable!("handled above"),
+            Self::BdDeviceN(..) => unreachable!("handled above"),
         };
 
         if let Optional::Some(origin_color) = origin_color {
@@ -728,6 +849,7 @@ impl<C: style_traits::ToCss> style_traits::ToCss for ColorFunction<C> {
             },
             Self::DeviceCmyk(..) => unreachable!("handled above"),
             Self::BdSpot(..) => unreachable!("handled above"),
+            Self::BdDeviceN(..) => unreachable!("handled above"),
         }
 
         dest.write_str(")")

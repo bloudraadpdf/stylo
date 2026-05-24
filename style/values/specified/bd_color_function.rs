@@ -39,6 +39,43 @@ use cssparser::Parser;
 use std::fmt::{self, Write};
 use style_traits::{CssWriter, ParseError, StyleParseErrorKind, ToCss};
 
+/// moegoe F2 — one resolved `(colorant-name, tint)` pair carried on the
+/// internal `_-bd-color-function` companion for a
+/// `color: device-n(...)` value (Stage C consumer).
+///
+/// Wrapping the pair in a named struct (rather than the
+/// `(Atom, f32)` tuple it represents) is required because Stylo's
+/// `ToAnimatedValue` blanket impl for `Vec<T>` requires `T:
+/// ToAnimatedValue`, and Stylo provides no tuple impls for
+/// `ToAnimatedValue`, `MallocSizeOf`, `ToShmem`, or
+/// `SpecifiedValueInfo`. A named struct with the derives applied
+/// is the supported path. Field names also make the cascade
+/// synthesis and IR-conversion arms self-documenting.
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToAnimatedValue,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(C)]
+pub struct BdDeviceNCompanionComponent {
+    /// The colorant name (matches the colorant identifier authored
+    /// on the `@-bd-colour` block that registers this DeviceN
+    /// component).
+    pub colorant: Atom,
+    /// Resolved tint, clamped to `[0.0, 1.0]` per the PDF DeviceN
+    /// tint-transform convention (ISO 32000-2 §8.6.6.5). Out-of-gamut
+    /// values are preserved verbatim because the renderer clamps at
+    /// emission time per backend convention.
+    pub tint: f32,
+}
+
 /// Computed (and specified) value of the internal `_-bd-color-function`
 /// longhand. `None` is the initial value; `Spot` carries the resolved
 /// colorant name and tint produced by the cascade hook for
@@ -114,6 +151,22 @@ pub enum BdColorFunction {
         /// Color 4 §10.2.2.
         alpha: f32,
     },
+    /// `color: device-n(<name> <tint>, … , <fallback>)` (or its
+    /// `-bd-devicen(...)` alias). Carried through the cascade as a
+    /// list of resolved (colorant-name, tint) pairs so the moegoe
+    /// IR boundary can preserve it onto a DeviceN-aware IR colour
+    /// node and emit the PDF DeviceN colour space (ISO 32000-2
+    /// §8.6.6.5) rather than falling back to the authored sRGB
+    /// fallback. Stage B carries the side-channel definition; Stage C
+    /// (moegoe-side) wires the cascade synthesis and IR consumption.
+    DeviceN {
+        /// Resolved colorant tints. Each entry is the colorant name
+        /// plus its 0..=1 ink-coverage tint (numbers and percentages
+        /// alike normalise to a number-on-[0,1] range via
+        /// `ColorComponent::resolve(None)`). Out-of-gamut values are
+        /// preserved verbatim; the renderer clamps at emission time.
+        pairs: Vec<BdDeviceNCompanionComponent>,
+    },
 }
 
 impl BdColorFunction {
@@ -176,6 +229,22 @@ impl ToCss for BdColorFunction {
                 if (alpha - 1.0).abs() > f32::EPSILON {
                     dest.write_str(" / ")?;
                     alpha.to_css(dest)?;
+                }
+                dest.write_char(')')
+            }
+            Self::DeviceN { pairs } => {
+                dest.write_str("device-n(")?;
+                for (index, pair) in pairs.iter().enumerate() {
+                    if index != 0 {
+                        dest.write_str(", ")?;
+                    }
+                    // Atoms emit their string content as a raw CSS
+                    // ident (matching `BdSpot` above). The companion
+                    // longhand is internal-only, so the surface only
+                    // ever reaches debug tooling.
+                    dest.write_str(&pair.colorant.to_string())?;
+                    dest.write_char(' ')?;
+                    pair.tint.to_css(dest)?;
                 }
                 dest.write_char(')')
             }

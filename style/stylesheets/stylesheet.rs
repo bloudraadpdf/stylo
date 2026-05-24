@@ -2620,6 +2620,36 @@ mod tests {
         );
     }
 
+    // moegoe Family 2 — `device-n(<name> <tint>, … , <fallback>)`
+    // round-trips with all colorant pairs and the fallback sRGB
+    // colour preserved. Spec: CSS Color 5 §4.
+    #[test]
+    fn servo_preserves_device_n_colour_function() {
+        let serialised = bd_spot_color_declaration(
+            "p { color: device-n(MyCyan 0.5, MyMagenta 0.3, rgb(0, 0, 0)); }",
+        )
+        .expect("expected color declaration");
+        assert_eq!(
+            serialised, "device-n(MyCyan 0.5, MyMagenta 0.3, rgb(0, 0, 0))",
+            "device-n colorant pairs and fallback colour preserved through OM round-trip"
+        );
+    }
+
+    // moegoe Family 2 — `-bd-devicen(...)` is a synonym for
+    // `device-n(...)`; the alias serialises to the canonical
+    // `device-n(...)` spelling (matches CSS Color 5's
+    // vendor-prefix-collapses-to-standard convention).
+    #[test]
+    fn servo_normalises_bd_devicen_alias_to_device_n() {
+        let serialised =
+            bd_spot_color_declaration("p { color: -bd-devicen(MyCyan 1, rgb(0, 0, 0)); }")
+                .expect("expected color declaration");
+        assert_eq!(
+            serialised, "device-n(MyCyan 1, rgb(0, 0, 0))",
+            "-bd-devicen alias normalises to canonical device-n spelling at serialise time"
+        );
+    }
+
     // moegoe Family 30 — `:first-of-group` page pseudo-class.
     #[test]
     fn servo_parses_first_of_group_page_pseudo() {

@@ -142,6 +142,7 @@ fn parse_color_function<'i, 't>(
         "device-cmyk" => parse_device_cmyk(context, arguments, origin_color),
         "-bd-spot" => parse_bd_spot(context, arguments, origin_color, false),
         "-bd-separation" => parse_bd_spot(context, arguments, origin_color, true),
+        "device-n" | "-bd-devicen" => parse_bd_device_n(context, arguments, origin_color),
         _ => return Err(arguments.new_unexpected_token_error(Token::Ident(name))),
     }?;
 
@@ -476,6 +477,103 @@ fn parse_bd_spot<'i, 't>(
     };
 
     Ok(ColorFunction::BdSpot(name, tint, is_separation))
+}
+
+/// Parse `device-n(<name> <tint>[, <name> <tint>]* , <fallback>)` /
+/// `-bd-devicen(<name> <tint>[, <name> <tint>]* , <fallback>)`.
+///
+/// moegoe F2 — multi-colorant DeviceN colour reference. Each
+/// comma-separated argument up to the last is a `(<colorant-ident>
+/// <tint>)` pair (a literal whitespace-separated colorant name and
+/// tint component). The final argument is a mandatory sRGB fallback
+/// colour (CSS Color 5 §4 — DeviceN cannot omit the fallback because
+/// no naïve projection exists for the open-ended colorant set).
+///
+/// The relative-colour-syntax `from <origin>` prefix is rejected for
+/// the same reason as `-bd-spot()`: DeviceN has no per-channel
+/// resolution path that a relative-colour mix could decompose.
+///
+/// A minimum of one colorant pair is required (zero pairs would
+/// render as the fallback unconditionally; that is more honestly
+/// authored as the fallback colour directly).
+#[inline]
+fn parse_bd_device_n<'i, 't>(
+    context: &ParserContext,
+    arguments: &mut Parser<'i, 't>,
+    origin_color: Option<SpecifiedColor>,
+) -> Result<ColorFunction<SpecifiedColor>, ParseError<'i>> {
+    if origin_color.is_some() {
+        return Err(arguments.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+    }
+
+    // Greedily collect (name, tint) pairs separated by commas. The
+    // final argument must be a colour value (the fallback), so the
+    // loop stops when an attempt to parse a name-and-tint pair fails
+    // and we fall back to parsing a colour.
+    let mut pairs: Vec<crate::color::color_function::BdDeviceNComponent> = Vec::new();
+
+    loop {
+        // Each iteration speculatively parses `<ident> <tint>`. If the
+        // next argument is the fallback colour, that parse fails and
+        // we break out to consume the colour.
+        let pair_state = arguments.state();
+        let pair = arguments.try_parse(
+            |p| -> Result<crate::color::color_function::BdDeviceNComponent, ParseError<'i>> {
+                let name_location = p.current_source_location();
+                let name_ident = p.expect_ident()?.clone();
+                if name_ident.is_empty() {
+                    return Err(name_location
+                        .new_custom_error(StyleParseErrorKind::UnspecifiedError));
+                }
+                let colorant = crate::Atom::from(&*name_ident);
+                let tint = ColorComponent::<NumberOrPercentageComponent>::parse(
+                    context,
+                    p,
+                    /* allow_none = */ false,
+                )?;
+                if !tint.could_be_number() && !tint.could_be_percentage() {
+                    return Err(p.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+                }
+                Ok(crate::color::color_function::BdDeviceNComponent { colorant, tint })
+            },
+        );
+
+        match pair {
+            Ok(pair) => {
+                pairs.push(pair);
+                // After a successful pair, the next thing is either a
+                // comma (more pairs / the fallback) or end of input
+                // (illegal — the fallback is mandatory).
+                if arguments.try_parse(|p| p.expect_comma()).is_err() {
+                    // No comma → no fallback. Rewind to the pair to
+                    // surface a sensible error message.
+                    arguments.reset(&pair_state);
+                    return Err(
+                        arguments.new_custom_error(StyleParseErrorKind::UnspecifiedError)
+                    );
+                }
+            },
+            Err(_) => {
+                // No more pairs — fall through to consume the fallback.
+                arguments.reset(&pair_state);
+                break;
+            },
+        }
+    }
+
+    if pairs.is_empty() {
+        return Err(arguments.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+    }
+
+    // Mandatory fallback colour. Bare-keyword colours (`red`, `black`)
+    // and modern colour functions both round-trip through
+    // `SpecifiedColor::parse`.
+    let fallback = SpecifiedColor::parse(context, arguments)?;
+
+    Ok(ColorFunction::BdDeviceN(
+        pairs,
+        Optional::Some(Box::new(fallback)),
+    ))
 }
 
 /// Either a percentage or a number.

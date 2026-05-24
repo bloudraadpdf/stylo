@@ -948,6 +948,21 @@ impl Color {
                     return Some(ComputedColor::ColorFunction(Box::new(color_function)));
                 }
 
+                // F2 — moegoe `device-n(<name> <tint>, … , <fallback>)`
+                // must also survive to compute time so the IR
+                // conversion boundary can preserve the per-colorant
+                // tints and resolve them against the document's
+                // registered DeviceN-aware backends (Stage C). Eager
+                // resolution here would collapse to the fallback sRGB
+                // colour and the colorant references would be
+                // unrecoverable.
+                if matches!(&**color_function, ColorFunction::BdDeviceN(..)) {
+                    let color_function = color_function.map_origin_color(|origin_color| {
+                        origin_color.to_computed_color(context)
+                    });
+                    return Some(ComputedColor::ColorFunction(Box::new(color_function)));
+                }
+
                 // Try to eagerly resolve the color function before making it a computed color.
                 if let Ok(absolute) = color_function.resolve_to_absolute() {
                     ComputedColor::Absolute(absolute)

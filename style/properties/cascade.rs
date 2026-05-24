@@ -590,6 +590,14 @@ fn tweak_when_ignoring_colors(
 /// * `color: device-cmyk(c m y k[ / a], <fallback>)` → companion stays
 ///   `None` so the cascade's fallback-driven sRGB resolution wins (CSS
 ///   Color 6 §2 says the fallback drives the in-cascade colour space).
+/// * `color: device-n(<name> <tint>, … , <fallback>)` →
+///   `_-bd-color-function: <DeviceN { pairs }>`. The fallback is
+///   always present (CSS Color 5 §4), so this carries the typed
+///   payload unconditionally; the companion's IR consumer will use
+///   the typed payload when DeviceN is available on the target
+///   backend and the cascade's fallback resolution otherwise. The
+///   side-channel is therefore additive — it does not displace the
+///   sRGB resolution that the `color` longhand carries.
 /// * any other colour value → `_-bd-color-function: <None>`
 /// * `color: <css-wide-keyword>` → companion follows the same keyword.
 ///   `_-bd-color-function` is on the same `inherited_text` style struct
@@ -694,6 +702,42 @@ fn synthesise_bd_color_function_companion(
                 y: ye,
                 k: ke,
                 alpha: alpha_value,
+            }))
+        }
+        ColorFunction::BdDeviceN(pairs, _fallback) => {
+            // F2 — resolve each authored tint to a concrete `f32`.
+            // Numbers and percentages normalise via
+            // `ColorComponent::resolve(None)`; DeviceN has no
+            // relative-syntax origin (CSS Color 6 §2). Any tint that
+            // does not resolve drops the entire companion to `None`
+            // so the cascade's fallback-driven sRGB resolution wins
+            // as a fail-safe — silently ignoring an unresolved
+            // colorant would render against a stale tint and
+            // produce a wrong PDF colour.
+            let resolve = |comp: &ColorComponent<NumberOrPercentageComponent>| -> Option<f32> {
+                comp.resolve(None)
+                    .ok()?
+                    .map(|value| value.to_number(1.0))
+            };
+            use crate::values::specified::bd_color_function::BdDeviceNCompanionComponent;
+            let mut resolved_pairs: Vec<BdDeviceNCompanionComponent> =
+                Vec::with_capacity(pairs.len());
+            for pair in pairs.iter() {
+                match resolve(&pair.tint) {
+                    Some(value) => resolved_pairs.push(BdDeviceNCompanionComponent {
+                        colorant: pair.colorant.clone(),
+                        tint: value,
+                    }),
+                    None => return none_decl(),
+                }
+            }
+            // The parser rejects the empty pair list, but defend
+            // against future shape changes by collapsing here too.
+            if resolved_pairs.is_empty() {
+                return none_decl();
+            }
+            PropertyDeclaration::BdColorFunction(Box::new(SpecifiedBdColorFunction::DeviceN {
+                pairs: resolved_pairs,
             }))
         }
         _ => none_decl(),
