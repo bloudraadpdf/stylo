@@ -14,9 +14,12 @@
 //! `order` property. Only `reading-flow` requires a bespoke keyword
 //! enum, defined here.
 //!
-//! Both properties cascade through the `inherited_box` struct because
-//! reading order is inherently a sequential-navigation property that
-//! descendants observe transparently.
+//! Both properties are non-inherited per CSS Display 4 §3.4. They
+//! share the non-inherited `position` struct alongside `order`:
+//! `reading-flow` is the opt-in switch on the flex/grid container,
+//! and `reading-order` is the per-item integer tie-breaker. Descendant
+//! propagation is performed by the consumer (PDF structure tree
+//! emission) at tree-walk time, not by the cascade.
 
 use crate::derives::*;
 

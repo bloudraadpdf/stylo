@@ -1792,13 +1792,15 @@ spec = "https://drafts.csswg.org/css-flexbox/#order-property"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
-# CSS Display Module Level 4 §3 — sequential-navigation order. The
-# two properties cascade through `inherited_box` so descendants
-# observe the traversal policy without having to re-declare it.
+# CSS Display Module Level 4 §3 — sequential-navigation order. Both
+# properties are non-inherited per the spec: `reading-flow` applies to
+# the flex/grid container that opts in, and `reading-order` is set on
+# individual items that participate in the container's reading flow.
+# They share the non-inherited `position` struct alongside `order`.
 [reading-flow]
 type = "ReadingFlow"
 initial = "computed::ReadingFlow::Normal"
-struct = "inherited_box"
+struct = "position"
 initial_specified_value = "specified::ReadingFlow::Normal"
 spec = "https://drafts.csswg.org/css-display-4/#reading-flow"
 animation_type = "discrete"
@@ -1807,7 +1809,7 @@ affects = "layout"
 [reading-order]
 type = "Integer"
 initial = "0"
-struct = "inherited_box"
+struct = "position"
 spec = "https://drafts.csswg.org/css-display-4/#reading-order"
 animation_type = "discrete"
 affects = "layout"
