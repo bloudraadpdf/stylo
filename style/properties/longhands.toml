@@ -2720,6 +2720,20 @@ spec = "Nonstandard (moegoe -bd-* fork extension; K3 PDF Optional Content Groups
 animation_type = "none"
 affects = "paint"
 
+# moegoe G66 — OCG `/Intent` (ISO 32000-2 §8.11.2.1). Per-element;
+# not inherited. Pairs with `-bd-pdf-layer: <ident>`; tagging a
+# layer `design` flags it as design-time metadata so conforming
+# readers omit it from ordinary rendering. Initial `view` matches
+# the historical bracket-only behaviour.
+[-bd-pdf-layer-intent]
+type = "BdPdfLayerIntent"
+initial = "computed::BdPdfLayerIntent::View"
+struct = "counters"
+initial_specified_value = "specified::BdPdfLayerIntent::View"
+spec = "Nonstandard (moegoe -bd-* fork extension; G66 PDF OCG intent)"
+animation_type = "none"
+affects = "paint"
+
 # moegoe F27 — PDF output tuning. Per-element / inherited knobs
 # governing how the PDF backend (krilla) emits content.
 [-bd-pdf-text-rendering]

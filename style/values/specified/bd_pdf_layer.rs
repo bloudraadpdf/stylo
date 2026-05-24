@@ -30,6 +30,53 @@ use crate::parser::{Parse, ParserContext};
 use crate::values::CustomIdent;
 use cssparser::Parser;
 
+/// Specified value of `-bd-pdf-layer-intent` (G66).
+///
+/// Per ISO 32000-2 §8.11.2.1, an Optional Content Group's `/Intent`
+/// entry tells a conforming reader whether the layer represents a
+/// user-visible variant of the document (`view` — the default and
+/// historical CSS-author expectation) or design-time metadata that
+/// readers ignore during ordinary rendering (`design` — typically
+/// proofing, commentary, or markup layers that should not print).
+///
+/// Used in concert with `-bd-pdf-layer: <ident>`; an element bearing
+/// `-bd-pdf-layer-intent` without a `-bd-pdf-layer` declaration has
+/// no observable effect because no OCG is registered for the
+/// subtree.
+///
+/// Per-element; not inherited. Mirrors the inheritance rules of
+/// `-bd-pdf-layer` — the OCG bracket is the unit of authority,
+/// descendants inherit visibility through bracket nesting at paint
+/// time, not through cascade inheritance.
+#[repr(u8)]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[allow(missing_docs)]
+pub enum BdPdfLayerIntent {
+    /// `view` (initial) — the layer is honoured during ordinary
+    /// rendering. PDF viewers show / hide it through the OCG panel
+    /// like any normal layer.
+    #[default]
+    View,
+    /// `design` — the layer carries design-time metadata.
+    /// Conforming readers omit it from ordinary rendering (and from
+    /// print output by default).
+    Design,
+}
+
 /// Specified value of `-bd-pdf-layer`.
 ///
 /// `none` (initial) — emit no OCG bracket. `<custom-ident>` — emit
