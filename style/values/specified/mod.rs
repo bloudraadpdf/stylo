@@ -218,7 +218,7 @@ pub use self::position::PositionTryFallbacks;
 pub use self::position::PositionTryOrder;
 pub use self::position::PositionVisibility;
 pub use self::position::{GridAutoFlow, GridTemplateAreas, Position, PositionOrAuto};
-pub use self::position::{MasonryAutoFlow, MasonryItemOrder, MasonryPlacement};
+pub use self::position::{MasonryAutoFlow, MasonryItemOrder, MasonryPlacement, MasonrySlack};
 pub use self::position::{PositionArea, PositionAreaKeyword};
 pub use self::position::{PositionComponent, ZIndex};
 pub use self::ratio::Ratio;

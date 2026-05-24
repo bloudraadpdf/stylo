@@ -221,7 +221,8 @@ pub use self::position::PositionTryFallbacks;
 pub use self::position::PositionTryOrder;
 pub use self::position::PositionVisibility;
 pub use self::position::{
-    GridAutoFlow, GridTemplateAreas, MasonryAutoFlow, Position, PositionOrAuto, ZIndex,
+    GridAutoFlow, GridTemplateAreas, MasonryAutoFlow, MasonrySlack, Position, PositionOrAuto,
+    ZIndex,
 };
 pub use self::position::{PositionArea, PositionAreaKeyword};
 pub use self::ratio::Ratio;

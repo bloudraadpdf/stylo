@@ -7,6 +7,7 @@
 //!
 //! [position]: https://drafts.csswg.org/css-backgrounds-3/#position
 
+use crate::derives::*;
 use crate::logical_geometry::PhysicalSide;
 use crate::values::computed::{
     Context, Integer, LengthPercentage, NonNegativeNumber, Percentage, ToComputedValue,
@@ -271,3 +272,41 @@ pub type ZIndex = GenericZIndex<Integer>;
 
 /// A computed value for the `aspect-ratio` property.
 pub type AspectRatio = GenericAspectRatio<NonNegativeNumber>;
+
+/// Computed value of `masonry-slack` (CSS Grid 3 §3.8).
+///
+/// Mirrors the specified-side enum but carries a computed
+/// `NonNegativeLengthPercentage` for the explicit-length case. See
+/// `crate::values::specified::position::MasonrySlack` for the
+/// authoring-side grammar and rationale.
+///
+/// `ToShmem` is intentionally omitted — computed `LengthPercentage`
+/// is a tagged union without a `ToShmem` impl and the computed value
+/// never enters shareable-memory storage (only the specified value
+/// does, and that lives on the specified-side `MasonrySlack`).
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    ToCss,
+    ToResolvedValue,
+    ToTyped,
+)]
+#[repr(C, u8)]
+pub enum MasonrySlack {
+    /// `infinite` — no slack constraint; initial value.
+    Infinite,
+    /// `auto` — UA-defined slack heuristic.
+    Auto,
+    /// `<length-percentage>` — explicit slack budget.
+    LengthPercentage(crate::values::computed::length::NonNegativeLengthPercentage),
+}
+
+impl MasonrySlack {
+    /// Initial value (`infinite`).
+    #[inline]
+    pub fn initial() -> Self {
+        Self::Infinite
+    }
+}
