@@ -23,6 +23,7 @@ use crate::values::generics::position::{AspectRatio as GenericAspectRatio, Gener
 use crate::values::generics::position::{GenericAnchorFunction, GenericInset, TreeScoped};
 use crate::values::specified;
 use crate::values::specified::align::AlignFlags;
+use crate::values::specified::length::NonNegativeLengthPercentage;
 use crate::values::specified::{AllowQuirks, Integer, LengthPercentage, NonNegativeNumber};
 use crate::values::DashedIdent;
 use crate::{Atom, Zero};
@@ -1723,6 +1724,92 @@ impl Parse for MasonryAutoFlow {
             Ok(value)
         } else {
             Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
+        }
+    }
+}
+
+/// Specified value of `masonry-slack` (CSS Grid 3 §3.8).
+///
+/// The longhand bounds how much wall-height differential the masonry
+/// `pack` placement algorithm is allowed to tolerate when choosing a
+/// grid-axis track for an auto-placed item. The grammar is
+/// `<length-percentage> | infinite | auto` with initial `infinite`
+/// — `infinite` lets the algorithm prefer the absolutely shortest
+/// wall, `auto` leaves the slack to a UA-defined heuristic, and an
+/// explicit `<length-percentage>` caps the permitted excess above the
+/// shortest wall (percentages resolve against the grid container's
+/// inline size on the grid axis).
+///
+/// Reference: <https://drafts.csswg.org/css-grid-3/#masonry-slack>
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(C, u8)]
+pub enum MasonrySlack {
+    /// `infinite` — no slack constraint; the placer prefers the
+    /// shortest wall outright. Initial value.
+    Infinite,
+    /// `auto` — UA-defined slack heuristic. Treated as `infinite`
+    /// until a dedicated heuristic ships.
+    Auto,
+    /// `<length-percentage>` — explicit slack budget; non-negative.
+    LengthPercentage(NonNegativeLengthPercentage),
+}
+
+impl MasonrySlack {
+    /// Initial value (`infinite`).
+    #[inline]
+    pub fn initial() -> Self {
+        Self::Infinite
+    }
+}
+
+impl Parse for MasonrySlack {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if let Ok(ident) = input.try_parse(|i| i.expect_ident_cloned()) {
+            return match_ignore_ascii_case! { &ident,
+                "infinite" => Ok(Self::Infinite),
+                "auto" => Ok(Self::Auto),
+                _ => Err(input.new_custom_error(
+                    SelectorParseErrorKind::UnexpectedIdent(ident),
+                )),
+            };
+        }
+        let lp = NonNegativeLengthPercentage::parse(context, input)?;
+        Ok(Self::LengthPercentage(lp))
+    }
+}
+
+impl ToComputedValue for MasonrySlack {
+    type ComputedValue = crate::values::computed::MasonrySlack;
+
+    fn to_computed_value(&self, ctx: &Context) -> Self::ComputedValue {
+        use crate::values::computed::MasonrySlack as Computed;
+        match self {
+            Self::Infinite => Computed::Infinite,
+            Self::Auto => Computed::Auto,
+            Self::LengthPercentage(lp) => Computed::LengthPercentage(lp.to_computed_value(ctx)),
+        }
+    }
+
+    fn from_computed_value(computed: &Self::ComputedValue) -> Self {
+        use crate::values::computed::MasonrySlack as Computed;
+        match computed {
+            Computed::Infinite => Self::Infinite,
+            Computed::Auto => Self::Auto,
+            Computed::LengthPercentage(lp) => {
+                Self::LengthPercentage(ToComputedValue::from_computed_value(lp))
+            },
         }
     }
 }
