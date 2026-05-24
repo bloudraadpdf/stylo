@@ -7006,7 +7006,7 @@ affects = "paint"
 extra_prefixes = ["webkit"]
 servo_restyle_damage = "repaint"
 vector = {}
-keyword = { values = ["border-box", "padding-box", "content-box"], extra_gecko_values = ["text"], gecko_enum_prefix = "StyleGeometryBox", gecko_inexhaustive = true }
+keyword = { values = ["border-box", "padding-box", "content-box"], extra_gecko_values = ["text"], extra_servo_values = ["border-area"], gecko_enum_prefix = "StyleGeometryBox", gecko_inexhaustive = true }
 rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [background-origin]
