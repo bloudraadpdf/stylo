@@ -198,7 +198,8 @@ bitflags! {
             Self::RECT.bits() |
             Self::CIRCLE.bits() |
             Self::ELLIPSE.bits() |
-            Self::POLYGON.bits();
+            Self::POLYGON.bits() |
+            Self::PATH.bits();
     }
 }
 
