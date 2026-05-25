@@ -224,6 +224,11 @@ impl ToComputedValue for specified::Image {
             Self::CrossFade(f) => Image::CrossFade(f.to_computed_value(context)),
             Self::ImageSet(s) => Image::ImageSet(s.to_computed_value(context)),
             Self::LightDark(ld) => ld.compute(context),
+            // CSS Images 4 §3.1: lower the `image()` payload component-wise.
+            // Direction-tag resolution happens at use-time against the
+            // element's resolved `direction`, so the tag itself is
+            // preserved verbatim in the computed value.
+            Self::Image(payload) => Image::Image(payload.to_computed_value(context)),
         }
     }
 
@@ -243,6 +248,7 @@ impl ToComputedValue for specified::Image {
             Image::CrossFade(f) => Self::CrossFade(ToComputedValue::from_computed_value(f)),
             Image::ImageSet(s) => Self::ImageSet(ToComputedValue::from_computed_value(s)),
             Image::LightDark(_) => unreachable!("Shouldn't have computed image-set values"),
+            Image::Image(payload) => Self::Image(ToComputedValue::from_computed_value(payload)),
         }
     }
 }

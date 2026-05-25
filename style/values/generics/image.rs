@@ -62,9 +62,154 @@ pub enum GenericImage<G, ImageUrl, Color, Percentage, Resolution> {
     /// NOTE(emilio): #[css(skip)] only affects SpecifiedValueInfo. Remove or make conditional
     /// if/when shipping light-dark() for content.
     LightDark(#[css(skip)] Box<GenericLightDark<Self>>),
+
+    /// A CSS Images 4 §3.1 `image(...)` notation.
+    ///
+    /// Grammar: `image() = image( <image-tags>? [ <image-src>? , <color>? ]! )`
+    /// where `<image-tags> = ltr | rtl` and `<image-src> = <url> | <string>`.
+    ///
+    /// The `!` combinator demands that at least one of the inner pieces
+    /// (`<image-src>` or `<color>` fallback) be present. Boxed to keep
+    /// `GenericImage` <= 16 bytes (see `size_of_test!` in
+    /// `style::values::specified::image`).
+    ///
+    /// Direction selection (`ltr` / `rtl`) per spec §3.1 is resolved at
+    /// use-time against the element's computed `direction`; both
+    /// computed and specified representations preserve the tag.
+    Image(Box<GenericImageImage<ImageUrl, Color>>),
 }
 
 pub use self::GenericImage as Image;
+
+/// CSS Images 4 §3.1 `<image-tags>` keyword.
+///
+/// Carries the optional `ltr` / `rtl` annotation authored on
+/// `image()` so the cascade can pick the correct source variant
+/// for the resolved writing-mode direction at use-time.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+)]
+#[repr(u8)]
+pub enum ImageTags {
+    /// `ltr` — applies when the element's resolved direction is left-to-right.
+    Ltr,
+    /// `rtl` — applies when the element's resolved direction is right-to-left.
+    Rtl,
+}
+
+/// CSS Images 4 §3.1 `<image-src>` — a `<url>` or a bare `<string>`.
+///
+/// Both forms resolve to the same `<url>` semantics per spec: the
+/// `<string>` form is shorthand for `url("...")`. We store the
+/// parsed URL representation so the computed-value lowering and
+/// downstream consumers can treat both arms uniformly.
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+)]
+#[repr(C, u8)]
+pub enum GenericImageSrc<ImageUrl> {
+    /// `<url>` form, e.g. `url("path/to/img.png")`.
+    Url(ImageUrl),
+    /// `<string>` form, e.g. `"path/to/img.png"`. Resolved against the
+    /// stylesheet base URL identically to the `<url>` form.
+    String(ImageUrl),
+}
+
+pub use self::GenericImageSrc as ImageSrc;
+
+impl<U: ToCss> ToCss for GenericImageSrc<U> {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: fmt::Write,
+    {
+        match self {
+            // `<url>` form serialises as `url(...)` via the inner type.
+            GenericImageSrc::Url(u) => u.to_css(dest),
+            // `<string>` form preserves the bare-string serialisation;
+            // we fall back to `url(...)` here because we lower the
+            // string to a URL at parse time, so we no longer have the
+            // original quoted form.
+            GenericImageSrc::String(u) => u.to_css(dest),
+        }
+    }
+}
+
+/// Payload for CSS Images 4 §3.1 `image(...)`.
+///
+/// The grammar's `!`-combinator over `[ <image-src>? , <color>? ]`
+/// means *at least one* of `src` / `fallback` must be present.
+/// Parser enforces this; the type system encodes the looser shape so
+/// the spec's direction-tag-only sub-form is also representable.
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+)]
+#[repr(C)]
+pub struct GenericImageImage<ImageUrl, Color> {
+    /// Optional `ltr` / `rtl` annotation. When the computed `direction`
+    /// matches the tag the source applies; otherwise this `image()`
+    /// is skipped and the next layer / fallback colour is used.
+    pub tag: Option<ImageTags>,
+    /// Optional `<image-src>` (`<url>` or `<string>`). At least one of
+    /// `src` / `fallback` is present at parse time.
+    pub src: Option<GenericImageSrc<ImageUrl>>,
+    /// Optional `<color>` fallback. Drawn as a solid fill when the
+    /// source fails to load (or when no source was authored).
+    pub fallback: Option<Color>,
+}
+
+pub use self::GenericImageImage as ImageImage;
+
+impl<U: ToCss, C: ToCss> ToCss for GenericImageImage<U, C> {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: fmt::Write,
+    {
+        dest.write_str("image(")?;
+        let mut wrote = false;
+        if let Some(t) = self.tag {
+            t.to_css(dest)?;
+            wrote = true;
+        }
+        if let Some(ref s) = self.src {
+            if wrote {
+                dest.write_char(' ')?;
+            }
+            s.to_css(dest)?;
+            wrote = true;
+        }
+        if let Some(ref c) = self.fallback {
+            if wrote {
+                dest.write_str(", ")?;
+            }
+            c.to_css(dest)?;
+        }
+        dest.write_char(')')
+    }
+}
 
 /// <https://drafts.csswg.org/css-images-4/#cross-fade-function>
 #[derive(
@@ -442,6 +587,7 @@ where
             Image::ImageSet(ref is) => is.to_css(dest),
             Image::CrossFade(ref cf) => cf.to_css(dest),
             Image::LightDark(ref ld) => ld.to_css(dest),
+            Image::Image(ref payload) => payload.to_css(dest),
         }
     }
 }
