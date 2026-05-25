@@ -13,8 +13,9 @@ use crate::parser::{Parse, ParserContext};
 use crate::stylesheets::CorsMode;
 use crate::values::generics::color::{ColorMixFlags, GenericLightDark};
 use crate::values::generics::image::{
-    self as generic, Circle, Ellipse, GradientCompatMode, ShapeExtent,
+    self as generic, Circle, Ellipse, GradientCompatMode, ImageTags, ShapeExtent,
 };
+use crate::values::generics::image::{GenericImageImage, GenericImageSrc};
 use crate::values::generics::image::{GradientFlags, PaintWorklet};
 use crate::values::generics::position::Position as GenericPosition;
 use crate::values::generics::NonNegative;
@@ -69,6 +70,12 @@ pub type CrossFadeImage = generic::CrossFadeImage<Image, Color>;
 
 /// `image-set()`
 pub type ImageSet = generic::ImageSet<Image, Resolution>;
+
+/// Specified value for the CSS Images 4 §3.1 `image()` payload.
+pub type ImageImage = GenericImageImage<SpecifiedUrl, Color>;
+
+/// Specified value for the CSS Images 4 §3.1 `<image-src>` token.
+pub type ImageSrc = GenericImageSrc<SpecifiedUrl>;
 
 /// Each of the arguments to `image-set()`
 pub type ImageSetItem = generic::ImageSetItem<Image, Resolution>;
@@ -248,12 +255,82 @@ impl Image {
             "light-dark" if image_light_dark_enabled(context) => Self::LightDark(Box::new(GenericLightDark::parse_args_with(input, |input| {
                 Self::parse_with_cors_mode(context, input, cors_mode, flags)
             })?)),
+            "image" => Self::Image(Box::new(ImageImage::parse_args(context, input, cors_mode)?)),
             #[cfg(feature = "gecko")]
             "-moz-element" => Self::Element(Self::parse_element(input)?),
             #[cfg(feature = "gecko")]
             "-moz-symbolic-icon" if context.chrome_rules_enabled() => Self::MozSymbolicIcon(input.expect_ident()?.as_ref().into()),
             _ => return Err(input.new_custom_error(StyleParseErrorKind::UnexpectedFunction(function))),
         }))
+    }
+}
+
+impl ImageImage {
+    /// Parse the contents of `image(...)` per CSS Images 4 §3.1.
+    ///
+    /// Grammar: `<image-tags>? [ <image-src>? , <color>? ]!`
+    ///   - `<image-tags> = ltr | rtl`
+    ///   - `<image-src>  = <url> | <string>`
+    ///   - The `!` combinator demands at least one of `<image-src>` /
+    ///     `<color>` be present; the bare `image()` form is invalid.
+    ///
+    /// Permitted shapes:
+    ///   - `image(<src>)`                        — src only, no fallback
+    ///   - `image(<src>, <color>)`               — src + fallback
+    ///   - `image(, <color>)` / `image(<color>)` — fallback only
+    ///   - all of the above optionally prefixed with `ltr` / `rtl`
+    fn parse_args<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+        cors_mode: CorsMode,
+    ) -> Result<Self, ParseError<'i>> {
+        // Optional `<image-tags>` prefix.
+        let tag = input.try_parse(ImageTags::parse).ok();
+
+        // Try to parse a leading `<image-src>` — `<url>` first, then a
+        // bare `<string>` shorthand. Both lower to the same SpecifiedUrl
+        // representation (string form is `url("...")` semantically).
+        let src = input
+            .try_parse(|input| -> Result<ImageSrc, ParseError<'i>> {
+                if let Ok(url) = input.try_parse(|input| {
+                    SpecifiedUrl::parse_with_cors_mode(context, input, cors_mode)
+                }) {
+                    return Ok(GenericImageSrc::Url(url));
+                }
+                let s = input.expect_string()?.as_ref().to_owned();
+                let url = SpecifiedUrl::parse_from_string(s, context, cors_mode);
+                Ok(GenericImageSrc::String(url))
+            })
+            .ok();
+
+        // The `<color>` fallback is preceded by a comma. If we did not
+        // see a source, the leading comma is still required by the
+        // grammar when a colour follows — except when *only* a colour is
+        // authored, in which case the comma may be omitted (the `?` on
+        // `<image-src>` lets the comma be elided too). Both forms are
+        // accepted.
+        let mut fallback: Option<Color> = None;
+        if input.try_parse(|input| input.expect_comma()).is_ok() {
+            // Comma seen — a colour MUST follow per the grammar's
+            // `!` operator (otherwise the comma is grammar noise).
+            fallback = Some(Color::parse(context, input)?);
+        } else if src.is_none() {
+            // No source AND no leading comma — accept a bare `<color>`
+            // as the sole argument (degenerate `<image-src>?, <color>?`).
+            fallback = Some(Color::parse(context, input)?);
+        }
+
+        // The `!` combinator: at least one of src / fallback must be
+        // present. Bare `image()` / `image(ltr)` are invalid.
+        if src.is_none() && fallback.is_none() {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+
+        Ok(GenericImageImage {
+            tag,
+            src,
+            fallback,
+        })
     }
 }
 
