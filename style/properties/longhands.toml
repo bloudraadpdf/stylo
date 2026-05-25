@@ -2196,6 +2196,31 @@ spec = "Nonstandard (moegoe -bd-* fork extension; K7 PDF info-dictionary /Trappe
 animation_type = "none"
 affects = ""
 
+# moegoe Prince-residuals — force-on Tagged-PDF emission from the
+# cascade. Document-level; the renderer honours only `:root`
+# declarations. `auto` defers to the embedder's `PdfConfig::tagged`;
+# `yes` / `no` overrides it.
+[-bd-pdf-tagged]
+type = "BdPdfTagged"
+initial = "computed::BdPdfTagged::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfTagged::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; Prince-residuals -bd-pdf-tagged)"
+animation_type = "none"
+affects = ""
+
+# moegoe Prince-residuals — pre-seed the PDF structure-tree /RoleMap
+# (ISO 32000-2 §14.7.3). Document-level; the renderer honours only
+# `:root` declarations. `none` is the initial value.
+[-bd-pdf-role-map]
+type = "BdPdfRoleMap"
+initial = "computed::BdPdfRoleMap::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfRoleMap::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; Prince-residuals -bd-pdf-role-map)"
+animation_type = "none"
+affects = ""
+
 # moegoe K10 — PDF output-intent OutputCondition / RegistryName
 # descriptors (ISO 32000-2 §14.11.5). Document-level; the renderer
 # honours only `:root` declarations.
@@ -2754,6 +2779,19 @@ initial = "computed::BdRasterizationSupersampling::one()"
 struct = "counters"
 initial_specified_value = "specified::BdRasterizationSupersampling::one()"
 spec = "Nonstandard (moegoe -bd-* fork extension; F27 rasterisation supersampling)"
+animation_type = "none"
+affects = "paint"
+
+# moegoe Prince-residuals — per-element raster density override for
+# CSS Filter Effects primitives (`prince-filter-resolution`).
+# Per-element; not inherited. `auto` (initial) defers to the
+# backend default; `<resolution>` clamps the per-element raster.
+[-bd-filter-resolution]
+type = "BdFilterResolution"
+initial = "computed::BdFilterResolution::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdFilterResolution::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; Prince-residuals -bd-filter-resolution)"
 animation_type = "none"
 affects = "paint"
 

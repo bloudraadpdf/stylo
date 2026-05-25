@@ -156,8 +156,11 @@ pub use self::bd_pdf_destination::{
     BdDestinationArea, BdPdfAttachmentLocation, BdPdfAttachmentModificationDate,
     BdPdfAttachmentRelationship, BdPdfAttachmentUrl, BdPdfStringSlot,
 };
+pub use self::bd_filter_resolution::BdFilterResolution;
 pub use self::bd_pdf_output_condition::BdPdfOutputCondition;
 pub use self::bd_pdf_output_registry_name::BdPdfOutputRegistryName;
+pub use self::bd_pdf_role_map::{BdPdfRoleMap, BdPdfRoleMapEntry};
+pub use self::bd_pdf_tagged::BdPdfTagged;
 pub use self::bd_pdf_trapped::BdPdfTrapped;
 pub use self::bd_pdf_form::{
     BdPdfAnnotationHidden, BdPdfFormFieldFlags, BdPdfFormFieldMaxLength, BdPdfSignatureFieldLock,
@@ -293,9 +296,12 @@ pub mod bd_pdf_output;
 pub mod bd_pdf_output_condition;
 pub mod bd_pdf_output_intent;
 pub mod bd_pdf_output_registry_name;
+pub mod bd_pdf_role_map;
 pub mod bd_pdf_tag;
+pub mod bd_pdf_tagged;
 pub mod bd_pdf_trapped;
 pub mod bd_pdf_viewer;
+pub mod bd_filter_resolution;
 pub mod bd_running_copy;
 pub mod bd_sidenote;
 pub mod bd_tab_stops;

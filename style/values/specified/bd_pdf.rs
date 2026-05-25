@@ -16,9 +16,18 @@
 //! keywords}` semantics (see `docs/reference-manuals/pdfreactor.md`
 //! §Metadata). XMP is moegoe-specific — neither PDFreactor nor Prince
 //! exposes a raw-XMP escape hatch as a CSS property.
+//!
+//! `-bd-pdf-xmp` additionally accepts `url(<href>)`, used as the
+//! native equivalent of Prince's `prince-pdf-xmp: url(...)`. The
+//! cascade reader in `moegoe-css` fetches the referenced bytes
+//! through the standard moegoe [`ResourceLoader`] (the same path
+//! `-bd-pdf-output-intent: url(...)` already uses) and treats the
+//! fetched content as the literal XMP packet. Non-`xmp` slots
+//! reject the `Url` variant at the cascade-reader boundary.
 
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
+use crate::values::specified::url::SpecifiedUrl;
 use crate::{OwnedSlice, OwnedStr};
 use cssparser::Parser;
 use style_traits::{ParseError, StyleParseErrorKind};
@@ -27,17 +36,25 @@ use style_traits::{ParseError, StyleParseErrorKind};
 ///
 /// `none` clears the slot. `<string>+` contributes one or more
 /// quoted strings; the renderer is responsible for joining and
-/// merging declarations across elements.
-#[derive(
-    Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue,
-    ToResolvedValue, ToShmem, ToTyped,
-)]
+/// merging declarations across elements. `url(<href>)` is accepted
+/// only by `-bd-pdf-xmp`; other slots reject the variant at the
+/// cascade reader.
+///
+/// `ToComputedValue` is implemented manually because the `Url`
+/// variant must collapse `SpecifiedUrl -> ComputedUrl` at compute
+/// time (the standard derive would only succeed for identity-computed
+/// inner types). See [`crate::values::computed::bd_pdf::BdPdfMetaValue`]
+/// for the matching computed enum.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
 #[repr(C, u8)]
 pub enum BdPdfMetaValue {
     /// `none` — no contribution to the PDF metadata slot.
     None,
     /// `<string>+` — one or more author strings.
     Strings(#[css(iterable)] OwnedSlice<OwnedStr>),
+    /// `url(<href>)` — external packet (XMP only). Other metadata
+    /// slots reject the variant at the cascade boundary.
+    Url(SpecifiedUrl),
 }
 
 impl BdPdfMetaValue {
@@ -56,7 +73,7 @@ impl BdPdfMetaValue {
 
 impl Parse for BdPdfMetaValue {
     fn parse<'i, 't>(
-        _: &ParserContext,
+        context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
         if input
@@ -64,6 +81,9 @@ impl Parse for BdPdfMetaValue {
             .is_ok()
         {
             return Ok(Self::None);
+        }
+        if let Ok(url) = input.try_parse(|i| SpecifiedUrl::parse(context, i)) {
+            return Ok(Self::Url(url));
         }
         let mut strings: Vec<OwnedStr> = Vec::new();
         loop {
