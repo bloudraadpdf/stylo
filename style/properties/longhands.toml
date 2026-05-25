@@ -2165,6 +2165,32 @@ spec = "Nonstandard (moegoe -bd-* fork extension; G6 PDF document metadata)"
 animation_type = "none"
 affects = ""
 
+# moegoe G64 — PDF document-level JavaScript. The script bytes are
+# embedded into the PDF for execution by the PDF reader (Acrobat
+# etc.) at viewer-side events; moegoe does NOT invoke a JavaScript
+# engine at render time for these properties (`<script>` element
+# author-side JavaScript stays on moegoe-script). Document-level;
+# the renderer honours only `:root` declarations. See ISO 32000-2
+# §12.6.4.16 (JavaScript actions) and §12.6.3 Table 200 (catalogue
+# additional-actions dictionary).
+[-bd-pdf-script]
+type = "BdPdfScript"
+initial = "computed::BdPdfScript::none()"
+struct = "counters"
+initial_specified_value = "specified::BdPdfScript::none()"
+spec = "Nonstandard (moegoe -bd-* fork extension; G64 PDF document-level JavaScript, ISO 32000-2 §12.6.4.16)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-event-scripts]
+type = "BdPdfEventScripts"
+initial = "computed::BdPdfEventScripts::none()"
+struct = "counters"
+initial_specified_value = "specified::BdPdfEventScripts::none()"
+spec = "Nonstandard (moegoe -bd-* fork extension; G64 PDF catalogue /AA event scripts, ISO 32000-2 §12.6.3 Table 200)"
+animation_type = "none"
+affects = ""
+
 # moegoe G4 — PDF/A and PDF/UA conformance. Document-level; the
 # renderer honours only `:root` declarations.
 [-bd-pdf-conformance]
