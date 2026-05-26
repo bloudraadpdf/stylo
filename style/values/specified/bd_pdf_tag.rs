@@ -350,6 +350,120 @@ impl Parse for BdPdfTagStringPlain {
     }
 }
 
+/// Specified value of `-bd-pdf-tag-header-cell-scope` (T1-D2).
+///
+/// PDF/UA-1 §7.5.1 / PDF/UA-2 §8.8 / ISO 32000-2 §14.7.4.4 Table
+/// 359 require every `Tag::TH` structure element on a tagged PDF
+/// to carry an explicit `/Scope` attribute indicating which axis
+/// the header cell labels. `none` accepts the renderer's
+/// structural default (Column for `<thead>` headers, Row
+/// otherwise — matching HTML5 §4.9.10.1 "header cell implicit
+/// scope"). Authors can pin a specific scope on a per-element
+/// basis with `row`, `column`, or `both`; the value lands on
+/// krilla `Tag::TH::with_scope(...)` at PDF emission time.
+/// Mirrors the IR-side `IrTableHeaderScope` enum so authoring
+/// stays direct from CSS to the structure tree without an HTML
+/// `scope=` attribute.
+///
+/// Initial `none`. Per-element; not inherited.
+#[repr(u8)]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+pub enum BdPdfTagHeaderCellScope {
+    /// `none` (initial) — defer to the renderer's structural
+    /// default and any HTML `scope=` attribute on the bearing
+    /// `<th>`.
+    #[default]
+    None,
+    /// `row` — the header cell labels its row.
+    Row,
+    /// `column` — the header cell labels its column.
+    Column,
+    /// `both` — the header cell labels both row and column
+    /// (PDF `/Both`). Also covers HTML5 `scope="rowgroup"` and
+    /// `scope="colgroup"` which PDF collapses onto `/Both`.
+    Both,
+}
+
+impl BdPdfTagHeaderCellScope {
+    /// Initial value (`none`).
+    #[inline]
+    pub fn none() -> Self {
+        Self::None
+    }
+}
+
+/// Specified value of `-bd-pdf-tag-table-summary` (T1-D2).
+///
+/// ISO 32000-2 §14.7.4.4 Table 359 defines the `/Summary` entry
+/// on the `Table` structure attribute object as a free-form
+/// string supplying an accessible description of the table's
+/// purpose, structure, or content. PDF/UA-2 §8.8 / WTPDF clause
+/// 5 honour the entry as the canonical equivalent of HTML's
+/// legacy `<table summary="...">` attribute. Cascade values
+/// land on krilla `Tag::Table::with_summary(...)` at PDF
+/// emission time.
+///
+/// `none` — no summary. `<string>` — literal summary text.
+/// Initial `none`. Per-element; not inherited.
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(C, u8)]
+pub enum BdPdfTagTableSummary {
+    /// `none` (initial) — no `/Summary` entry, unless an HTML
+    /// `summary=` attribute supplies one.
+    None,
+    /// `<string>` — literal summary text.
+    Literal(OwnedStr),
+}
+
+impl BdPdfTagTableSummary {
+    /// Initial value (`none`).
+    #[inline]
+    pub fn none() -> Self {
+        Self::None
+    }
+}
+
+impl Parse for BdPdfTagTableSummary {
+    fn parse<'i, 't>(
+        _: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, style_traits::ParseError<'i>> {
+        if input
+            .try_parse(|i| i.expect_ident_matching("none"))
+            .is_ok()
+        {
+            return Ok(Self::None);
+        }
+        let s = input.expect_string()?;
+        Ok(Self::Literal(s.as_ref().to_owned().into()))
+    }
+}
+
 /// Specified value of `-bd-pdf-tag-namespace` (K6).
 ///
 /// PDF 2.0 (ISO 32000-2 §14.8.6) lets a structure element bind to

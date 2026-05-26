@@ -2720,6 +2720,34 @@ spec = "Nonstandard (moegoe -bd-* fork extension; G8 tagged-PDF role overrides)"
 animation_type = "none"
 affects = ""
 
+# moegoe T1-D2 — per-cell `/Scope` (ISO 32000-2 §14.7.4.4
+# Table 359). PDF/UA-1 §7.5.1 / PDF/UA-2 §8.8 require every
+# `Tag::TH` element to declare which axis it labels. Per-element;
+# not inherited. `none` defers to the renderer's structural
+# default and any HTML `scope=` attribute on the bearing `<th>`.
+[-bd-pdf-tag-header-cell-scope]
+type = "BdPdfTagHeaderCellScope"
+initial = "computed::BdPdfTagHeaderCellScope::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfTagHeaderCellScope::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; T1-D2 PDF/UA TH /Scope)"
+animation_type = "none"
+affects = ""
+
+# moegoe T1-D2 — per-table `/Summary` (ISO 32000-2 §14.7.4.4
+# Table 359). PDF/UA-2 §8.8 / WTPDF clause 5 — accessible
+# description of a table's purpose / structure / content. Per-
+# element; not inherited. `none` opts out (unless the HTML
+# `summary=` attribute supplies one).
+[-bd-pdf-tag-table-summary]
+type = "BdPdfTagTableSummary"
+initial = "computed::BdPdfTagTableSummary::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfTagTableSummary::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; T1-D2 PDF/UA Table /Summary)"
+animation_type = "none"
+affects = ""
+
 # moegoe K6 — PDF 2.0 `/NS` per-element namespace override
 # (ISO 32000-2 §14.8.6). `auto` follows the element's HTML
 # namespace (MathML for `<math>` subtrees; default elsewhere).
