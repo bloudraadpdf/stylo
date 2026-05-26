@@ -84,6 +84,17 @@ pub enum BdPdfStandardRole {
     Title,
     Strong,
     Em,
+    /// PDF 2.0 `Aside` structure type (ISO 32000-2 §14.8.4.3).
+    /// Content distinct from the surrounding flow — callouts,
+    /// sidebars, commentary, background information. Honoured under
+    /// PDF/UA-2 / WTPDF; downgrades to `Div` on PDF 1.7 output.
+    Aside,
+    /// PDF 2.0 `Sub` structure type (ISO 32000-2 §14.8.4.6).
+    /// Inline subdivision inside a block-level element — typically
+    /// the subscript / superscript context exposed by HTML's
+    /// `<sub>` / `<sup>` elements. Honoured under PDF/UA-2 / WTPDF;
+    /// downgrades to a `/RoleMap` custom name on PDF 1.7 output.
+    Sub,
 }
 
 /// Artifact subtype keyword for `-bd-pdf-tag: artifact(<kind>)`.
