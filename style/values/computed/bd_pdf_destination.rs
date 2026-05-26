@@ -11,8 +11,8 @@ use crate::values::computed::{Context, ToComputedValue};
 use crate::values::specified::bd_pdf_destination as specified;
 
 pub use specified::{
-    BdDestinationArea, BdPdfAttachmentLocation, BdPdfAttachmentModificationDate,
-    BdPdfAttachmentRelationship, BdPdfStringSlot,
+    BdDestinationArea, BdPdfAttachmentIcon, BdPdfAttachmentLocation,
+    BdPdfAttachmentModificationDate, BdPdfAttachmentRelationship, BdPdfStringSlot,
 };
 
 /// Computed value of `-bd-pdf-attachment-url`.

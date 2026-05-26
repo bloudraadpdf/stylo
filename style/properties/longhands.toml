@@ -3606,6 +3606,21 @@ spec = "Nonstandard (moegoe -bd-* fork extension; F9 PDF attachment URL)"
 animation_type = "none"
 affects = ""
 
+# moegoe K11 — PDF `/FileAttachment` annotation icon glyph
+# (ISO 32000-2 §12.5.6.15 Table 178). Cascades onto each
+# attachment-bearer element (one that also carries
+# `-bd-pdf-attachment-url`) and projects into the per-page
+# `/FileAttachment` annotation's `/Name` slot at finalise time.
+# Default `push-pin` matches the spec's implicit default.
+[-bd-pdf-attachment-icon]
+type = "BdPdfAttachmentIcon"
+initial = "computed::BdPdfAttachmentIcon::PushPin"
+struct = "counters"
+initial_specified_value = "specified::BdPdfAttachmentIcon::PushPin"
+spec = "Nonstandard (moegoe -bd-* fork extension; K11 PDF FileAttachment annotation /Name icon; ISO 32000-2 §12.5.6.15 Table 178)"
+animation_type = "none"
+affects = ""
+
 [-bd-pdf-destination]
 type = "BdPdfStringSlot"
 initial = "computed::BdPdfStringSlot::Auto"

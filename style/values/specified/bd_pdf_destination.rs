@@ -110,6 +110,43 @@ pub enum BdPdfAttachmentLocation {
     After,
 }
 
+/// Specified value of `-bd-pdf-attachment-icon` (K11).
+///
+/// Mirrors ISO 32000-2 §12.5.6.15 Table 178 `/Name` keyword space —
+/// selects the icon glyph a conforming reader paints over the
+/// `/FileAttachment` annotation's rectangle. Cascaded onto each
+/// element that also carries `-bd-pdf-attachment-url` (an
+/// attachment-bearer) and projected into the annotation's `/Name`
+/// slot at finalise time.
+///
+/// Default is `push-pin`, matching ISO 32000-2 §12.5.6.15 default
+/// behaviour when the `/Name` entry is absent.
+#[repr(u8)]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    Eq,
+    Hash,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[allow(missing_docs)]
+pub enum BdPdfAttachmentIcon {
+    Graph,
+    Paperclip,
+    #[default]
+    PushPin,
+    Tag,
+}
+
 /// Specified value of `-bd-pdf-attachment-relationship` (F9).
 ///
 /// Mirrors ISO 32000-2 §14.13 Table 357 `/AFRelationship` keyword

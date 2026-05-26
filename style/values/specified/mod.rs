@@ -153,8 +153,9 @@ pub use self::bd_pdf_comment::{
 };
 pub use self::bd_pdf_conformance::{BdPdfConformanceValue, BdPdfVersionValue};
 pub use self::bd_pdf_destination::{
-    BdDestinationArea, BdPdfAttachmentLocation, BdPdfAttachmentModificationDate,
-    BdPdfAttachmentRelationship, BdPdfAttachmentUrl, BdPdfStringSlot,
+    BdDestinationArea, BdPdfAttachmentIcon, BdPdfAttachmentLocation,
+    BdPdfAttachmentModificationDate, BdPdfAttachmentRelationship, BdPdfAttachmentUrl,
+    BdPdfStringSlot,
 };
 pub use self::bd_filter_resolution::BdFilterResolution;
 pub use self::bd_pdf_custom_property::{BdPdfCustomProperty, BdPdfCustomPropertyEntry};
