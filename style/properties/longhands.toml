@@ -2247,6 +2247,22 @@ spec = "Nonstandard (moegoe -bd-* fork extension; Prince-residuals -bd-pdf-role-
 animation_type = "none"
 affects = ""
 
+# moegoe F18 — custom PDF Info-dictionary properties (ISO 32000-2
+# §14.3.3 "any number of additional entries containing
+# application-specific data"). Each (custom-ident, string) pair is
+# threaded into the PDF /Info dictionary as a custom entry and
+# mirrored into the XMP packet under a pdfx-aligned namespace so
+# PDF/A consumers see the same metadata. Document-level; the cascade
+# reader honours only `:root` declarations. `none` is the initial value.
+[-bd-pdf-custom-property]
+type = "BdPdfCustomProperty"
+initial = "computed::BdPdfCustomProperty::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfCustomProperty::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; F18 PDF custom Info-dictionary entries, ISO 32000-2 §14.3.3)"
+animation_type = "none"
+affects = ""
+
 # moegoe K10 — PDF output-intent OutputCondition / RegistryName
 # descriptors (ISO 32000-2 §14.11.5). Document-level; the renderer
 # honours only `:root` declarations.

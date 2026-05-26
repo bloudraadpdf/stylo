@@ -160,6 +160,7 @@ pub use self::bd_pdf_destination::{
     BdPdfAttachmentRelationship, BdPdfAttachmentUrl, BdPdfStringSlot,
 };
 pub use self::bd_filter_resolution::BdFilterResolution;
+pub use self::bd_pdf_custom_property::{BdPdfCustomProperty, BdPdfCustomPropertyEntry};
 pub use self::bd_pdf_output_condition::BdPdfOutputCondition;
 pub use self::bd_pdf_output_registry_name::BdPdfOutputRegistryName;
 pub use self::bd_pdf_role_map::{BdPdfRoleMap, BdPdfRoleMapEntry};
@@ -293,6 +294,7 @@ pub mod bd_pdf;
 pub mod bd_pdf_colour;
 pub mod bd_pdf_comment;
 pub mod bd_pdf_conformance;
+pub mod bd_pdf_custom_property;
 pub mod bd_pdf_destination;
 pub mod bd_pdf_form;
 pub mod bd_pdf_format;
