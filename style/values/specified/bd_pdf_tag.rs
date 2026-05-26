@@ -464,6 +464,170 @@ impl Parse for BdPdfTagTableSummary {
     }
 }
 
+/// Specified value of `-bd-pdf-tag-form` (T1-D2).
+///
+/// PDFreactor's `-ro-pdf-tag-form` (pdfreactor.md:17421) is the
+/// `/Role` entry on the `/PrintField` attribute owner attached to a
+/// `Form` structure element (ISO 32000-2 §14.7.4.4 Table 359).
+/// PDF/UA-1 §7.18 / PDF/UA-2 §8.13 require non-interactive form
+/// controls in tagged PDF to declare their role so assistive
+/// technology can announce them. The cascade reader projects this
+/// onto krilla's `FormFieldRole` enum at PDF emission time.
+///
+/// `none` (initial) — no `/Role` entry; the renderer leaves the
+/// `Form` structure element without a role. `text | button |
+/// radiobutton | checkbox | listbox` — explicit roles. Per-element;
+/// not inherited.
+#[repr(u8)]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+pub enum BdPdfTagForm {
+    /// `none` (initial) — no `/Role` entry.
+    #[default]
+    None,
+    /// `text` — text field (`/Role /tv`).
+    Text,
+    /// `button` — push-button (`/Role /pb`).
+    Button,
+    /// `radiobutton` — radio button (`/Role /rb`).
+    RadioButton,
+    /// `checkbox` — checkbox (`/Role /cb`).
+    CheckBox,
+    /// `listbox` — list-box (`/Role /lb`); PDF 2.0+.
+    ListBox,
+}
+
+impl BdPdfTagForm {
+    /// Initial value (`none`).
+    #[inline]
+    pub fn none() -> Self {
+        Self::None
+    }
+}
+
+/// Specified value of `-bd-pdf-tag-form-checked` (T1-D2).
+///
+/// PDFreactor's `-ro-pdf-tag-form-checked` (pdfreactor.md:17450) is
+/// the `/checked` (PDF 1.x) / `/Checked` (PDF 2.0+) entry on the
+/// `/PrintField` attribute owner attached to a `Form` structure
+/// element representing a checkbox or radio button (ISO 32000-2
+/// §14.7.4.4 Table 359). The cascade reader projects this onto
+/// krilla's `FormFieldState` enum at PDF emission time. The `mixed`
+/// keyword mirrors HTML's `aria-checked: mixed` and PDFreactor's
+/// `neutral` keyword; the compat translator rewrites `neutral` to
+/// `mixed` so authors targeting the native surface use the
+/// `aria-checked` vocabulary.
+///
+/// `none` (initial) — no `/Checked` entry. `off | on | mixed` —
+/// explicit state. Per-element; not inherited.
+#[repr(u8)]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+pub enum BdPdfTagFormChecked {
+    /// `none` (initial) — no `/Checked` entry.
+    #[default]
+    None,
+    /// `off` — the control is unchecked.
+    Off,
+    /// `on` — the control is checked.
+    On,
+    /// `mixed` — the control is in the indeterminate / mixed
+    /// state. Mirrors HTML's `aria-checked: mixed`.
+    Mixed,
+}
+
+impl BdPdfTagFormChecked {
+    /// Initial value (`none`).
+    #[inline]
+    pub fn none() -> Self {
+        Self::None
+    }
+}
+
+/// Specified value of `-bd-pdf-tag-form-name` (T1-D2).
+///
+/// PDFreactor's `-ro-pdf-tag-form-name` (pdfreactor.md:17475) is the
+/// `/Desc` entry on the `/PrintField` attribute owner attached to a
+/// `Form` structure element (ISO 32000-2 §14.7.4.4 Table 359). The
+/// entry carries the descriptive name screen readers announce for
+/// the form control. PDFreactor's full grammar accepts a
+/// comma-separated list with `auto`, `aria-name`, `aria-description`,
+/// and `<string>` parts; the native surface accepts a simpler
+/// `none | <string>` grammar — `auto` resolution against ARIA
+/// happens in the convert layer, not the parser.
+///
+/// `none` (initial) — no `/Desc` entry. `<string>` — literal
+/// descriptive name. Per-element; not inherited.
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(C, u8)]
+pub enum BdPdfTagFormName {
+    /// `none` (initial) — no `/Desc` entry.
+    None,
+    /// `<string>` — literal descriptive name.
+    Literal(OwnedStr),
+}
+
+impl BdPdfTagFormName {
+    /// Initial value (`none`).
+    #[inline]
+    pub fn none() -> Self {
+        Self::None
+    }
+}
+
+impl Parse for BdPdfTagFormName {
+    fn parse<'i, 't>(
+        _: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, style_traits::ParseError<'i>> {
+        if input
+            .try_parse(|i| i.expect_ident_matching("none"))
+            .is_ok()
+        {
+            return Ok(Self::None);
+        }
+        let s = input.expect_string()?;
+        Ok(Self::Literal(s.as_ref().to_owned().into()))
+    }
+}
+
 /// Specified value of `-bd-pdf-tag-namespace` (K6).
 ///
 /// PDF 2.0 (ISO 32000-2 §14.8.6) lets a structure element bind to

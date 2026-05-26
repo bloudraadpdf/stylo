@@ -5,6 +5,7 @@
 //! Computed values for `-bd-pdf-tag*` properties.
 
 pub use crate::values::specified::bd_pdf_tag::{
-    BdPdfArtifactKind, BdPdfStandardRole, BdPdfTagHeaderCellScope, BdPdfTagNamespace,
-    BdPdfTagStringAuto, BdPdfTagStringPlain, BdPdfTagTableSummary, BdPdfTagValue,
+    BdPdfArtifactKind, BdPdfStandardRole, BdPdfTagForm, BdPdfTagFormChecked, BdPdfTagFormName,
+    BdPdfTagHeaderCellScope, BdPdfTagNamespace, BdPdfTagStringAuto, BdPdfTagStringPlain,
+    BdPdfTagTableSummary, BdPdfTagValue,
 };

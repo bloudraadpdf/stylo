@@ -190,8 +190,9 @@ pub use self::bd_pdf_output_intent::{
     BdPdfOutputIntent,
 };
 pub use self::bd_pdf_tag::{
-    BdPdfArtifactKind, BdPdfStandardRole, BdPdfTagHeaderCellScope, BdPdfTagNamespace,
-    BdPdfTagStringAuto, BdPdfTagStringPlain, BdPdfTagTableSummary, BdPdfTagValue,
+    BdPdfArtifactKind, BdPdfStandardRole, BdPdfTagForm, BdPdfTagFormChecked, BdPdfTagFormName,
+    BdPdfTagHeaderCellScope, BdPdfTagNamespace, BdPdfTagStringAuto, BdPdfTagStringPlain,
+    BdPdfTagTableSummary, BdPdfTagValue,
 };
 pub use self::bd_pdf_viewer::{
     BdFirstPageSide, BdInitialPage, BdInitialZoom, BdPagesCounterOffset, BdPdfTriState,

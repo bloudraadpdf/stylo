@@ -2748,6 +2748,48 @@ spec = "Nonstandard (moegoe -bd-* fork extension; T1-D2 PDF/UA Table /Summary)"
 animation_type = "none"
 affects = ""
 
+# moegoe T1-D2 — per-form-control `/Role` on the `/PrintField`
+# attribute owner (ISO 32000-2 §14.7.4.4 Table 359). PDF/UA-1
+# §7.18 / PDF/UA-2 §8.13 require non-interactive form controls in
+# tagged PDF to declare their role so a screen reader can announce
+# them. Per-element; not inherited. `none` opts out (no `/Role`).
+[-bd-pdf-tag-form]
+type = "BdPdfTagForm"
+initial = "computed::BdPdfTagForm::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfTagForm::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; T1-D2 PDF/UA /PrintField /Role)"
+animation_type = "none"
+affects = ""
+
+# moegoe T1-D2 — per-form-control `/checked` (PDF 1.x) / `/Checked`
+# (PDF 2.0+) on the `/PrintField` attribute owner (ISO 32000-2
+# §14.7.4.4 Table 359). Per-element; not inherited. `none` opts
+# out (no `/Checked`). `off | on | mixed` mirrors HTML's
+# `aria-checked` vocabulary; the compat translator rewrites
+# PDFreactor's `neutral` to `mixed`.
+[-bd-pdf-tag-form-checked]
+type = "BdPdfTagFormChecked"
+initial = "computed::BdPdfTagFormChecked::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfTagFormChecked::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; T1-D2 PDF/UA /PrintField /Checked)"
+animation_type = "none"
+affects = ""
+
+# moegoe T1-D2 — per-form-control `/Desc` on the `/PrintField`
+# attribute owner (ISO 32000-2 §14.7.4.4 Table 359). Accessible
+# name announced by screen readers. Per-element; not inherited.
+# `none` opts out; `<string>` pins a literal descriptive name.
+[-bd-pdf-tag-form-name]
+type = "BdPdfTagFormName"
+initial = "computed::BdPdfTagFormName::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfTagFormName::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; T1-D2 PDF/UA /PrintField /Desc)"
+animation_type = "none"
+affects = ""
+
 # moegoe K6 — PDF 2.0 `/NS` per-element namespace override
 # (ISO 32000-2 §14.8.6). `auto` follows the element's HTML
 # namespace (MathML for `<math>` subtrees; default elsewhere).
