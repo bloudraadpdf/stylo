@@ -674,6 +674,139 @@ impl ColorSpaceConversion for Rec2020 {
     }
 }
 
+/// The Rec. 2100 colour space with the SMPTE ST 2084 perceptual quantiser
+/// transfer function. BT.2100 primaries are identical to BT.2020, so the
+/// XYZ transforms reuse `Rec2020`'s matrices; only the transfer functions
+/// differ.
+/// https://drafts.csswg.org/css-color-hdr/#rec2100-pq
+pub struct Rec2100Pq;
+
+impl Rec2100Pq {
+    // SMPTE ST 2084 constants.
+    const M1: f32 = 2610.0 / 16384.0;
+    const M2: f32 = 2523.0 / 4096.0 * 128.0;
+    const C1: f32 = 3424.0 / 4096.0;
+    const C2: f32 = 2413.0 / 4096.0 * 32.0;
+    const C3: f32 = 2392.0 / 4096.0 * 32.0;
+    /// Peak luminance the PQ EOTF is normalised against (cd/m²). The CSS
+    /// HDR draft expects the linearised value to be expressed relative to
+    /// 10 000 cd/m², matching the SMPTE ST 2084 spec.
+    const PEAK_LUMINANCE: f32 = 10_000.0;
+}
+
+impl ColorSpaceConversion for Rec2100Pq {
+    const WHITE_POINT: WhitePoint = WhitePoint::D65;
+
+    fn to_linear_light(from: &ColorComponents) -> ColorComponents {
+        // PQ EOTF — non-linear PQ signal -> linear-light cd/m² normalised
+        // to [0, 1] against `PEAK_LUMINANCE`.
+        from.clone().map(|v| {
+            let sign = v.signum();
+            let abs = v.abs();
+            let e_pow_m2 = abs.powf(1.0 / Self::M2);
+            let numerator = (e_pow_m2 - Self::C1).max(0.0);
+            let denominator = Self::C2 - Self::C3 * e_pow_m2;
+            sign * (numerator / denominator).powf(1.0 / Self::M1)
+        })
+    }
+
+    fn to_xyz(from: &ColorComponents) -> ColorComponents {
+        Rec2020::to_xyz(from)
+    }
+
+    fn from_xyz(from: &ColorComponents) -> ColorComponents {
+        Rec2020::from_xyz(from)
+    }
+
+    fn to_gamma_encoded(from: &ColorComponents) -> ColorComponents {
+        // Inverse PQ — linear-light fraction of `PEAK_LUMINANCE` -> PQ signal.
+        from.clone().map(|v| {
+            let sign = v.signum();
+            let abs = v.abs();
+            let y_pow_m1 = abs.powf(Self::M1);
+            let numerator = Self::C1 + Self::C2 * y_pow_m1;
+            let denominator = 1.0 + Self::C3 * y_pow_m1;
+            sign * (numerator / denominator).powf(Self::M2)
+        })
+    }
+}
+
+/// The Rec. 2100 colour space with the ARIB STD-B67 hybrid log-gamma
+/// transfer function. BT.2100 primaries are identical to BT.2020.
+/// https://drafts.csswg.org/css-color-hdr/#rec2100-hlg
+pub struct Rec2100Hlg;
+
+impl Rec2100Hlg {
+    // ARIB STD-B67 constants for the HLG OETF.
+    const A: f32 = 0.17883277;
+    const B: f32 = 0.28466892; // 1 - 4 * A
+    const C: f32 = 0.55991073; // 0.5 - A * ln(4 * A)
+}
+
+impl ColorSpaceConversion for Rec2100Hlg {
+    const WHITE_POINT: WhitePoint = WhitePoint::D65;
+
+    fn to_linear_light(from: &ColorComponents) -> ColorComponents {
+        // HLG inverse OETF: signal in [0, 1] -> scene-linear in [0, 12].
+        from.clone().map(|v| {
+            let sign = v.signum();
+            let abs = v.abs();
+            if abs <= 0.5 {
+                sign * (abs * abs) / 3.0
+            } else {
+                sign * (((abs - Self::C) / Self::A).exp() + Self::B) / 12.0
+            }
+        })
+    }
+
+    fn to_xyz(from: &ColorComponents) -> ColorComponents {
+        Rec2020::to_xyz(from)
+    }
+
+    fn from_xyz(from: &ColorComponents) -> ColorComponents {
+        Rec2020::from_xyz(from)
+    }
+
+    fn to_gamma_encoded(from: &ColorComponents) -> ColorComponents {
+        // HLG OETF: scene-linear in [0, 12] -> signal in [0, 1].
+        from.clone().map(|v| {
+            let sign = v.signum();
+            let abs = v.abs();
+            let abs = abs * 12.0;
+            if abs <= 1.0 {
+                sign * (abs / 3.0).sqrt()
+            } else {
+                sign * (Self::A * (abs - Self::B).ln() + Self::C)
+            }
+        })
+    }
+}
+
+/// The Rec. 2100 colour space with a linear (gamma = 1.0) transfer function —
+/// the scene-linear representation. BT.2100 primaries are identical to BT.2020.
+/// https://drafts.csswg.org/css-color-hdr/#rec2100-linear
+pub struct Rec2100Linear;
+
+impl ColorSpaceConversion for Rec2100Linear {
+    const WHITE_POINT: WhitePoint = WhitePoint::D65;
+
+    fn to_linear_light(from: &ColorComponents) -> ColorComponents {
+        *from
+    }
+
+    fn to_xyz(from: &ColorComponents) -> ColorComponents {
+        Rec2020::to_xyz(from)
+    }
+
+    fn from_xyz(from: &ColorComponents) -> ColorComponents {
+        Rec2020::from_xyz(from)
+    }
+
+    fn to_gamma_encoded(from: &ColorComponents) -> ColorComponents {
+        *from
+    }
+}
+
 /// A color in the XYZ coordinate space with a D50 white reference.
 /// https://drafts.csswg.org/css-color-4/#predefined-xyz
 pub struct XyzD50;

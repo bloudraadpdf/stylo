@@ -131,6 +131,20 @@ pub enum ColorSpace {
     ///       specifies that `xyz` is an alias for the `xyz-d65` color space.
     #[parse(aliases = "xyz")]
     XyzD65,
+    /// CSS Color HDR Module Level 1 §4 — `color(rec2100-pq …)`. ITU-R BT.2100
+    /// primaries (identical to Rec. 2020) with the SMPTE ST 2084 perceptual
+    /// quantiser transfer function. Peak luminance 10 000 cd/m².
+    /// https://drafts.csswg.org/css-color-hdr/#rec2100-pq
+    Rec2100Pq,
+    /// CSS Color HDR Module Level 1 §4 — `color(rec2100-hlg …)`. ITU-R BT.2100
+    /// primaries with the ARIB STD-B67 hybrid log-gamma transfer function.
+    /// https://drafts.csswg.org/css-color-hdr/#rec2100-hlg
+    Rec2100Hlg,
+    /// CSS Color HDR Module Level 1 §4 — `color(rec2100-linear …)`. ITU-R BT.2100
+    /// primaries with a linear (gamma = 1.0) transfer function — the
+    /// scene-linear representation used for compositing pipelines.
+    /// https://drafts.csswg.org/css-color-hdr/#rec2100-linear
+    Rec2100Linear,
 }
 
 impl ColorSpace {
@@ -157,6 +171,9 @@ impl ColorSpace {
             | Self::A98Rgb
             | Self::ProphotoRgb
             | Self::Rec2020
+            | Self::Rec2100Pq
+            | Self::Rec2100Hlg
+            | Self::Rec2100Linear
             | Self::XyzD50
             | Self::XyzD65 => true,
             _ => false,
@@ -520,7 +537,10 @@ impl AbsoluteColor {
             | ColorSpace::DisplayP3Linear
             | ColorSpace::A98Rgb
             | ColorSpace::ProphotoRgb
-            | ColorSpace::Rec2020 => match channel_keyword {
+            | ColorSpace::Rec2020
+            | ColorSpace::Rec2100Pq
+            | ColorSpace::Rec2100Hlg
+            | ColorSpace::Rec2100Linear => match channel_keyword {
                 ChannelKeyword::R => self.c0(),
                 ChannelKeyword::G => self.c1(),
                 ChannelKeyword::B => self.c2(),
@@ -592,6 +612,9 @@ impl AbsoluteColor {
                     A98Rgb => convert::to_xyz::<convert::A98Rgb>(&components),
                     ProphotoRgb => convert::to_xyz::<convert::ProphotoRgb>(&components),
                     Rec2020 => convert::to_xyz::<convert::Rec2020>(&components),
+                    Rec2100Pq => convert::to_xyz::<convert::Rec2100Pq>(&components),
+                    Rec2100Hlg => convert::to_xyz::<convert::Rec2100Hlg>(&components),
+                    Rec2100Linear => convert::to_xyz::<convert::Rec2100Linear>(&components),
                     XyzD50 => convert::to_xyz::<convert::XyzD50>(&components),
                     XyzD65 => convert::to_xyz::<convert::XyzD65>(&components),
                 };
@@ -612,6 +635,11 @@ impl AbsoluteColor {
                     A98Rgb => convert::from_xyz::<convert::A98Rgb>(&xyz, white_point),
                     ProphotoRgb => convert::from_xyz::<convert::ProphotoRgb>(&xyz, white_point),
                     Rec2020 => convert::from_xyz::<convert::Rec2020>(&xyz, white_point),
+                    Rec2100Pq => convert::from_xyz::<convert::Rec2100Pq>(&xyz, white_point),
+                    Rec2100Hlg => convert::from_xyz::<convert::Rec2100Hlg>(&xyz, white_point),
+                    Rec2100Linear => {
+                        convert::from_xyz::<convert::Rec2100Linear>(&xyz, white_point)
+                    },
                     XyzD50 => convert::from_xyz::<convert::XyzD50>(&xyz, white_point),
                     XyzD65 => convert::from_xyz::<convert::XyzD65>(&xyz, white_point),
                 }

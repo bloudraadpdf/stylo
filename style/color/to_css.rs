@@ -132,6 +132,9 @@ impl ToCss for AbsoluteColor {
                     | ColorSpace::A98Rgb
                     | ColorSpace::ProphotoRgb
                     | ColorSpace::Rec2020
+                    | ColorSpace::Rec2100Pq
+                    | ColorSpace::Rec2100Hlg
+                    | ColorSpace::Rec2100Linear
                     | ColorSpace::XyzD50
                     | ColorSpace::XyzD65 => {
                         // These color spaces are allowed.
@@ -279,6 +282,9 @@ impl AbsoluteColor {
             | ColorSpace::A98Rgb
             | ColorSpace::ProphotoRgb
             | ColorSpace::Rec2020
+            | ColorSpace::Rec2100Pq
+            | ColorSpace::Rec2100Hlg
+            | ColorSpace::Rec2100Linear
             | ColorSpace::XyzD50
             | ColorSpace::XyzD65 => {
                 dest.write_str("color(")?;

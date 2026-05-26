@@ -9,7 +9,7 @@
 use super::{
     color_function::ColorFunction,
     component::{ColorComponent, ColorComponentType},
-    AbsoluteColor,
+    AbsoluteColor, ColorSpace,
 };
 use crate::derives::*;
 use crate::{
@@ -340,6 +340,28 @@ fn parse_lch_like<'i, 't>(
     ))
 }
 
+/// Parse the colour-space identifier inside a `color(...)` function. Accepts
+/// every CSS Color 4 predefined space (via cssparser's `PredefinedColorSpace`)
+/// AND the CSS Color HDR Level 1 §4 Rec.2100 spaces (`rec2100-pq` /
+/// `rec2100-hlg` / `rec2100-linear`) that cssparser does not yet recognise.
+fn parse_color_space_for_color_function<'i, 't>(
+    arguments: &mut Parser<'i, 't>,
+) -> Result<ColorSpace, ParseError<'i>> {
+    let location = arguments.current_source_location();
+    let start = arguments.state();
+    if let Ok(predefined) = arguments.try_parse(PredefinedColorSpace::parse) {
+        return Ok(predefined.into());
+    }
+    arguments.reset(&start);
+    let ident = arguments.expect_ident_cloned()?;
+    match_ignore_ascii_case! { &ident,
+        "rec2100-pq" => Ok(ColorSpace::Rec2100Pq),
+        "rec2100-hlg" => Ok(ColorSpace::Rec2100Hlg),
+        "rec2100-linear" => Ok(ColorSpace::Rec2100Linear),
+        _ => Err(location.new_unexpected_token_error(cssparser::Token::Ident(ident))),
+    }
+}
+
 /// Parse the color() function.
 #[inline]
 fn parse_color_with_color_space<'i, 't>(
@@ -347,7 +369,7 @@ fn parse_color_with_color_space<'i, 't>(
     arguments: &mut Parser<'i, 't>,
     origin_color: Option<SpecifiedColor>,
 ) -> Result<ColorFunction<SpecifiedColor>, ParseError<'i>> {
-    let color_space = PredefinedColorSpace::parse(arguments)?;
+    let color_space = parse_color_space_for_color_function(arguments)?;
 
     let c1 = parse_number_or_percentage(context, arguments, true)?;
     let c2 = parse_number_or_percentage(context, arguments, true)?;
@@ -361,7 +383,7 @@ fn parse_color_with_color_space<'i, 't>(
         c2,
         c3,
         alpha,
-        color_space.into(),
+        color_space,
     ))
 }
 
