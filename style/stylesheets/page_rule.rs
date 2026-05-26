@@ -113,6 +113,17 @@ page_pseudo_classes! {
     /// this is also a positional page-context pseudo with no
     /// direction component.
     Index => "index",
+    /// moegoe — `:last` page pseudo-class (PDFreactor item 20 / C.6,
+    /// `pdfreactor.md:4107,19780`).
+    ///
+    /// Matches the final page of the document. moegoe's paginator
+    /// can only set this flag once the total page count is known,
+    /// so the cascade-resolution path re-evaluates last-page
+    /// settings as a finalisation pass post-pagination. Specificity
+    /// is grouped with `:first` / `:blank` / `:first-of-group` /
+    /// `:index` (the `g` bucket) since this is a positional
+    /// page-context pseudo with no direction component.
+    Last => "last",
 }
 
 bitflags! {
@@ -147,6 +158,10 @@ bitflags! {
         /// Flag for PagePseudoClass::Index (Family 23 — book-index
         /// back-matter pages synthesised by the GCPM index renderer).
         const INDEX = 1 << 8;
+        /// Flag for PagePseudoClass::Last (PDFreactor item 20 / C.6 —
+        /// matches the final page of the document, set as a
+        /// finalisation pass once total page count is known).
+        const LAST = 1 << 9;
     }
 }
 
@@ -163,6 +178,7 @@ impl PagePseudoClassFlags {
             PagePseudoClass::Verso => PagePseudoClassFlags::VERSO,
             PagePseudoClass::FirstOfGroup => PagePseudoClassFlags::FIRST_OF_GROUP,
             PagePseudoClass::Index => PagePseudoClassFlags::INDEX,
+            PagePseudoClass::Last => PagePseudoClassFlags::LAST,
         }
     }
     /// Checks if the given pseudo class applies to this set of flags.
@@ -283,7 +299,8 @@ impl PageSelector {
                 PagePseudoClass::First
                 | PagePseudoClass::Blank
                 | PagePseudoClass::FirstOfGroup
-                | PagePseudoClass::Index => g += 1,
+                | PagePseudoClass::Index
+                | PagePseudoClass::Last => g += 1,
                 PagePseudoClass::Left
                 | PagePseudoClass::Right
                 | PagePseudoClass::Recto
