@@ -4052,6 +4052,94 @@ spec = "Nonstandard (moegoe -bd-* fork extension; G3 AcroForm signature widget �
 animation_type = "none"
 affects = ""
 
+# moegoe Family 26 — `/MK` (Appearance Characteristics) entries on
+# an AcroForm widget annotation per ISO 32000-2 §12.5.6.19 Table 167.
+# Per-element; not inherited; consumed by the form-widget conversion
+# arm in `moegoe-css`. Pushbutton-only entries (`RC`, `AC`, `RI`, `IX`,
+# `IF`, `TP`) parse on any element; the renderer applies them only to
+# pushbutton widgets.
+
+[-bd-pdf-form-field-mk-border-colour]
+type = "BdPdfFormFieldMkColour"
+initial = "computed::BdPdfFormFieldMkColour::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfFormFieldMkColour::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; T1-D4 /MK /BC border colour)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-form-field-mk-background-colour]
+type = "BdPdfFormFieldMkColour"
+initial = "computed::BdPdfFormFieldMkColour::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfFormFieldMkColour::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; T1-D4 /MK /BG background colour)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-form-field-mk-rotation]
+type = "BdPdfFormFieldMkRotation"
+initial = "computed::BdPdfFormFieldMkRotation::Zero"
+struct = "counters"
+initial_specified_value = "specified::BdPdfFormFieldMkRotation::Zero"
+spec = "Nonstandard (moegoe -bd-* fork extension; T1-D4 /MK /R rotation)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-form-field-mk-rollover-caption]
+type = "BdPdfFormFieldMkCaption"
+initial = "computed::BdPdfFormFieldMkCaption::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfFormFieldMkCaption::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; T1-D4 /MK /RC rollover caption)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-form-field-mk-down-caption]
+type = "BdPdfFormFieldMkCaption"
+initial = "computed::BdPdfFormFieldMkCaption::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfFormFieldMkCaption::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; T1-D4 /MK /AC down caption)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-form-field-mk-rollover-icon]
+type = "BdPdfFormFieldMkIcon"
+initial = "computed::BdPdfFormFieldMkIcon::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfFormFieldMkIcon::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; T1-D4 /MK /RI rollover icon)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-form-field-mk-alternate-icon]
+type = "BdPdfFormFieldMkIcon"
+initial = "computed::BdPdfFormFieldMkIcon::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfFormFieldMkIcon::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; T1-D4 /MK /IX alternate icon)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-form-field-mk-icon-fit]
+type = "BdPdfFormFieldMkIconFit"
+initial = "computed::BdPdfFormFieldMkIconFit::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfFormFieldMkIconFit::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; T1-D4 /MK /IF icon fit)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-form-field-mk-text-position]
+type = "BdPdfFormFieldMkTextPosition"
+initial = "computed::BdPdfFormFieldMkTextPosition::CaptionOnly"
+struct = "counters"
+initial_specified_value = "specified::BdPdfFormFieldMkTextPosition::CaptionOnly"
+spec = "Nonstandard (moegoe -bd-* fork extension; T1-D4 /MK /TP text position)"
+animation_type = "none"
+affects = ""
+
 # moegoe Family 26 (annotation-level) — `/F 2` (`HIDDEN`) per
 # ISO 32000-2 §12.5.3 Table 165. Cascade opt-in distinct from the
 # widget *field* flags above (which write `/Ff`). The initial value

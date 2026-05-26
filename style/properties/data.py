@@ -598,6 +598,8 @@ class Longhand(Property):
                 "BdPdfAnnotationHidden",
                 "BdPdfFormFieldFlags",
                 "BdPdfFormFieldMaxLength",
+                "BdPdfFormFieldMkRotation",
+                "BdPdfFormFieldMkTextPosition",
                 "BdPdfLinkArea",
                 "BdPdfLinkBorderStyle",
                 "BdPdfSignatureFieldLock",

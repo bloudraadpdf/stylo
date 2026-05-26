@@ -166,7 +166,11 @@ pub use self::bd_pdf_script::{BdPdfEventKind, BdPdfEventScript, BdPdfEventScript
 pub use self::bd_pdf_tagged::BdPdfTagged;
 pub use self::bd_pdf_trapped::BdPdfTrapped;
 pub use self::bd_pdf_form::{
-    BdPdfAnnotationHidden, BdPdfFormFieldFlags, BdPdfFormFieldMaxLength, BdPdfSignatureFieldLock,
+    BdPdfAnnotationHidden, BdPdfFormFieldFlags, BdPdfFormFieldMaxLength,
+    BdPdfFormFieldMkCaption, BdPdfFormFieldMkColour, BdPdfFormFieldMkIcon,
+    BdPdfFormFieldMkIconFit, BdPdfFormFieldMkIconFitScaleType,
+    BdPdfFormFieldMkIconFitScaleWhen, BdPdfFormFieldMkIconFitValue,
+    BdPdfFormFieldMkRotation, BdPdfFormFieldMkTextPosition, BdPdfSignatureFieldLock,
     BdPdfSignatureFieldLockFields, BdPdfSignatureFieldName,
 };
 pub use self::bd_pdf_format::BdPdfFormat;

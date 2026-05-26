@@ -171,7 +171,11 @@ pub use self::bd_pdf_trapped::BdPdfTrapped;
 // re-export by computed path; bd_pdf_destination now declares its own
 // computed `BdPdfAttachmentUrl` that contains `ComputedUrl`.
 pub use self::bd_pdf_form::{
-    BdPdfAnnotationHidden, BdPdfFormFieldFlags, BdPdfFormFieldMaxLength, BdPdfSignatureFieldLock,
+    BdPdfAnnotationHidden, BdPdfFormFieldFlags, BdPdfFormFieldMaxLength,
+    BdPdfFormFieldMkCaption, BdPdfFormFieldMkColour, BdPdfFormFieldMkIcon,
+    BdPdfFormFieldMkIconFit, BdPdfFormFieldMkIconFitScaleType,
+    BdPdfFormFieldMkIconFitScaleWhen, BdPdfFormFieldMkIconFitValue,
+    BdPdfFormFieldMkRotation, BdPdfFormFieldMkTextPosition, BdPdfSignatureFieldLock,
     BdPdfSignatureFieldLockFields, BdPdfSignatureFieldName,
 };
 pub use self::bd_pdf_format::BdPdfFormat;

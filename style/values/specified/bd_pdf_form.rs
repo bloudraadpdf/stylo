@@ -24,6 +24,9 @@
 
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
+use crate::values::specified::color::Color;
+use crate::values::specified::url::SpecifiedUrl;
+use crate::values::specified::Percentage;
 use crate::values::CustomIdent;
 use crate::{OwnedSlice, OwnedStr};
 use cssparser::Parser;
@@ -337,5 +340,432 @@ impl Parse for BdPdfSignatureFieldName {
         }
         let s = input.expect_string()?;
         Ok(Self::Literal(s.as_ref().to_owned().into()))
+    }
+}
+
+// ---------------------------------------------------------------------
+// `-bd-pdf-form-field-mk-*` — `/MK` Appearance Characteristics
+// (ISO 32000-2 §12.5.6.19 Table 167) longhands for AcroForm widget
+// annotations. Per-element; not inherited; consumed by the
+// form-widget conversion arm in `moegoe-css`. Pushbutton-only entries
+// (`RC`, `AC`, `RI`, `IX`, `IF`, `TP`) are still parsed on any
+// element; the renderer applies them only to pushbutton widgets per
+// the spec.
+// ---------------------------------------------------------------------
+
+/// Specified value of `-bd-pdf-form-field-mk-border-colour` and
+/// `-bd-pdf-form-field-mk-background-colour`.
+///
+/// `none` (initial) omits the corresponding `/MK /BC` or `/MK /BG`
+/// entry — the viewer falls back to its default. A `<color>` value
+/// writes the device-space colour array per Table 167. Wide-gamut
+/// colours collapse to a three-component DeviceRGB array because
+/// `/MK` colour entries are device-space only.
+#[derive(
+    Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped,
+)]
+#[repr(C, u8)]
+pub enum BdPdfFormFieldMkColour {
+    /// `none` — entry omitted from `/MK`.
+    None,
+    /// Explicit colour.
+    Colour(Color),
+}
+
+impl Default for BdPdfFormFieldMkColour {
+    #[inline]
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+impl BdPdfFormFieldMkColour {
+    /// Whether the value is `none`.
+    #[inline]
+    pub fn is_none(&self) -> bool {
+        matches!(self, Self::None)
+    }
+}
+
+impl Parse for BdPdfFormFieldMkColour {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if input
+            .try_parse(|i| i.expect_ident_matching("none"))
+            .is_ok()
+        {
+            return Ok(Self::None);
+        }
+        Ok(Self::Colour(Color::parse(context, input)?))
+    }
+}
+
+/// Specified value of `-bd-pdf-form-field-mk-rotation`.
+///
+/// `/MK /R` per ISO 32000-2 §12.5.6.19 Table 167 — the widget
+/// rotation in degrees, restricted to multiples of 90 in `[0, 360)`.
+/// `0` is the initial value and is treated identically to omission
+/// (no `/R` entry emitted).
+#[repr(u8)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+pub enum BdPdfFormFieldMkRotation {
+    /// `0` — no rotation (initial, omits `/R`).
+    #[default]
+    #[parse(aliases = "0")]
+    Zero,
+    /// `90` — 90° counter-clockwise.
+    #[parse(aliases = "90")]
+    Quarter,
+    /// `180` — upside-down.
+    #[parse(aliases = "180")]
+    Half,
+    /// `270` — 90° clockwise.
+    #[parse(aliases = "270")]
+    ThreeQuarter,
+}
+
+impl BdPdfFormFieldMkRotation {
+    /// Whether the value is the initial (`0`, omits `/R`).
+    #[inline]
+    pub fn is_zero(&self) -> bool {
+        matches!(self, Self::Zero)
+    }
+}
+
+/// Specified value of `-bd-pdf-form-field-mk-rollover-caption` and
+/// `-bd-pdf-form-field-mk-down-caption`.
+///
+/// `none` (initial) omits the corresponding `/MK /RC` or `/MK /AC`
+/// entry. A `<string>` value writes the caption verbatim; meaningful
+/// only on pushbutton widgets.
+#[derive(
+    Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue,
+    ToResolvedValue, ToShmem, ToTyped,
+)]
+#[repr(C, u8)]
+pub enum BdPdfFormFieldMkCaption {
+    /// `none` — entry omitted from `/MK`.
+    None,
+    /// Explicit caption string.
+    Literal(OwnedStr),
+}
+
+impl Default for BdPdfFormFieldMkCaption {
+    #[inline]
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+impl BdPdfFormFieldMkCaption {
+    /// Whether the value is `none`.
+    #[inline]
+    pub fn is_none(&self) -> bool {
+        matches!(self, Self::None)
+    }
+}
+
+impl Parse for BdPdfFormFieldMkCaption {
+    fn parse<'i, 't>(
+        _: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if input
+            .try_parse(|i| i.expect_ident_matching("none"))
+            .is_ok()
+        {
+            return Ok(Self::None);
+        }
+        let s = input.expect_string()?;
+        Ok(Self::Literal(s.as_ref().to_owned().into()))
+    }
+}
+
+/// Specified value of `-bd-pdf-form-field-mk-rollover-icon` and
+/// `-bd-pdf-form-field-mk-alternate-icon`.
+///
+/// `none` (initial) omits the corresponding `/MK /RI` or `/MK /IX`
+/// entry. `url(<href>)` declares the image source; the cascade
+/// reader fetches the bytes through the standard moegoe
+/// [`ResourceLoader`] and constructs a `FormXObject` for embedding
+/// per ISO 32000-2 §12.5.6.19 Table 167. Meaningful only on
+/// pushbutton widgets.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
+#[repr(C, u8)]
+pub enum BdPdfFormFieldMkIcon {
+    /// `none` — entry omitted from `/MK`.
+    None,
+    /// `url(<href>)` — external icon image.
+    Url(SpecifiedUrl),
+}
+
+impl Default for BdPdfFormFieldMkIcon {
+    #[inline]
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+impl BdPdfFormFieldMkIcon {
+    /// Whether the value is `none`.
+    #[inline]
+    pub fn is_none(&self) -> bool {
+        matches!(self, Self::None)
+    }
+}
+
+impl Parse for BdPdfFormFieldMkIcon {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if input
+            .try_parse(|i| i.expect_ident_matching("none"))
+            .is_ok()
+        {
+            return Ok(Self::None);
+        }
+        let url = SpecifiedUrl::parse(context, input)?;
+        Ok(Self::Url(url))
+    }
+}
+
+/// `/MK /IF /S` scale type per ISO 32000-2 §12.5.6.19 Table 188.
+#[repr(u8)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[allow(missing_docs)]
+pub enum BdPdfFormFieldMkIconFitScaleType {
+    /// `always` — anamorphic scaling (`/S /A`, the spec default).
+    #[default]
+    Always,
+    /// `proportional` — proportional scaling (`/S /P`).
+    Proportional,
+    /// `never` — never scale; matches `scale-when: never` (`/SW /N`)
+    /// at the renderer.
+    Never,
+    /// `bigger` — only scale when the content is bigger; matches
+    /// `scale-when: content-bigger` (`/SW /B`).
+    Bigger,
+}
+
+/// `/MK /IF /SW` scale-when keyword per ISO 32000-2 §12.5.6.19
+/// Table 189.
+#[repr(u8)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[allow(missing_docs)]
+pub enum BdPdfFormFieldMkIconFitScaleWhen {
+    /// `always` — `/SW /A` (the spec default).
+    #[default]
+    Always,
+    /// `content-smaller` — `/SW /S`.
+    ContentSmaller,
+    /// `content-bigger` — `/SW /B`.
+    ContentBigger,
+    /// `never` — `/SW /N`.
+    Never,
+}
+
+/// Specified value of `-bd-pdf-form-field-mk-icon-fit`.
+///
+/// `/MK /IF` icon-fit dictionary per ISO 32000-2 §12.5.6.19 Table 187.
+/// `none` (initial) omits the entry; otherwise the value is a triple
+/// `<scale-type> || <scale-when> || <alignment>` where alignment is a
+/// `<percentage> <percentage>` pair (`/A` array). Each component is
+/// optional in any order; missing components fall back to their
+/// initial values (`always`, `always`, `50% 50%`).
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
+#[repr(C, u8)]
+pub enum BdPdfFormFieldMkIconFit {
+    /// `none` — entry omitted from `/MK`.
+    None,
+    /// Explicit icon-fit triple.
+    Fit(BdPdfFormFieldMkIconFitValue),
+}
+
+/// The non-`none` payload of [`BdPdfFormFieldMkIconFit`]. Carries the
+/// three orderable components of the `<scale-type> || <scale-when> ||
+/// <alignment>` value-list.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
+#[repr(C)]
+pub struct BdPdfFormFieldMkIconFitValue {
+    /// `/IF /S` scale-type keyword.
+    pub scale_type: BdPdfFormFieldMkIconFitScaleType,
+    /// `/IF /SW` scale-when keyword.
+    pub scale_when: BdPdfFormFieldMkIconFitScaleWhen,
+    /// `/IF /A[0]` horizontal alignment percentage in `[0%, 100%]`.
+    pub align_x: Percentage,
+    /// `/IF /A[1]` vertical alignment percentage in `[0%, 100%]`.
+    pub align_y: Percentage,
+}
+
+impl Default for BdPdfFormFieldMkIconFit {
+    #[inline]
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+impl BdPdfFormFieldMkIconFit {
+    /// Whether the value is `none`.
+    #[inline]
+    pub fn is_none(&self) -> bool {
+        matches!(self, Self::None)
+    }
+}
+
+impl Parse for BdPdfFormFieldMkIconFit {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if input
+            .try_parse(|i| i.expect_ident_matching("none"))
+            .is_ok()
+        {
+            return Ok(Self::None);
+        }
+        // `<scale-type> || <scale-when> || <align-x> <align-y>` —
+        // each component is optional; at least one must parse. The
+        // alignment pair is the only multi-token component, so we
+        // accept the first percentage we see, then require the
+        // second percentage to follow before yielding control back.
+        let mut scale_type: Option<BdPdfFormFieldMkIconFitScaleType> = None;
+        let mut scale_when: Option<BdPdfFormFieldMkIconFitScaleWhen> = None;
+        let mut align: Option<(Percentage, Percentage)> = None;
+        loop {
+            if scale_type.is_none() {
+                if let Ok(v) = input.try_parse(BdPdfFormFieldMkIconFitScaleType::parse) {
+                    scale_type = Some(v);
+                    continue;
+                }
+            }
+            if scale_when.is_none() {
+                if let Ok(v) = input.try_parse(BdPdfFormFieldMkIconFitScaleWhen::parse) {
+                    scale_when = Some(v);
+                    continue;
+                }
+            }
+            if align.is_none() {
+                if let Ok(pair) = input.try_parse(|i| -> Result<(Percentage, Percentage), ParseError<'i>> {
+                    let x = Percentage::parse(context, i)?;
+                    let y = Percentage::parse(context, i)?;
+                    Ok((x, y))
+                }) {
+                    align = Some(pair);
+                    continue;
+                }
+            }
+            break;
+        }
+        if scale_type.is_none() && scale_when.is_none() && align.is_none() {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+        let (align_x, align_y) = align.unwrap_or_else(|| {
+            (Percentage::new(0.5), Percentage::new(0.5))
+        });
+        Ok(Self::Fit(BdPdfFormFieldMkIconFitValue {
+            scale_type: scale_type.unwrap_or_default(),
+            scale_when: scale_when.unwrap_or_default(),
+            align_x,
+            align_y,
+        }))
+    }
+}
+
+/// Specified value of `-bd-pdf-form-field-mk-text-position`.
+///
+/// `/MK /TP` integer keyword per ISO 32000-2 §12.5.6.19 Table 192.
+/// Selects the position of the pushbutton caption relative to the
+/// icon. `caption-only` (initial) matches the absent-`/TP` default
+/// and is treated identically to omission.
+#[repr(u8)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[allow(missing_docs)]
+pub enum BdPdfFormFieldMkTextPosition {
+    /// `caption-only` — `/TP 0` (initial, omits `/TP`).
+    #[default]
+    CaptionOnly,
+    /// `icon-only` — `/TP 1`.
+    IconOnly,
+    /// `caption-below-icon` — `/TP 2`.
+    CaptionBelowIcon,
+    /// `caption-above-icon` — `/TP 3`.
+    CaptionAboveIcon,
+    /// `caption-right-of-icon` — `/TP 4`.
+    CaptionRightOfIcon,
+    /// `caption-left-of-icon` — `/TP 5`.
+    CaptionLeftOfIcon,
+    /// `caption-overlaid-on-icon` — `/TP 6`.
+    CaptionOverlaidOnIcon,
+}
+
+impl BdPdfFormFieldMkTextPosition {
+    /// Whether the value is the initial (`caption-only`, omits
+    /// `/TP`).
+    #[inline]
+    pub fn is_caption_only(&self) -> bool {
+        matches!(self, Self::CaptionOnly)
     }
 }
