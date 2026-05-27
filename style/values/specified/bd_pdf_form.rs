@@ -408,6 +408,12 @@ impl Parse for BdPdfFormFieldMkColour {
 /// rotation in degrees, restricted to multiples of 90 in `[0, 360)`.
 /// `0` is the initial value and is treated identically to omission
 /// (no `/R` entry emitted).
+///
+/// Accepts either the CSS integer form (`0`, `90`, `180`, `270`) or
+/// keyword aliases (`zero`, `quarter`, `half`, `three-quarter`).
+/// The Stylo `Parse` derive only matches ident tokens, so integer
+/// parsing is handled by a manual `Parse` impl that tries the integer
+/// path first.
 #[repr(u8)]
 #[derive(
     Clone,
@@ -416,7 +422,6 @@ impl Parse for BdPdfFormFieldMkColour {
     Default,
     Eq,
     MallocSizeOf,
-    Parse,
     PartialEq,
     SpecifiedValueInfo,
     ToCss,
@@ -426,19 +431,45 @@ impl Parse for BdPdfFormFieldMkColour {
     ToTyped,
 )]
 pub enum BdPdfFormFieldMkRotation {
-    /// `0` — no rotation (initial, omits `/R`).
+    /// `0` / `zero` — no rotation (initial, omits `/R`).
     #[default]
-    #[parse(aliases = "0")]
     Zero,
-    /// `90` — 90° counter-clockwise.
-    #[parse(aliases = "90")]
+    /// `90` / `quarter` — 90° counter-clockwise.
     Quarter,
-    /// `180` — upside-down.
-    #[parse(aliases = "180")]
+    /// `180` / `half` — upside-down.
     Half,
-    /// `270` — 90° clockwise.
-    #[parse(aliases = "270")]
+    /// `270` / `three-quarter` — 90° clockwise.
     ThreeQuarter,
+}
+
+impl Parse for BdPdfFormFieldMkRotation {
+    fn parse<'i, 't>(
+        _: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        // Try integer tokens first (`90`, `180`, `270`, `0`).
+        if let Ok(n) = input.try_parse(|i| i.expect_integer()) {
+            return match n {
+                0 => Ok(Self::Zero),
+                90 => Ok(Self::Quarter),
+                180 => Ok(Self::Half),
+                270 => Ok(Self::ThreeQuarter),
+                _ => Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError)),
+            };
+        }
+        // Fall back to keyword aliases.
+        let location = input.current_source_location();
+        let ident = input.expect_ident()?;
+        match_ignore_ascii_case! { &ident,
+            "zero" => Ok(Self::Zero),
+            "quarter" => Ok(Self::Quarter),
+            "half" => Ok(Self::Half),
+            "three-quarter" => Ok(Self::ThreeQuarter),
+            _ => Err(location.new_unexpected_token_error(
+                cssparser::Token::Ident(ident.clone())
+            ))
+        }
+    }
 }
 
 impl BdPdfFormFieldMkRotation {
