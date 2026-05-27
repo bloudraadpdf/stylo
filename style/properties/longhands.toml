@@ -4438,6 +4438,33 @@ spec = "Nonstandard (moegoe -bd-* fork extension; G3 annotation /F HIDDEN flag �
 animation_type = "none"
 affects = ""
 
+# V1-21 — `-bd-pdf-multimedia` cluster controlling Sound / Movie /
+# Screen annotation emission per ISO 32000-2 §12.5.6.16–18. The
+# default `auto` derives annotation type from the HTML element
+# (`<audio>` → Sound, `<video>` → Screen, `<embed>` → Movie); `none`
+# suppresses emission. Per-element; not inherited.
+[-bd-pdf-multimedia]
+type = "BdPdfMultimedia"
+initial = "computed::BdPdfMultimedia::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfMultimedia::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; V1-21 PDF multimedia annotation emission gate)"
+animation_type = "none"
+affects = ""
+
+# V1-21 — Sound annotation encoding hint per ISO 32000-2 §12.5.6.16
+# Table 185. `auto` (initial) sniffs the audio container; explicit
+# keywords pin the resulting `/E` entry on the embedded sound stream
+# dict. Per-element; not inherited.
+[-bd-pdf-multimedia-format]
+type = "BdPdfMultimediaFormat"
+initial = "computed::BdPdfMultimediaFormat::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfMultimediaFormat::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; V1-21 sound annotation encoding hint)"
+animation_type = "none"
+affects = ""
+
 # moegoe Family 16 — change-bar revision marks. Per-element; not
 # inherited. The paginator allocates a margin-side track and the
 # paint stage draws a vertical bar covering the fragment's vertical
