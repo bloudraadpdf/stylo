@@ -502,11 +502,19 @@ pub enum BdPdfTagForm {
     Text,
     /// `button` — push-button (`/Role /pb`).
     Button,
-    /// `radiobutton` — radio button (`/Role /rb`).
+    /// `radiobutton` — radio button (`/Role /rb`). Single-token
+    /// keyword matches the PDFreactor surface
+    /// (`-ro-pdf-tag-form: radiobutton`).
+    #[css(keyword = "radiobutton")]
     RadioButton,
-    /// `checkbox` — checkbox (`/Role /cb`).
+    /// `checkbox` — checkbox (`/Role /cb`). Single-token keyword
+    /// matches the PDFreactor surface
+    /// (`-ro-pdf-tag-form: checkbox`).
+    #[css(keyword = "checkbox")]
     CheckBox,
-    /// `listbox` — list-box (`/Role /lb`); PDF 2.0+.
+    /// `listbox` — list-box (`/Role /lb`); PDF 2.0+. Single-token
+    /// keyword matches the PDFreactor surface.
+    #[css(keyword = "listbox")]
     ListBox,
 }
 
