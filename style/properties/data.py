@@ -603,6 +603,7 @@ class Longhand(Property):
                 "BdPdfLinkArea",
                 "BdPdfLinkBorderStyle",
                 "BdPdfSignatureFieldLock",
+                "BdSourcePage",
                 "BdPrintMarkSet",
                 "BdPdfTagged",
                 "BdPdfTrapped",

@@ -2820,6 +2820,57 @@ spec = "Nonstandard (moegoe -bd-* fork extension; F31 tagged-PDF /Alt override)"
 animation_type = "none"
 affects = ""
 
+# moegoe F30 — embed an external PDF page inside an element's
+# content box. Per-element; not inherited. PDFreactor parity for
+# `-ro-source` / `-ro-source-page` / `-ro-source-area` (matrix lines
+# 18133/18149/18161). `none` (initial) opts out; `url(...)` selects
+# the source PDF. The renderer resolves the URL via the embedder's
+# `ResourceLoader`, then forwards the chosen page to krilla's
+# `Surface::draw_pdf_page` over the element's content box.
+[-bd-source]
+type = "BdSource"
+initial = "computed::BdSource::None"
+struct = "counters"
+initial_specified_value = "specified::BdSource::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; F30 PDF page embedding)"
+animation_type = "none"
+affects = "paint"
+
+# moegoe F30 — 1-based page index inside the `-bd-source` PDF.
+# Per-element; not inherited. Initial `1` matches PDFreactor
+# `-ro-source-page` default semantics. Out-of-range page indexes are
+# silently clamped at paint time so an authored typo never aborts
+# the render — the page table is only known after the URL has been
+# fetched and parsed.
+[-bd-source-page]
+type = "BdSourcePage"
+initial = "computed::BdSourcePage::one()"
+struct = "counters"
+initial_specified_value = "specified::BdSourcePage::one()"
+spec = "Nonstandard (moegoe -bd-* fork extension; F30 source page index)"
+animation_type = "none"
+affects = "paint"
+
+# moegoe F30 — clipping rectangle applied in the source PDF's own
+# coordinate space. Per-element; not inherited. `content-box`
+# (initial) embeds the full page; `inset(<top> <right> <bottom>
+# <left>)` crops the source page by the four CSS lengths. The
+# lengths compute to CSS pixels; the renderer projects them onto
+# PDF points (1 px = 0.75 pt) before clipping.
+[-bd-source-area]
+type = "BdSourceArea"
+initial = "computed::BdSourceArea::ContentBox"
+struct = "counters"
+initial_specified_value = "specified::BdSourceArea::ContentBox"
+spec = "Nonstandard (moegoe -bd-* fork extension; F30 source clip area)"
+animation_type = "none"
+affects = "paint"
+# `BdSourceArea::Inset { top, right, bottom, left }` carries four
+# `NonNegativeLength` values which trip the 24-byte BOX_THRESHOLD;
+# box the longhand so it pays the side-channel cost only when
+# authors opt in to a non-default inset.
+boxed = true
+
 # moegoe K3 — Optional Content Group (OCG) opt-in (ISO 32000-2
 # §8.11). Per-element; not inherited. `<custom-ident>` assigns the
 # element subtree to the named PDF layer; distinct names register

@@ -189,6 +189,7 @@ pub use self::bd_pdf_tag::{
     BdPdfTagHeaderCellScope, BdPdfTagNamespace, BdPdfTagStringAuto, BdPdfTagStringPlain,
     BdPdfTagTableSummary, BdPdfTagValue,
 };
+pub use self::bd_source::{BdSource, BdSourceArea, BdSourcePage};
 pub use self::bd_pdf_viewer::{
     BdFirstPageSide, BdInitialPage, BdInitialZoom, BdPagesCounterOffset, BdPdfTriState,
     BdPdfViewerDirection, BdPdfViewerDuplex, BdPdfViewerNonFullscreenPageMode,
@@ -311,6 +312,7 @@ pub mod bd_pdf_tag;
 pub mod bd_pdf_tagged;
 pub mod bd_pdf_trapped;
 pub mod bd_pdf_viewer;
+pub mod bd_source;
 pub mod bd_filter_resolution;
 pub mod bd_running_copy;
 pub mod bd_sidenote;

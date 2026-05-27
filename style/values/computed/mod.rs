@@ -199,6 +199,7 @@ pub use self::bd_pdf_viewer::{
     BdPdfViewerDirection, BdPdfViewerDuplex, BdPdfViewerNonFullscreenPageMode,
     BdPdfViewerPageLayout, BdPdfViewerPageMode, BdPdfViewerPrintScaling,
 };
+pub use self::bd_source::{BdSource, BdSourceArea, BdSourcePage};
 pub use self::bd_gaps::{BorderClip, MaskBorderMode, Overlay};
 pub use self::bd_misc::{
     BdCaptionPage, BdFlow, BdIntegerAuto, BdLang, BdLineBreakOpportunity, BdObjectSlice,
@@ -316,6 +317,7 @@ pub mod bd_pdf_tag;
 pub mod bd_pdf_tagged;
 pub mod bd_pdf_trapped;
 pub mod bd_pdf_viewer;
+pub mod bd_source;
 pub mod bd_running_copy;
 pub mod bd_sidenote;
 pub mod bd_tab_stops;
