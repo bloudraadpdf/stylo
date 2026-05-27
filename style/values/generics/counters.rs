@@ -554,6 +554,20 @@ pub enum GenericContentItem<I> {
         TargetReference,
         #[css(skip_if = "is_content_keyword")] TargetTextKeyword,
     ),
+    /// moegoe `-bd-target-counter-offset(<target>, <ident>, <integer>
+    /// [, <counter-style>])` — F37, modelled on PDFreactor matrix line
+    /// 19676 `-ro-target-counter-offset()`. Resolves like `target-counter`
+    /// but adds the literal integer offset to the resolved counter value
+    /// before applying the counter style. The offset is an authored
+    /// integer literal, not a `<integer>` calc expression, to match the
+    /// PDFreactor grammar.
+    #[css(comma, function = "-bd-target-counter-offset")]
+    BdTargetCounterOffset(
+        TargetReference,
+        CustomIdent,
+        i32,
+        #[css(skip_if = "is_decimal")] CounterStyleType,
+    ),
     /// `leader(dotted | solid | space | <string>)`
     ///
     /// https://www.w3.org/TR/css-gcpm-3/#funcdef-leader
