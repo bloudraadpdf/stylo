@@ -3851,6 +3851,57 @@ spec = "Nonstandard (moegoe -bd-* fork extension; K11 PDF FileAttachment annotat
 animation_type = "none"
 affects = ""
 
+# moegoe V1-20 — PDF rubber-stamp annotation (ISO 32000-2 §12.5.6.13).
+# Five-longhand cluster gating one `/Subtype /Stamp` annotation per
+# bearer element. `-bd-pdf-stamp-icon` is the gating slot — `none`
+# (initial) suppresses emission; any other value drives the renderer
+# to emit a stamp over the element's painted bbox with the chosen
+# `/Name` glyph (or a `custom("<name>")` author-defined name).
+[-bd-pdf-stamp-icon]
+type = "BdPdfStampIcon"
+initial = "computed::BdPdfStampIcon::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfStampIcon::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; V1-20 PDF Stamp annotation /Name icon; ISO 32000-2 §12.5.6.13 Table 184)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-stamp-contents]
+type = "BdPdfStampString"
+initial = "computed::BdPdfStampString::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfStampString::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; V1-20 PDF Stamp annotation /Contents; ISO 32000-2 §12.5.2)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-stamp-title]
+type = "BdPdfStampString"
+initial = "computed::BdPdfStampString::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfStampString::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; V1-20 PDF Stamp annotation /T; ISO 32000-2 §12.5.6.4 Table 169)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-stamp-subject]
+type = "BdPdfStampString"
+initial = "computed::BdPdfStampString::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfStampString::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; V1-20 PDF Stamp annotation /Subj; ISO 32000-2 §12.5.6.4 Table 169)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-stamp-intent]
+type = "BdPdfStampIntent"
+initial = "computed::BdPdfStampIntent::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfStampIntent::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; V1-20 PDF Stamp annotation /IT; ISO 32000-2 §12.5.6.2 Table 168)"
+animation_type = "none"
+affects = ""
+
 [-bd-pdf-destination]
 type = "BdPdfStringSlot"
 initial = "computed::BdPdfStringSlot::Auto"

@@ -162,6 +162,7 @@ pub use self::bd_pdf_destination::{
     BdPdfAttachmentModificationDate, BdPdfAttachmentRelationship, BdPdfAttachmentUrl,
     BdPdfStringSlot,
 };
+pub use self::bd_pdf_stamp::{BdPdfStampIcon, BdPdfStampIntent, BdPdfStampString};
 pub use self::bd_filter_resolution::BdFilterResolution;
 pub use self::bd_pdf_custom_property::{BdPdfCustomProperty, BdPdfCustomPropertyEntry};
 pub use self::bd_pdf_output_condition::BdPdfOutputCondition;
@@ -317,6 +318,7 @@ pub mod bd_pdf_output_intent;
 pub mod bd_pdf_output_registry_name;
 pub mod bd_pdf_role_map;
 pub mod bd_pdf_script;
+pub mod bd_pdf_stamp;
 pub mod bd_pdf_tag;
 pub mod bd_pdf_tagged;
 pub mod bd_pdf_trapped;
