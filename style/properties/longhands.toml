@@ -2191,6 +2191,47 @@ spec = "Nonstandard (moegoe -bd-* fork extension; G64 PDF catalogue /AA event sc
 animation_type = "none"
 affects = ""
 
+# moegoe — per-widget AcroForm `/AA /C` (Calculate) JavaScript.
+# `none` (initial) omits the entry. A `<string>` value is written
+# verbatim into the widget's additional-actions dictionary so a PDF
+# viewer fires it whenever any field's value changes — the natural
+# place for `AFSimple_Calculate("SUM", [...])` and friends.
+# Non-inherited; ISO 32000-2 §12.6.4.16 + §12.7.4 Table 230.
+[-bd-pdf-calculate]
+type = "BdPdfWidgetActionScript"
+initial = "computed::BdPdfWidgetActionScript::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfWidgetActionScript::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; AcroForm widget /AA /C, ISO 32000-2 §12.6.4.16)"
+animation_type = "none"
+affects = ""
+
+# moegoe — per-widget AcroForm `/AA /Fo` (Focus) JavaScript.
+# `none` (initial) omits the entry. A `<string>` value is written
+# verbatim; PDF viewers fire it when the widget receives input
+# focus. Non-inherited; ISO 32000-2 §12.6.4.16 + §12.7.4 Table 230.
+[-bd-pdf-focus]
+type = "BdPdfWidgetActionScript"
+initial = "computed::BdPdfWidgetActionScript::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfWidgetActionScript::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; AcroForm widget /AA /Fo, ISO 32000-2 §12.6.4.16)"
+animation_type = "none"
+affects = ""
+
+# moegoe — per-widget AcroForm `/AA /Bl` (Blur) JavaScript.
+# `none` (initial) omits the entry. A `<string>` value is written
+# verbatim; PDF viewers fire it when the widget loses input focus.
+# Non-inherited; ISO 32000-2 §12.6.4.16 + §12.7.4 Table 230.
+[-bd-pdf-blur]
+type = "BdPdfWidgetActionScript"
+initial = "computed::BdPdfWidgetActionScript::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfWidgetActionScript::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; AcroForm widget /AA /Bl, ISO 32000-2 §12.6.4.16)"
+animation_type = "none"
+affects = ""
+
 # moegoe G4 — PDF/A and PDF/UA conformance. Document-level; the
 # renderer honours only `:root` declarations.
 [-bd-pdf-conformance]

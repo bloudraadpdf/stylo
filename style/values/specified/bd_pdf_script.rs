@@ -299,3 +299,71 @@ impl Parse for BdPdfEventScripts {
         Ok(Self::Specs(OwnedSlice::from(specs)))
     }
 }
+
+/// Specified value of the per-widget AcroForm `/AA` JavaScript
+/// trio extension — `-bd-pdf-calculate`, `-bd-pdf-focus`, and
+/// `-bd-pdf-blur`. These cascade onto AcroForm widget annotations
+/// and project onto krilla's `WidgetAnnotation::with_*_action`
+/// setters at PDF emission time, populating the `/AA /C`, `/AA /Fo`,
+/// and `/AA /Bl` entries per ISO 32000-2 §12.6.4.16 Table 230.
+///
+/// `none` (initial) leaves the corresponding `/AA` slot unset.
+/// A `<string>` value is written verbatim as the
+/// `Action /JavaScript /JS` body — moegoe does NOT invoke a
+/// JavaScript engine here; the bytes are passed through to the
+/// PDF viewer which executes them at the corresponding event.
+///
+/// Non-inherited: each widget reads the value at its own host
+/// element. Author-provided values override any HTML-input-type
+/// defaults the convert layer assigns (`AFNumber_Keystroke` etc.).
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(C, u8)]
+pub enum BdPdfWidgetActionScript {
+    /// `none` — the `/AA` slot is omitted from the widget's
+    /// additional-actions dictionary.
+    None,
+    /// `<string>` — JavaScript source written verbatim into the
+    /// `/AA /<key> /JS` entry.
+    Literal(OwnedStr),
+}
+
+impl BdPdfWidgetActionScript {
+    /// `none` value (initial).
+    #[inline]
+    pub fn none() -> Self {
+        Self::None
+    }
+
+    /// Whether the value is `none`.
+    #[inline]
+    pub fn is_none(&self) -> bool {
+        matches!(self, Self::None)
+    }
+}
+
+impl Parse for BdPdfWidgetActionScript {
+    fn parse<'i, 't>(
+        _: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if input
+            .try_parse(|i| i.expect_ident_matching("none"))
+            .is_ok()
+        {
+            return Ok(Self::None);
+        }
+        let s = input.expect_string()?;
+        Ok(Self::Literal(s.as_ref().to_owned().into()))
+    }
+}
