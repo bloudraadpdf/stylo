@@ -159,6 +159,7 @@ pub use self::bd_pdf_destination::{
     BdPdfAttachmentModificationDate, BdPdfAttachmentRelationship, BdPdfAttachmentUrl,
     BdPdfStringSlot,
 };
+pub use self::bd_pdf_multimedia::{BdPdfMultimedia, BdPdfMultimediaFormat};
 pub use self::bd_filter_resolution::BdFilterResolution;
 pub use self::bd_pdf_custom_property::{BdPdfCustomProperty, BdPdfCustomPropertyEntry};
 pub use self::bd_pdf_output_condition::BdPdfOutputCondition;
@@ -304,6 +305,7 @@ pub mod bd_pdf_destination;
 pub mod bd_pdf_form;
 pub mod bd_pdf_format;
 pub mod bd_pdf_layer;
+pub mod bd_pdf_multimedia;
 pub mod bd_pdf_output;
 pub mod bd_pdf_output_condition;
 pub mod bd_pdf_output_intent;

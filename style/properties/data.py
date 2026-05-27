@@ -601,6 +601,8 @@ class Longhand(Property):
                 "BdPdfFormFieldMkRotation",
                 "BdPdfFormFieldMkTextPosition",
                 "BdPdfLinkArea",
+                "BdPdfMultimedia",
+                "BdPdfMultimediaFormat",
                 "BdPdfLinkBorderStyle",
                 "BdPdfSignatureFieldLock",
                 "BdSourcePage",
