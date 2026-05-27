@@ -2802,6 +2802,24 @@ spec = "Nonstandard (moegoe -bd-* fork extension; K6 tagged-PDF /NS namespace ov
 animation_type = "none"
 affects = ""
 
+# moegoe F31 — tagged-PDF /Alt override for replaced and non-
+# replaced elements (PDFreactor `-ro-alt-text`, pdfreactor.md
+# §12775; ISO 32000-2 §14.7.5.2). Authored CSS value wins over
+# the DOM `alt=` attribute and lands on the structure element's
+# /Alt entry. Distinct from `-bd-pdf-tag-alt` (the explicit
+# struct-attribute longhand) at the cascade surface, but both
+# converge onto the same IR slot at the conversion boundary —
+# `-bd-pdf-tag-alt` takes precedence when both are authored.
+# Per-element; not inherited.
+[-bd-pdf-alt-text]
+type = "BdPdfTagStringAuto"
+initial = "computed::BdPdfTagStringAuto::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfTagStringAuto::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F31 tagged-PDF /Alt override)"
+animation_type = "none"
+affects = ""
+
 # moegoe K3 — Optional Content Group (OCG) opt-in (ISO 32000-2
 # §8.11). Per-element; not inherited. `<custom-ident>` assigns the
 # element subtree to the named PDF layer; distinct names register
