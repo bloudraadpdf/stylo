@@ -164,7 +164,9 @@ pub use self::bd_pdf_custom_property::{BdPdfCustomProperty, BdPdfCustomPropertyE
 pub use self::bd_pdf_output_condition::BdPdfOutputCondition;
 pub use self::bd_pdf_output_registry_name::BdPdfOutputRegistryName;
 pub use self::bd_pdf_role_map::{BdPdfRoleMap, BdPdfRoleMapEntry};
-pub use self::bd_pdf_script::{BdPdfEventKind, BdPdfEventScript, BdPdfEventScripts, BdPdfScript};
+pub use self::bd_pdf_script::{
+    BdPdfEventKind, BdPdfEventScript, BdPdfEventScripts, BdPdfScript, BdPdfWidgetActionScript,
+};
 pub use self::bd_pdf_tagged::BdPdfTagged;
 pub use self::bd_pdf_trapped::BdPdfTrapped;
 pub use self::bd_pdf_form::{

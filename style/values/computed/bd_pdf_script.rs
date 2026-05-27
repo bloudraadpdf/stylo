@@ -9,5 +9,5 @@
 //! through unchanged, and the event-key enum is `Copy`.
 
 pub use crate::values::specified::bd_pdf_script::{
-    BdPdfEventKind, BdPdfEventScript, BdPdfEventScripts, BdPdfScript,
+    BdPdfEventKind, BdPdfEventScript, BdPdfEventScripts, BdPdfScript, BdPdfWidgetActionScript,
 };
