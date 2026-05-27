@@ -360,6 +360,23 @@ fn parse_content_item<'i, 't>(
                     }).unwrap_or_default();
                     Ok(generics::ContentItem::TargetText(url, keyword))
                 }),
+                // moegoe F37 — `-bd-target-counter-offset(<target>,
+                // <ident>, <integer> [, <counter-style>])`. Modelled on
+                // PDFreactor matrix line 19676 `-ro-target-counter-offset`.
+                // The offset is an authored integer literal that is added
+                // to the target's resolved counter value before the style
+                // is applied.
+                "-bd-target-counter-offset" if allow_counter_functions => input.parse_nested_block(|input| {
+                    let url = parse_target_reference(context, input)?;
+                    input.expect_comma()?;
+                    let name = CustomIdent::parse(input, &[])?;
+                    input.expect_comma()?;
+                    let offset = Integer::parse(context, input)?.value();
+                    let style = Content::parse_counter_style(context, input)?;
+                    Ok(generics::ContentItem::BdTargetCounterOffset(
+                        url, name, offset, style,
+                    ))
+                }),
                 "leader" if allow_counter_functions => input.parse_nested_block(|input| {
                     let leader_type = if let Ok(ident) = input.try_parse(|i| i.expect_ident().map(|s| s.clone())) {
                         match_ignore_ascii_case! { &ident,
