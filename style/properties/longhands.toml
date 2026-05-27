@@ -3485,6 +3485,24 @@ spec = "Nonstandard (moegoe -bd-* fork extension; F5 per-image clip path)"
 animation_type = "none"
 affects = "paint"
 
+[-bd-image-interactivity]
+type = "BdImageInteractivity"
+initial = "computed::BdImageInteractivity::Enabled"
+struct = "counters"
+initial_specified_value = "specified::BdImageInteractivity::Enabled"
+spec = "Nonstandard (moegoe -bd-* fork extension; F33 image annotation gating, PDFreactor -ro-image-interactivity parity)"
+animation_type = "none"
+affects = "paint"
+
+[-bd-image-orientation]
+type = "BdImageOrientation"
+initial = "computed::BdImageOrientation::FromImage"
+struct = "counters"
+initial_specified_value = "specified::BdImageOrientation::FromImage"
+spec = "Nonstandard (moegoe -bd-* fork extension; F33 image orientation, PDFreactor -ro-image-orientation parity, extends CSS Images 3 §6.1 with <angle>)"
+animation_type = "none"
+affects = "paint"
+
 # moegoe F6 — footnote area styling (rule + inline + side-position).
 # Audit: docs/audits/CSS-COVERAGE-AUDIT-2026-05-14/stylo-push-plan.md
 [-bd-footnote-rule-length]

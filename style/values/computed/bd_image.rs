@@ -12,7 +12,9 @@ use crate::values::specified::bd_image as specified;
 use std::fmt::{self, Write};
 use style_traits::{CssWriter, ToCss};
 
-pub use crate::values::specified::bd_image::{BdImageMagic, BdImageResampling};
+pub use crate::values::specified::bd_image::{
+    BdImageInteractivity, BdImageMagic, BdImageResampling,
+};
 
 /// Computed value of `image-resolution` / `-bd-image-resolution`.
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, ToResolvedValue, ToShmem, ToTyped)]
@@ -192,6 +194,71 @@ impl ToComputedValue for specified::BdImageClipPath {
                 ToComputedValue::from_computed_value(s.as_ref()),
             )),
             BdImageClipPath::Url(u) => Self::Url(ToComputedValue::from_computed_value(u)),
+        }
+    }
+}
+
+/// Computed value of `-bd-image-orientation`.
+///
+/// `Angle(degrees)` carries the rotation as a single `f32` of degrees
+/// (already normalised by `ToComputedValue`). Storing degrees rather
+/// than the computed `Angle` type sidesteps the latter's lack of a
+/// `ToShmem` impl — the property never needs to round-trip back into
+/// a specified Angle once cascaded.
+#[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, ToResolvedValue, ToShmem, ToTyped)]
+#[repr(C, u8)]
+pub enum BdImageOrientation {
+    /// `none`
+    None,
+    /// `from-image`
+    FromImage,
+    /// `<angle>` normalised to degrees, clockwise.
+    Angle(Number),
+}
+
+impl BdImageOrientation {
+    /// Initial value (`from-image`).
+    #[inline]
+    pub fn from_image() -> Self {
+        Self::FromImage
+    }
+}
+
+impl ToCss for BdImageOrientation {
+    fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        match self {
+            Self::None => dest.write_str("none"),
+            Self::FromImage => dest.write_str("from-image"),
+            Self::Angle(deg) => {
+                deg.to_css(dest)?;
+                dest.write_str("deg")
+            },
+        }
+    }
+}
+
+impl ToComputedValue for specified::BdImageOrientation {
+    type ComputedValue = BdImageOrientation;
+
+    fn to_computed_value(&self, ctx: &Context) -> Self::ComputedValue {
+        match self {
+            Self::None => BdImageOrientation::None,
+            Self::FromImage => BdImageOrientation::FromImage,
+            Self::Angle(a) => {
+                BdImageOrientation::Angle(a.to_computed_value(ctx).degrees().into())
+            },
+        }
+    }
+
+    fn from_computed_value(computed: &Self::ComputedValue) -> Self {
+        use crate::values::specified::Angle as SpecifiedAngle;
+        match computed {
+            BdImageOrientation::None => Self::None,
+            BdImageOrientation::FromImage => Self::FromImage,
+            BdImageOrientation::Angle(deg) => Self::Angle(SpecifiedAngle::from_degrees(
+                ToComputedValue::from_computed_value(deg),
+                false,
+            )),
         }
     }
 }

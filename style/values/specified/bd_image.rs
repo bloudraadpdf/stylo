@@ -28,7 +28,7 @@ use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
 use crate::values::specified::basic_shape::{AllowedBasicShapes, BasicShape, ShapeType};
 use crate::values::specified::url::SpecifiedUrl;
-use crate::values::specified::{Number, Resolution};
+use crate::values::specified::{Angle, Number, Resolution};
 use cssparser::{match_ignore_ascii_case, Parser};
 use std::fmt::{self, Write};
 use style_traits::{CssWriter, ParseError, StyleParseErrorKind, ToCss};
@@ -309,6 +309,98 @@ impl Parse for BdImageClipPath {
             AllowedBasicShapes::ALL,
             ShapeType::Filled,
         )?)))
+    }
+}
+
+/// `-bd-image-interactivity`.
+///
+/// PDFreactor matrix line 15665 — `-ro-image-interactivity`.
+/// `enabled` (initial) preserves any `/Link` or `/Widget` annotation
+/// overlay attached to the image's element; `disabled` suppresses
+/// those annotations so the image is non-interactive when the PDF is
+/// rendered (the bitmap still embeds as an `/Image` XObject).
+#[repr(u8)]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[allow(missing_docs)]
+pub enum BdImageInteractivity {
+    #[default]
+    Enabled,
+    Disabled,
+}
+
+/// `-bd-image-orientation`.
+///
+/// PDFreactor matrix line 15682 — `-ro-image-orientation`. Extends the
+/// CSS Images 3 §6.1 `image-orientation` keyword set with an explicit
+/// `<angle>` rotation. `none` ignores EXIF and renders the image as
+/// encoded (matches CSS Images 3 `none`); `from-image` honours the
+/// EXIF `Orientation` tag (matches CSS Images 3 `from-image`);
+/// `<angle>` rotates clockwise by the given angle (degrees, radians,
+/// gradians, or turns).
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToShmem, ToTyped)]
+#[repr(C, u8)]
+pub enum BdImageOrientation {
+    /// `none` — ignore EXIF Orientation, draw image as encoded.
+    None,
+    /// `from-image` — apply EXIF Orientation tag at decode time.
+    FromImage,
+    /// `<angle>` — additional clockwise rotation.
+    Angle(Angle),
+}
+
+impl BdImageOrientation {
+    /// Initial value (`from-image`).
+    #[inline]
+    pub fn from_image() -> Self {
+        Self::FromImage
+    }
+}
+
+impl ToCss for BdImageOrientation {
+    fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        match self {
+            Self::None => dest.write_str("none"),
+            Self::FromImage => dest.write_str("from-image"),
+            Self::Angle(a) => a.to_css(dest),
+        }
+    }
+}
+
+impl Parse for BdImageOrientation {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        // Try the angle first so `0deg` parses cleanly before the keyword
+        // arm runs `expect_ident`. CSS-VALUES §6.1 forbids unitless zero
+        // for `<angle>` outside transforms, which matches the PDFreactor
+        // surface — authors must write `0deg`, not bare `0`.
+        if let Ok(angle) = input.try_parse(|i| Angle::parse(context, i)) {
+            return Ok(Self::Angle(angle));
+        }
+        let location = input.current_source_location();
+        let ident = input.expect_ident()?.clone();
+        Ok(match_ignore_ascii_case! { &*ident,
+            "none" => Self::None,
+            "from-image" => Self::FromImage,
+            _ => return Err(location.new_custom_error(
+                StyleParseErrorKind::UnspecifiedError,
+            )),
+        })
     }
 }
 

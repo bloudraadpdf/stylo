@@ -123,7 +123,8 @@ pub use self::bd_hyphenation::{
     BdLinebreakMagic,
 };
 pub use self::bd_image::{
-    BdImageClipPath, BdImageMagic, BdImageRecompression, BdImageResampling, BdImageResolution,
+    BdImageClipPath, BdImageInteractivity, BdImageMagic, BdImageOrientation, BdImageRecompression,
+    BdImageResampling, BdImageResolution,
 };
 pub use self::bd_line_grid::{BdBaselineGrid, BdLineGrid, BdLineSnap, BdLineStackingStrategy};
 pub use self::bd_link::{BdLink, BdLinkArea};
