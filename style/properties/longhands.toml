@@ -5968,16 +5968,20 @@ spec = "Nonstandard (moegoe -bd-* fork extension; F32.10 replaced-element opt-in
 animation_type = "none"
 affects = "layout"
 
-# F32.12 — uniform first-page content scale
-# (PDFreactor -ro-scale-content).
+# F36 — page-level uniform content scale applied at PDF content-
+# stream open via a `[s 0 0 s 0 0] cm` transform. Authored on `:root`;
+# layout (line breaks, page breaks, multicol balance, widows/orphans)
+# is unaffected — only the visual paint scales. Supersedes the
+# earlier F32.12 number-typed prototype to match PDFreactor matrix
+# line 17962 (`<percentage> | fit-page`).
 [-bd-scale-content]
 type = "BdScaleContent"
-initial = "computed::BdScaleContent::Auto"
+initial = "computed::BdScaleContent::initial()"
 struct = "counters"
-initial_specified_value = "specified::BdScaleContent::Auto"
-spec = "Nonstandard (moegoe -bd-* fork extension; F32.12 first-page content scale)"
+initial_specified_value = "specified::BdScaleContent::initial()"
+spec = "Nonstandard (moegoe -bd-* fork extension; F36 page-level content scale)"
 animation_type = "none"
-affects = "layout"
+affects = ""
 
 # F32.13 — absolute-positioning reference box
 # (PDFreactor -ro-position-origin).

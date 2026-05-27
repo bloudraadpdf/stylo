@@ -16,7 +16,7 @@ use crate::parser::{Parse, ParserContext};
 use crate::values::computed::{
     Context as ComputedContext, ToComputedValue as ToComputedValueTrait,
 };
-use crate::values::specified::{Integer, Number};
+use crate::values::specified::{Integer, Percentage};
 use crate::values::CSSFloat;
 use crate::OwnedStr;
 use cssparser::Parser;
@@ -343,29 +343,43 @@ pub enum BdReplacedElement {
     Image,
 }
 
-/// Specified value of `-bd-scale-content` / `-bd-print-scale-content`
-/// (F32.12, F32.22).
+/// Specified value of `-bd-scale-content` (F36; supersedes the
+/// earlier F32.12 number-typed prototype).
 ///
-/// PDFreactor `-ro-scale-content` — uniform scale factor applied to
-/// the first-page content area (intended for "fit fold-out diagram
-/// onto trimmed page" use cases). `auto` (initial) — no scaling.
-/// `<number>` — multiplicative factor (1.0 = identity).
+/// PDFreactor `-ro-scale-content` (matrix line 17962) — page-level
+/// uniform visual scale applied to the entire content stream of
+/// every page via a `[s 0 0 s 0 0] cm` transform pushed at content-
+/// stream open. Authored on `:root`; non-root declarations have no
+/// effect on the renderer.
+///
+/// `Percentage(p)` (initial `100%`) — every page paints at `p` of
+/// natural size. `1.0` (100%) is the identity — the renderer elides
+/// the `cm` transform entirely. `fit-page` (per-page) — each page's
+/// scale is `min(1.0, page_content_height / natural_content_height)`
+/// so any page whose natural content exceeds the page content box
+/// shrinks uniformly to fit, while pages already within the content
+/// box paint at full size. Layout (line breaks, page breaks,
+/// widows / orphans, multicol balance) is unaffected — only the
+/// visual paint scales.
 #[derive(
     Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped,
 )]
 #[repr(C, u8)]
 pub enum BdScaleContent {
-    /// `auto` — no scaling.
-    Auto,
-    /// `<number>` — scale factor.
-    Factor(Number),
+    /// `<percentage>` — uniform scale factor expressed as a
+    /// percentage. Stored as the parsed `Percentage` so `to_css`
+    /// round-trips the authored token. Initial value: `100%`.
+    Percentage(Percentage),
+    /// `fit-page` — per-page shrink-to-fit when natural content
+    /// overflows the page content box.
+    FitPage,
 }
 
 impl BdScaleContent {
-    /// Initial value (`auto`).
+    /// Initial value (`100%`).
     #[inline]
-    pub fn auto() -> Self {
-        Self::Auto
+    pub fn initial() -> Self {
+        Self::Percentage(Percentage::new(1.0))
     }
 }
 
@@ -374,18 +388,21 @@ impl Parse for BdScaleContent {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
-            return Ok(Self::Auto);
+        if input
+            .try_parse(|i| i.expect_ident_matching("fit-page"))
+            .is_ok()
+        {
+            return Ok(Self::FitPage);
         }
-        let n = Number::parse(context, input)?;
-        Ok(Self::Factor(n))
+        Ok(Self::Percentage(Percentage::parse(context, input)?))
     }
 }
 
 /// Computed value of `-bd-scale-content`.
 ///
-/// The inner number becomes a plain `f32` to align with `Number`'s
-/// `ToComputedValue::ComputedValue = CSSFloat`.
+/// The percentage is computed to a plain `CSSFloat` factor (e.g.
+/// `0.5` for `50%`) so downstream consumers can multiply directly
+/// without re-deriving the unit base.
 #[derive(
     Clone,
     Debug,
@@ -399,10 +416,18 @@ impl Parse for BdScaleContent {
 )]
 #[repr(C, u8)]
 pub enum ComputedBdScaleContent {
-    /// `auto`.
-    Auto,
-    /// `<number>` factor.
-    Factor(CSSFloat),
+    /// `<percentage>` — resolved to a multiplicative factor.
+    Percentage(CSSFloat),
+    /// `fit-page` — per-page shrink-to-fit.
+    FitPage,
+}
+
+impl ComputedBdScaleContent {
+    /// Initial computed value (`100%` → factor `1.0`).
+    #[inline]
+    pub fn initial() -> Self {
+        Self::Percentage(1.0)
+    }
 }
 
 impl ToComputedValueTrait for BdScaleContent {
@@ -410,17 +435,17 @@ impl ToComputedValueTrait for BdScaleContent {
 
     fn to_computed_value(&self, context: &ComputedContext) -> ComputedBdScaleContent {
         match *self {
-            Self::Auto => ComputedBdScaleContent::Auto,
-            Self::Factor(ref n) => ComputedBdScaleContent::Factor(n.to_computed_value(context)),
+            Self::Percentage(ref p) => {
+                ComputedBdScaleContent::Percentage(p.to_computed_value(context).0)
+            }
+            Self::FitPage => ComputedBdScaleContent::FitPage,
         }
     }
 
     fn from_computed_value(computed: &ComputedBdScaleContent) -> Self {
         match *computed {
-            ComputedBdScaleContent::Auto => Self::Auto,
-            ComputedBdScaleContent::Factor(f) => {
-                Self::Factor(<Number as ToComputedValueTrait>::from_computed_value(&f))
-            }
+            ComputedBdScaleContent::Percentage(f) => Self::Percentage(Percentage::new(f)),
+            ComputedBdScaleContent::FitPage => Self::FitPage,
         }
     }
 }

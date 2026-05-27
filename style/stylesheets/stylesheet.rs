@@ -2301,7 +2301,7 @@ mod tests {
                 -bd-truncate-margin-after-break: none;
                 -bd-listitem-value: 7;
                 -bd-replacedelement: image;
-                -bd-scale-content: 0.75;
+                -bd-scale-content: 75%;
                 -bd-position-origin: padding;
                 -bd-line-break-opportunity: before;
                 -bd-object-slice: slice;
