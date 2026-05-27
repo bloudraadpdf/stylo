@@ -156,7 +156,7 @@ pub use self::bd_pdf_comment::{
 };
 pub use self::bd_pdf_conformance::{BdPdfConformanceValue, BdPdfVersionValue};
 pub use self::bd_pdf_destination::{
-    BdDestinationArea, BdPdfAttachmentIcon, BdPdfAttachmentLocation,
+    BdDestinationArea, BdPdfAttachmentIcon, BdPdfAttachmentLocation, BdPdfAttachmentOrder,
     BdPdfAttachmentModificationDate, BdPdfAttachmentRelationship, BdPdfAttachmentUrl,
     BdPdfStringSlot,
 };

@@ -86,6 +86,25 @@ impl Parse for BdPdfStringSlot {
 }
 
 /// Specified value of `-bd-pdf-attachment-location`.
+///
+/// Mirrors PDFreactor's `-ro-pdf-attachment-location` vocabulary
+/// (`element | document`). Selects the *association scope* of the
+/// embedded file relative to its bearing element:
+///
+/// - `element` (default) — the cascade-bearer also surfaces a per-page
+///   `/Subtype /FileAttachment` annotation (ISO 32000-2 §12.5.6.15) at
+///   the element's painted bbox; the file payload is shared with the
+///   catalogue's `/Names /EmbeddedFiles` entry via krilla's content-hash
+///   deduplication.
+/// - `document` — only the document-level `/Names /EmbeddedFiles` entry
+///   is emitted; no per-page annotation.
+///
+/// The disjoint `/AF` array ordering axis (`before | after`) lives on
+/// the companion `-bd-pdf-attachment-order` longhand
+/// (`BdPdfAttachmentOrder`). Splitting the two orthogonal axes onto
+/// separate longhands keeps the K11 closure vocabulary aligned with
+/// PDFreactor's `-ro-pdf-attachment-location` without overloading a
+/// single keyword space.
 #[repr(u8)]
 #[derive(
     Clone,
@@ -105,6 +124,42 @@ impl Parse for BdPdfStringSlot {
 )]
 #[allow(missing_docs)]
 pub enum BdPdfAttachmentLocation {
+    #[default]
+    Element,
+    Document,
+}
+
+/// Specified value of `-bd-pdf-attachment-order` (K11 closure).
+///
+/// Selects the ordering of the embedded file in the catalogue's
+/// `/AF` (associated files) array (ISO 32000-2 §14.13). The
+/// PDFreactor surface does not carry this axis — it was previously
+/// folded into `-bd-pdf-attachment-location: before | after` (K9)
+/// before the K11 vocab-mismatch closure split out the
+/// association-scope axis onto `-bd-pdf-attachment-location`'s
+/// `element | document` keywords.
+///
+/// `before` (default) places the attachment ahead of the host
+/// document in the `/AF` array; `after` places it after.
+#[repr(u8)]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    Eq,
+    Hash,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[allow(missing_docs)]
+pub enum BdPdfAttachmentOrder {
     #[default]
     Before,
     After,

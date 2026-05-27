@@ -3596,10 +3596,25 @@ affects = ""
 
 [-bd-pdf-attachment-location]
 type = "BdPdfAttachmentLocation"
-initial = "computed::BdPdfAttachmentLocation::Before"
+initial = "computed::BdPdfAttachmentLocation::Element"
 struct = "counters"
-initial_specified_value = "specified::BdPdfAttachmentLocation::Before"
-spec = "Nonstandard (moegoe -bd-* fork extension; F9 PDF attachment location)"
+initial_specified_value = "specified::BdPdfAttachmentLocation::Element"
+spec = "Nonstandard (moegoe -bd-* fork extension; K11 closure — PDF attachment association scope: element | document; PDFreactor -ro-pdf-attachment-location vocab)"
+animation_type = "none"
+affects = ""
+
+# moegoe K11 closure — PDF attachment `/AF` array ordering axis.
+# Split out from `-bd-pdf-attachment-location` so the location longhand
+# can carry PDFreactor's `element | document` association-scope
+# vocabulary without overloading two orthogonal axes onto one keyword
+# space. `before` (default) emits the file before the host document in
+# the `/AF` array; `after` emits it after.
+[-bd-pdf-attachment-order]
+type = "BdPdfAttachmentOrder"
+initial = "computed::BdPdfAttachmentOrder::Before"
+struct = "counters"
+initial_specified_value = "specified::BdPdfAttachmentOrder::Before"
+spec = "Nonstandard (moegoe -bd-* fork extension; K11 closure — PDF /AF array ordering; ISO 32000-2 §14.13)"
 animation_type = "none"
 affects = ""
 
