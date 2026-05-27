@@ -91,7 +91,40 @@ pub enum BdPdfCommentIcon {
     Insert,
 }
 
-/// Specified value of `-bd-pdf-comment-state`.
+/// Specified value of `-bd-pdf-comment-open` (formerly
+/// `-bd-pdf-comment-state`).
+///
+/// Drives the PDF `/Open` flag on a Text annotation — whether the
+/// pop-up is initially shown when the page is opened. The original
+/// `-bd-pdf-comment-state` name has been reclaimed for the
+/// review-state model (`/State` + `/StateModel`); the open/closed
+/// keyword pair lives on the renamed longhand.
+#[repr(u8)]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[allow(missing_docs)]
+pub enum BdPdfCommentOpen {
+    #[default]
+    Closed,
+    Open,
+}
+
+/// Specified value of `-bd-pdf-comment-state` (PDF `/State`,
+/// ISO 32000-2 §12.5.6.4). Together with [`BdPdfCommentStateModel`]
+/// drives the review-state markup on a comment annotation.
 #[repr(u8)]
 #[derive(
     Clone,
@@ -111,8 +144,38 @@ pub enum BdPdfCommentIcon {
 #[allow(missing_docs)]
 pub enum BdPdfCommentState {
     #[default]
-    Closed,
-    Open,
+    None,
+    Marked,
+    Unmarked,
+    Accepted,
+    Rejected,
+    Cancelled,
+    Completed,
+}
+
+/// Specified value of `-bd-pdf-comment-state-model` (PDF
+/// `/StateModel`, ISO 32000-2 §12.5.6.4).
+#[repr(u8)]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[allow(missing_docs)]
+pub enum BdPdfCommentStateModel {
+    #[default]
+    Marked,
+    Review,
 }
 
 /// Specified value of `-bd-pdf-comment-contents` and
@@ -288,6 +351,89 @@ impl Parse for BdPdfCommentDate {
     ) -> Result<Self, style_traits::ParseError<'i>> {
         if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
             return Ok(Self::Auto);
+        }
+        let s = input.expect_string()?;
+        Ok(Self::Literal(s.as_ref().to_owned().into()))
+    }
+}
+
+/// Specified value of `-bd-pdf-comment-subject` (PDF `/Subj`,
+/// ISO 32000-2 §12.5.6.4 Table 169). `auto` (initial) suppresses
+/// `/Subj` so the viewer falls back to its default; a literal
+/// `<string>` projects verbatim onto the annotation dictionary.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue,
+    ToResolvedValue, ToShmem, ToTyped)]
+#[repr(C, u8)]
+pub enum BdPdfCommentSubject {
+    /// `auto` — no `/Subj` emission.
+    Auto,
+    /// `<string>` — explicit subject line.
+    Literal(OwnedStr),
+}
+
+impl BdPdfCommentSubject {
+    /// Initial value (`auto`).
+    #[inline]
+    pub fn auto() -> Self {
+        Self::Auto
+    }
+
+    /// Whether the value is `auto`.
+    #[inline]
+    pub fn is_auto(&self) -> bool {
+        matches!(self, Self::Auto)
+    }
+}
+
+impl Parse for BdPdfCommentSubject {
+    fn parse<'i, 't>(
+        _: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, style_traits::ParseError<'i>> {
+        if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
+            return Ok(Self::Auto);
+        }
+        let s = input.expect_string()?;
+        Ok(Self::Literal(s.as_ref().to_owned().into()))
+    }
+}
+
+/// Specified value of `-bd-pdf-comment-date-format`. Advisory format
+/// string used when `-bd-pdf-comment-date` resolves to the render-time
+/// timestamp (see PDFreactor `-ro-comment-dateformat`); mirrors
+/// Java `SimpleDateFormat` syntax. `none` (initial) leaves the
+/// renderer's default ISO 32000-2 §7.9.4 PDF date format untouched.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue,
+    ToResolvedValue, ToShmem, ToTyped)]
+#[repr(C, u8)]
+pub enum BdPdfCommentDateFormat {
+    /// `none` — renderer default (`D:YYYYMMDDhhmmssZ`).
+    None,
+    /// `<string>` — explicit format spec.
+    Literal(OwnedStr),
+}
+
+impl BdPdfCommentDateFormat {
+    /// Initial value (`none`).
+    #[inline]
+    pub fn none() -> Self {
+        Self::None
+    }
+
+    /// Whether the value is `none`.
+    #[inline]
+    pub fn is_none(&self) -> bool {
+        matches!(self, Self::None)
+    }
+}
+
+impl Parse for BdPdfCommentDateFormat {
+    fn parse<'i, 't>(
+        _: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, style_traits::ParseError<'i>> {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
+            return Ok(Self::None);
         }
         let s = input.expect_string()?;
         Ok(Self::Literal(s.as_ref().to_owned().into()))

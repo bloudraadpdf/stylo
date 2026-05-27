@@ -11,8 +11,9 @@ use crate::values::computed::{Context, ToComputedValue};
 use crate::values::specified::bd_pdf_comment as specified;
 
 pub use specified::{
-    BdPdfCommentAuthor, BdPdfCommentDate, BdPdfCommentIcon, BdPdfCommentKind, BdPdfCommentPosition,
-    BdPdfCommentState, BdPdfCommentString,
+    BdPdfCommentAuthor, BdPdfCommentDate, BdPdfCommentDateFormat, BdPdfCommentIcon,
+    BdPdfCommentKind, BdPdfCommentOpen, BdPdfCommentPosition, BdPdfCommentState,
+    BdPdfCommentStateModel, BdPdfCommentString, BdPdfCommentSubject,
 };
 
 /// Computed value of `-bd-pdf-comment-colour`.

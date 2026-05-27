@@ -151,8 +151,9 @@ pub use self::bd_pagination::{
 pub use self::bd_pdf::BdPdfMetaValue;
 pub use self::bd_pdf_colour::{BdPdfOverprint, BdPdfOverprintContent, BdPdfPageColourSpace};
 pub use self::bd_pdf_comment::{
-    BdPdfCommentAuthor, BdPdfCommentColour, BdPdfCommentDate, BdPdfCommentIcon, BdPdfCommentKind,
-    BdPdfCommentPosition, BdPdfCommentState, BdPdfCommentString, BdPdfLinkArea, BdPdfLinkBorder,
+    BdPdfCommentAuthor, BdPdfCommentColour, BdPdfCommentDate, BdPdfCommentDateFormat,
+    BdPdfCommentIcon, BdPdfCommentKind, BdPdfCommentOpen, BdPdfCommentPosition, BdPdfCommentState,
+    BdPdfCommentStateModel, BdPdfCommentString, BdPdfCommentSubject, BdPdfLinkArea, BdPdfLinkBorder,
     BdPdfLinkBorderColor, BdPdfLinkBorderStyle, BdPdfLinkBorderWidth,
 };
 pub use self::bd_pdf_conformance::{BdPdfConformanceValue, BdPdfVersionValue};

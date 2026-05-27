@@ -2627,12 +2627,57 @@ spec = "Nonstandard (moegoe -bd-* fork extension; G7 PDF annotations)"
 animation_type = "none"
 affects = ""
 
+[-bd-pdf-comment-open]
+type = "BdPdfCommentOpen"
+initial = "computed::BdPdfCommentOpen::Closed"
+struct = "counters"
+initial_specified_value = "specified::BdPdfCommentOpen::Closed"
+spec = "Nonstandard (moegoe -bd-* fork extension; G7 PDF annotations: /Open popup flag)"
+animation_type = "none"
+affects = ""
+
 [-bd-pdf-comment-state]
 type = "BdPdfCommentState"
-initial = "computed::BdPdfCommentState::Closed"
+initial = "computed::BdPdfCommentState::None"
 struct = "counters"
-initial_specified_value = "specified::BdPdfCommentState::Closed"
-spec = "Nonstandard (moegoe -bd-* fork extension; G7 PDF annotations)"
+initial_specified_value = "specified::BdPdfCommentState::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; F34 PDF /State review-state)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-comment-state-model]
+type = "BdPdfCommentStateModel"
+initial = "computed::BdPdfCommentStateModel::Marked"
+struct = "counters"
+initial_specified_value = "specified::BdPdfCommentStateModel::Marked"
+spec = "Nonstandard (moegoe -bd-* fork extension; F34 PDF /StateModel)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-comment-subject]
+type = "BdPdfCommentSubject"
+initial = "computed::BdPdfCommentSubject::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfCommentSubject::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F34 PDF /Subj)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-comment-date]
+type = "BdPdfCommentDate"
+initial = "computed::BdPdfCommentDate::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfCommentDate::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F34 PDF /M modify date)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-comment-date-format]
+type = "BdPdfCommentDateFormat"
+initial = "computed::BdPdfCommentDateFormat::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfCommentDateFormat::None"
+spec = "Nonstandard (moegoe -bd-* fork extension; F34 PDFreactor -ro-comment-dateformat parity)"
 animation_type = "none"
 affects = ""
 
