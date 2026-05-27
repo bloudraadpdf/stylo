@@ -1973,9 +1973,27 @@ mod tests {
     #[test]
     fn servo_preserves_bd_footnote_fragmentation_declaration() {
         assert_bd_roundtrip(
-            "p { -bd-footnote-fragmentation: keep; }",
+            "p { -bd-footnote-fragmentation: avoid; }",
             "-bd-footnote-fragmentation",
-            "keep",
+            "avoid",
+        );
+    }
+
+    #[test]
+    fn servo_preserves_bd_footnote_fragmentation_repeat_declaration() {
+        assert_bd_roundtrip(
+            "p { -bd-footnote-fragmentation: repeat; }",
+            "-bd-footnote-fragmentation",
+            "repeat",
+        );
+    }
+
+    #[test]
+    fn servo_preserves_bd_footnote_fragmentation_break_declaration() {
+        assert_bd_roundtrip(
+            "p { -bd-footnote-fragmentation: break; }",
+            "-bd-footnote-fragmentation",
+            "break",
         );
     }
 

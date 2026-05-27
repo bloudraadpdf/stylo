@@ -66,9 +66,24 @@ pub enum FootnoteStylePosition {
 
 /// Specified value of `-bd-footnote-fragmentation`.
 ///
-/// Governs whether footnotes may split across pages.
-/// `auto` (initial) leaves the heuristic to the paginator;
-/// `normal` permits splitting; `keep` forbids it.
+/// Governs the paginator's response when a footnote body overflows
+/// the bottom of the page on which its reference falls. Vocabulary
+/// is moegoe's four-arm refinement of PDFreactor matrix line 15234
+/// (`-ro-footnote-fragmentation: auto | none`):
+///
+/// - `continue` (initial) — split the footnote body across pages;
+///   the call's page hosts the head, subsequent pages host the
+///   continuation. Matches PDFreactor `auto`.
+/// - `repeat`           — split as `continue`, and re-emit the
+///   footnote marker at the start of every continuation page.
+/// - `break`            — force a page break *before* the
+///   footnote's call so the entire body fits on one page (the
+///   call moves with the body).
+/// - `avoid`            — keep the call on its current page but
+///   defer the body to the next page's footnote area. Matches
+///   PDFreactor `none`.
+///
+/// Inherits per CSS GCPM 3 §2.5 and PDFreactor.
 #[repr(u8)]
 #[derive(
     Clone,
@@ -89,9 +104,10 @@ pub enum FootnoteStylePosition {
 #[allow(missing_docs)]
 pub enum BdFootnoteFragmentation {
     #[default]
-    Auto,
-    Normal,
-    Keep,
+    Continue,
+    Repeat,
+    Break,
+    Avoid,
 }
 
 /// Specified value of `float-placement`.

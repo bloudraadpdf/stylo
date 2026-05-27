@@ -3574,10 +3574,10 @@ affects = "layout"
 
 [-bd-footnote-fragmentation]
 type = "BdFootnoteFragmentation"
-initial = "computed::BdFootnoteFragmentation::Auto"
+initial = "computed::BdFootnoteFragmentation::Continue"
 struct = "inherited_text"
-initial_specified_value = "specified::BdFootnoteFragmentation::Auto"
-spec = "Nonstandard (moegoe -bd-* fork extension; F6 footnote fragmentation)"
+initial_specified_value = "specified::BdFootnoteFragmentation::Continue"
+spec = "Nonstandard (moegoe -bd-* fork extension; F38 footnote overflow handling — continue | repeat | break | avoid)"
 animation_type = "none"
 affects = "layout"
 
