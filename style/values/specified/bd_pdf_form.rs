@@ -29,7 +29,7 @@ use crate::values::specified::url::SpecifiedUrl;
 use crate::values::specified::Percentage;
 use crate::values::CustomIdent;
 use crate::{OwnedSlice, OwnedStr};
-use cssparser::Parser;
+use cssparser::{match_ignore_ascii_case, Parser};
 use std::fmt::Write;
 use style_traits::{ParseError, StyleParseErrorKind};
 
