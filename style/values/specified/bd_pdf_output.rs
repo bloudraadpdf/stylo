@@ -37,12 +37,42 @@ use style_traits::ParseError;
 
 /// `-bd-pdf-text-rendering`.
 ///
-/// `auto` defers to the PDF text-rendering default (use glyphs);
-/// `text-as-glyphs` emits TJ / Tj operators against the embedded
-/// font; `text-as-vector` traces every glyph outline so the
-/// document carries no embedded fonts. Vector emission inflates
-/// content streams but is required when accessibility is off and
-/// the embed surface is constrained.
+/// Per-element / inherited knob governing how the PDF backend
+/// reaches the consumer with text. The value space mirrors
+/// PDFreactor's `-ro-pdf-text-rendering` (line 17569) — `normal`,
+/// `embed`, `path`, `raster` — and is exposed under the native
+/// `-bd-*` prefix.
+///
+/// - `auto` (the cascade initial) defers to the document-level
+///   default. The CSS surface treats `auto` and `normal` as
+///   synonyms for the PDF text-showing emission path; the typed
+///   IR layer preserves the distinction so a non-`auto` element
+///   override can scope back to the document default on the surface
+///   push.
+/// - `normal` / `text-as-glyphs` emits PDF text-showing operators
+///   (`Tj` / `TJ`) against the embedded (or referenced) font.
+///   Searchable, selectable, copy-pasteable. The `text-as-glyphs`
+///   spelling is the historic moegoe alias retained for backwards
+///   compatibility; `normal` is the PDFreactor-spec spelling.
+/// - `embed` keeps the PDF text-showing operators but forces every
+///   font in the element's subtree to be embedded as a full font
+///   programme (`/FontFile2` / `/FontFile3`), regardless of the
+///   document's subset policy. Pairs with `-bd-font-embedding-type:
+///   embed` but scoped via the text-rendering surface so a single
+///   declaration covers both the operator and the embedding shape.
+/// - `path` / `text-as-vector` traces every glyph outline as PDF
+///   path operators (`m` / `l` / `c` / `h` / `f`). The document
+///   carries no `Tj` / `TJ`, no embedded font programme, and no
+///   ToUnicode mapping. Required by strict PDF/A profiles when the
+///   font cannot be embedded (licence-restricted CFF programmes).
+///   `text-as-vector` is the historic moegoe alias; `path` is the
+///   PDFreactor-spec spelling.
+/// - `raster` rasterises the text region to an image and embeds it
+///   as a `/XObject /Image`. Total fidelity loss for searchability
+///   and copy-paste; total preservation of visual appearance.
+///   First cut: emits a `RenderWarning::UnsupportedCssFeature`
+///   and falls back to `normal`. The rasterisation pipeline is a
+///   follow-up.
 #[repr(u8)]
 #[derive(
     Clone,
@@ -63,8 +93,12 @@ use style_traits::ParseError;
 pub enum BdPdfTextRendering {
     #[default]
     Auto,
+    #[parse(aliases = "normal")]
     TextAsGlyphs,
+    Embed,
+    #[parse(aliases = "path")]
     TextAsVector,
+    Raster,
 }
 
 /// `-bd-paint-reordering`.
@@ -450,10 +484,32 @@ mod tests {
 
     #[test]
     fn text_rendering_round_trips() {
-        for css in ["auto", "text-as-glyphs", "text-as-vector"] {
+        for css in [
+            "auto",
+            "text-as-glyphs",
+            "embed",
+            "text-as-vector",
+            "raster",
+        ] {
             let value = parse_text_rendering(css);
             assert_eq!(value.to_css_string(), css);
         }
+    }
+
+    #[test]
+    fn text_rendering_accepts_pdfreactor_spec_aliases() {
+        // `normal` and `path` are the PDFreactor-spec spellings of
+        // `text-as-glyphs` and `text-as-vector` respectively. The
+        // aliases parse onto the canonical variants; the round-trip
+        // serialisation uses the canonical native spellings.
+        assert!(matches!(
+            parse_text_rendering("normal"),
+            BdPdfTextRendering::TextAsGlyphs
+        ));
+        assert!(matches!(
+            parse_text_rendering("path"),
+            BdPdfTextRendering::TextAsVector
+        ));
     }
 
     fn parse_rasterization_max_size(css: &str) -> BdRasterizationMaxSize {
