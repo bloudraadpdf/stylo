@@ -72,6 +72,16 @@ pub enum BdPdfConformanceValue {
     PdfX4,
     #[css(keyword = "pdf-x-4p")]
     PdfX4P,
+    // PDF/X-5 family (ISO 15930-7 / -8) — OPI-based external
+    // graphics (X-5g, X-5pg) and n-colorant output intent (X-5n).
+    // All three are PDF 1.6 based. X-5pg additionally requires an
+    // external output profile reference.
+    #[css(keyword = "pdf-x-5g")]
+    PdfX5g,
+    #[css(keyword = "pdf-x-5pg")]
+    PdfX5pg,
+    #[css(keyword = "pdf-x-5n")]
+    PdfX5n,
     // Well-Tagged PDF — PDF Association profile (krilla
     // `Validator::WTPDF`). Structural tagging subset of PDF/UA
     // without the full UA accessibility conformance gate.
