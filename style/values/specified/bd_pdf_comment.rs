@@ -549,6 +549,12 @@ pub enum BdPdfLinkBorderStyle {
     None,
     Solid,
     Dashed,
+    /// `dotted` — the renderer paints the link border as a tight dot
+    /// pattern. Wired through to a PDF `/BS << /S /D /D [1 1] >>`
+    /// border-style dictionary on the resulting `/Link` annotation
+    /// (ISO 32000-2 §12.5.4); the moegoe-side wire-through owns the
+    /// dash-array emission so this enum only carries the variant.
+    Dotted,
     Underline,
     Inset,
 }
@@ -692,5 +698,49 @@ impl Parse for BdPdfLinkBorderWidth {
             return Ok(Self::Auto);
         }
         Ok(Self::Length(NonNegativeLength::parse(context, input)?))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::context::QuirksMode;
+    use crate::parser::ParserContext;
+    use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
+    use cssparser::{Parser, ParserInput};
+    use style_traits::{ParsingMode, ToCss};
+
+    fn parse_link_border_style(css: &str) -> BdPdfLinkBorderStyle {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let _context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input = ParserInput::new(css);
+        let mut parser = Parser::new(&mut input);
+        parser
+            .parse_entirely(|input| BdPdfLinkBorderStyle::parse(input))
+            .expect("link border style should parse")
+    }
+
+    #[test]
+    fn link_border_style_dotted_round_trips() {
+        let value = parse_link_border_style("dotted");
+        assert_eq!(value, BdPdfLinkBorderStyle::Dotted);
+        assert_eq!(value.to_css_string(), "dotted");
+    }
+
+    #[test]
+    fn link_border_style_all_variants_round_trip() {
+        for css in ["none", "solid", "dashed", "dotted", "underline", "inset"] {
+            let value = parse_link_border_style(css);
+            assert_eq!(value.to_css_string(), css);
+        }
     }
 }
