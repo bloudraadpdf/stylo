@@ -30,6 +30,71 @@ use crate::parser::{Parse, ParserContext};
 use crate::values::CustomIdent;
 use cssparser::Parser;
 
+/// Specified value of `-bd-pdf-layer-visible` (K18).
+///
+/// Per ISO 32000-2 §8.11.3.3, an Optional Content Group's
+/// configuration dictionary `/OCGs` entry pairs a default-visibility
+/// list (`/ON` / `/OFF`) with each registered OCG. This longhand
+/// flips the initial visibility of the layer assigned via
+/// `-bd-pdf-layer: <ident>`; PDF viewers honour it as the layer's
+/// starting state, and authors can toggle it through the OCG panel
+/// at runtime.
+///
+/// `auto` (initial) — the renderer chooses the default. Today the
+/// moegoe-side wire-through hard-codes "visible" for backwards
+/// compatibility with the K3 baseline; `auto` preserves that
+/// behaviour and reserves room for a future per-conformance default.
+/// `on` — the layer is visible on document open. `off` — the layer
+/// is hidden on document open (the author opted the subtree out of
+/// the default view but the content is still browseable through the
+/// OCG panel).
+///
+/// Per-element; not inherited. Pairs with `-bd-pdf-layer: <ident>`;
+/// declaring `-bd-pdf-layer-visible` without a `-bd-pdf-layer`
+/// declaration has no observable effect because no OCG is registered
+/// for the subtree. Mirrors the inheritance rules of
+/// `-bd-pdf-layer-intent`.
+#[repr(u8)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Eq,
+    Hash,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[allow(missing_docs)]
+pub enum BdPdfLayerVisible {
+    /// `auto` (initial) — the renderer chooses the default
+    /// visibility. Today this resolves to "visible" so that an
+    /// element opting into a layer without further configuration
+    /// keeps the K3 baseline behaviour.
+    #[default]
+    Auto,
+    /// `on` — the layer is visible on document open.
+    On,
+    /// `off` — the layer is hidden on document open. The content
+    /// remains discoverable through the PDF viewer's OCG panel.
+    Off,
+}
+
+impl BdPdfLayerVisible {
+    /// Whether the value is at its initial `auto`.
+    #[inline]
+    pub fn is_auto(self) -> bool {
+        matches!(self, Self::Auto)
+    }
+}
+
 /// Specified value of `-bd-pdf-layer-intent` (G66).
 ///
 /// Per ISO 32000-2 §8.11.2.1, an Optional Content Group's `/Intent`
@@ -131,5 +196,53 @@ impl Parse for BdPdfLayer {
             return Ok(Self::None);
         }
         Ok(Self::Named(CustomIdent::parse(input, &["none"])?))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::context::QuirksMode;
+    use crate::parser::ParserContext;
+    use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
+    use cssparser::{Parser, ParserInput};
+    use style_traits::{ParsingMode, ToCss};
+
+    fn parse_layer_visible(css: &str) -> BdPdfLayerVisible {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let _context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input = ParserInput::new(css);
+        let mut parser = Parser::new(&mut input);
+        parser
+            .parse_entirely(|input| BdPdfLayerVisible::parse(input))
+            .expect("layer visibility should parse")
+    }
+
+    #[test]
+    fn layer_visible_initial_is_auto() {
+        assert_eq!(BdPdfLayerVisible::default(), BdPdfLayerVisible::Auto);
+        assert!(BdPdfLayerVisible::default().is_auto());
+    }
+
+    #[test]
+    fn layer_visible_all_variants_round_trip() {
+        for css in ["auto", "on", "off"] {
+            let value = parse_layer_visible(css);
+            assert_eq!(value.to_css_string(), css);
+        }
+    }
+
+    #[test]
+    fn layer_visible_off_parses() {
+        assert_eq!(parse_layer_visible("off"), BdPdfLayerVisible::Off);
     }
 }

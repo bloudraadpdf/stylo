@@ -600,6 +600,7 @@ class Longhand(Property):
                 "BdPdfFormFieldMaxLength",
                 "BdPdfFormFieldMkRotation",
                 "BdPdfFormFieldMkTextPosition",
+                "BdPdfLayerVisible",
                 "BdPdfLinkArea",
                 "BdPdfMultimedia",
                 "BdPdfMultimediaFormat",

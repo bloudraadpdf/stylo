@@ -2984,6 +2984,23 @@ spec = "Nonstandard (moegoe -bd-* fork extension; G66 PDF OCG intent)"
 animation_type = "none"
 affects = "paint"
 
+# moegoe K18 — OCG default visibility (ISO 32000-2 §8.11.3.3).
+# Per-element; not inherited. Pairs with `-bd-pdf-layer: <ident>`;
+# selects the layer's starting state in the configuration
+# dictionary's `/ON` / `/OFF` lists. Initial `auto` resolves to
+# "visible" in the moegoe-side wire-through, preserving the K3
+# baseline; `on` and `off` make the intent explicit so authors can
+# ship documents with selectively hidden layers (proofing marks,
+# alternate-language text, etc.).
+[-bd-pdf-layer-visible]
+type = "BdPdfLayerVisible"
+initial = "computed::BdPdfLayerVisible::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfLayerVisible::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; K18 PDF OCG default visibility)"
+animation_type = "none"
+affects = "paint"
+
 # moegoe F27 — PDF output tuning. Per-element / inherited knobs
 # governing how the PDF backend (krilla) emits content.
 [-bd-pdf-text-rendering]
