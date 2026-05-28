@@ -633,6 +633,28 @@ impl<'a> Context<'a> {
             .au_viewport_size_for_viewport_unit_resolution(variant)
     }
 
+    /// The current bleed-box size, used to resolve the moegoe
+    /// `-bd-b{w,h,i,b,min,max}` page-relative length units (CSS Paged
+    /// Media L3 §7.1 — trim box outset by the cascaded `bleed`).
+    ///
+    /// The embedder sets this via `Device::set_bleed_box_size`. When
+    /// no bleed cascade is in effect, the embedder is expected to
+    /// leave it equal to the page-content viewport so that the
+    /// bleed-axis arms degrade to the page-axis fallback path
+    /// described in the matrix (A.26).
+    ///
+    /// This is exposed on `Context` (not just `Device`) because the
+    /// computed-value pass walks the cascade and needs the embedder
+    /// to surface the bleed-box dimensions per-page; recording the
+    /// usage flag here also lets a future Stylo rebase add an
+    /// equivalent of `USES_VIEWPORT_UNITS` without churn at the
+    /// computation site.
+    pub fn viewport_size_for_bleed_box_resolution(&self) -> default::Size2D<Au> {
+        self.builder
+            .add_flags(ComputedValueFlags::USES_VIEWPORT_UNITS);
+        self.builder.device.au_bleed_box_size_for_resolution()
+    }
+
     /// Whether we're in a media or container query.
     pub fn in_media_or_container_query(&self) -> bool {
         self.in_media_query || self.in_container_query

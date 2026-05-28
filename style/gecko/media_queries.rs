@@ -533,6 +533,16 @@ impl Device {
         Size2D::new(Au(area.width), Au(area.height))
     }
 
+    /// Returns the current bleed-box size in app units, used to
+    /// resolve the moegoe `-bd-b{w,h,i,b,min,max}` length units
+    /// (CSS Paged Media L3 §7.1). Gecko does not have a dedicated
+    /// bleed-box surface, so the implementation degrades to the
+    /// viewport-unit resolution — i.e. the same path Stylo took
+    /// before the moegoe bleed-box dispatch was introduced.
+    pub fn au_bleed_box_size_for_resolution(&self) -> Size2D<Au> {
+        self.au_viewport_size_for_viewport_unit_resolution(ViewportVariant::UADefault)
+    }
+
     /// Returns the current viewport size in app units, recording that it's been
     /// used for viewport unit resolution.
     pub fn au_viewport_size_for_viewport_unit_resolution(

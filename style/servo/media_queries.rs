@@ -68,6 +68,15 @@ pub struct Device {
     media_type: MediaType,
     /// The current viewport size, in CSS pixels.
     viewport_size: Size2D<f32, CSSPixel>,
+    /// The current bleed-box size, in CSS pixels.
+    ///
+    /// Mirrors `viewport_size` but is consulted by the
+    /// `PageRelativeLength` bleed-axis arms (`Bw`/`Bh`/`Bi`/`Bb`/
+    /// `Bmin`/`Bmax`) rather than the viewport-relative path.
+    /// Initialised to the same dimensions as `viewport_size`, so
+    /// embedders that never call `set_bleed_box_size` get the
+    /// page-axis fallback behaviour for free.
+    bleed_box_size: Size2D<f32, CSSPixel>,
     /// The current device pixel ratio, from CSS pixels to device pixels.
     device_pixel_ratio: Scale<f32, CSSPixel, DevicePixel>,
     /// The current quirks mode.
@@ -145,6 +154,7 @@ impl Device {
         Device {
             media_type,
             viewport_size,
+            bleed_box_size: viewport_size,
             device_pixel_ratio,
             quirks_mode,
             root_style,
@@ -343,6 +353,25 @@ impl Device {
         self.viewport_size = viewport_size;
     }
 
+    /// Get the bleed-box size on this [`Device`].
+    pub fn bleed_box_size(&self) -> Size2D<f32, CSSPixel> {
+        self.bleed_box_size
+    }
+
+    /// Set the bleed-box size on this [`Device`].
+    ///
+    /// moegoe calls this from
+    /// `StyleEngine::update_bleed_box_for_page` after computing the
+    /// cascaded `@page { bleed: ... }` outset of the cascaded page
+    /// `size`. Like `set_viewport_size`, this does not update any
+    /// associated `Stylist`; the caller mirrors the
+    /// `media_features_change_changed_style` /
+    /// `force_stylesheet_origins_dirty` calls so the next compute
+    /// pass re-evaluates `-bd-b*` lengths.
+    pub fn set_bleed_box_size(&mut self, bleed_box_size: Size2D<f32, CSSPixel>) {
+        self.bleed_box_size = bleed_box_size;
+    }
+
     /// Returns the viewport size of the current device in app units, needed,
     /// among other things, to resolve viewport units.
     #[inline]
@@ -362,6 +391,22 @@ impl Device {
         // Servo doesn't have dynamic UA interfaces that affect the viewport,
         // so we can just ignore the ViewportVariant.
         self.au_viewport_size()
+    }
+
+    /// Returns the bleed-box size of the current device in app units,
+    /// used to resolve the moegoe `-bd-b{w,h,i,b,min,max}` length
+    /// units (CSS Paged Media L3 §7.1). Mirrors
+    /// `au_viewport_size_for_viewport_unit_resolution` but consults
+    /// `bleed_box_size` rather than `viewport_size`. When the
+    /// embedder has not set the bleed box separately it equals the
+    /// viewport, so the bleed-axis arms collapse onto the page-axis
+    /// path — preserving the pre-S-A26 fallback semantics.
+    pub fn au_bleed_box_size_for_resolution(&self) -> UntypedSize2D<Au> {
+        self.used_viewport_units.store(true, Ordering::Relaxed);
+        Size2D::new(
+            Au::from_f32_px(self.bleed_box_size.width),
+            Au::from_f32_px(self.bleed_box_size.height),
+        )
     }
 
     /// Whether viewport units were used since the last device change.

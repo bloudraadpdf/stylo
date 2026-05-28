@@ -1191,39 +1191,106 @@ impl PageRelativeLength {
     /// Computes the given page-relative length.
     ///
     /// moegoe sets the Stylo viewport size to match the first-page
-    /// dimensions, so this resolves via
+    /// **content area** (page dimensions minus `@page` margins), so
+    /// the `Pw|Pi|Ph|Pb|Pmin|Pmax` arms resolve via
     /// `viewport_size_for_viewport_unit_resolution`. Inline / block
-    /// aliases respect the writing-mode. Bleed-box variants reuse
-    /// the viewport size for now; once the bleed-box dimensions are
-    /// threaded through Context, the bleed arms should switch to
-    /// the new accessor.
+    /// aliases respect the writing-mode.
+    ///
+    /// The `Bw|Bi|Bh|Bb|Bmin|Bmax` arms resolve against the
+    /// **bleed box** (CSS Paged Media L3 §7.1 — the trim box outset
+    /// by the cascaded `bleed` value). moegoe surfaces that size to
+    /// Stylo through `viewport_size_for_bleed_box_resolution`, which
+    /// falls back to the page-content viewport when no bleed cascade
+    /// is in effect — so bleed-free pages keep their numerical
+    /// behaviour unchanged.
     pub fn to_computed_value(&self, context: &Context) -> CSSPixelLength {
         use self::PageRelativeLength::*;
 
-        let size = context.viewport_size_for_viewport_unit_resolution(ViewportVariant::UADefault);
         let writing_mode_vertical = context.style().writing_mode.is_vertical();
 
         let (factor, length): (CSSFloat, app_units::Au) = match *self {
-            Pw(v) | Bw(v) => (v, size.width),
-            Ph(v) | Bh(v) => (v, size.height),
-            Pi(v) | Bi(v) => (
-                v,
-                if writing_mode_vertical {
-                    size.height
-                } else {
-                    size.width
-                },
-            ),
-            Pb(v) | Bb(v) => (
-                v,
-                if writing_mode_vertical {
-                    size.width
-                } else {
-                    size.height
-                },
-            ),
-            Pmin(v) | Bmin(v) => (v, cmp::min(size.width, size.height)),
-            Pmax(v) | Bmax(v) => (v, cmp::max(size.width, size.height)),
+            Pw(v) => {
+                let size = context
+                    .viewport_size_for_viewport_unit_resolution(ViewportVariant::UADefault);
+                (v, size.width)
+            }
+            Ph(v) => {
+                let size = context
+                    .viewport_size_for_viewport_unit_resolution(ViewportVariant::UADefault);
+                (v, size.height)
+            }
+            Pi(v) => {
+                let size = context
+                    .viewport_size_for_viewport_unit_resolution(ViewportVariant::UADefault);
+                (
+                    v,
+                    if writing_mode_vertical {
+                        size.height
+                    } else {
+                        size.width
+                    },
+                )
+            }
+            Pb(v) => {
+                let size = context
+                    .viewport_size_for_viewport_unit_resolution(ViewportVariant::UADefault);
+                (
+                    v,
+                    if writing_mode_vertical {
+                        size.width
+                    } else {
+                        size.height
+                    },
+                )
+            }
+            Pmin(v) => {
+                let size = context
+                    .viewport_size_for_viewport_unit_resolution(ViewportVariant::UADefault);
+                (v, cmp::min(size.width, size.height))
+            }
+            Pmax(v) => {
+                let size = context
+                    .viewport_size_for_viewport_unit_resolution(ViewportVariant::UADefault);
+                (v, cmp::max(size.width, size.height))
+            }
+            Bw(v) => {
+                let size = context.viewport_size_for_bleed_box_resolution();
+                (v, size.width)
+            }
+            Bh(v) => {
+                let size = context.viewport_size_for_bleed_box_resolution();
+                (v, size.height)
+            }
+            Bi(v) => {
+                let size = context.viewport_size_for_bleed_box_resolution();
+                (
+                    v,
+                    if writing_mode_vertical {
+                        size.height
+                    } else {
+                        size.width
+                    },
+                )
+            }
+            Bb(v) => {
+                let size = context.viewport_size_for_bleed_box_resolution();
+                (
+                    v,
+                    if writing_mode_vertical {
+                        size.width
+                    } else {
+                        size.height
+                    },
+                )
+            }
+            Bmin(v) => {
+                let size = context.viewport_size_for_bleed_box_resolution();
+                (v, cmp::min(size.width, size.height))
+            }
+            Bmax(v) => {
+                let size = context.viewport_size_for_bleed_box_resolution();
+                (v, cmp::max(size.width, size.height))
+            }
         };
 
         let length = context.builder.effective_zoom.zoom(length.0 as f32);
