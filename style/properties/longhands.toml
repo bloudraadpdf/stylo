@@ -2191,6 +2191,20 @@ spec = "Nonstandard (moegoe -bd-* fork extension; G64 PDF catalogue /AA event sc
 animation_type = "none"
 affects = ""
 
+# moegoe S8 — JavaScript open action for the document catalogue.
+# `<string>` projects onto a `/OpenAction` JavaScript action
+# dictionary (`/S /JavaScript`, `/JS <string>`) per ISO 32000-2
+# §12.6.3 Table 198 and §12.6.4.16. Mirrors Prince's
+# `prince-pdf-open-action`.
+[-bd-pdf-open-action-script]
+type = "BdPdfOpenActionScript"
+initial = "computed::BdPdfOpenActionScript::none()"
+struct = "counters"
+initial_specified_value = "specified::BdPdfOpenActionScript::none()"
+spec = "Nonstandard (moegoe -bd-* fork extension; S8 PDF /OpenAction JavaScript, ISO 32000-2 §12.6.3 Table 198)"
+animation_type = "none"
+affects = ""
+
 # moegoe — per-widget AcroForm `/AA /C` (Calculate) JavaScript.
 # `none` (initial) omits the entry. A `<string>` value is written
 # verbatim into the widget's additional-actions dictionary so a PDF
@@ -2513,6 +2527,65 @@ initial = "computed::BdPdfTriState::Auto"
 struct = "counters"
 initial_specified_value = "specified::BdPdfTriState::Auto"
 spec = "Nonstandard (moegoe -bd-* fork extension; G5 PDF viewer preferences)"
+animation_type = "none"
+affects = ""
+
+# moegoe K13 — extended PDF ViewerPreferences slots
+# (ISO 32000-2 §12.2 Table 153). `auto` (initial) emits no
+# dictionary entry; non-`auto` projects onto `/NumCopies`,
+# `/PrintPageRange`, `/ViewArea`, `/ViewClip`, `/PrintArea`,
+# `/PrintClip` respectively.
+[-bd-pdf-viewer-num-copies]
+type = "BdPdfViewerNumCopies"
+initial = "computed::BdPdfViewerNumCopies::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfViewerNumCopies::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; K13 PDF viewer preferences)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-viewer-print-page-range]
+type = "BdPdfViewerPrintPageRange"
+initial = "computed::BdPdfViewerPrintPageRange::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfViewerPrintPageRange::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; K13 PDF viewer preferences)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-viewer-view-area]
+type = "BdPdfViewerPageBox"
+initial = "computed::BdPdfViewerPageBox::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfViewerPageBox::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; K13 PDF viewer preferences)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-viewer-view-clip]
+type = "BdPdfViewerPageBox"
+initial = "computed::BdPdfViewerPageBox::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfViewerPageBox::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; K13 PDF viewer preferences)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-viewer-print-area]
+type = "BdPdfViewerPageBox"
+initial = "computed::BdPdfViewerPageBox::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfViewerPageBox::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; K13 PDF viewer preferences)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-viewer-print-clip]
+type = "BdPdfViewerPageBox"
+initial = "computed::BdPdfViewerPageBox::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdPdfViewerPageBox::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; K13 PDF viewer preferences)"
 animation_type = "none"
 affects = ""
 
@@ -7670,6 +7743,19 @@ affects = "layout"
 servo_pref = "layout.columns.enabled"
 rule_types_allowed = ["style", "keyframe", "scope", "footnote"]
 keyword = { values = ["none", "all"] }
+
+# moegoe K20 — paint-time clipping of column inline-overflow.
+# `normal` (initial) preserves CSS Multi-column Level 2 §3.4
+# overflow behaviour; `clip` intersects column-overflowing content
+# with the column box at paint time.
+[-bd-column-clip]
+type = "BdColumnClip"
+initial = "computed::BdColumnClip::Normal"
+struct = "column"
+initial_specified_value = "specified::BdColumnClip::Normal"
+spec = "Nonstandard (moegoe -bd-* fork extension; K20 column inline-overflow clip)"
+animation_type = "none"
+affects = "paint"
 
 [font-variant-caps]
 struct = "font"

@@ -8,8 +8,9 @@
 //! ViewerPreferences dictionary entries (PageLayout, PageMode,
 //! NonFullScreenPageMode, Direction, PrintScaling, Duplex, plus
 //! seven boolean flags HideToolbar, HideMenubar, HideWindowUI,
-//! FitWindow, CenterWindow, DisplayDocTitle, PickTrayByPDFSize).
-//! `NumCopies` and `PrintPageRange` are deferred to a follow-up.
+//! FitWindow, CenterWindow, DisplayDocTitle, PickTrayByPDFSize,
+//! and the K13 cluster NumCopies, PrintPageRange, ViewArea, ViewClip,
+//! PrintArea, PrintClip).
 //! All longhands apply to all elements but the moegoe renderer
 //! only honours `:root` declarations — viewer prefs are
 //! document-level.
@@ -39,8 +40,9 @@
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
 use crate::values::specified::{Integer, Percentage};
+use crate::OwnedSlice;
 use cssparser::{match_ignore_ascii_case, Parser};
-use style_traits::ParseError;
+use style_traits::{ParseError, StyleParseErrorKind};
 
 /// Shared three-state value for boolean PDF viewer preference
 /// dictionary entries (`HideToolbar`, `HideMenubar`,
@@ -250,6 +252,162 @@ pub enum BdPdfViewerDuplex {
     FlipLongEdge,
 }
 
+/// Specified value of `-bd-pdf-viewer-num-copies` (K13).
+///
+/// `auto | <integer [1, 99]>`. `auto` (initial) emits no
+/// `/NumCopies` slot; an integer in `[1, 99]` projects directly
+/// onto `/ViewerPreferences /NumCopies` per ISO 32000-2 §12.2
+/// Table 153. Out-of-range integers (`< 1` or `> 99`) are
+/// rejected at parse time so authors cannot accidentally smuggle
+/// an invalid PDF dictionary entry past the cascade.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
+#[repr(C, u8)]
+pub enum BdPdfViewerNumCopies {
+    /// `auto` (initial) — no `/NumCopies` slot is emitted.
+    Auto,
+    /// `<integer [1, 99]>` — explicit copy count.
+    Count(Integer),
+}
+
+impl BdPdfViewerNumCopies {
+    /// Initial value (`auto`).
+    #[inline]
+    pub fn auto() -> Self {
+        Self::Auto
+    }
+
+    /// Whether the value is `auto`.
+    #[inline]
+    pub fn is_auto(&self) -> bool {
+        matches!(self, Self::Auto)
+    }
+}
+
+impl Default for BdPdfViewerNumCopies {
+    fn default() -> Self {
+        Self::Auto
+    }
+}
+
+impl Parse for BdPdfViewerNumCopies {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
+            return Ok(Self::Auto);
+        }
+        let value = Integer::parse(context, input)?;
+        if value.value() < 1 || value.value() > 99 {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+        Ok(Self::Count(value))
+    }
+}
+
+/// Specified value of `-bd-pdf-viewer-print-page-range` (K13).
+///
+/// `auto | <integer>+` — a flat space-separated list of 1-indexed
+/// page numbers (mirroring the `bd-hyphenate-lines` shape). The
+/// list is interpreted pairwise: `n1 n2 n3 n4 …` projects onto
+/// the PDF `/ViewerPreferences /PrintPageRange` array
+/// `[first1 last1 first2 last2 …]` (ISO 32000-2 §12.2 Table 153,
+/// §14.11.2). The cascade reader emits the slot only when the
+/// list has an even cardinality with `first[i] <= last[i]`;
+/// downstream odd-length lists are rejected at the IR boundary
+/// rather than in CSS.
+///
+/// `auto` (initial) emits no `/PrintPageRange` slot. Each integer
+/// must be `>= 1`; non-positive values are rejected at parse time
+/// so authors cannot smuggle a malformed range past the cascade.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
+#[repr(C, u8)]
+pub enum BdPdfViewerPrintPageRange {
+    /// `auto` (initial) — no `/PrintPageRange` slot is emitted.
+    Auto,
+    /// `<integer>+` — flat space-separated page-number list.
+    Pages(#[css(iterable)] OwnedSlice<Integer>),
+}
+
+impl BdPdfViewerPrintPageRange {
+    /// Initial value (`auto`).
+    #[inline]
+    pub fn auto() -> Self {
+        Self::Auto
+    }
+
+    /// Whether the value is `auto`.
+    #[inline]
+    pub fn is_auto(&self) -> bool {
+        matches!(self, Self::Auto)
+    }
+}
+
+impl Default for BdPdfViewerPrintPageRange {
+    fn default() -> Self {
+        Self::Auto
+    }
+}
+
+impl Parse for BdPdfViewerPrintPageRange {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
+            return Ok(Self::Auto);
+        }
+        let mut pages: Vec<Integer> = Vec::new();
+        loop {
+            let value = match input.try_parse(|i| Integer::parse(context, i)) {
+                Ok(v) => v,
+                Err(_) => break,
+            };
+            if value.value() < 1 {
+                return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+            }
+            pages.push(value);
+        }
+        if pages.is_empty() {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+        Ok(Self::Pages(OwnedSlice::from(pages)))
+    }
+}
+
+/// Shared specified value for the four `-bd-pdf-viewer-{view,print}-{area,clip}`
+/// longhands (K13). All four select from the same PDF page-box
+/// vocabulary (ISO 32000-2 §14.11.2). Initial value is `auto` so the
+/// renderer can defer to its own default and emit no
+/// `/ViewerPreferences /ViewArea | ViewClip | PrintArea | PrintClip`
+/// slot.
+#[repr(u8)]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[allow(missing_docs)]
+pub enum BdPdfViewerPageBox {
+    #[default]
+    Auto,
+    MediaBox,
+    CropBox,
+    BleedBox,
+    TrimBox,
+    ArtBox,
+}
+
 /// Specified value of `-bd-first-page-side` and
 /// `-bd-first-page-side-view`.
 ///
@@ -417,5 +575,172 @@ impl Parse for BdPagesCounterOffset {
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
         Ok(Self(Integer::parse(context, input)?))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::context::QuirksMode;
+    use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
+    use cssparser::{Parser, ParserInput};
+    use style_traits::{ParsingMode, ToCss};
+
+    fn make_context(url_data: &UrlExtraData) -> ParserContext {
+        ParserContext::new(
+            Origin::Author,
+            url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        )
+    }
+
+    fn parse_num_copies(css: &str) -> Result<BdPdfViewerNumCopies, ()> {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let context = make_context(&url_data);
+        let mut input = ParserInput::new(css);
+        let mut parser = Parser::new(&mut input);
+        parser
+            .parse_entirely(|input| BdPdfViewerNumCopies::parse(&context, input))
+            .map_err(|_| ())
+    }
+
+    fn parse_print_page_range(css: &str) -> Result<BdPdfViewerPrintPageRange, ()> {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let context = make_context(&url_data);
+        let mut input = ParserInput::new(css);
+        let mut parser = Parser::new(&mut input);
+        parser
+            .parse_entirely(|input| BdPdfViewerPrintPageRange::parse(&context, input))
+            .map_err(|_| ())
+    }
+
+    fn parse_page_box(css: &str) -> Result<BdPdfViewerPageBox, ()> {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let _context = make_context(&url_data);
+        let mut input = ParserInput::new(css);
+        let mut parser = Parser::new(&mut input);
+        parser
+            .parse_entirely(|input| BdPdfViewerPageBox::parse(input))
+            .map_err(|_| ())
+    }
+
+    #[test]
+    fn bd_pdf_viewer_num_copies_initial_is_auto() {
+        assert!(BdPdfViewerNumCopies::default().is_auto());
+        assert_eq!(BdPdfViewerNumCopies::auto(), BdPdfViewerNumCopies::Auto);
+    }
+
+    #[test]
+    fn bd_pdf_viewer_num_copies_auto_parses() {
+        let value = parse_num_copies("auto").expect("auto should parse");
+        assert_eq!(value, BdPdfViewerNumCopies::Auto);
+        assert_eq!(value.to_css_string(), "auto");
+    }
+
+    #[test]
+    fn bd_pdf_viewer_num_copies_one_through_ninety_nine_parse() {
+        for n in [1, 2, 5, 25, 50, 99] {
+            let value = parse_num_copies(&n.to_string()).expect("integer in [1, 99] should parse");
+            assert!(matches!(value, BdPdfViewerNumCopies::Count(_)));
+            assert_eq!(value.to_css_string(), n.to_string());
+        }
+    }
+
+    #[test]
+    fn bd_pdf_viewer_num_copies_rejects_zero_and_negative() {
+        assert!(parse_num_copies("0").is_err());
+        assert!(parse_num_copies("-1").is_err());
+    }
+
+    #[test]
+    fn bd_pdf_viewer_num_copies_rejects_above_ninety_nine() {
+        assert!(parse_num_copies("100").is_err());
+        assert!(parse_num_copies("9999").is_err());
+    }
+
+    #[test]
+    fn bd_pdf_viewer_print_page_range_initial_is_auto() {
+        assert!(BdPdfViewerPrintPageRange::default().is_auto());
+        assert_eq!(
+            BdPdfViewerPrintPageRange::auto(),
+            BdPdfViewerPrintPageRange::Auto,
+        );
+    }
+
+    #[test]
+    fn bd_pdf_viewer_print_page_range_auto_parses() {
+        let value = parse_print_page_range("auto").expect("auto should parse");
+        assert!(value.is_auto());
+        assert_eq!(value.to_css_string(), "auto");
+    }
+
+    #[test]
+    fn bd_pdf_viewer_print_page_range_single_integer_parses() {
+        let value = parse_print_page_range("5").expect("single integer should parse");
+        match &value {
+            BdPdfViewerPrintPageRange::Pages(items) => assert_eq!(items.len(), 1),
+            _ => panic!("expected Pages variant"),
+        }
+        assert_eq!(value.to_css_string(), "5");
+    }
+
+    #[test]
+    fn bd_pdf_viewer_print_page_range_multi_integer_parses() {
+        let value = parse_print_page_range("1 5 7 9")
+            .expect("space-separated integer list should parse");
+        match &value {
+            BdPdfViewerPrintPageRange::Pages(items) => assert_eq!(items.len(), 4),
+            _ => panic!("expected Pages variant"),
+        }
+        assert_eq!(value.to_css_string(), "1 5 7 9");
+    }
+
+    #[test]
+    fn bd_pdf_viewer_print_page_range_rejects_zero() {
+        assert!(parse_print_page_range("0").is_err());
+        assert!(parse_print_page_range("1 0 3").is_err());
+    }
+
+    #[test]
+    fn bd_pdf_viewer_print_page_range_rejects_negative() {
+        assert!(parse_print_page_range("-1").is_err());
+    }
+
+    #[test]
+    fn bd_pdf_viewer_print_page_range_rejects_empty() {
+        // Bare empty value (no `auto`, no integer) must fail.
+        assert!(parse_print_page_range("").is_err());
+    }
+
+    #[test]
+    fn bd_pdf_viewer_page_box_initial_is_auto() {
+        assert_eq!(BdPdfViewerPageBox::default(), BdPdfViewerPageBox::Auto);
+    }
+
+    #[test]
+    fn bd_pdf_viewer_page_box_all_variants_round_trip() {
+        for (css, expected) in [
+            ("auto", BdPdfViewerPageBox::Auto),
+            ("media-box", BdPdfViewerPageBox::MediaBox),
+            ("crop-box", BdPdfViewerPageBox::CropBox),
+            ("bleed-box", BdPdfViewerPageBox::BleedBox),
+            ("trim-box", BdPdfViewerPageBox::TrimBox),
+            ("art-box", BdPdfViewerPageBox::ArtBox),
+        ] {
+            let value = parse_page_box(css).expect("page-box keyword should parse");
+            assert_eq!(value, expected);
+            assert_eq!(value.to_css_string(), css);
+        }
+    }
+
+    #[test]
+    fn bd_pdf_viewer_page_box_rejects_unknown_keyword() {
+        assert!(parse_page_box("crop").is_err());
+        assert!(parse_page_box("xyz-box").is_err());
     }
 }

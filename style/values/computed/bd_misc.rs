@@ -12,8 +12,9 @@
 //! type. Those expose a `Computed*` variant under the original name.
 
 pub use crate::values::specified::bd_misc::{
-    BdCaptionPage, BdFlow, BdLang, BdLineBreakOpportunity, BdObjectSlice, BdPositionOrigin,
-    BdReplacedElement, BdShrinkToFit, BdTabSnap, BdTargetCandidate, BdTruncateMarginAfterBreak,
+    BdCaptionPage, BdColumnClip, BdFlow, BdLang, BdLineBreakOpportunity, BdObjectSlice,
+    BdPositionOrigin, BdReplacedElement, BdShrinkToFit, BdTabSnap, BdTargetCandidate,
+    BdTruncateMarginAfterBreak,
 };
 
 pub use crate::values::specified::bd_misc::ComputedBdIntegerAuto as BdIntegerAuto;

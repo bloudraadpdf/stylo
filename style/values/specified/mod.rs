@@ -167,7 +167,8 @@ pub use self::bd_pdf_output_condition::BdPdfOutputCondition;
 pub use self::bd_pdf_output_registry_name::BdPdfOutputRegistryName;
 pub use self::bd_pdf_role_map::{BdPdfRoleMap, BdPdfRoleMapEntry};
 pub use self::bd_pdf_script::{
-    BdPdfEventKind, BdPdfEventScript, BdPdfEventScripts, BdPdfScript, BdPdfWidgetActionScript,
+    BdPdfEventKind, BdPdfEventScript, BdPdfEventScripts, BdPdfOpenActionScript, BdPdfScript,
+    BdPdfWidgetActionScript,
 };
 pub use self::bd_pdf_tagged::BdPdfTagged;
 pub use self::bd_pdf_trapped::BdPdfTrapped;
@@ -199,12 +200,13 @@ pub use self::bd_source::{BdSource, BdSourceArea, BdSourcePage};
 pub use self::bd_pdf_viewer::{
     BdFirstPageSide, BdInitialPage, BdInitialZoom, BdPagesCounterOffset, BdPdfTriState,
     BdPdfViewerDirection, BdPdfViewerDuplex, BdPdfViewerNonFullscreenPageMode,
-    BdPdfViewerPageLayout, BdPdfViewerPageMode, BdPdfViewerPrintScaling,
+    BdPdfViewerNumCopies, BdPdfViewerPageBox, BdPdfViewerPageLayout, BdPdfViewerPageMode,
+    BdPdfViewerPrintPageRange, BdPdfViewerPrintScaling,
 };
 pub use self::bd_gaps::{BorderClip, MaskBorderMode, Overlay};
 pub use self::bd_misc::{
-    BdCaptionPage, BdFlow, BdIntegerAuto, BdLang, BdLineBreakOpportunity, BdObjectSlice,
-    BdPositionOrigin, BdReplacedElement, BdScaleContent, BdShrinkToFit, BdTabSnap,
+    BdCaptionPage, BdColumnClip, BdFlow, BdIntegerAuto, BdLang, BdLineBreakOpportunity,
+    BdObjectSlice, BdPositionOrigin, BdReplacedElement, BdScaleContent, BdShrinkToFit, BdTabSnap,
     BdTargetCandidate, BdTruncateMarginAfterBreak,
 };
 pub use self::bd_running_copy::BdRunningCopy;

@@ -367,3 +367,135 @@ impl Parse for BdPdfWidgetActionScript {
         Ok(Self::Literal(s.as_ref().to_owned().into()))
     }
 }
+
+/// Specified value of `-bd-pdf-open-action-script` (S8).
+///
+/// `none | <string>`. `none` (initial) emits no JavaScript open
+/// action — the document catalogue retains whatever non-script
+/// `/OpenAction` slot the open-action / initial-page / initial-zoom
+/// pipeline produces. A `<string>` projects onto a catalogue-level
+/// `/OpenAction` JavaScript action dictionary per ISO 32000-2
+/// §12.6.3 Table 198 and §12.6.4.16 (`/S /JavaScript`, `/JS <string>`).
+/// PDF readers fire the action when the document is opened.
+///
+/// `<string>` is byte-passthrough — moegoe writes the source verbatim
+/// without parsing or sanitisation; authors are responsible for
+/// well-formedness.
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(C, u8)]
+pub enum BdPdfOpenActionScript {
+    /// `none` (initial) — no JavaScript open action contributed.
+    None,
+    /// `<string>` — JavaScript source for the catalogue
+    /// `/OpenAction /JS` entry.
+    Literal(OwnedStr),
+}
+
+impl BdPdfOpenActionScript {
+    /// `none` value (initial).
+    #[inline]
+    pub fn none() -> Self {
+        Self::None
+    }
+
+    /// Whether the value is `none`.
+    #[inline]
+    pub fn is_none(&self) -> bool {
+        matches!(self, Self::None)
+    }
+}
+
+impl Parse for BdPdfOpenActionScript {
+    fn parse<'i, 't>(
+        _: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if input
+            .try_parse(|i| i.expect_ident_matching("none"))
+            .is_ok()
+        {
+            return Ok(Self::None);
+        }
+        let s = input.expect_string()?;
+        Ok(Self::Literal(s.as_ref().to_owned().into()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::context::QuirksMode;
+    use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
+    use cssparser::{Parser, ParserInput};
+    use style_traits::{ParsingMode, ToCss};
+
+    fn make_context(url_data: &UrlExtraData) -> ParserContext<'_> {
+        ParserContext::new(
+            Origin::Author,
+            url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        )
+    }
+
+    fn parse_open_action_script(css: &str) -> Result<BdPdfOpenActionScript, ()> {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let context = make_context(&url_data);
+        let mut input = ParserInput::new(css);
+        let mut parser = Parser::new(&mut input);
+        parser
+            .parse_entirely(|input| BdPdfOpenActionScript::parse(&context, input))
+            .map_err(|_| ())
+    }
+
+    #[test]
+    fn bd_pdf_open_action_script_initial_is_none() {
+        assert!(BdPdfOpenActionScript::none().is_none());
+    }
+
+    #[test]
+    fn bd_pdf_open_action_script_none_parses() {
+        let value = parse_open_action_script("none").expect("none should parse");
+        assert!(value.is_none());
+        assert_eq!(value.to_css_string(), "none");
+    }
+
+    #[test]
+    fn bd_pdf_open_action_script_string_parses() {
+        let value = parse_open_action_script("\"app.alert('hello')\"")
+            .expect("string literal should parse");
+        match &value {
+            BdPdfOpenActionScript::Literal(s) => {
+                assert_eq!(&**s, "app.alert('hello')")
+            }
+            _ => panic!("expected Literal variant"),
+        }
+        assert_eq!(value.to_css_string(), "\"app.alert('hello')\"");
+    }
+
+    #[test]
+    fn bd_pdf_open_action_script_rejects_bare_identifier() {
+        // A bare ident other than `none` is not a valid value.
+        assert!(parse_open_action_script("foo").is_err());
+    }
+
+    #[test]
+    fn bd_pdf_open_action_script_rejects_integer() {
+        assert!(parse_open_action_script("42").is_err());
+    }
+}

@@ -595,3 +595,98 @@ impl Parse for BdFlow {
         Ok(Self::Name(ident.as_ref().to_owned().into()))
     }
 }
+
+/// Specified value of `-bd-column-clip` (K20).
+///
+/// `normal | clip` (default `normal`). Mirrors PDFreactor's
+/// `-ro-column-clip` and Prince's overflow control for multicol
+/// columns. `normal` (initial) preserves the CSS Multi-column
+/// spec's overflow behaviour — content that exceeds the column's
+/// inline extent is permitted to ink-overflow into the column
+/// gap, matching CSS Multi-column Level 2 §3.4. `clip` forces
+/// the renderer to clip overflowing inline content at the
+/// column's inline edge (paint-time intersection with the column
+/// box), suppressing the bleed into the gap that some authors
+/// find undesirable in print.
+///
+/// This is paint-time scoped; layout-time geometry is unchanged.
+#[repr(u8)]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    Eq,
+    Hash,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[allow(missing_docs)]
+pub enum BdColumnClip {
+    #[default]
+    Normal,
+    Clip,
+}
+
+impl BdColumnClip {
+    /// Whether the value is `normal`.
+    #[inline]
+    pub fn is_normal(&self) -> bool {
+        matches!(self, Self::Normal)
+    }
+
+    /// Whether the value is `clip`.
+    #[inline]
+    pub fn is_clip(&self) -> bool {
+        matches!(self, Self::Clip)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cssparser::{Parser, ParserInput};
+    use style_traits::ToCss;
+
+    fn parse_column_clip(css: &str) -> Result<BdColumnClip, ()> {
+        let mut input = ParserInput::new(css);
+        let mut parser = Parser::new(&mut input);
+        parser
+            .parse_entirely(|input| BdColumnClip::parse(input))
+            .map_err(|_| ())
+    }
+
+    #[test]
+    fn bd_column_clip_initial_is_normal() {
+        assert_eq!(BdColumnClip::default(), BdColumnClip::Normal);
+        assert!(BdColumnClip::default().is_normal());
+    }
+
+    #[test]
+    fn bd_column_clip_normal_parses() {
+        let value = parse_column_clip("normal").expect("normal should parse");
+        assert_eq!(value, BdColumnClip::Normal);
+        assert_eq!(value.to_css_string(), "normal");
+    }
+
+    #[test]
+    fn bd_column_clip_clip_parses() {
+        let value = parse_column_clip("clip").expect("clip should parse");
+        assert_eq!(value, BdColumnClip::Clip);
+        assert!(value.is_clip());
+        assert_eq!(value.to_css_string(), "clip");
+    }
+
+    #[test]
+    fn bd_column_clip_rejects_unknown() {
+        assert!(parse_column_clip("hidden").is_err());
+        assert!(parse_column_clip("visible").is_err());
+        assert!(parse_column_clip("").is_err());
+    }
+}
