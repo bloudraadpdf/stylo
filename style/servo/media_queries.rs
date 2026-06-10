@@ -634,8 +634,17 @@ fn eval_prefers_color_scheme(context: &Context, query_value: Option<PrefersColor
     }
 }
 
+/// https://drafts.csswg.org/mediaqueries-4/#color
+fn eval_color(_: &Context) -> i32 {
+    // Servo targets colour print/PDF output; the device has a non-zero colour
+    // depth. Gecko reads the real depth via `Gecko_MediaFeatures_GetColorDepth`,
+    // which is unavailable in the Servo build, so report a fixed 8 bits per
+    // component.
+    8
+}
+
 /// A list with all the media features that Servo supports.
-pub static MEDIA_FEATURES: [QueryFeatureDescription; 9] = [
+pub static MEDIA_FEATURES: [QueryFeatureDescription; 10] = [
     feature!(
         atom!("width"),
         AllowsRanges::Yes,
@@ -688,6 +697,12 @@ pub static MEDIA_FEATURES: [QueryFeatureDescription; 9] = [
         atom!("prefers-color-scheme"),
         AllowsRanges::No,
         keyword_evaluator!(eval_prefers_color_scheme, PrefersColorScheme),
+        FeatureFlags::empty(),
+    ),
+    feature!(
+        atom!("color"),
+        AllowsRanges::Yes,
+        Evaluator::Integer(eval_color),
         FeatureFlags::empty(),
     ),
 ];

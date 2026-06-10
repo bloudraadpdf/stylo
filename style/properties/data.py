@@ -1209,6 +1209,8 @@ class PropertyRestrictions:
                 "opacity",
                 "float",
                 "initial-letter",
+                "initial-letter-align",
+                "initial-letter-wrap",
                 # Kinda like css-fonts?
                 "-moz-osx-font-smoothing",
                 "alignment-baseline",

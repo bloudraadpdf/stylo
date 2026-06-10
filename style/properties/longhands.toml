@@ -8230,7 +8230,7 @@ struct = "inherited_svg"
 spec = "https://www.w3.org/TR/css-inline-3/#propdef-dominant-baseline"
 animation_type = "discrete"
 affects = "layout"
-keyword = { values = ["auto", "ideographic", "alphabetic", "hanging", "mathematical", "central", "middle", "text-after-edge", "text-before-edge"] }
+keyword = { values = ["auto", "ideographic", "alphabetic", "hanging", "mathematical", "central", "middle", "text-after-edge", "text-before-edge"], servo_aliases = ["text-top=text-before-edge", "text-bottom=text-after-edge"] }
 
 [-moz-math-variant]
 struct = "font"
