@@ -284,12 +284,25 @@ impl Device {
     pub fn calc_line_height(
         &self,
         font: &crate::properties::style_structs::Font,
-        _writing_mode: WritingMode,
+        writing_mode: WritingMode,
         _element: Option<()>,
     ) -> NonNegativeLength {
         (match font.line_height {
-            // TODO: compute `normal` from the font metrics
-            LineHeight::Normal => CSSPixelLength::new(0.),
+            LineHeight::Normal => {
+                // `normal` derives from the first available font's
+                // metrics (ascent + descent + line gap), per
+                // css-inline-3, with a 1.2em fallback when the font
+                // provides no descent metric.
+                let font_size = font.font_size.computed_size();
+                let metrics = self.query_font_metrics(
+                    writing_mode.is_text_vertical(),
+                    font,
+                    font_size,
+                    QueryFontMetricsFlags::USE_USER_FONT_SET,
+                    /* track_usage = */ true,
+                );
+                metrics.normal_line_height_or_default(font_size)
+            },
             LineHeight::Number(number) => font.font_size.computed_size() * number.0,
             LineHeight::Length(length) => length.0,
         })

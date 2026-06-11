@@ -22,6 +22,10 @@ pub struct FontMetrics {
     pub ic_width: Option<Length>,
     /// The ascent of the font (a value is always available for this).
     pub ascent: Length,
+    /// The descent of the font, as a positive distance below the baseline.
+    pub descent: Option<Length>,
+    /// The line gap (external leading) of the font.
+    pub line_gap: Option<Length>,
     /// Script scale down factor for math-depth 1.
     /// https://w3c.github.io/mathml-core/#dfn-scriptpercentscaledown
     pub script_percent_scale_down: Option<f32>,
@@ -38,6 +42,8 @@ impl Default for FontMetrics {
             cap_height: None,
             ic_width: None,
             ascent: Length::new(0.0),
+            descent: None,
+            line_gap: None,
             script_percent_scale_down: None,
             script_script_percent_scale_down: None,
         }
@@ -94,6 +100,27 @@ impl FontMetrics {
         //     used.
         //
         self.cap_height.unwrap_or_else(|| self.ascent)
+    }
+
+    /// Returns the font-derived `line-height: normal`, computing a fallback
+    /// value if the font provides no descent metric
+    pub fn normal_line_height_or_default(&self, reference_font_size: Length) -> Length {
+        // https://drafts.csswg.org/css-inline-3/#valdef-line-height-normal
+        //
+        //     Set the used value to a "reasonable" value based on the
+        //     font of the element.
+        //
+        // With metrics available the used value is the font's
+        // ascent + descent + line gap; without a descent metric, fall
+        // back to 1.2em (the CSS2 recommendation is a value between
+        // 1.0 and 1.2 times the font size).
+        match self.descent {
+            Some(descent) => {
+                let line_gap = self.line_gap.map_or(0., |gap| gap.px());
+                Length::new(self.ascent.px() + descent.px().abs() + line_gap)
+            },
+            None => reference_font_size * 1.2,
+        }
     }
 
     /// Returns the ideographic advance measure, computing a fallback value if not present

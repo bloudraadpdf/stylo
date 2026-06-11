@@ -348,6 +348,11 @@ impl Device {
                 None
             },
             ascent: gecko_metrics.mAscent,
+            // Gecko resolves `line-height: normal` natively through
+            // Gecko_CalcLineHeight, so its metrics query does not carry
+            // descent or line-gap values.
+            descent: None,
+            line_gap: None,
             script_percent_scale_down: if gecko_metrics.mScriptPercentScaleDown > 0. {
                 Some(gecko_metrics.mScriptPercentScaleDown)
             } else {
