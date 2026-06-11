@@ -26,7 +26,6 @@
 //! a CSS cascade surface.
 
 use crate::derives::*;
-use crate::parser::Parse;
 
 /// Specified value of `-bd-pdf-multimedia`.
 ///

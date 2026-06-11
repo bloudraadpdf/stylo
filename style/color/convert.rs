@@ -688,10 +688,6 @@ impl Rec2100Pq {
     const C1: f32 = 3424.0 / 4096.0;
     const C2: f32 = 2413.0 / 4096.0 * 32.0;
     const C3: f32 = 2392.0 / 4096.0 * 32.0;
-    /// Peak luminance the PQ EOTF is normalised against (cd/m²). The CSS
-    /// HDR draft expects the linearised value to be expressed relative to
-    /// 10 000 cd/m², matching the SMPTE ST 2084 spec.
-    const PEAK_LUMINANCE: f32 = 10_000.0;
 }
 
 impl ColorSpaceConversion for Rec2100Pq {
@@ -699,7 +695,8 @@ impl ColorSpaceConversion for Rec2100Pq {
 
     fn to_linear_light(from: &ColorComponents) -> ColorComponents {
         // PQ EOTF — non-linear PQ signal -> linear-light cd/m² normalised
-        // to [0, 1] against `PEAK_LUMINANCE`.
+        // to [0, 1] against the 10 000 cd/m² SMPTE ST 2084 peak, per the
+        // CSS HDR draft.
         from.clone().map(|v| {
             let sign = v.signum();
             let abs = v.abs();
@@ -719,7 +716,8 @@ impl ColorSpaceConversion for Rec2100Pq {
     }
 
     fn to_gamma_encoded(from: &ColorComponents) -> ColorComponents {
-        // Inverse PQ — linear-light fraction of `PEAK_LUMINANCE` -> PQ signal.
+        // Inverse PQ — linear-light fraction of the 10 000 cd/m² SMPTE
+        // ST 2084 peak -> PQ signal.
         from.clone().map(|v| {
             let sign = v.signum();
             let abs = v.abs();
