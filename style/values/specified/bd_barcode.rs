@@ -77,6 +77,7 @@ pub enum BdBarcodeType {
     Itf,
     Codabar,
     MaxiCode,
+    Telepen,
 }
 
 /// Specified value of `-bd-barcode-content`.
