@@ -424,20 +424,6 @@ impl Device {
         self.page_box_size = page_box_size;
     }
 
-    /// Returns the page-box size of the current device in app units,
-    /// used to evaluate the `width` and `height` media features in
-    /// paged media (Media Queries 4 §6.1). Mirrors `au_viewport_size`
-    /// but consults `page_box_size`. When the embedder has not set
-    /// the page box separately it equals the viewport, so
-    /// continuous-media evaluation is unchanged.
-    #[inline]
-    pub fn au_page_box_size(&self) -> UntypedSize2D<Au> {
-        Size2D::new(
-            Au::from_f32_px(self.page_box_size.width),
-            Au::from_f32_px(self.page_box_size.height),
-        )
-    }
-
     /// Returns the viewport size of the current device in app units, needed,
     /// among other things, to resolve viewport units.
     #[inline]
@@ -654,17 +640,28 @@ impl Device {
 /// https://drafts.csswg.org/mediaqueries-4/#width
 ///
 /// For paged media this describes the page box (the full sheet, page
-/// area plus margins), so it reads `au_page_box_size` rather than the
+/// area plus margins), so it reads `page_box_size` rather than the
 /// viewport (page area). For continuous media the two coincide.
+///
+/// The CSS-pixel `page_box_size` is read directly rather than routed
+/// through app units: the range comparison in
+/// `QueryFeatureExpression::matches` evaluates the feature value
+/// against the query length in CSS pixels (`f32`), and the query side
+/// is *not* quantised to app units. Quantising the page box to `Au`
+/// (1/60 px) here would round it to the nearest app unit and so, on an
+/// exact boundary such as `min-width: 210mm` against a 210 mm page,
+/// drop it just below the query value (≈0.0008 px) and miss the match.
+/// Comparing in `f32` keeps both sides at the same precision.
 fn eval_width(context: &Context) -> CSSPixelLength {
-    CSSPixelLength::new(context.device().au_page_box_size().width.to_f32_px())
+    CSSPixelLength::new(context.device().page_box_size().width)
 }
 
 /// https://drafts.csswg.org/mediaqueries-4/#height
 ///
-/// See [`eval_width`]: the page box, not the page area, in paged media.
+/// See [`eval_width`]: the page box, not the page area, in paged media,
+/// read directly in CSS pixels to avoid an app-unit rounding mismatch.
 fn eval_height(context: &Context) -> CSSPixelLength {
-    CSSPixelLength::new(context.device().au_page_box_size().height.to_f32_px())
+    CSSPixelLength::new(context.device().page_box_size().height)
 }
 
 fn eval_orientation(context: &Context, value: Option<Orientation>) -> bool {
