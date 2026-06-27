@@ -77,6 +77,22 @@ pub struct Device {
     /// embedders that never call `set_bleed_box_size` get the
     /// page-axis fallback behaviour for free.
     bleed_box_size: Size2D<f32, CSSPixel>,
+    /// The current page-box size, in CSS pixels.
+    ///
+    /// Mirrors `viewport_size` but is consulted by the `width` and
+    /// `height` media features (`eval_width`/`eval_height`) rather
+    /// than the viewport-relative path. In paged output the
+    /// `width`/`height` media features describe the page box — the
+    /// full sheet, page area plus margins (Media Queries 4 §6.1) —
+    /// whereas viewport units (`vw`/`vh`/…) resolve against the page
+    /// area, i.e. the content box inside the margins (CSS Values 4
+    /// §6.1.2). The two therefore differ in paged media and cannot
+    /// share `viewport_size`. Initialised to the same dimensions as
+    /// `viewport_size`, so embedders that never call
+    /// `set_page_box_size` get the viewport-equals-page-box fallback
+    /// for free — correct for continuous media, where the two
+    /// coincide.
+    page_box_size: Size2D<f32, CSSPixel>,
     /// The current device pixel ratio, from CSS pixels to device pixels.
     device_pixel_ratio: Scale<f32, CSSPixel, DevicePixel>,
     /// The current quirks mode.
@@ -155,6 +171,7 @@ impl Device {
             media_type,
             viewport_size,
             bleed_box_size: viewport_size,
+            page_box_size: viewport_size,
             device_pixel_ratio,
             quirks_mode,
             root_style,
@@ -385,6 +402,42 @@ impl Device {
         self.bleed_box_size = bleed_box_size;
     }
 
+    /// Get the page-box size on this [`Device`].
+    pub fn page_box_size(&self) -> Size2D<f32, CSSPixel> {
+        self.page_box_size
+    }
+
+    /// Set the page-box size on this [`Device`].
+    ///
+    /// moegoe calls this from
+    /// `StyleEngine::update_page_box_for_media_queries` with the
+    /// cascaded `@page` size — the full sheet (page area plus
+    /// margins) — so the `width`/`height` media features describe the
+    /// page box per Media Queries 4 §6.1, while `viewport_size`
+    /// keeps the page area for viewport-unit resolution. Like
+    /// `set_viewport_size`, this does not update any associated
+    /// `Stylist`; the caller mirrors the
+    /// `media_features_change_changed_style` /
+    /// `force_stylesheet_origins_dirty` calls so the next compute
+    /// pass re-evaluates `width`/`height` media queries.
+    pub fn set_page_box_size(&mut self, page_box_size: Size2D<f32, CSSPixel>) {
+        self.page_box_size = page_box_size;
+    }
+
+    /// Returns the page-box size of the current device in app units,
+    /// used to evaluate the `width` and `height` media features in
+    /// paged media (Media Queries 4 §6.1). Mirrors `au_viewport_size`
+    /// but consults `page_box_size`. When the embedder has not set
+    /// the page box separately it equals the viewport, so
+    /// continuous-media evaluation is unchanged.
+    #[inline]
+    pub fn au_page_box_size(&self) -> UntypedSize2D<Au> {
+        Size2D::new(
+            Au::from_f32_px(self.page_box_size.width),
+            Au::from_f32_px(self.page_box_size.height),
+        )
+    }
+
     /// Returns the viewport size of the current device in app units, needed,
     /// among other things, to resolve viewport units.
     #[inline]
@@ -599,12 +652,19 @@ impl Device {
 }
 
 /// https://drafts.csswg.org/mediaqueries-4/#width
+///
+/// For paged media this describes the page box (the full sheet, page
+/// area plus margins), so it reads `au_page_box_size` rather than the
+/// viewport (page area). For continuous media the two coincide.
 fn eval_width(context: &Context) -> CSSPixelLength {
-    CSSPixelLength::new(context.device().au_viewport_size().width.to_f32_px())
+    CSSPixelLength::new(context.device().au_page_box_size().width.to_f32_px())
 }
 
+/// https://drafts.csswg.org/mediaqueries-4/#height
+///
+/// See [`eval_width`]: the page box, not the page area, in paged media.
 fn eval_height(context: &Context) -> CSSPixelLength {
-    CSSPixelLength::new(context.device().au_viewport_size().height.to_f32_px())
+    CSSPixelLength::new(context.device().au_page_box_size().height.to_f32_px())
 }
 
 fn eval_orientation(context: &Context, value: Option<Orientation>) -> bool {
