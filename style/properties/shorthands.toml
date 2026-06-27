@@ -492,6 +492,7 @@ spec = "https://drafts.csswg.org/css-backgrounds-4/#corner-shape"
 
 [outline]
 sub_properties = ["outline-color", "outline-style", "outline-width"]
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 spec = "https://drafts.csswg.org/css-ui/#propdef-outline"
 
 [columns]
