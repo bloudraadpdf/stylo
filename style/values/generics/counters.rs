@@ -266,6 +266,14 @@ pub enum StringSetContentKeyword {
     After,
     /// `first-letter`
     FirstLetter,
+    /// `marker`
+    ///
+    /// css-content-3 §2.7.3 lists `marker` as a `content()` source. It is
+    /// valid for `string-set` (and `bookmark-label`) but NOT for the
+    /// `target-text()` second argument (css-gcpm-3 §3.2, whose grammar is
+    /// `content | before | after | first-letter`); the target-text parser
+    /// rejects it.
+    Marker,
 }
 
 /// Keyword for `target-text()` second argument.

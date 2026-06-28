@@ -212,6 +212,7 @@ fn parse_content_function_keyword<'i, 't>(
         "before" => generics::StringSetContentKeyword::Before,
         "after" => generics::StringSetContentKeyword::After,
         "first-letter" => generics::StringSetContentKeyword::FirstLetter,
+        "marker" => generics::StringSetContentKeyword::Marker,
         _ => {
             let ident = ident.clone();
             return Err(input.new_custom_error(
@@ -263,6 +264,13 @@ fn parse_target_text_keyword<'i, 't>(
                     generics::StringSetContentKeyword::After => generics::TargetTextKeyword::After,
                     generics::StringSetContentKeyword::FirstLetter => {
                         generics::TargetTextKeyword::FirstLetter
+                    },
+                    // css-gcpm-3 §3.2: `marker` is not a valid `target-text()`
+                    // content-level (its grammar is `content | before | after
+                    // | first-letter`). Reject it rather than silently
+                    // mapping it to another source.
+                    generics::StringSetContentKeyword::Marker => {
+                        return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
                     },
                 })
             })
