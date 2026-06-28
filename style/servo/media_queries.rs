@@ -665,12 +665,20 @@ fn eval_height(context: &Context) -> CSSPixelLength {
 }
 
 fn eval_orientation(context: &Context, value: Option<Orientation>) -> bool {
-    Orientation::eval(context.device().au_viewport_size(), value)
+    // Paged media: the `orientation` feature describes the page box (Media
+    // Queries 4 §6.1), not the page area. `page_box_size` defaults to the
+    // viewport for continuous media, so that case is unchanged. Au precision is
+    // sufficient here — this is a width-vs-height comparison, not an exact
+    // length boundary (unlike `width`/`height`, which read f32 directly).
+    let page_box = context.device().page_box_size();
+    let au = UntypedSize2D::new(Au::from_f32_px(page_box.width), Au::from_f32_px(page_box.height));
+    Orientation::eval(au, value)
 }
 
 fn eval_aspect_ratio(context: &Context) -> Ratio {
-    let size = context.device().au_viewport_size();
-    Ratio::new(size.width.0 as f32, size.height.0 as f32)
+    // Paged media: the page box, not the page area (Media Queries 4 §6.1).
+    let page_box = context.device().page_box_size();
+    Ratio::new(page_box.width, page_box.height)
 }
 
 #[derive(Clone, Copy, Debug, FromPrimitive, Parse, ToCss)]
