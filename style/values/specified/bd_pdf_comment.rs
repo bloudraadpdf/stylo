@@ -11,7 +11,7 @@
 //! Squiggly). `-bd-pdf-link-border` styles the implicit Link
 //! annotation produced by `<a href>`. v1 ships the parse surface
 //! and IR plumbing; emission of non-link annotation subtypes is
-//! gated on krilla upstream support and emits a
+//! gated on bladsy upstream support and emits a
 //! `RenderWarning::UnsupportedPdfFeature` until that lands.
 
 use crate::derives::*;

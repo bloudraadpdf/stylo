@@ -7,7 +7,7 @@
 //! AcroForm interactive-form opt-in. `pdf` declares that the
 //! document contains widget annotations driven by HTML form
 //! controls (ISO 32000-2 §12.7). v1 ships the parse surface
-//! only; full widget emission via krilla is deferred to a
+//! only; full widget emission via bladsy is deferred to a
 //! separate workstream. The moegoe renderer emits a
 //! `RenderWarning::UnsupportedPdfFeature` when any computed
 //! `-bd-pdf-format: pdf` is observed in the cascade.

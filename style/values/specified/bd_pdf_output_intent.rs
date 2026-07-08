@@ -48,7 +48,7 @@ use style_traits::{CssWriter, ParseError, StyleParseErrorKind, ToCss};
 
 /// Specified value of `-bd-pdf-output-intent`.
 ///
-/// `auto` (initial) registers the krilla validator's recommended
+/// `auto` (initial) registers the bladsy validator's recommended
 /// profile when one exists; `none` clears any registered profile.
 /// `Named` carries a registered colour-space identifier
 /// (`sRGB IEC61966-2.1`, `FOGRA39`, ...); `Url` references an ICC

@@ -94,7 +94,7 @@ impl Parse for BdPdfStringSlot {
 /// - `element` (default) — the cascade-bearer also surfaces a per-page
 ///   `/Subtype /FileAttachment` annotation (ISO 32000-2 §12.5.6.15) at
 ///   the element's painted bbox; the file payload is shared with the
-///   catalogue's `/Names /EmbeddedFiles` entry via krilla's content-hash
+///   catalogue's `/Names /EmbeddedFiles` entry via bladsy's content-hash
 ///   deduplication.
 /// - `document` — only the document-level `/Names /EmbeddedFiles` entry
 ///   is emitted; no per-page annotation.

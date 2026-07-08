@@ -18,8 +18,8 @@ use crate::OwnedStr;
 use cssparser::{match_ignore_ascii_case, Parser};
 
 /// PDF/UA structure-tree standard roles. One Rust variant per
-/// krilla `TagKind` variant — keep aligned with
-/// `~/github/krilla/crates/krilla/src/interchange/tagging/generated.rs`.
+/// bladsy `TagKind` variant — keep aligned with
+/// `~/dev/bloudraad/bladsy/crates/bladsy/src/interchange/tagging/generated.rs`.
 #[repr(u8)]
 #[derive(
     Clone,
@@ -104,7 +104,7 @@ pub enum BdPdfStandardRole {
 /// (the most common case for purely decorative typography or
 /// design elements).
 ///
-/// Maps onto krilla's `ArtifactType` at the PDF emission boundary:
+/// Maps onto bladsy's `ArtifactType` at the PDF emission boundary:
 /// `Layout` -> `ArtifactType::Layout`, `Page` -> `ArtifactType::Page`,
 /// `Background` -> `ArtifactType::Background`, `Pagination` ->
 /// `ArtifactType::PaginationOther` (the generic pagination kind;
@@ -152,9 +152,9 @@ pub enum BdPdfArtifactKind {
 /// `artifact(layout|page|background|pagination)`) — exclude this
 /// element and its subtree from the structure tree and mark the
 /// content as a PDF `/Artifact` of the named kind (`layout` by
-/// default). `<standard-role>` — explicit krilla `TagKind`.
+/// default). `<standard-role>` — explicit bladsy `TagKind`.
 /// `<custom-ident>` — author-named role; falls back to `Span` or
-/// `Div` (block-display) with a warning until the krilla
+/// `Div` (block-display) with a warning until the bladsy
 /// `RoleMap` API lands.
 #[derive(
     Clone,
@@ -360,7 +360,7 @@ impl Parse for BdPdfTagStringPlain {
 /// otherwise — matching HTML5 §4.9.10.1 "header cell implicit
 /// scope"). Authors can pin a specific scope on a per-element
 /// basis with `row`, `column`, or `both`; the value lands on
-/// krilla `Tag::TH::with_scope(...)` at PDF emission time.
+/// bladsy `Tag::TH::with_scope(...)` at PDF emission time.
 /// Mirrors the IR-side `IrTableHeaderScope` enum so authoring
 /// stays direct from CSS to the structure tree without an HTML
 /// `scope=` attribute.
@@ -414,7 +414,7 @@ impl BdPdfTagHeaderCellScope {
 /// purpose, structure, or content. PDF/UA-2 §8.8 / WTPDF clause
 /// 5 honour the entry as the canonical equivalent of HTML's
 /// legacy `<table summary="...">` attribute. Cascade values
-/// land on krilla `Tag::Table::with_summary(...)` at PDF
+/// land on bladsy `Tag::Table::with_summary(...)` at PDF
 /// emission time.
 ///
 /// `none` — no summary. `<string>` — literal summary text.
@@ -472,7 +472,7 @@ impl Parse for BdPdfTagTableSummary {
 /// PDF/UA-1 §7.18 / PDF/UA-2 §8.13 require non-interactive form
 /// controls in tagged PDF to declare their role so assistive
 /// technology can announce them. The cascade reader projects this
-/// onto krilla's `FormFieldRole` enum at PDF emission time.
+/// onto bladsy's `FormFieldRole` enum at PDF emission time.
 ///
 /// `none` (initial) — no `/Role` entry; the renderer leaves the
 /// `Form` structure element without a role. `text | button |
@@ -533,7 +533,7 @@ impl BdPdfTagForm {
 /// `/PrintField` attribute owner attached to a `Form` structure
 /// element representing a checkbox or radio button (ISO 32000-2
 /// §14.7.4.4 Table 359). The cascade reader projects this onto
-/// krilla's `FormFieldState` enum at PDF emission time. The `mixed`
+/// bladsy's `FormFieldState` enum at PDF emission time. The `mixed`
 /// keyword mirrors HTML's `aria-checked: mixed` and PDFreactor's
 /// `neutral` keyword; the compat translator rewrites `neutral` to
 /// `mixed` so authors targeting the native surface use the

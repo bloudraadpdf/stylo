@@ -242,9 +242,9 @@ fn eval_font_format(kw: &FontFaceSourceFormatKeyword) -> bool {
     // preserving authorial fallback intent).
     //
     // - `Truetype` / `Opentype`: native rustybuzz shaping path and
-    //   krilla CFF/glyf embedding. Always supported.
+    //   bladsy CFF/glyf embedding. Always supported.
     // - `Woff` / `Woff2`: allsorts decompresses these containers down
-    //   to SFNT before they reach rustybuzz / krilla. Always supported.
+    //   to SFNT before they reach rustybuzz / bladsy. Always supported.
     // - `EmbeddedOpentype`: legacy IE-only `.eot`; no consumer wiring.
     // - `Svg`: SVG-as-font (deprecated container); no consumer wiring.
     //   Distinct from `color-svg` glyph tables, which is handled by
@@ -289,7 +289,7 @@ fn eval_font_tech(flag: &FontFaceSourceTechFlags) -> bool {
     //   instance, which is sufficient for the spec predicate ("does
     //   the UA accept variation fonts?"). Axis-override authoring via
     //   `font-variation-settings` is a separate capability.
-    // - `COLOR_COLRV0` / `COLOR_COLRV1`: krilla's colour-font emission
+    // - `COLOR_COLRV0` / `COLOR_COLRV1`: bladsy's colour-font emission
     //   path renders COLR layer trees; moegoe ships `Noto Color Emoji`
     //   (COLRv1) as a bundled face.
     // - `FEATURES_AAT`: Apple Advanced Typography state machines are

@@ -303,7 +303,7 @@ impl Parse for BdPdfEventScripts {
 /// Specified value of the per-widget AcroForm `/AA` JavaScript
 /// trio extension — `-bd-pdf-calculate`, `-bd-pdf-focus`, and
 /// `-bd-pdf-blur`. These cascade onto AcroForm widget annotations
-/// and project onto krilla's `WidgetAnnotation::with_*_action`
+/// and project onto bladsy's `WidgetAnnotation::with_*_action`
 /// setters at PDF emission time, populating the `/AA /C`, `/AA /Fo`,
 /// and `/AA /Bl` entries per ISO 32000-2 §12.6.4.16 Table 230.
 ///

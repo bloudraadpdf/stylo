@@ -27,7 +27,7 @@
 //! `StyleEngine::extract_bd_source_overrides`) and emits a
 //! `PaintCommand::DrawPdfPage` over each bearing element's content
 //! box. The PDF backend resolves the URL via the embedder's
-//! `ResourceLoader` and forwards the page bytes through krilla's
+//! `ResourceLoader` and forwards the page bytes through bladsy's
 //! `Surface::draw_pdf_page` API.
 
 use crate::derives::*;

@@ -162,8 +162,8 @@ pub enum ColorFunction<OriginColor> {
     /// 32000-2 §8.6.6.5); the fallback is consumed when DeviceN is
     /// unavailable on the target backend or when the document is being
     /// projected to a colour space that has no compatible DeviceN
-    /// resource (e.g. PDF/A-1 — see Stage A of the krilla wire-through
-    /// at krilla commit `e93295e29c`).
+    /// resource (e.g. PDF/A-1 — see Stage A of the bladsy wire-through
+    /// at bladsy commit `e93295e29c`).
     ///
     /// The colorant names are stored as `crate::Atom` for the same
     /// reason as [`Self::BdSpot`] — the variant must derive

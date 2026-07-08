@@ -8,7 +8,7 @@
 //! emits content. Most are keyword enums backed by trivial Stylo
 //! types; `-bd-rasterization-max-size` carries `auto | none | <number>`
 //! (megapixels), and `-bd-rasterization-supersampling` carries a
-//! positive `<number>`. The renderer surface (krilla) consumes them
+//! positive `<number>`. The renderer surface (bladsy) consumes them
 //! at the paint-to-PDF boundary.
 //!
 //! All values are PDFreactor-derived per
@@ -254,7 +254,7 @@ pub enum BdRasterization {
 /// - `actual-text`: after the rasterised image is emitted, every
 ///   captured `DrawText` command from the element subtree is
 ///   re-played onto the PDF surface with `TextRendering::Invisible`
-///   (krilla 71e71db59). The glyphs remain in the content stream
+///   (bladsy 71e71db59). The glyphs remain in the content stream
 ///   for accessibility tools, text selection, and search per
 ///   ISO 32000-2 §14.9.4 ("ActualText" accessibility overlay).
 ///

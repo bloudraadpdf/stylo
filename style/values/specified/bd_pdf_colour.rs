@@ -10,7 +10,7 @@
 //! variants, the `@-bd-colour` at-rule, and the `-bd-spot()` /
 //! `-bd-separation()` colour functions) is deferred per the audit
 //! plan: it requires touching every colour-consuming property in
-//! the cascade, the IR `Color` enum, and the krilla colour-space
+//! the cascade, the IR `Color` enum, and the bladsy colour-space
 //! API. The F2 keyword surface here parses and computes
 //! independently and so can land ahead of the wider work.
 //!

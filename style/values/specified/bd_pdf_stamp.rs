@@ -39,13 +39,13 @@ use style_traits::ParseError;
 /// annotation over the bearer element's painted bbox.
 ///
 /// Default predefined stamps (e.g. `draft`, `approved`) project onto
-/// krilla's [`StampIcon`] variants; viewers supply the appearance.
+/// bladsy's [`StampIcon`] variants; viewers supply the appearance.
 /// `custom("MyHouseStamp")` projects onto `StampIcon::Custom` and
 /// emits the literal name verbatim — the embedder is responsible
 /// for supplying an `/AP` appearance stream if the receiving viewer
 /// does not recognise the name.
 ///
-/// [`StampIcon`]: ../../../../../../krilla/src/interactive/annotation.rs
+/// [`StampIcon`]: ../../../../../../bladsy/src/interactive/annotation.rs
 #[derive(
     Clone,
     Debug,

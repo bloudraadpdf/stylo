@@ -8,7 +8,7 @@
 //! `OutputCondition` entry (ISO 32000-2 §14.11.5, Table 401).
 //!
 //! Grammar: `none | <string>`. `none` (initial) leaves the slot
-//! unset — krilla will not emit an `OutputCondition` key on the
+//! unset — bladsy will not emit an `OutputCondition` key on the
 //! output-intent dictionary. A literal `<string>` is round-tripped
 //! verbatim.
 //!

@@ -5,8 +5,8 @@
 //! moegoe `-bd-pdf-trapped` property (K7).
 //!
 //! Document-level descriptor projecting onto the PDF info-dictionary
-//! `/Trapped` entry (ISO 32000-2 §14.11.3). krilla maps the moegoe
-//! values onto `krilla::Metadata::trapped(Trapping::*)`:
+//! `/Trapped` entry (ISO 32000-2 §14.11.3). bladsy maps the moegoe
+//! values onto `bladsy::Metadata::trapped(Trapping::*)`:
 //!
 //! - `unknown` (initial) — `Trapping::Unknown`, equivalent to omitting
 //!   the `/Trapped` key.
