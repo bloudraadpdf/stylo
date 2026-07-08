@@ -640,14 +640,14 @@ impl Parse for BdPdfTagFormName {
 ///
 /// PDF 2.0 (ISO 32000-2 §14.8.6) lets a structure element bind to
 /// a declared namespace so structure-element names carry meaning
-/// relative to a vocabulary. krilla projects this onto its
+/// relative to a vocabulary. bladsy projects this onto its
 /// `TagNamespace` enum.
 ///
 /// `auto` — pick the default for the element's HTML namespace:
 /// `<math>` and descendants resolve to `mathml`, every other
 /// element resolves to the PDF 2.0 standard structure namespace
 /// (no override is set on the per-tag `/NS` slot). `pdf2-ssn` and
-/// `krilla` pin the explicit krilla-built-in namespaces; `html`
+/// `bladsy` pin the explicit bladsy-built-in namespaces; `html`
 /// and `mathml` request the well-known external namespace URIs
 /// (`http://www.w3.org/1999/xhtml` and
 /// `http://www.w3.org/1998/Math/MathML` respectively).
@@ -678,17 +678,17 @@ pub enum BdPdfTagNamespace {
     /// `<math>` -> MathML; everything else -> default (no `/NS`).
     Auto,
     /// `pdf2-ssn` — bind to the PDF 2.0 standard structure
-    /// namespace (krilla `TagNamespace::Pdf2Ssn`). Useful when a
+    /// namespace (bladsy `TagNamespace::Pdf2Ssn`). Useful when a
     /// custom-ident role is being rewritten back to its standard
     /// name and the author wants to force the SSN binding.
     Pdf2Ssn,
-    /// `krilla` — bind to krilla's custom namespace
-    /// (`TagNamespace::Krilla`). Reserved for krilla-defined
+    /// `bladsy` — bind to bladsy's custom namespace
+    /// (`TagNamespace::Bladsy`). Reserved for bladsy-defined
     /// custom names (`Datetime`, `Terms`, `Title`, &c.).
-    Krilla,
+    Bladsy,
     /// `mathml` — MathML 3 namespace URI
     /// (`http://www.w3.org/1998/Math/MathML`). The renderer
-    /// registers the URI on the krilla `Document` once per
+    /// registers the URI on the bladsy `Document` once per
     /// document and reuses the resulting handle for every
     /// element flagged `mathml`.
     MathMl,
@@ -721,7 +721,7 @@ impl Parse for BdPdfTagNamespace {
             match_ignore_ascii_case! { ident,
                 "auto" => Ok(Self::Auto),
                 "pdf2-ssn" => Ok(Self::Pdf2Ssn),
-                "krilla" => Ok(Self::Krilla),
+                "bladsy" => Ok(Self::Bladsy),
                 "mathml" => Ok(Self::MathMl),
                 "html" => Ok(Self::Html),
                 _ => Err(i.new_custom_error::<_, style_traits::StyleParseErrorKind>(
@@ -733,7 +733,7 @@ impl Parse for BdPdfTagNamespace {
         }
         Ok(Self::Custom(CustomIdent::parse(
             input,
-            &["auto", "pdf2-ssn", "krilla", "mathml", "html"],
+            &["auto", "pdf2-ssn", "bladsy", "mathml", "html"],
         )?))
     }
 }

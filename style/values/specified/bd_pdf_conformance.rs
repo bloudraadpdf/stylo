@@ -5,7 +5,7 @@
 //! moegoe `-bd-pdf-conformance` and `-bd-pdf-version` properties (G4).
 //!
 //! Native moegoe fork-extension surface for PDF/A and PDF/UA
-//! conformance validation. `-bd-pdf-conformance` selects the krilla
+//! conformance validation. `-bd-pdf-conformance` selects the bladsy
 //! `Validator`; `-bd-pdf-version` overrides the PDF baseline version
 //! when the chosen conformance permits more than one. Both apply to
 //! all elements but the moegoe renderer only honours `:root`
@@ -17,7 +17,7 @@ use cssparser::{match_ignore_ascii_case, Parser, Token};
 
 /// Specified value of the `-bd-pdf-conformance` property.
 ///
-/// One variant per krilla `Validator` enum entry plus `none`. Spec
+/// One variant per bladsy `Validator` enum entry plus `none`. Spec
 /// vocabulary (`a1a` … `ua1`) matches the short-form identifiers
 /// authors copy from PDF/A and PDF/UA compliance documents.
 #[repr(u8)]
@@ -72,17 +72,15 @@ pub enum BdPdfConformanceValue {
     PdfX4,
     #[css(keyword = "pdf-x-4p")]
     PdfX4P,
-    // PDF/X-5 family (ISO 15930-7 / -8) — OPI-based external
-    // graphics (X-5g, X-5pg) and n-colorant output intent (X-5n).
-    // All three are PDF 1.6 based. X-5pg additionally requires an
-    // external output profile reference.
-    #[css(keyword = "pdf-x-5g")]
-    PdfX5g,
-    #[css(keyword = "pdf-x-5pg")]
-    PdfX5pg,
-    #[css(keyword = "pdf-x-5n")]
-    PdfX5n,
-    // Well-Tagged PDF — PDF Association profile (krilla
+    // PDF/X-6 family (ISO 15930-9) — the PDF 2.0-based successor to
+    // PDF/X-5. `pdf-x-6` embeds the output intent; `pdf-x-6p` (like
+    // PDF/X-4p) references an external output profile instead. moegoe
+    // maps these onto bladsy's `Prepress::X6` / `Prepress::X6P`.
+    #[css(keyword = "pdf-x-6")]
+    PdfX6,
+    #[css(keyword = "pdf-x-6p")]
+    PdfX6P,
+    // Well-Tagged PDF — PDF Association profile (bladsy
     // `Validator::WTPDF`). Structural tagging subset of PDF/UA
     // without the full UA accessibility conformance gate.
     Wtpdf,
@@ -104,7 +102,7 @@ impl BdPdfConformanceValue {
 
 /// Specified value of the `-bd-pdf-version` property.
 ///
-/// `auto` defers to the krilla validator's recommended version (or
+/// `auto` defers to the bladsy validator's recommended version (or
 /// the moegoe baseline when no conformance is set). The numeric
 /// variants name explicit PDF baseline versions.
 #[repr(u8)]
