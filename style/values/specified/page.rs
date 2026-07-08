@@ -163,13 +163,37 @@ impl Parse for Bleed {
 /// Specified value of the @page size descriptor
 pub type PageSize = generics::page::PageSize<Size2D<NonNegativeLength>>;
 
+/// Parse a `<page-size>` keyword, accepting the Prince vendor
+/// aliases `US-Letter`, `US-Legal`, and `US-Ledger` on top of the
+/// css-page-3 set. Prince documents the aliases as interchangeable
+/// with `letter` / `legal` / `ledger`; real-world Prince stylesheets
+/// (e.g. the vendor's published sample projects) use the aliased
+/// spelling, and rejecting it invalidates the whole `size`
+/// declaration, silently falling back to the UA default sheet.
+fn parse_paper_size_with_vendor_aliases<'i, 't>(
+    input: &mut Parser<'i, 't>,
+) -> Result<PaperSize, ParseError<'i>> {
+    if let Ok(paper_size) = input.try_parse(PaperSize::parse) {
+        return Ok(paper_size);
+    }
+    let ident = input.expect_ident()?.clone();
+    match_ignore_ascii_case! { &ident,
+        "us-letter" => Ok(PaperSize::Letter),
+        "us-legal" => Ok(PaperSize::Legal),
+        "us-ledger" => Ok(PaperSize::Ledger),
+        _ => Err(input.new_custom_error(
+            style_traits::StyleParseErrorKind::UnexpectedIdent(ident.clone()),
+        )),
+    }
+}
+
 impl Parse for PageSize {
     fn parse<'i, 't>(
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
         // Try to parse as <page-size> [ <orientation> ]
-        if let Ok(paper_size) = input.try_parse(PaperSize::parse) {
+        if let Ok(paper_size) = input.try_parse(parse_paper_size_with_vendor_aliases) {
             let orientation = input
                 .try_parse(PageSizeOrientation::parse)
                 .unwrap_or(PageSizeOrientation::Portrait);
@@ -177,7 +201,7 @@ impl Parse for PageSize {
         }
         // Try to parse as <orientation> [ <page-size> ]
         if let Ok(orientation) = input.try_parse(PageSizeOrientation::parse) {
-            if let Ok(paper_size) = input.try_parse(PaperSize::parse) {
+            if let Ok(paper_size) = input.try_parse(parse_paper_size_with_vendor_aliases) {
                 return Ok(PageSize::PaperSize(paper_size, orientation));
             }
             return Ok(PageSize::Orientation(orientation));
