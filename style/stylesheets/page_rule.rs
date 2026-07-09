@@ -190,6 +190,14 @@ impl PagePseudoClassFlags {
 
 type PagePseudoClasses = SmallVec<[PagePseudoClass; 4]>;
 
+/// The `:nth(An+B)` components of one page selector.
+///
+/// A page selector is a compound selector, so `@page:nth(n+3):nth(-n+4)`
+/// carries TWO `:nth()` components and matches only the pages both accept.
+/// One inline slot covers every real stylesheet; a chain of two appears in
+/// PDFreactor's own `magazine` sample.
+type PageNths = SmallVec<[(i32, i32); 1]>;
+
 /// Type of a single [`@page`][page selector]
 ///
 /// [page-selectors]: https://drafts.csswg.org/css2/page.html#page-selectors
@@ -203,10 +211,28 @@ pub struct PageSelector {
     ///
     /// [page-selectors]: https://drafts.csswg.org/css2/page.html#page-selectors
     pub pseudos: PagePseudoClasses,
-    /// `:nth(An+B)` coefficients, if present.
+    /// `:nth(An+B)` coefficients, one per `:nth()` component. Empty when the
+    /// selector carries none.
+    ///
+    /// A compound page selector may repeat `:nth()`; every component must
+    /// match, exactly as the keyword pseudo-classes in `pseudos` must.
     ///
     /// https://drafts.csswg.org/css-page-4/#nth-page-pseudo-class
-    pub nth: Option<(i32, i32)>,
+    pub nth: PageNths,
+}
+
+/// Whether `:nth(An+B)` selects `page_number` (1-indexed).
+///
+/// https://drafts.csswg.org/css-page-4/#nth-page-pseudo-class
+#[inline]
+fn nth_matches(a: i32, b: i32, page_number: usize) -> bool {
+    let n = page_number as i32;
+    let diff = n - b;
+    if a == 0 {
+        diff == 0
+    } else {
+        diff % a == 0 && diff / a >= 0
+    }
 }
 
 /// Computes the [specificity] given the g, h, and f values as in the spec.
@@ -260,16 +286,12 @@ impl PageSelector {
         if !self.pseudos.iter().all(|pc| flags.contains_class(pc)) {
             return false;
         }
-        if let Some((a, b)) = self.nth {
-            let n = page_number as i32;
-            let diff = n - b;
-            if a == 0 {
-                if diff != 0 {
-                    return false;
-                }
-            } else if diff % a != 0 || diff / a < 0 {
-                return false;
-            }
+        if !self
+            .nth
+            .iter()
+            .all(|&(a, b)| nth_matches(a, b, page_number))
+        {
+            return false;
         }
         true
     }
@@ -307,18 +329,12 @@ impl PageSelector {
                 | PagePseudoClass::Verso => h += 1,
             }
         }
-        // Check :nth() match
-        if let Some((a, b)) = self.nth {
-            let n = page_number as i32;
-            let diff = n - b;
-            if a == 0 {
-                if diff != 0 {
-                    return None;
-                }
-            } else if diff % a != 0 || diff / a < 0 {
+        // Check every :nth() component. Each contributes +1 pseudo-class
+        // specificity (same bucket as :left / :right).
+        for &(a, b) in self.nth.iter() {
+            if !nth_matches(a, b, page_number) {
                 return None;
             }
-            // :nth() contributes +1 pseudo-class specificity (same bucket as :left/:right)
             h += 1;
         }
         Some(selector_specificity(g, h, !self.name.0.is_empty()))
@@ -334,7 +350,7 @@ impl ToCss for PageSelector {
         for pc in self.pseudos.iter() {
             dest.write_str(pc.to_str())?;
         }
-        if let Some((a, b)) = self.nth {
+        for &(a, b) in self.nth.iter() {
             dest.write_str(":nth(")?;
             match (a, b) {
                 (0, val) => write!(dest, "{}", val)?,
@@ -366,7 +382,7 @@ impl Parse for PageSelector {
     ) -> Result<Self, ParseError<'i>> {
         let name = input.try_parse(parse_page_name);
         let mut pseudos = PagePseudoClasses::default();
-        let mut nth = None;
+        let mut nth = PageNths::default();
         loop {
             // Try functional pseudo-class :nth(...) first.
             // We use a state variable since try_parse borrows input mutably.
@@ -382,7 +398,7 @@ impl Parse for PageSelector {
                 i.parse_nested_block(|i| parse_nth(i).map_err(|e| e.into()))
             });
             if let Ok((a, b)) = parsed_nth {
-                nth = Some((a, b));
+                nth.push((a, b));
                 continue;
             }
             // Then try keyword pseudo-class
@@ -393,7 +409,7 @@ impl Parse for PageSelector {
             break;
         }
         // If the result was empty, then we didn't get a selector.
-        let has_content = !pseudos.is_empty() || nth.is_some();
+        let has_content = !pseudos.is_empty() || !nth.is_empty();
         let name = match name {
             Ok(name) => name,
             Err(..) if has_content => AtomIdent::new(atom!("")),
