@@ -577,6 +577,14 @@ extra_gecko_sub_properties = [
 ]
 spec = "https://drafts.csswg.org/css-fonts-3/#propdef-font"
 derive_value_info = false
+# CSS Page 3 Appendix A lists the font properties among those that apply in
+# the page context, and every `font` sub-property this shorthand sets already
+# carries `page`. Without it the shorthand is rejected whole, so
+# `@bottom-left { font: 7pt sans-serif }` -- the spelling PDFreactor's own
+# sample stylesheets use -- silently falls back to the initial 12pt serif.
+# `margin` is not listed because a margin rule nests inside `@page` and the
+# parser accumulates both rule types (see `line-height`, `font-size`).
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [font-variant]
 sub_properties = ["font-variant-caps", "font-variant-alternates", "font-variant-east-asian", "font-variant-emoji", "font-variant-ligatures", "font-variant-numeric", "font-variant-position"]
