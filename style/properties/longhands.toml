@@ -6154,6 +6154,7 @@ initial_specified_value = "specified::BdTruncateMarginAfterBreak::Auto"
 spec = "Nonstandard (moegoe -bd-* fork extension; F32.8 margin truncation after break)"
 animation_type = "none"
 affects = "layout"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 # F32.9 — list-item marker value override
 # (PDFreactor -ro-listitem-value).
