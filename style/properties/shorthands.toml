@@ -482,6 +482,7 @@ extra_prefixes = ["webkit"]
 sub_properties = ["border-top-left-radius", "border-top-right-radius", "border-bottom-right-radius", "border-bottom-left-radius"]
 spec = "https://drafts.csswg.org/css-backgrounds/#border-radius"
 extra_prefixes = ["webkit"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 # CSS Backgrounds 4 §5.5 — `corner-shape` shorthand sets all four
 # per-corner shape longhands at once. Grammar mirrors `border-radius`

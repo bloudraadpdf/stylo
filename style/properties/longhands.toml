@@ -7106,6 +7106,7 @@ gecko_ffi_name = "mBorderRadius.top_left"
 boxed = true
 logical_group = "border-radius"
 affects = "paint"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [border-top-right-radius]
 type = "BorderCornerRadius"
@@ -7117,6 +7118,7 @@ gecko_ffi_name = "mBorderRadius.top_right"
 boxed = true
 logical_group = "border-radius"
 affects = "paint"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [border-bottom-right-radius]
 type = "BorderCornerRadius"
@@ -7128,6 +7130,7 @@ gecko_ffi_name = "mBorderRadius.bottom_right"
 boxed = true
 logical_group = "border-radius"
 affects = "paint"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [border-bottom-left-radius]
 type = "BorderCornerRadius"
@@ -7139,6 +7142,7 @@ gecko_ffi_name = "mBorderRadius.bottom_left"
 boxed = true
 logical_group = "border-radius"
 affects = "paint"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [border-start-start-radius]
 type = "BorderCornerRadius"
