@@ -287,9 +287,12 @@ pub enum BdTargetCandidate {
 /// Specified value of `-bd-truncate-margin-after-break` (F32.8).
 ///
 /// PDFreactor `-ro-truncate-margin-after-break` — controls whether
-/// block margins are collapsed away when a forced break leaves them
-/// at the top of a fresh fragmentainer. `auto` defers to standard
-/// CSS margin-collapse rules; `none` retains the margin in full.
+/// block margins are collapsed away when a break leaves them at the
+/// top of a fresh fragmentainer. `auto` defers to standard CSS
+/// margin-collapse rules (truncate at unforced breaks, keep at
+/// forced breaks and at the first page); `none` retains the margin
+/// in full; `always` truncates in every case, including forced
+/// breaks and the first page (PDFreactor manual, "Between Blocks").
 #[repr(u8)]
 #[derive(
     Clone,
@@ -311,6 +314,7 @@ pub enum BdTruncateMarginAfterBreak {
     #[default]
     Auto,
     None,
+    Always,
 }
 
 /// Specified value of `-bd-replacedelement` (F32.10).
