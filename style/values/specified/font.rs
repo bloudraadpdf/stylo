@@ -808,6 +808,7 @@ impl FontSizeKeyword {
         #[cfg(feature = "gecko")]
         let family = &font.mFont.family.families;
 
+        #[cfg(feature = "gecko")]
         let generic = family
             .single_generic()
             .unwrap_or(computed::GenericFontFamily::None);
@@ -818,8 +819,13 @@ impl FontSizeKeyword {
                 cx.device().base_size_for_generic(language, generic)
             })
         };
+        // The provider decides which generic governs the keyword size
+        // for a family LIST (default: the browser bare-single-generic
+        // quirk; print engines may let a trailing generic govern).
         #[cfg(feature = "servo")]
-        let base_size = cx.device().base_size_for_generic(generic);
+        let base_size = cx
+            .device()
+            .base_size_for_generic(cx.device().keyword_size_generic_for_family(family));
 
         self.to_length_without_context(cx.quirks_mode, base_size)
     }

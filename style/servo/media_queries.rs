@@ -15,7 +15,7 @@ use crate::properties::style_structs::Font;
 use crate::properties::ComputedValues;
 use crate::queries::feature::{AllowsRanges, Evaluator, FeatureFlags, QueryFeatureDescription};
 use crate::queries::values::{Orientation, PrefersColorScheme};
-use crate::values::computed::font::GenericFontFamily;
+use crate::values::computed::font::{FontFamilyList, GenericFontFamily};
 use crate::values::computed::{
     CSSPixelLength, Context, Length, LineHeight, NonNegativeLength, Ratio, Resolution,
 };
@@ -50,6 +50,16 @@ pub trait FontMetricsProvider: Debug + Sync {
     ) -> FontMetrics;
     /// Gets the base size given a generic font family.
     fn base_size_for_generic(&self, generic: GenericFontFamily) -> Length;
+    /// The generic family that governs font-size keyword resolution
+    /// (`medium` and the rest of the CSS 2.1 ladder) for a family
+    /// list. The default matches the browser quirk: only a list that
+    /// IS a single bare generic resolves against that generic's base
+    /// size. Clients may widen this -- print engines such as
+    /// PDFreactor let a trailing `monospace` generic govern the
+    /// keyword size even behind named families.
+    fn keyword_size_generic_for_family(&self, family: &FontFamilyList) -> GenericFontFamily {
+        family.single_generic().unwrap_or(GenericFontFamily::None)
+    }
 }
 
 /// A device is a structure that represents the current media a given document
@@ -341,6 +351,12 @@ impl Device {
     /// Gets the base size given a generic font family.
     pub fn base_size_for_generic(&self, generic: GenericFontFamily) -> Length {
         self.font_metrics_provider.base_size_for_generic(generic)
+    }
+
+    /// The generic family that governs font-size keyword resolution for
+    /// `family` -- see [`FontMetricsProvider::keyword_size_generic_for_family`].
+    pub fn keyword_size_generic_for_family(&self, family: &FontFamilyList) -> GenericFontFamily {
+        self.font_metrics_provider.keyword_size_generic_for_family(family)
     }
 
     /// Whether a given animation name may be referenced from style.
