@@ -884,7 +884,13 @@ impl FontSizeKeyword {
         static FONT_SIZE_FACTORS: [i32; 8] = [60, 75, 89, 100, 120, 150, 200, 300];
         let base_size_px = base_size.px().round() as i32;
         let html_size = self.html_size() as usize;
-        NonNegative(if base_size_px >= 9 && base_size_px <= 16 {
+        // The Gecko mapping tables are defined for the INTEGER base
+        // sizes browsers ship (9..16px). A fractional base (e.g. a
+        // client provider serving a print engine's 10pt = 13.333px
+        // monospace default) must scale exactly through the factor
+        // ladder rather than snap to the nearest integer row.
+        let integral_base = base_size.px().fract() == 0.0;
+        NonNegative(if integral_base && base_size_px >= 9 && base_size_px <= 16 {
             let mapping = if quirks_mode == QuirksMode::Quirks {
                 QUIRKS_FONT_SIZE_MAPPING
             } else {
