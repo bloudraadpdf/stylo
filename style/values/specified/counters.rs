@@ -385,6 +385,19 @@ fn parse_content_item<'i, 't>(
                         url, name, offset, style,
                     ))
                 }),
+                // moegoe -- `-bd-counter-offset(<ident>, <integer>
+                // [, <counter-style>])`, PDFreactor `-ro-counter-offset`.
+                // `counter()` plus an authored integer offset applied to
+                // the resolved value before the style (the mortgage
+                // sample's break markers use `-ro-counter-offset(page, 1)`
+                // for "Continued on page <next>").
+                "-bd-counter-offset" if allow_counter_functions => input.parse_nested_block(|input| {
+                    let name = CustomIdent::parse(input, &[])?;
+                    input.expect_comma()?;
+                    let offset = Integer::parse(context, input)?.value();
+                    let style = Content::parse_counter_style(context, input)?;
+                    Ok(generics::ContentItem::BdCounterOffset(name, offset, style))
+                }),
                 "leader" if allow_counter_functions => input.parse_nested_block(|input| {
                     let leader_type = if let Ok(ident) = input.try_parse(|i| i.expect_ident().map(|s| s.clone())) {
                         match_ignore_ascii_case! { &ident,
