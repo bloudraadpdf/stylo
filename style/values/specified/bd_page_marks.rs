@@ -125,16 +125,22 @@ impl Parse for BdPageMarksColour {
 /// Specified value of a `-bd-page-colorbar-*` slot.
 ///
 /// `none` (initial) — slot empty. `auto` — engine default colour
-/// bar (per ISO 12647). `<url>` — explicit colour-bar artwork.
-#[derive(
-    Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped,
-)]
+/// bar (per ISO 12647). `gradient-tint` and `progressive-color` are
+/// PDFreactor's two process-control wedges. A non-empty `<color>` list
+/// paints authored swatches in order. `<url>` selects explicit artwork.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToShmem, ToTyped)]
 #[repr(C, u8)]
 pub enum BdColorBarPosition {
     /// `none`.
     None,
     /// `auto`.
     Auto,
+    /// PDFreactor `gradient-tint` process-control wedge.
+    GradientTint,
+    /// PDFreactor `progressive-color` process-control wedge.
+    ProgressiveColor,
+    /// One or more authored `<color>` swatches.
+    Colours(OwnedSlice<Color>),
     /// `<url>`.
     Url(UrlOrNone),
 }
@@ -160,6 +166,29 @@ impl BdColorBarPosition {
     }
 }
 
+impl ToCss for BdColorBarPosition {
+    fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        match self {
+            Self::None => dest.write_str("none"),
+            Self::Auto => dest.write_str("auto"),
+            Self::GradientTint => dest.write_str("gradient-tint"),
+            Self::ProgressiveColor => dest.write_str("progressive-color"),
+            Self::Colours(list) => {
+                let mut first = true;
+                for colour in list.iter() {
+                    if !first {
+                        dest.write_str(" ")?;
+                    }
+                    first = false;
+                    colour.to_css(dest)?;
+                }
+                Ok(())
+            },
+            Self::Url(url) => url.to_css(dest),
+        }
+    }
+}
+
 impl Parse for BdColorBarPosition {
     fn parse<'i, 't>(
         context: &ParserContext,
@@ -177,7 +206,27 @@ impl Parse for BdColorBarPosition {
         {
             return Ok(Self::Auto);
         }
-        Ok(Self::Url(UrlOrNone::parse(context, input)?))
+        if input
+            .try_parse(|i| i.expect_ident_matching("gradient-tint"))
+            .is_ok()
+        {
+            return Ok(Self::GradientTint);
+        }
+        if input
+            .try_parse(|i| i.expect_ident_matching("progressive-color"))
+            .is_ok()
+        {
+            return Ok(Self::ProgressiveColor);
+        }
+        if let Ok(url) = input.try_parse(|i| UrlOrNone::parse(context, i)) {
+            return Ok(Self::Url(url));
+        }
+
+        let mut colours = vec![Color::parse(context, input)?];
+        while let Ok(colour) = input.try_parse(|i| Color::parse(context, i)) {
+            colours.push(colour);
+        }
+        Ok(Self::Colours(OwnedSlice::from(colours)))
     }
 }
 
@@ -564,10 +613,54 @@ mod tests {
             .expect("mark length should parse")
     }
 
+    fn parse_colour_bar(css: &str) -> BdColorBarPosition {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Page),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input = ParserInput::new(css);
+        let mut parser = Parser::new(&mut input);
+        parser
+            .parse_entirely(|input| BdColorBarPosition::parse(&context, input))
+            .expect("PDFreactor-compatible colour-bar value should parse")
+    }
+
     #[test]
     fn mark_length_round_trips() {
         // Numbers serialise canonically; check parse + serialise consistency.
         let value = parse_length("12pt");
         assert!(value.to_css_string().contains("pt"));
+    }
+
+    #[test]
+    fn colour_bar_algorithm_keywords_round_trip() {
+        assert_eq!(
+            parse_colour_bar("gradient-tint").to_css_string(),
+            "gradient-tint"
+        );
+        assert_eq!(
+            parse_colour_bar("progressive-color").to_css_string(),
+            "progressive-color"
+        );
+    }
+
+    #[test]
+    fn colour_bar_cmyk_list_round_trips_in_authored_order() {
+        let css = "device-cmyk(100% 0% 0% 0%) device-cmyk(75% 0% 0% 0%) device-cmyk(0% 100% 0% 0%)";
+        let serialised = parse_colour_bar(css).to_css_string();
+        let cyan = serialised.find("100%").expect("first 100% cyan swatch");
+        let cyan_75 = serialised.find("75%").expect("second 75% cyan swatch");
+        let magenta = serialised.rfind("100%").expect("third 100% magenta swatch");
+        assert!(
+            cyan < cyan_75 && cyan_75 < magenta,
+            "authored swatch order changed: {serialised}"
+        );
     }
 }

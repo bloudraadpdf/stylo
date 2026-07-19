@@ -112,15 +112,19 @@ impl ToComputedValue for specified::BdPageMarksColour {
 ///
 /// Note: `ComputedUrl` is not `ToShmem` (it carries an `Arc`); the
 /// derive is therefore omitted here.
-#[derive(
-    Clone, Debug, MallocSizeOf, PartialEq, ToCss, ToResolvedValue, ToTyped,
-)]
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToResolvedValue, ToTyped)]
 #[repr(C, u8)]
 pub enum BdColorBarPosition {
     /// `none`.
     None,
     /// `auto`.
     Auto,
+    /// PDFreactor `gradient-tint` process-control wedge.
+    GradientTint,
+    /// PDFreactor `progressive-color` process-control wedge.
+    ProgressiveColor,
+    /// One or more authored computed colour swatches.
+    Colours(crate::OwnedSlice<Color>),
     /// `<url>`.
     Url(GenericUrlOrNone<ComputedUrl>),
 }
@@ -133,6 +137,29 @@ impl BdColorBarPosition {
     }
 }
 
+impl ToCss for BdColorBarPosition {
+    fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        match self {
+            Self::None => dest.write_str("none"),
+            Self::Auto => dest.write_str("auto"),
+            Self::GradientTint => dest.write_str("gradient-tint"),
+            Self::ProgressiveColor => dest.write_str("progressive-color"),
+            Self::Colours(list) => {
+                let mut first = true;
+                for colour in list.iter() {
+                    if !first {
+                        dest.write_str(" ")?;
+                    }
+                    first = false;
+                    colour.to_css(dest)?;
+                }
+                Ok(())
+            },
+            Self::Url(url) => url.to_css(dest),
+        }
+    }
+}
+
 impl ToComputedValue for specified::BdColorBarPosition {
     type ComputedValue = BdColorBarPosition;
 
@@ -140,6 +167,15 @@ impl ToComputedValue for specified::BdColorBarPosition {
         match self {
             specified::BdColorBarPosition::None => BdColorBarPosition::None,
             specified::BdColorBarPosition::Auto => BdColorBarPosition::Auto,
+            specified::BdColorBarPosition::GradientTint => BdColorBarPosition::GradientTint,
+            specified::BdColorBarPosition::ProgressiveColor => BdColorBarPosition::ProgressiveColor,
+            specified::BdColorBarPosition::Colours(list) => {
+                let colours = list
+                    .iter()
+                    .map(|colour| colour.to_computed_value(ctx))
+                    .collect::<Vec<_>>();
+                BdColorBarPosition::Colours(crate::OwnedSlice::from(colours))
+            },
             specified::BdColorBarPosition::Url(u) => {
                 BdColorBarPosition::Url(u.to_computed_value(ctx))
             },
@@ -150,9 +186,18 @@ impl ToComputedValue for specified::BdColorBarPosition {
         match c {
             BdColorBarPosition::None => specified::BdColorBarPosition::None,
             BdColorBarPosition::Auto => specified::BdColorBarPosition::Auto,
-            BdColorBarPosition::Url(u) => specified::BdColorBarPosition::Url(
-                ToComputedValue::from_computed_value(u),
-            ),
+            BdColorBarPosition::GradientTint => specified::BdColorBarPosition::GradientTint,
+            BdColorBarPosition::ProgressiveColor => specified::BdColorBarPosition::ProgressiveColor,
+            BdColorBarPosition::Colours(list) => {
+                let colours = list
+                    .iter()
+                    .map(ToComputedValue::from_computed_value)
+                    .collect::<Vec<_>>();
+                specified::BdColorBarPosition::Colours(crate::OwnedSlice::from(colours))
+            },
+            BdColorBarPosition::Url(u) => {
+                specified::BdColorBarPosition::Url(ToComputedValue::from_computed_value(u))
+            },
         }
     }
 }

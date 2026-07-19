@@ -4826,10 +4826,10 @@ rule_types_allowed = ["page"]
 affects = ""
 
 [-bd-page-colorbar-offset]
-type = "Length"
-initial = "computed::Length::zero()"
+type = "LengthPercentage"
+initial = "computed::LengthPercentage::new_percent(computed::Percentage::hundred())"
 struct = "page"
-initial_specified_value = "specified::Length::zero()"
+initial_specified_value = "specified::LengthPercentage::hundred_percent()"
 spec = "Nonstandard (moegoe -bd-* fork extension; Family 20 page marks)"
 animation_type = "none"
 rule_types_allowed = ["page"]
