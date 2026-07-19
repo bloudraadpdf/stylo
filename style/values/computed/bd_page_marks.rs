@@ -119,9 +119,9 @@ pub enum BdColorBarPosition {
     None,
     /// `auto`.
     Auto,
-    /// PDFreactor `gradient-tint` process-control wedge.
+    /// Bloudraad `gradient-tint` process-control wedge.
     GradientTint,
-    /// PDFreactor `progressive-color` process-control wedge.
+    /// Bloudraad `progressive-color` process-control wedge.
     ProgressiveColor,
     /// One or more authored computed colour swatches.
     Colours(crate::OwnedSlice<Color>),

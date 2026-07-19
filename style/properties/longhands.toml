@@ -3733,15 +3733,25 @@ affects = "layout"
 
 [-bd-sidenote-align]
 type = "BdSidenoteAlign"
-initial = "computed::BdSidenoteAlign::Auto"
-struct = "inherited_text"
-initial_specified_value = "specified::BdSidenoteAlign::Auto"
-spec = "Nonstandard (moegoe -bd-* fork extension; F7 sidenote align)"
+initial = "computed::BdSidenoteAlign::baseline()"
+struct = "counters"
+initial_specified_value = "specified::BdSidenoteAlign::baseline()"
+spec = "Nonstandard (moegoe -bd-* fork extension; F7 vertical sidenote alignment)"
 animation_type = "none"
 affects = "layout"
 # moegoe F7 — accepted inside `@-bd-sidenote` and on regular elements
 # (so authors can target `aside.sidenote` style rules in addition to
 # the page-area block).
+rule_types_allowed = ["style", "page", "sidenote"]
+
+[-bd-sidenote-side]
+type = "BdSidenoteSide"
+initial = "computed::BdSidenoteSide::Auto"
+struct = "counters"
+initial_specified_value = "specified::BdSidenoteSide::Auto"
+spec = "Nonstandard (moegoe -bd-* fork extension; F7 sidenote page side)"
+animation_type = "none"
+affects = "layout"
 rule_types_allowed = ["style", "page", "sidenote"]
 
 [-bd-sidenote-avoid]

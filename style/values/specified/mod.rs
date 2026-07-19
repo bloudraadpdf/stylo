@@ -210,7 +210,10 @@ pub use self::bd_misc::{
     BdTargetCandidate, BdTruncateMarginAfterBreak,
 };
 pub use self::bd_running_copy::BdRunningCopy;
-pub use self::bd_sidenote::{BdFloatReferenceSidenote, BdSidenoteAlign, BdSidenoteAvoid, BdSidenoteOffset};
+pub use self::bd_sidenote::{
+    BdFloatReferenceSidenote, BdSidenoteAlign, BdSidenoteAlignment,
+    BdSidenoteAvoid, BdSidenoteOffset, BdSidenoteSide,
+};
 pub use self::bd_tab_stops::{BdTabStop, BdTabStopAlignment, BdTabStopLeader, BdTabStops};
 pub use self::bd_text_decoration::{
     BdTextDecorationLineColour, BdTextDecorationLineStyle, BdTextDecorationLineThickness,

@@ -126,7 +126,7 @@ impl Parse for BdPageMarksColour {
 ///
 /// `none` (initial) — slot empty. `auto` — engine default colour
 /// bar (per ISO 12647). `gradient-tint` and `progressive-color` are
-/// PDFreactor's two process-control wedges. A non-empty `<color>` list
+/// Bloudraad's two process-control wedges. A non-empty `<color>` list
 /// paints authored swatches in order. `<url>` selects explicit artwork.
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToShmem, ToTyped)]
 #[repr(C, u8)]
@@ -135,9 +135,9 @@ pub enum BdColorBarPosition {
     None,
     /// `auto`.
     Auto,
-    /// PDFreactor `gradient-tint` process-control wedge.
+    /// Bloudraad `gradient-tint` process-control wedge.
     GradientTint,
-    /// PDFreactor `progressive-color` process-control wedge.
+    /// Bloudraad `progressive-color` process-control wedge.
     ProgressiveColor,
     /// One or more authored `<color>` swatches.
     Colours(OwnedSlice<Color>),
@@ -629,7 +629,7 @@ mod tests {
         let mut parser = Parser::new(&mut input);
         parser
             .parse_entirely(|input| BdColorBarPosition::parse(&context, input))
-            .expect("PDFreactor-compatible colour-bar value should parse")
+            .expect("Bloudraad colour-bar value should parse")
     }
 
     #[test]

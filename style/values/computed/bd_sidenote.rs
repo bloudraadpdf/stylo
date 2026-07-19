@@ -9,7 +9,10 @@ use crate::values::computed::length::LengthPercentage;
 use crate::values::computed::{Context, ToComputedValue};
 use crate::values::specified::bd_sidenote as specified;
 
-pub use specified::{BdFloatReferenceSidenote, BdSidenoteAlign, BdSidenoteAvoid};
+pub use specified::{
+    BdFloatReferenceSidenote, BdSidenoteAlign, BdSidenoteAlignment,
+    BdSidenoteAvoid, BdSidenoteSide,
+};
 
 /// Computed value of `-bd-sidenote-offset`.
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, ToCss, ToResolvedValue, ToTyped)]

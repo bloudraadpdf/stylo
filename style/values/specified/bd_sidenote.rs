@@ -4,11 +4,10 @@
 
 //! moegoe sidenote-area styling (F7).
 //!
-//! Native fork-extension surface for sidenote regions per
-//! PDFreactor `-ro-sidenote-*` and Prince `float-reference:
-//! sidenote|leftnote|rightnote|insidenote|outsidenote`. The
-//! audit `docs/audits/CSS-COVERAGE-AUDIT-2026-05-14/stylo-push-plan.md`
-//! family 7 enumerates source vendors.
+//! Native fork-extension surface for sidenote regions. Foreign syntax is
+//! translated before declarations reach this parser.
+
+use std::fmt::{self, Write};
 
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
@@ -16,7 +15,7 @@ use crate::values::specified::length::LengthPercentage;
 use crate::values::CustomIdent;
 use crate::OwnedSlice;
 use cssparser::Parser;
-use style_traits::ParseError;
+use style_traits::{CssWriter, ParseError, ToCss};
 
 /// Specified value of `float-reference` extensions for sidenotes.
 ///
@@ -52,9 +51,9 @@ pub enum BdFloatReferenceSidenote {
     Outsidenote,
 }
 
-/// Specified value of `-bd-sidenote-align`.
+/// Specified value of `-bd-sidenote-side`.
 ///
-/// Which side of the sidenote area the call/note anchors to.
+/// Which physical or spread-relative page side contains the sidenote area.
 #[repr(u8)]
 #[derive(
     Clone,
@@ -73,13 +72,117 @@ pub enum BdFloatReferenceSidenote {
     ToTyped,
 )]
 #[allow(missing_docs)]
-pub enum BdSidenoteAlign {
+pub enum BdSidenoteSide {
     #[default]
     Auto,
     Inside,
     Outside,
     Left,
     Right,
+}
+
+/// Vertical reference used by `-bd-sidenote-align`.
+#[repr(u8)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Eq,
+    Hash,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[allow(missing_docs)]
+pub enum BdSidenoteAlignment {
+    Start,
+    End,
+    Stack,
+    #[default]
+    Baseline,
+    ContainerStart,
+    ContainerEnd,
+}
+
+/// Specified value of `-bd-sidenote-align`.
+///
+/// Alignment is vertical and independent from [`BdSidenoteSide`]. `strict`
+/// is meaningful only for alignments with a specific originating position.
+#[derive(
+    Clone,
+    Debug,
+    Eq,
+    Hash,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(C)]
+pub struct BdSidenoteAlign {
+    /// Vertical alignment reference.
+    pub alignment: BdSidenoteAlignment,
+    /// Whether the originating position must be preserved during stacking.
+    pub strict: bool,
+}
+
+impl BdSidenoteAlign {
+    /// Initial value (`baseline`).
+    #[inline]
+    pub fn baseline() -> Self {
+        Self {
+            alignment: BdSidenoteAlignment::Baseline,
+            strict: false,
+        }
+    }
+}
+
+impl Parse for BdSidenoteAlign {
+    fn parse<'i, 't>(
+        _context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        let alignment = BdSidenoteAlignment::parse(input)?;
+        let strict = input
+            .try_parse(|input| input.expect_ident_matching("strict"))
+            .is_ok();
+        if strict
+            && !matches!(
+                alignment,
+                BdSidenoteAlignment::Baseline
+                    | BdSidenoteAlignment::ContainerStart
+                    | BdSidenoteAlignment::ContainerEnd
+            )
+        {
+            return Err(input.new_custom_error(
+                style_traits::StyleParseErrorKind::UnspecifiedError,
+            ));
+        }
+        Ok(Self { alignment, strict })
+    }
+}
+
+impl ToCss for BdSidenoteAlign {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        self.alignment.to_css(dest)?;
+        if self.strict {
+            dest.write_str(" strict")?;
+        }
+        Ok(())
+    }
 }
 
 /// Specified value of `-bd-sidenote-avoid`.

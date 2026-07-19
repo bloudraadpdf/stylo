@@ -1951,6 +1951,27 @@ mod tests {
         );
     }
 
+    /// Parse a declaration and assert that the value is rejected rather than
+    /// retained as an untyped fork extension.
+    fn assert_bd_rejected(css: &str) {
+        let stylesheet = parse_stylesheet(css);
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let style = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Style(s) => Some(s.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected style rule");
+        assert_eq!(
+            style.block.read_with(&guard).len(),
+            0,
+            "expected invalid declaration to be rejected in `{css}`"
+        );
+    }
+
     // ----- F6 ----------------------------------------------------------
     #[test]
     fn servo_preserves_bd_footnote_rule_length_declaration() {
@@ -2008,12 +2029,28 @@ mod tests {
 
     // ----- F7 ----------------------------------------------------------
     #[test]
-    fn servo_preserves_bd_sidenote_align_declaration() {
+    fn servo_preserves_bd_sidenote_side_declaration() {
         assert_bd_roundtrip(
-            "p { -bd-sidenote-align: outside; }",
-            "-bd-sidenote-align",
+            "p { -bd-sidenote-side: outside; }",
+            "-bd-sidenote-side",
             "outside",
         );
+    }
+
+    #[test]
+    fn servo_preserves_bd_sidenote_align_container_start_strict_declaration() {
+        assert_bd_roundtrip(
+            "p { -bd-sidenote-align: container-start strict; }",
+            "-bd-sidenote-align",
+            "container-start strict",
+        );
+    }
+
+    #[test]
+    fn servo_rejects_strict_for_unanchored_bd_sidenote_alignments() {
+        for value in ["start strict", "end strict", "stack strict"] {
+            assert_bd_rejected(&format!("p {{ -bd-sidenote-align: {value}; }}"));
+        }
     }
 
     #[test]
