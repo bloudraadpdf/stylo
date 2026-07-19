@@ -275,6 +275,14 @@ pub enum GenericFloat<LengthPercentage> {
     Footnote,
     Top,
     Bottom,
+    /// Bloudraad native fixed page-block-start float. Unlike the standards
+    /// `top` value, pagination compatibility heuristics do not demote it to a
+    /// natural-flow placement.
+    BdTop,
+    /// Bloudraad native fixed page-block-end float. Unlike the standards
+    /// `bottom` value, pagination compatibility heuristics do not demote it to
+    /// a natural-flow placement.
+    BdBottom,
     TopUnlessRoom,
     BottomUnlessRoom,
     SnapBlock(GenericSnapBlock<LengthPercentage>),
@@ -296,6 +304,8 @@ impl<LengthPercentage> GenericFloat<LengthPercentage> {
                 | Self::Footnote
                 | Self::Top
                 | Self::Bottom
+                | Self::BdTop
+                | Self::BdBottom
                 | Self::TopUnlessRoom
                 | Self::BottomUnlessRoom
                 | Self::SnapBlock(..)
@@ -322,6 +332,8 @@ impl<LengthPercentage: ToCss> ToCss for GenericFloat<LengthPercentage> {
             Self::Footnote => dest.write_str("footnote"),
             Self::Top => dest.write_str("top"),
             Self::Bottom => dest.write_str("bottom"),
+            Self::BdTop => dest.write_str("-bd-top"),
+            Self::BdBottom => dest.write_str("-bd-bottom"),
             Self::TopUnlessRoom => dest.write_str("top-unless-room"),
             Self::BottomUnlessRoom => dest.write_str("bottom-unless-room"),
             Self::SnapBlock(snap_block) => snap_block.to_css(dest),

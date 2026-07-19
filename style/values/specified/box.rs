@@ -1748,6 +1748,8 @@ impl ToComputedValue for GenericFloat<SnapBlockThreshold> {
             Self::Footnote => Self::ComputedValue::Footnote,
             Self::Top => Self::ComputedValue::Top,
             Self::Bottom => Self::ComputedValue::Bottom,
+            Self::BdTop => Self::ComputedValue::BdTop,
+            Self::BdBottom => Self::ComputedValue::BdBottom,
             Self::TopUnlessRoom => Self::ComputedValue::TopUnlessRoom,
             Self::BottomUnlessRoom => Self::ComputedValue::BottomUnlessRoom,
             Self::SnapBlock(snap_block) => {
@@ -1773,6 +1775,8 @@ impl ToComputedValue for GenericFloat<SnapBlockThreshold> {
             Self::ComputedValue::Footnote => Self::Footnote,
             Self::ComputedValue::Top => Self::Top,
             Self::ComputedValue::Bottom => Self::Bottom,
+            Self::ComputedValue::BdTop => Self::BdTop,
+            Self::ComputedValue::BdBottom => Self::BdBottom,
             Self::ComputedValue::TopUnlessRoom => Self::TopUnlessRoom,
             Self::ComputedValue::BottomUnlessRoom => Self::BottomUnlessRoom,
             Self::ComputedValue::SnapBlock(snap_block) => {
@@ -1819,6 +1823,8 @@ impl Parse for GenericFloat<SnapBlockThreshold> {
             "footnote" => Self::Footnote,
             "top" => Self::Top,
             "bottom" => Self::Bottom,
+            "-bd-top" => Self::BdTop,
+            "-bd-bottom" => Self::BdBottom,
             "top-unless-room" => Self::TopUnlessRoom,
             "bottom-unless-room" => Self::BottomUnlessRoom,
             "snap-block" => Self::SnapBlock(GenericSnapBlock {
