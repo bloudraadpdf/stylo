@@ -101,10 +101,10 @@ pub use self::outline::OutlineStyle;
 pub use self::overflow_4::{BlockEllipsis, Continue, LeadingTrim, MaxLines, StandardLineClamp};
 pub use self::bd_a11y::{BdTextReplace, BdTooltip};
 pub use self::bd_barcode::{
-    BdBarcodeAffix, BdBarcodeCheckDigitMode, BdBarcodeColour, BdBarcodeCompositeType,
-    BdBarcodeContent, BdBarcodeEccLevel, BdBarcodeEncoding, BdBarcodeFontFamily,
-    BdBarcodeHrPosition, BdBarcodeReaderInit, BdBarcodeSize, BdBarcodeStructuredAppend,
-    BdBarcodeType, BdQrEccLetter,
+    BdBarcodeAffix, BdBarcodeCheckDigitMode, BdBarcodeCompositeType, BdBarcodeContent,
+    BdBarcodeEccLevel, BdBarcodeEncoding, BdBarcodeFontFamily, BdBarcodeHrPosition,
+    BdBarcodeReaderInit, BdBarcodeSize, BdBarcodeStructuredAppend, BdBarcodeType,
+    BdQrEccLetter,
 };
 pub use self::bd_bfo::{BdIndex, BdIndexGrouping};
 pub use self::bd_bookmark::{BdPdfLinkType, BookmarkTarget};

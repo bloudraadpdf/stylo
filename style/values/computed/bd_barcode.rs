@@ -9,7 +9,6 @@
 //! computed types.
 
 use crate::derives::*;
-use crate::values::computed::color::Color;
 use crate::values::computed::length::NonNegativeLengthPercentage;
 use crate::values::computed::{Context, ToComputedValue};
 use crate::values::specified::bd_barcode as specified;
@@ -19,46 +18,6 @@ pub use specified::{
     BdBarcodeEccLevel, BdBarcodeEncoding, BdBarcodeFontFamily, BdBarcodeHrPosition,
     BdBarcodeReaderInit, BdBarcodeStructuredAppend, BdBarcodeType, BdQrEccLetter,
 };
-
-/// Computed `-bd-barcode-colour`.
-#[derive(
-    Clone, Debug, MallocSizeOf, PartialEq, ToCss, ToResolvedValue, ToShmem, ToTyped,
-)]
-#[repr(C, u8)]
-pub enum BdBarcodeColour {
-    /// `auto` — fall back to `currentcolor`.
-    Auto,
-    /// Explicit colour.
-    Colour(Color),
-}
-
-impl BdBarcodeColour {
-    /// Initial value.
-    #[inline]
-    pub fn auto() -> Self {
-        Self::Auto
-    }
-}
-
-impl ToComputedValue for specified::BdBarcodeColour {
-    type ComputedValue = BdBarcodeColour;
-
-    fn to_computed_value(&self, ctx: &Context) -> Self::ComputedValue {
-        match self {
-            specified::BdBarcodeColour::Auto => BdBarcodeColour::Auto,
-            specified::BdBarcodeColour::Colour(c) => BdBarcodeColour::Colour(c.to_computed_value(ctx)),
-        }
-    }
-
-    fn from_computed_value(c: &Self::ComputedValue) -> Self {
-        match c {
-            BdBarcodeColour::Auto => specified::BdBarcodeColour::Auto,
-            BdBarcodeColour::Colour(c) => specified::BdBarcodeColour::Colour(
-                ToComputedValue::from_computed_value(c),
-            ),
-        }
-    }
-}
 
 /// Computed `-bd-barcode-size`.
 ///

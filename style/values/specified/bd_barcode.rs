@@ -4,31 +4,23 @@
 
 //! moegoe `-bd-barcode-*` properties (Family 15).
 //!
-//! Native moegoe fork-extension surface for PDFreactor's
-//! declarative barcode family (see
-//! `docs/reference-manuals/pdfreactor.md:13021–13201`). The CSS
-//! surface lands here; the backend (symbol-generation crate, e.g.
-//! `qrcode` + `barcoders`) is gated and surfaced as
-//! `RenderWarning::UnsupportedPdfFeature` until the
-//! `moegoe-barcode` crate ships.
+//! Native moegoe fork-extension surface for declarative barcodes.
+//! The CSS surface lands here and the rendering backend consumes the
+//! computed values without exposing backend-specific types.
 //!
 //! Each longhand is non-inherited. The `-bd-barcode` shorthand
-//! lives in `style/properties/shorthands.toml` (deferred — the
-//! v1 surface is longhand-only, mirroring how `-ro-barcode`
-//! resolves to nine of these properties through the cascade).
+//! lives in `style/properties/shorthands.toml`; the initial surface is
+//! longhand-only.
 
 use crate::derives::*;
-use crate::values::specified::color::Color;
 use crate::values::specified::length::NonNegativeLengthPercentage;
 use crate::OwnedSlice;
 use crate::OwnedStr;
 
 /// Specified value of `-bd-barcode-type`.
 ///
-/// Selects the encoding family. The list mirrors the symbology
-/// keywords PDFreactor documents for `-ro-barcode-type` and the
-/// BFO `Barcodes` chapter. Backend support is gated on
-/// availability of a generator crate.
+/// Selects the encoding family. Backend support is gated on the
+/// availability of an encoder for the selected symbology.
 #[repr(u8)]
 #[derive(
     Clone,
@@ -54,12 +46,7 @@ pub enum BdBarcodeType {
     DataMatrix,
     Pdf417,
     Aztec,
-    // PDFreactor canonicalises the hyphenated forms (`code-39`, etc.) —
-    // see docs/reference-manuals/pdfreactor.md §Barcodes (lines
-    // 13021+ in the 2026-Q1 manual). Accept both spellings so authored
-    // CSS works whether it targets moegoe's native `-bd-barcode-*`
-    // surface directly or comes in via the PDFreactor compat
-    // translator.
+    // Accept both compact and hyphenated symbology spellings.
     #[parse(aliases = "code-39")]
     Code39,
     #[parse(aliases = "code-93")]
@@ -166,47 +153,6 @@ pub enum BdBarcodeCheckDigitMode {
     None,
     Add,
     Check,
-}
-
-/// Specified value of `-bd-barcode-colour`.
-#[derive(
-    Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped,
-)]
-#[repr(C, u8)]
-pub enum BdBarcodeColour {
-    /// `auto` — fall back to `currentcolor`.
-    Auto,
-    /// Explicit colour.
-    Colour(Color),
-}
-
-impl BdBarcodeColour {
-    /// Initial value.
-    #[inline]
-    pub fn auto() -> Self {
-        Self::Auto
-    }
-
-    /// Whether the value is `auto`.
-    #[inline]
-    pub fn is_auto(&self) -> bool {
-        matches!(self, Self::Auto)
-    }
-}
-
-impl crate::parser::Parse for BdBarcodeColour {
-    fn parse<'i, 't>(
-        context: &crate::parser::ParserContext,
-        input: &mut cssparser::Parser<'i, 't>,
-    ) -> Result<Self, style_traits::ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("auto"))
-            .is_ok()
-        {
-            return Ok(Self::Auto);
-        }
-        Ok(Self::Colour(Color::parse(context, input)?))
-    }
 }
 
 // `-bd-barcode-composite-content` reuses the

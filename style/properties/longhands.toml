@@ -4916,13 +4916,12 @@ animation_type = "none"
 affects = ""
 
 [-bd-barcode-colour]
-type = "BdBarcodeColour"
-initial = "computed::BdBarcodeColour::auto()"
+type = "Color"
+initial = "computed::Color::BLACK"
 struct = "counters"
-initial_specified_value = "specified::BdBarcodeColour::auto()"
 spec = "Nonstandard (moegoe -bd-* fork extension; Family 15 barcode — backend gated)"
 animation_type = "none"
-affects = ""
+affects = "paint"
 
 [-bd-barcode-composite-content]
 type = "BdBarcodeContent"

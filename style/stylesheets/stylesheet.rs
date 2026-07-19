@@ -2191,6 +2191,40 @@ mod tests {
         );
     }
 
+    // ----- F15 ---------------------------------------------------------
+    #[test]
+    fn servo_barcode_colour_is_non_inherited_with_black_initial() {
+        assert!(
+            !LonghandId::BdBarcodeColour.inherited(),
+            "-bd-barcode-colour must reset on descendants"
+        );
+
+        let initial =
+            ComputedValues::initial_values_with_font_override(Font::initial_values());
+        assert_eq!(
+            initial
+                .get_counters()
+                ._bd_barcode_colour
+                .to_css_string(),
+            "rgb(0, 0, 0)"
+        );
+    }
+
+    #[test]
+    fn servo_barcode_colour_accepts_css_colours_but_not_auto() {
+        assert_bd_roundtrip(
+            "p { -bd-barcode-colour: currentColor; }",
+            "-bd-barcode-colour",
+            "currentcolor",
+        );
+        assert_bd_roundtrip(
+            "p { -bd-barcode-colour: #c02030; }",
+            "-bd-barcode-colour",
+            "rgb(192, 32, 48)",
+        );
+        assert_bd_rejected("p { -bd-barcode-colour: auto; }");
+    }
+
     // ----- F22 ---------------------------------------------------------
     #[test]
     fn servo_preserves_bd_pdf_comment_author_declaration() {
