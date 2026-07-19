@@ -275,11 +275,11 @@ pub enum GenericFloat<LengthPercentage> {
     Footnote,
     Top,
     Bottom,
-    /// Bloudraad native fixed page-block-start float. Unlike the standards
+    /// Bloudraad native fixed physical page-top float. Unlike the standards
     /// `top` value, pagination compatibility heuristics do not demote it to a
     /// natural-flow placement.
     BdTop,
-    /// Bloudraad native fixed page-block-end float. Unlike the standards
+    /// Bloudraad native fixed physical page-bottom float. Unlike the standards
     /// `bottom` value, pagination compatibility heuristics do not demote it to
     /// a natural-flow placement.
     BdBottom,
