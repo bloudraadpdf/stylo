@@ -4,8 +4,7 @@
 
 //! A nested `@-bd-sidenote` rule inside `@page`.
 //!
-//! moegoe Family 7 — sidenote area (PDFreactor `@-ro-sidenote`,
-//! `pdfreactor.md:20084`). Each authored rule may carry an optional
+//! moegoe Family 7 — native sidenote area. Each authored rule may carry an optional
 //! name identifier (e.g. `@-bd-sidenote left { ... }`) which scopes
 //! the descriptors to a named sidenote flow. The block is a property
 //! declaration list; the recognised descriptor longhands are the

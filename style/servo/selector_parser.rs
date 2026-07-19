@@ -70,8 +70,8 @@ pub enum PseudoElement {
     BdFootnoteArea,
     // moegoe Family 7 — sidenote call (in-flow inline at the anchor
     // site) and marker (in the sidenote flow). Authors style each via
-    // `::-bd-sidenote-call` and `::-bd-sidenote-marker`; the compat
-    // translator rewrites `::-ro-sidenote-call` / `::-ro-sidenote-marker`.
+    // `::-bd-sidenote-call` and `::-bd-sidenote-marker`; foreign spellings
+    // are translated before selector parsing.
     BdSidenoteCall,
     BdSidenoteMarker,
 

@@ -3757,7 +3757,7 @@ rule_types_allowed = ["style", "page", "sidenote"]
 [-bd-sidenote-avoid]
 type = "BdSidenoteAvoid"
 initial = "computed::BdSidenoteAvoid::None"
-struct = "inherited_text"
+struct = "counters"
 initial_specified_value = "specified::BdSidenoteAvoid::None"
 spec = "Nonstandard (moegoe -bd-* fork extension; F7 sidenote avoid)"
 animation_type = "none"
@@ -3767,7 +3767,7 @@ rule_types_allowed = ["style", "page", "sidenote"]
 [-bd-sidenote-offset]
 type = "BdSidenoteOffset"
 initial = "computed::BdSidenoteOffset::zero()"
-struct = "inherited_text"
+struct = "counters"
 initial_specified_value = "specified::BdSidenoteOffset::zero()"
 spec = "Nonstandard (moegoe -bd-* fork extension; F7 sidenote offset)"
 animation_type = "none"

@@ -2054,6 +2054,22 @@ mod tests {
     }
 
     #[test]
+    fn servo_sidenote_controls_are_not_inherited() {
+        for property in [
+            LonghandId::BdSidenoteAlign,
+            LonghandId::BdSidenoteSide,
+            LonghandId::BdSidenoteAvoid,
+            LonghandId::BdSidenoteOffset,
+        ] {
+            assert!(
+                !property.inherited(),
+                "{} must reset to its initial value on descendants",
+                property.name()
+            );
+        }
+    }
+
+    #[test]
     fn servo_preserves_bd_sidenote_offset_declaration() {
         assert_bd_roundtrip(
             "p { -bd-sidenote-offset: 12pt; }",
