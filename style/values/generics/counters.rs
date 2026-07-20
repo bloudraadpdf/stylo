@@ -358,6 +358,39 @@ impl ToCss for TargetReference {
     }
 }
 
+/// Counter name used by generated-content cross references.
+#[derive(
+    Clone,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+)]
+#[repr(u8)]
+pub enum GenericCounterName {
+    /// A statically authored counter identifier.
+    Ident(CustomIdent),
+    /// A counter identifier read from an attribute on the originating element.
+    Attr(Attr),
+}
+pub use self::GenericCounterName as CounterName;
+
+impl ToCss for CounterName {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        match self {
+            Self::Ident(name) => name.to_css(dest),
+            Self::Attr(attr) => attr.to_css(dest),
+        }
+    }
+}
+
 /// Type of leader pattern for `leader()` function.
 ///
 /// https://www.w3.org/TR/css-gcpm-3/#funcdef-leader
@@ -541,7 +574,7 @@ pub enum GenericContentItem<I> {
     #[css(comma, function = "target-counter")]
     TargetCounter(
         TargetReference,
-        CustomIdent,
+        CounterName,
         #[css(skip_if = "is_decimal")] CounterStyleType,
     ),
     /// `target-counters([ <string> | <url> | <attr()> ], <ident>, <string>, <counter-style>?)`

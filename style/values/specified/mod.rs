@@ -1358,7 +1358,15 @@ impl Attr {
 fn is_legacy_attr_keyword(keyword: &str) -> bool {
     matches!(
         keyword,
-        "string" | "url" | "color" | "integer" | "length" | "angle" | "time" | "frequency"
+        "string"
+            | "url"
+            | "color"
+            | "integer"
+            | "length"
+            | "angle"
+            | "time"
+            | "frequency"
+            | "-bd-ident"
     )
 }
 

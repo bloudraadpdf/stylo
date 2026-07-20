@@ -245,6 +245,27 @@ fn parse_target_reference<'i, 't>(
     ))
 }
 
+fn parse_target_counter_name<'i, 't>(
+    context: &ParserContext,
+    input: &mut Parser<'i, 't>,
+) -> Result<generics::CounterName, ParseError<'i>> {
+    if let Ok(attr) = input.try_parse(|input| {
+        input.expect_function_matching("attr")?;
+        input.parse_nested_block(|input| Attr::parse_function(context, input))
+    }) {
+        let is_ident = matches!(
+            &attr.syntax,
+            crate::values::specified::AttrSyntax::Keyword(keyword)
+                if keyword.eq_ignore_ascii_case("-bd-ident")
+        );
+        if !is_ident {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+        return Ok(generics::CounterName::Attr(attr));
+    }
+    Ok(generics::CounterName::Ident(CustomIdent::parse(input, &[])?))
+}
+
 fn parse_target_text_keyword<'i, 't>(
     input: &mut Parser<'i, 't>,
 ) -> Result<generics::TargetTextKeyword, ParseError<'i>> {
@@ -342,7 +363,7 @@ fn parse_content_item<'i, 't>(
                 "target-counter" if allow_counter_functions => input.parse_nested_block(|input| {
                     let url = parse_target_reference(context, input)?;
                     input.expect_comma()?;
-                    let name = CustomIdent::parse(input, &[])?;
+                    let name = parse_target_counter_name(context, input)?;
                     let style = Content::parse_counter_style(context, input)?;
                     Ok(generics::ContentItem::TargetCounter(url, name, style))
                 }),
@@ -654,7 +675,7 @@ mod tests {
         match &items.items[0] {
             generics::ContentItem::TargetCounter(
                 generics::TargetReference::String(url),
-                name,
+                generics::CounterName::Ident(name),
                 style,
             ) => {
                 assert_eq!(&**url, "#sec");
@@ -686,7 +707,7 @@ mod tests {
         match &items.items[0] {
             generics::ContentItem::TargetCounter(
                 generics::TargetReference::Attr(attr),
-                name,
+                generics::CounterName::Ident(name),
                 style,
             ) => {
                 assert_eq!(attr.attribute.as_ref(), "href");
@@ -703,6 +724,35 @@ mod tests {
                 assert_eq!(*keyword, generics::TargetTextKeyword::Before);
             },
             other => panic!("expected attr()-backed target-text item, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn target_counter_accepts_native_typed_attr_counter_name() {
+        let _guard = pref_lock().lock().unwrap();
+        let _attr_pref = BoolPrefGuard::set("layout.css.attr.enabled", true);
+
+        let content = parse_content_value(
+            r##"target-counter(attr(href), attr(data-counter -bd-ident))"##,
+        );
+        let Content::Items(items) = content else {
+            panic!("expected content items");
+        };
+        match &items.items[0] {
+            generics::ContentItem::TargetCounter(
+                generics::TargetReference::Attr(target),
+                generics::CounterName::Attr(name),
+                style,
+            ) => {
+                assert_eq!(target.attribute.as_ref(), "href");
+                assert_eq!(name.attribute.as_ref(), "data-counter");
+                assert_eq!(
+                    name.syntax,
+                    AttrSyntax::Keyword(String::from("-bd-ident").into()),
+                );
+                assert_eq!(style.to_css_string(), "decimal");
+            },
+            other => panic!("expected attr()-backed counter name, got {other:?}"),
         }
     }
 
