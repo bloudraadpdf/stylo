@@ -171,6 +171,13 @@ pub use self::GenericClipPath as ClipPath;
 pub enum GenericShapeOutside<BasicShape, I> {
     #[animation(error)]
     None,
+    /// Derive the exclusion shape from the float's own rendered content.
+    ///
+    /// This is Bloudraad's native extension; compatibility front-ends may
+    /// alias foreign spellings onto it before the cascade.
+    #[animation(error)]
+    #[css(keyword = "-bd-self")]
+    SelfContent,
     #[animation(error)]
     Image(I),
     Shape(Box<BasicShape>, #[css(skip_if = "is_default")] ShapeBox),

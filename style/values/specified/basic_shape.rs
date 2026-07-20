@@ -278,6 +278,10 @@ impl Parse for ShapeOutside {
             return Ok(ShapeOutside::None);
         }
 
+        if input.try_parse(|i| i.expect_ident_matching("-bd-self")).is_ok() {
+            return Ok(ShapeOutside::SelfContent);
+        }
+
         if let Ok(image) = input.try_parse(|i| Image::parse_with_cors_anonymous(context, i)) {
             debug_assert_ne!(image, Image::None);
             return Ok(ShapeOutside::Image(image));
