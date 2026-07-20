@@ -483,6 +483,10 @@ pub enum BdPositionOrigin {
     Border,
     Padding,
     Content,
+    #[css(keyword = "-bd-page-box")]
+    PageBox,
+    #[css(keyword = "-bd-bleed-box")]
+    BleedBox,
 }
 
 /// Specified value of `-bd-line-break-opportunity` (F32.14).
