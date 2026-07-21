@@ -96,7 +96,9 @@ pub use self::list::Quotes;
 pub use self::motion::{OffsetPath, OffsetPosition, OffsetRotate};
 pub use self::outline::OutlineStyle;
 pub use self::overflow_4::{BlockEllipsis, Continue, LeadingTrim, MaxLines, StandardLineClamp};
-pub use self::bd_a11y::{BdTextReplace, BdTooltip};
+pub use self::bd_a11y::{
+    BdTextReplace, BdTextReplacement, BdTextReplacementMethod, BdTextReplacementPoint, BdTooltip,
+};
 pub use self::bd_barcode::{
     BdBarcodeAffix, BdBarcodeCheckDigitMode, BdBarcodeCompositeType, BdBarcodeContent,
     BdBarcodeEccLevel, BdBarcodeEncoding, BdBarcodeFontFamily, BdBarcodeHrPosition,

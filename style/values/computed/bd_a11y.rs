@@ -4,4 +4,6 @@
 
 //! Computed values for moegoe text-replace / tooltip (F12).
 
-pub use crate::values::specified::bd_a11y::{BdTextReplace, BdTooltip};
+pub use crate::values::specified::bd_a11y::{
+    BdTextReplace, BdTextReplacement, BdTextReplacementMethod, BdTextReplacementPoint, BdTooltip,
+};
