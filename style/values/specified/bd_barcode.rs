@@ -65,6 +65,19 @@ pub enum BdBarcodeType {
     Codabar,
     MaxiCode,
     Telepen,
+    MicroQr,
+    GridMatrix,
+    CodeOne,
+    CodablockF,
+    DataBarLimited,
+    DataBarStacked,
+    Pharmacode,
+    Postnet,
+    Kix,
+    UspsIntelligentMail,
+    KoreaPost,
+    DeutschePostLeitcode,
+    AustraliaPost,
 }
 
 /// Specified value of `-bd-barcode-content`.
@@ -72,8 +85,16 @@ pub enum BdBarcodeType {
 /// `none` clears; `<string>+` provides the data to encode (joined
 /// by the renderer per symbology rules).
 #[derive(
-    Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue,
-    ToResolvedValue, ToShmem, ToTyped,
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
 )]
 #[repr(C, u8)]
 pub enum BdBarcodeContent {
@@ -103,10 +124,7 @@ impl crate::parser::Parse for BdBarcodeContent {
         _: &crate::parser::ParserContext,
         input: &mut cssparser::Parser<'i, 't>,
     ) -> Result<Self, style_traits::ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
         let mut strings: Vec<OwnedStr> = Vec::new();
@@ -120,9 +138,7 @@ impl crate::parser::Parse for BdBarcodeContent {
             }
         }
         if strings.is_empty() {
-            return Err(input.new_custom_error(
-                style_traits::StyleParseErrorKind::UnspecifiedError,
-            ));
+            return Err(input.new_custom_error(style_traits::StyleParseErrorKind::UnspecifiedError));
         }
         Ok(Self::Strings(OwnedSlice::from(strings)))
     }
@@ -189,8 +205,17 @@ pub enum BdBarcodeCompositeType {
 ///
 /// `<integer>` percentage-of-modules ECC for QR / DataMatrix.
 #[derive(
-    Clone, Copy, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue,
-    ToResolvedValue, ToShmem, ToTyped,
+    Clone,
+    Copy,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
 )]
 #[repr(C, u8)]
 pub enum BdBarcodeEccLevel {
@@ -241,10 +266,7 @@ impl crate::parser::Parse for BdBarcodeEccLevel {
         _: &crate::parser::ParserContext,
         input: &mut cssparser::Parser<'i, 't>,
     ) -> Result<Self, style_traits::ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("auto"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
             return Ok(Self::Auto);
         }
         if let Ok(letter) = input.try_parse(BdQrEccLetter::parse) {
@@ -252,9 +274,7 @@ impl crate::parser::Parse for BdBarcodeEccLevel {
         }
         let n = input.expect_integer()?;
         if !(0..=100).contains(&n) {
-            return Err(input.new_custom_error(
-                style_traits::StyleParseErrorKind::UnspecifiedError,
-            ));
+            return Err(input.new_custom_error(style_traits::StyleParseErrorKind::UnspecifiedError));
         }
         Ok(Self::Percent(n as u32))
     }
@@ -293,8 +313,16 @@ pub enum BdBarcodeEncoding {
 
 /// Specified value of `-bd-barcode-font-family`.
 #[derive(
-    Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue,
-    ToResolvedValue, ToShmem, ToTyped,
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
 )]
 #[repr(C, u8)]
 pub enum BdBarcodeFontFamily {
@@ -316,10 +344,7 @@ impl crate::parser::Parse for BdBarcodeFontFamily {
         _: &crate::parser::ParserContext,
         input: &mut cssparser::Parser<'i, 't>,
     ) -> Result<Self, style_traits::ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("auto"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
             return Ok(Self::Auto);
         }
         if let Ok(s) = input.try_parse(|i| -> Result<String, style_traits::ParseError<'i>> {
@@ -337,8 +362,16 @@ impl crate::parser::Parse for BdBarcodeFontFamily {
 
 /// Specified value of `-bd-barcode-human-readable-affix`.
 #[derive(
-    Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue,
-    ToResolvedValue, ToShmem, ToTyped,
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
 )]
 #[repr(C, u8)]
 pub enum BdBarcodeAffix {
@@ -362,16 +395,10 @@ impl crate::parser::Parse for BdBarcodeAffix {
         _: &crate::parser::ParserContext,
         input: &mut cssparser::Parser<'i, 't>,
     ) -> Result<Self, style_traits::ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
-        if input
-            .try_parse(|i| i.expect_ident_matching("auto"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
             return Ok(Self::Auto);
         }
         let s = input.expect_string()?;
@@ -440,9 +467,7 @@ pub enum BdBarcodeReaderInit {
 /// (manual `ToComputedValue` impl); the `NonNegativeLengthPercentage`
 /// inner field is not specified-to-computed identity, so the
 /// derive can't be used.
-#[derive(
-    Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped,
-)]
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
 #[repr(C, u8)]
 pub enum BdBarcodeSize {
     /// `auto`.
@@ -477,10 +502,7 @@ impl crate::parser::Parse for BdBarcodeSize {
         context: &crate::parser::ParserContext,
         input: &mut cssparser::Parser<'i, 't>,
     ) -> Result<Self, style_traits::ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("auto"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
             return Ok(Self::Auto);
         }
         Ok(Self::Square(NonNegativeLengthPercentage::parse(
@@ -493,8 +515,17 @@ impl crate::parser::Parse for BdBarcodeSize {
 ///
 /// `<integer> of <integer>` shape, e.g. `2 of 4`. `none` initial.
 #[derive(
-    Clone, Copy, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue,
-    ToResolvedValue, ToShmem, ToTyped,
+    Clone,
+    Copy,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
 )]
 #[repr(C, u8)]
 pub enum BdBarcodeStructuredAppend {
@@ -521,19 +552,14 @@ impl crate::parser::Parse for BdBarcodeStructuredAppend {
         _: &crate::parser::ParserContext,
         input: &mut cssparser::Parser<'i, 't>,
     ) -> Result<Self, style_traits::ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
         let index = input.expect_integer()?;
         input.expect_ident_matching("of")?;
         let total = input.expect_integer()?;
         if index < 1 || total < 1 || index > total {
-            return Err(input.new_custom_error(
-                style_traits::StyleParseErrorKind::UnspecifiedError,
-            ));
+            return Err(input.new_custom_error(style_traits::StyleParseErrorKind::UnspecifiedError));
         }
         Ok(Self::Pair {
             index: index as u32,
