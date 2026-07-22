@@ -24,7 +24,6 @@ use crate::values::CSSInteger;
 use crate::Atom;
 use cssparser::{match_ignore_ascii_case, serialize_identifier, CssStringWriter, Parser};
 use malloc_size_of::{MallocSizeOf, MallocSizeOfOps};
-use num_traits::abs;
 use num_traits::cast::AsPrimitive;
 use std::fmt::{self, Write};
 use style_traits::{CssWriter, ParseError, ToCss};
@@ -805,8 +804,39 @@ impl FontFamilyList {
     }
 }
 
+/// Computed factor for `font-size-adjust`.
+///
+/// `from-font` deliberately remains semantic at computed-value time. A
+/// document renderer may have a different font catalogue from Stylo's style
+/// context, and must resolve the reference metric against the face that
+/// actually wins the authored font stack.
+#[derive(
+    Animate,
+    Clone,
+    ComputeSquaredDistance,
+    Copy,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    ToAnimatedValue,
+    ToAnimatedZero,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[cfg_attr(feature = "servo", derive(Deserialize, Serialize))]
+pub enum FontSizeAdjustFactor {
+    /// An explicitly computed non-negative ratio.
+    Number(NonNegativeNumber),
+    /// Resolve the ratio from the first available face in the authored stack.
+    #[animation(error)]
+    FromFont,
+}
+
 /// Preserve the readability of text when font fallback occurs.
-pub type FontSizeAdjust = generics::GenericFontSizeAdjust<NonNegativeNumber>;
+pub type FontSizeAdjust = generics::GenericFontSizeAdjust<FontSizeAdjustFactor>;
 
 impl FontSizeAdjust {
     #[inline]
@@ -820,42 +850,18 @@ impl ToComputedValue for specified::FontSizeAdjust {
     type ComputedValue = FontSizeAdjust;
 
     fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
-        use crate::font_metrics::FontMetricsOrientation;
-
-        let font_metrics = |vertical, flags| {
-            let orient = if vertical {
-                FontMetricsOrientation::MatchContextPreferVertical
-            } else {
-                FontMetricsOrientation::Horizontal
-            };
-            let metrics = context.query_font_metrics(FontBaseSize::CurrentStyle, orient, flags);
-            let font_size = context.style().get_font().clone_font_size().used_size.0;
-            (metrics, font_size)
-        };
-
-        // Macro to resolve a from-font value using the given metric field. If not present,
-        // returns the fallback value, or if that is negative, resolves using ascent instead
-        // of the missing field (this is the fallback for cap-height).
+        // Keep `from-font` unresolved until the renderer knows which face wins
+        // the authored font stack. Resolving it through Stylo's style-context
+        // metric provider bakes in the provider's default face and is wrong
+        // whenever layout uses a different embedded/catalogued font.
         macro_rules! resolve {
-            ($basis:ident, $value:expr, $vertical:expr, $field:ident, $fallback:expr, $flags:expr) => {{
+            ($basis:ident, $value:expr) => {{
                 match $value {
-                    specified::FontSizeAdjustFactor::Number(f) => {
-                        FontSizeAdjust::$basis(f.to_computed_value(context))
-                    },
+                    specified::FontSizeAdjustFactor::Number(f) => FontSizeAdjust::$basis(
+                        FontSizeAdjustFactor::Number(f.to_computed_value(context)),
+                    ),
                     specified::FontSizeAdjustFactor::FromFont => {
-                        let (metrics, font_size) = font_metrics($vertical, $flags);
-                        let ratio = if let Some(metric) = metrics.$field {
-                            metric / font_size
-                        } else if $fallback >= 0.0 {
-                            $fallback
-                        } else {
-                            metrics.ascent / font_size
-                        };
-                        if ratio.is_nan() {
-                            FontSizeAdjust::$basis(NonNegative(abs($fallback)))
-                        } else {
-                            FontSizeAdjust::$basis(NonNegative(ratio))
-                        }
+                        FontSizeAdjust::$basis(FontSizeAdjustFactor::FromFont)
                     },
                 }
             }};
@@ -863,75 +869,24 @@ impl ToComputedValue for specified::FontSizeAdjust {
 
         match *self {
             Self::None => FontSizeAdjust::None,
-            Self::ExHeight(val) => {
-                resolve!(
-                    ExHeight,
-                    val,
-                    false,
-                    x_height,
-                    0.5,
-                    QueryFontMetricsFlags::empty()
-                )
-            },
-            Self::ExplicitExHeight(val) => {
-                resolve!(
-                    ExplicitExHeight,
-                    val,
-                    false,
-                    x_height,
-                    0.5,
-                    QueryFontMetricsFlags::empty()
-                )
-            },
-            Self::CapHeight(val) => {
-                resolve!(
-                    CapHeight,
-                    val,
-                    false,
-                    cap_height,
-                    -1.0, /* fall back to ascent */
-                    QueryFontMetricsFlags::empty()
-                )
-            },
-            Self::ChWidth(val) => {
-                resolve!(
-                    ChWidth,
-                    val,
-                    false,
-                    zero_advance_measure,
-                    0.5,
-                    QueryFontMetricsFlags::NEEDS_CH
-                )
-            },
-            Self::IcWidth(val) => {
-                resolve!(
-                    IcWidth,
-                    val,
-                    false,
-                    ic_width,
-                    1.0,
-                    QueryFontMetricsFlags::NEEDS_IC
-                )
-            },
-            Self::IcHeight(val) => {
-                resolve!(
-                    IcHeight,
-                    val,
-                    true,
-                    ic_width,
-                    1.0,
-                    QueryFontMetricsFlags::NEEDS_IC
-                )
-            },
+            Self::ExHeight(val) => resolve!(ExHeight, val),
+            Self::ExplicitExHeight(val) => resolve!(ExplicitExHeight, val),
+            Self::CapHeight(val) => resolve!(CapHeight, val),
+            Self::ChWidth(val) => resolve!(ChWidth, val),
+            Self::IcWidth(val) => resolve!(IcWidth, val),
+            Self::IcHeight(val) => resolve!(IcHeight, val),
         }
     }
 
     fn from_computed_value(computed: &Self::ComputedValue) -> Self {
         macro_rules! case {
             ($basis:ident, $val:expr) => {
-                Self::$basis(specified::FontSizeAdjustFactor::Number(
-                    ToComputedValue::from_computed_value($val),
-                ))
+                Self::$basis(match $val {
+                    FontSizeAdjustFactor::Number(value) => specified::FontSizeAdjustFactor::Number(
+                        ToComputedValue::from_computed_value(value),
+                    ),
+                    FontSizeAdjustFactor::FromFont => specified::FontSizeAdjustFactor::FromFont,
+                })
             };
         }
         match *computed {
