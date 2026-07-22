@@ -399,9 +399,9 @@ impl crate::parser::Parse for BdBarcodeAffix {
 )]
 #[allow(missing_docs)]
 pub enum BdBarcodeHrPosition {
-    #[default]
     None,
     Above,
+    #[default]
     Below,
 }
 
