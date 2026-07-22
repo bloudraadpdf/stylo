@@ -14,8 +14,11 @@
 
 use crate::derives::*;
 use crate::values::specified::length::NonNegativeLengthPercentage;
+use crate::values::specified::url::SpecifiedUrl;
 use crate::OwnedSlice;
 use crate::OwnedStr;
+use std::fmt::{self, Write};
+use style_traits::{CssWriter, ToCss};
 
 /// Specified value of `-bd-barcode-type`.
 ///
@@ -82,26 +85,18 @@ pub enum BdBarcodeType {
 
 /// Specified value of `-bd-barcode-content`.
 ///
-/// `none` clears; `<string>+` provides the data to encode (joined
-/// by the renderer per symbology rules).
-#[derive(
-    Clone,
-    Debug,
-    MallocSizeOf,
-    PartialEq,
-    SpecifiedValueInfo,
-    ToCss,
-    ToComputedValue,
-    ToResolvedValue,
-    ToShmem,
-    ToTyped,
-)]
+/// `none` clears; `<string>+` provides literal data (joined by the
+/// renderer per symbology rules); `url(...)` provides a URL payload
+/// resolved against the stylesheet base URL.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToShmem, ToTyped)]
 #[repr(C, u8)]
 pub enum BdBarcodeContent {
     /// `none`.
     None,
     /// `<string>+`.
-    Strings(#[css(iterable)] OwnedSlice<OwnedStr>),
+    Strings(OwnedSlice<OwnedStr>),
+    /// `url(...)` resolved against the stylesheet base URL.
+    Url(SpecifiedUrl),
 }
 
 impl Default for BdBarcodeContent {
@@ -119,13 +114,37 @@ impl BdBarcodeContent {
     }
 }
 
+impl ToCss for BdBarcodeContent {
+    fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        match self {
+            Self::None => dest.write_str("none"),
+            Self::Strings(strings) => {
+                for (index, string) in strings.iter().enumerate() {
+                    if index != 0 {
+                        dest.write_char(' ')?;
+                    }
+                    string.to_css(dest)?;
+                }
+                Ok(())
+            },
+            Self::Url(url) => url.to_css(dest),
+        }
+    }
+}
+
 impl crate::parser::Parse for BdBarcodeContent {
     fn parse<'i, 't>(
-        _: &crate::parser::ParserContext,
+        context: &crate::parser::ParserContext,
         input: &mut cssparser::Parser<'i, 't>,
     ) -> Result<Self, style_traits::ParseError<'i>> {
         if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
+        }
+        if let Ok(url) =
+            input.try_parse(|i| <SpecifiedUrl as crate::parser::Parse>::parse(context, i))
+        {
+            input.expect_exhausted()?;
+            return Ok(Self::Url(url));
         }
         let mut strings: Vec<OwnedStr> = Vec::new();
         loop {
