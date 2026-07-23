@@ -306,8 +306,8 @@ impl crate::parser::Parse for BdBarcodeEccLevel {
 
 /// Specified value of `-bd-barcode-encoding`.
 ///
-/// Selects the character-encoding for content that requires one
-/// (e.g. PDF417's textual modes).
+/// Selects the semantic data convention applied before a symbology encodes
+/// its payload.
 #[repr(u8)]
 #[derive(
     Clone,
@@ -329,10 +329,9 @@ impl crate::parser::Parse for BdBarcodeEccLevel {
 pub enum BdBarcodeEncoding {
     #[default]
     Auto,
-    Ascii,
-    Utf8,
-    Latin1,
-    Shift_jis,
+    Eci,
+    Hibc,
+    Gs1,
 }
 
 /// Specified value of `-bd-barcode-font-family`.
