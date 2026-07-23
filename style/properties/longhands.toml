@@ -737,6 +737,7 @@ struct = "svg"
 extra_prefixes = ["webkit"]
 spec = "https://drafts.fxtf.org/css-masking-1/#propdef-clip-path"
 affects = "paint"
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "repaint"
 
 [clip-rule]
