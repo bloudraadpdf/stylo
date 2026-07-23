@@ -4988,9 +4988,9 @@ affects = ""
 
 [-bd-barcode-human-readable-position]
 type = "BdBarcodeHrPosition"
-initial = "computed::BdBarcodeHrPosition::Below"
+initial = "computed::BdBarcodeHrPosition::BottomCenter"
 struct = "counters"
-initial_specified_value = "specified::BdBarcodeHrPosition::Below"
+initial_specified_value = "specified::BdBarcodeHrPosition::BottomCenter"
 spec = "Nonstandard (moegoe -bd-* fork extension; Family 15 barcode — backend gated)"
 animation_type = "none"
 affects = ""

@@ -438,10 +438,8 @@ impl crate::parser::Parse for BdBarcodeAffix {
     Default,
     Eq,
     MallocSizeOf,
-    Parse,
     PartialEq,
     SpecifiedValueInfo,
-    ToCss,
     ToComputedValue,
     ToResolvedValue,
     ToShmem,
@@ -450,9 +448,111 @@ impl crate::parser::Parse for BdBarcodeAffix {
 #[allow(missing_docs)]
 pub enum BdBarcodeHrPosition {
     None,
-    Above,
+    TopLeft,
+    TopCenter,
+    TopRight,
+    BottomLeft,
     #[default]
-    Below,
+    BottomCenter,
+    BottomRight,
+}
+
+#[derive(Clone, Copy)]
+enum HrBlockPosition {
+    Top,
+    Bottom,
+}
+
+#[derive(Clone, Copy)]
+enum HrInlineAlignment {
+    Left,
+    Center,
+    Right,
+}
+
+impl crate::parser::Parse for BdBarcodeHrPosition {
+    fn parse<'i, 't>(
+        _: &crate::parser::ParserContext,
+        input: &mut cssparser::Parser<'i, 't>,
+    ) -> Result<Self, style_traits::ParseError<'i>> {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
+            input.expect_exhausted()?;
+            return Ok(Self::None);
+        }
+
+        let mut block = None;
+        let mut alignment = None;
+        let mut saw_keyword = false;
+        while !input.is_exhausted() {
+            let ident = input.expect_ident()?;
+            saw_keyword = true;
+            if ident.eq_ignore_ascii_case("top") || ident.eq_ignore_ascii_case("above") {
+                if block.replace(HrBlockPosition::Top).is_some() {
+                    return Err(
+                        input.new_custom_error(style_traits::StyleParseErrorKind::UnspecifiedError)
+                    );
+                }
+            } else if ident.eq_ignore_ascii_case("bottom") || ident.eq_ignore_ascii_case("below") {
+                if block.replace(HrBlockPosition::Bottom).is_some() {
+                    return Err(
+                        input.new_custom_error(style_traits::StyleParseErrorKind::UnspecifiedError)
+                    );
+                }
+            } else if ident.eq_ignore_ascii_case("left") {
+                if alignment.replace(HrInlineAlignment::Left).is_some() {
+                    return Err(
+                        input.new_custom_error(style_traits::StyleParseErrorKind::UnspecifiedError)
+                    );
+                }
+            } else if ident.eq_ignore_ascii_case("center") {
+                if alignment.replace(HrInlineAlignment::Center).is_some() {
+                    return Err(
+                        input.new_custom_error(style_traits::StyleParseErrorKind::UnspecifiedError)
+                    );
+                }
+            } else if ident.eq_ignore_ascii_case("right") {
+                if alignment.replace(HrInlineAlignment::Right).is_some() {
+                    return Err(
+                        input.new_custom_error(style_traits::StyleParseErrorKind::UnspecifiedError)
+                    );
+                }
+            } else {
+                return Err(
+                    input.new_custom_error(style_traits::StyleParseErrorKind::UnspecifiedError)
+                );
+            }
+        }
+
+        if !saw_keyword {
+            return Err(input.new_custom_error(style_traits::StyleParseErrorKind::UnspecifiedError));
+        }
+
+        match (
+            block.unwrap_or(HrBlockPosition::Bottom),
+            alignment.unwrap_or(HrInlineAlignment::Center),
+        ) {
+            (HrBlockPosition::Top, HrInlineAlignment::Left) => Ok(Self::TopLeft),
+            (HrBlockPosition::Top, HrInlineAlignment::Center) => Ok(Self::TopCenter),
+            (HrBlockPosition::Top, HrInlineAlignment::Right) => Ok(Self::TopRight),
+            (HrBlockPosition::Bottom, HrInlineAlignment::Left) => Ok(Self::BottomLeft),
+            (HrBlockPosition::Bottom, HrInlineAlignment::Center) => Ok(Self::BottomCenter),
+            (HrBlockPosition::Bottom, HrInlineAlignment::Right) => Ok(Self::BottomRight),
+        }
+    }
+}
+
+impl ToCss for BdBarcodeHrPosition {
+    fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        dest.write_str(match self {
+            Self::None => "none",
+            Self::TopLeft => "top left",
+            Self::TopCenter => "top center",
+            Self::TopRight => "top right",
+            Self::BottomLeft => "bottom left",
+            Self::BottomCenter => "bottom center",
+            Self::BottomRight => "bottom right",
+        })
+    }
 }
 
 // `-bd-barcode-letter-spacing` uses the predefined `Length` type
@@ -595,3 +695,74 @@ impl crate::parser::Parse for BdBarcodeStructuredAppend {
 // `BdBarcodeStructuredAppend` longhand type directly in
 // `longhands.toml`. `-bd-barcode-symbol-width` uses the
 // predefined `NonNegativeLength` type directly.
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::context::QuirksMode;
+    use crate::parser::Parse;
+    use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
+    use cssparser::{Parser, ParserInput};
+    use style_traits::{ParsingMode, ToCss};
+
+    fn parse_hrt_position(css: &str) -> Result<BdBarcodeHrPosition, ()> {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let context = crate::parser::ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input = ParserInput::new(css);
+        Parser::new(&mut input)
+            .parse_entirely(|input| BdBarcodeHrPosition::parse(&context, input))
+            .map_err(|_| ())
+    }
+
+    #[test]
+    fn barcode_hrt_position_parses_both_axes_in_either_order() {
+        assert_eq!(
+            parse_hrt_position("top left"),
+            Ok(BdBarcodeHrPosition::TopLeft),
+        );
+        assert_eq!(
+            parse_hrt_position("right top"),
+            Ok(BdBarcodeHrPosition::TopRight),
+        );
+        assert_eq!(
+            parse_hrt_position("left"),
+            Ok(BdBarcodeHrPosition::BottomLeft)
+        );
+        assert_eq!(
+            parse_hrt_position("top"),
+            Ok(BdBarcodeHrPosition::TopCenter)
+        );
+    }
+
+    #[test]
+    fn barcode_hrt_position_uses_canonical_serialisation_and_accepts_legacy_vertical_aliases() {
+        assert_eq!(
+            parse_hrt_position("above").unwrap().to_css_string(),
+            "top center",
+        );
+        assert_eq!(
+            parse_hrt_position("below right").unwrap().to_css_string(),
+            "bottom right",
+        );
+        assert_eq!(
+            BdBarcodeHrPosition::default(),
+            BdBarcodeHrPosition::BottomCenter
+        );
+    }
+
+    #[test]
+    fn barcode_hrt_position_rejects_conflicting_or_duplicate_axes() {
+        for invalid in ["", "top bottom", "left right", "top top", "sideways"] {
+            assert!(parse_hrt_position(invalid).is_err(), "accepted {invalid:?}");
+        }
+    }
+}
