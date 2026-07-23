@@ -212,7 +212,7 @@ pub use self::bd_pdf_viewer::{
 pub use self::bd_source::{BdSource, BdSourceArea, BdSourcePage};
 pub use self::bd_gaps::{BorderClip, MaskBorderMode, Overlay};
 pub use self::bd_misc::{
-    BdCaptionPage, BdColumnClip, BdFlow, BdIntegerAuto, BdLang, BdLineBreakOpportunity,
+    BdCaptionPage, BdColumnClip, BdFlow, BdIntegerAuto, BdLang, BdLineBreakOpportunity, BdLineBreakRule,
     BdObjectSlice, BdPositionOrigin, BdReplacedElement, BdScaleContent, BdShrinkToFit, BdTabSnap,
     BdTargetCandidate, BdTruncateMarginAfterBreak,
 };

@@ -2408,7 +2408,7 @@ mod tests {
                 -bd-replacedelement: image;
                 -bd-scale-content: 75%;
                 -bd-position-origin: padding;
-                -bd-line-break-opportunity: before;
+                -bd-line-break-opportunity: normal '' '/';
                 -bd-object-slice: slice;
                 -bd-flow: figures;
             }

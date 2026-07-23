@@ -6227,14 +6227,14 @@ spec = "Nonstandard (moegoe -bd-* fork extension; GCPM §1.2.1 spec-note running
 animation_type = "discrete"
 affects = "layout"
 
-# F32.14 — explicit line-break opportunity
-# (PDFreactor -ro-line-break-opportunity).
+# Custom text-boundary line-break rules.
 [-bd-line-break-opportunity]
 type = "BdLineBreakOpportunity"
-initial = "computed::BdLineBreakOpportunity::Auto"
-struct = "counters"
-initial_specified_value = "specified::BdLineBreakOpportunity::Auto"
-spec = "Nonstandard (moegoe -bd-* fork extension; F32.14 line-break opportunity)"
+initial = "computed::BdLineBreakOpportunity::normal()"
+struct = "inherited_text"
+initial_specified_value = "specified::BdLineBreakOpportunity::normal()"
+spec = "Nonstandard (moegoe -bd-* fork extension; custom line-break boundary rules)"
+boxed = true
 animation_type = "none"
 affects = "layout"
 

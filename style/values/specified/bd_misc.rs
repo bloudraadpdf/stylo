@@ -18,9 +18,10 @@ use crate::values::computed::{
 };
 use crate::values::specified::{Integer, Percentage};
 use crate::values::CSSFloat;
-use crate::OwnedStr;
+use crate::{OwnedSlice, OwnedStr};
 use cssparser::Parser;
-use style_traits::{ParseError, StyleParseErrorKind};
+use std::fmt::{self, Write};
+use style_traits::{CssWriter, ParseError, StyleParseErrorKind, ToCss};
 
 /// Specified value of `-bd-lang` (F32.1).
 ///
@@ -489,36 +490,159 @@ pub enum BdPositionOrigin {
     BleedBox,
 }
 
-/// Specified value of `-bd-line-break-opportunity` (F32.14).
+/// One custom boundary matcher for `-bd-line-break-opportunity`.
 ///
-/// PDFreactor `-ro-line-break-opportunity` — declares whether the
-/// element introduces a line-break opportunity at its position in
-/// the inline run. `auto` defers to standard CSS rules; `before` /
-/// `after` force the opportunity on the named edge; `none`
-/// suppresses both.
-#[repr(u8)]
+/// `before` is matched against the text ending at the candidate boundary;
+/// `after`, when present, is matched against the text beginning there.
 #[derive(
-    Clone,
-    Debug,
-    Default,
-    Eq,
-    MallocSizeOf,
-    Parse,
-    PartialEq,
-    SpecifiedValueInfo,
-    ToCss,
-    ToComputedValue,
-    ToResolvedValue,
-    ToShmem,
-    ToTyped,
+    Clone, Debug, Eq, MallocSizeOf, PartialEq, SpecifiedValueInfo,
+    ToComputedValue, ToResolvedValue, ToShmem, ToTyped,
 )]
-#[allow(missing_docs)]
-pub enum BdLineBreakOpportunity {
-    #[default]
-    Auto,
-    Before,
-    After,
-    None,
+#[repr(C)]
+pub struct BdLineBreakRule {
+    /// Regular expression matched immediately before the boundary.
+    pub before: OwnedStr,
+    /// Optional regular expression matched immediately after the boundary.
+    pub after: Option<OwnedStr>,
+}
+
+impl ToCss for BdLineBreakRule {
+    fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        self.before.to_css(dest)?;
+        if let Some(after) = &self.after {
+            dest.write_char(' ')?;
+            after.to_css(dest)?;
+        }
+        Ok(())
+    }
+}
+
+/// Specified value of `-bd-line-break-opportunity`.
+///
+/// The native property models boundary rules directly. `normal` retains
+/// Unicode line-break opportunities; whitelist rules add opportunities and
+/// blacklist rules remove them, with the blacklist taking precedence.
+#[derive(
+    Clone, Debug, Eq, MallocSizeOf, PartialEq, SpecifiedValueInfo,
+    ToComputedValue, ToResolvedValue, ToShmem, ToTyped,
+)]
+#[repr(C)]
+pub struct BdLineBreakOpportunity {
+    /// Whether Unicode line-break opportunities remain active.
+    pub normal: bool,
+    /// Custom opportunities to add.
+    pub whitelist: OwnedSlice<BdLineBreakRule>,
+    /// Candidate opportunities to suppress.
+    pub blacklist: OwnedSlice<BdLineBreakRule>,
+}
+
+impl BdLineBreakOpportunity {
+    /// Initial value: retain ordinary Unicode line breaking.
+    #[inline]
+    pub fn normal() -> Self {
+        Self {
+            normal: true,
+            whitelist: OwnedSlice::default(),
+            blacklist: OwnedSlice::default(),
+        }
+    }
+
+    /// Whether this is exactly the initial `normal` value.
+    #[inline]
+    pub fn is_normal(&self) -> bool {
+        self.normal && self.whitelist.is_empty() && self.blacklist.is_empty()
+    }
+}
+
+impl ToCss for BdLineBreakOpportunity {
+    fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        let mut wrote = false;
+        if self.normal {
+            dest.write_str("normal")?;
+            wrote = true;
+        }
+        for (index, rule) in self.whitelist.iter().enumerate() {
+            if wrote {
+                dest.write_str(if self.normal && index == 0 { " " } else { ", " })?;
+            }
+            rule.to_css(dest)?;
+            wrote = true;
+        }
+        if !self.blacklist.is_empty() {
+            if wrote {
+                dest.write_str(" / ")?;
+            } else {
+                dest.write_str("/ ")?;
+            }
+            for (index, rule) in self.blacklist.iter().enumerate() {
+                if index != 0 {
+                    dest.write_str(", ")?;
+                }
+                rule.to_css(dest)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Parse for BdLineBreakOpportunity {
+    fn parse<'i, 't>(
+        _: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        let normal = input.try_parse(|i| i.expect_ident_matching("normal")).is_ok();
+
+        fn parse_rule<'i, 't>(input: &mut Parser<'i, 't>) -> Result<BdLineBreakRule, ParseError<'i>> {
+            let before: OwnedStr = input.expect_string()?.as_ref().to_owned().into();
+            let after = input
+                .try_parse(|i| -> Result<OwnedStr, ParseError<'i>> {
+                    Ok(i.expect_string()?.as_ref().to_owned().into())
+                })
+                .ok();
+            Ok(BdLineBreakRule { before, after })
+        }
+
+        fn parse_rule_list<'i, 't>(
+            input: &mut Parser<'i, 't>,
+            stop_at_slash: bool,
+        ) -> Result<Vec<BdLineBreakRule>, ParseError<'i>> {
+            let mut rules = Vec::new();
+            loop {
+                if input.is_exhausted()
+                    || (stop_at_slash && input.try_parse(|i| i.expect_delim('/')).is_ok())
+                {
+                    break;
+                }
+                rules.push(parse_rule(input)?);
+                if input.is_exhausted() {
+                    break;
+                }
+                if stop_at_slash && input.try_parse(|i| i.expect_delim('/')).is_ok() {
+                    break;
+                }
+                input.expect_comma()?;
+            }
+            Ok(rules)
+        }
+
+        let whitelist = parse_rule_list(input, true)?;
+        let blacklist = if input.is_exhausted() {
+            Vec::new()
+        } else {
+            // `parse_rule_list(..., true)` consumes the separating slash.
+            parse_rule_list(input, false)?
+        };
+
+        if !input.is_exhausted() || (!normal && whitelist.is_empty() && blacklist.is_empty()) {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+
+        Ok(Self {
+            normal,
+            whitelist: OwnedSlice::from(whitelist),
+            blacklist: OwnedSlice::from(blacklist),
+        })
+    }
 }
 
 /// Specified value of `-bd-object-slice` (F32.15).
