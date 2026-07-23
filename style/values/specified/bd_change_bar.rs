@@ -172,7 +172,12 @@ impl Parse for BdChangeBarAlign {
                 consumed = true;
                 continue;
             }
-            return Err(input.new_custom_error(style_traits::StyleParseErrorKind::UnspecifiedError));
+            // A longhand's generated declaration parser rejects any
+            // unconsumed tail.  Returning the alignment parsed so far
+            // here is nevertheless essential for the order-independent
+            // `-bd-change-bar` shorthand, whose following token may be
+            // its offset, width, colour, or `/ name` component.
+            break;
         }
 
         if !consumed || (saw_column && (saw_page || distribute_column)) {
