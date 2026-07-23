@@ -52,6 +52,9 @@ pub enum BdBarcodeType {
     // Accept both compact and hyphenated symbology spellings.
     #[parse(aliases = "code-39")]
     Code39,
+    /// LOGMARS (MIL-STD-1189), including its required modulo-43 check
+    /// character and 3:1 wide-to-narrow module ratio.
+    Logmars,
     #[parse(aliases = "code-93")]
     Code93,
     #[parse(aliases = "code-128")]
