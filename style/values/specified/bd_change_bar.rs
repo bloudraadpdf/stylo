@@ -12,18 +12,28 @@
 //!
 //! All longhands apply to all elements; they are not inherited.
 
+use std::fmt::{self, Write};
+
 use crate::derives::*;
+use crate::parser::{Parse, ParserContext};
 use crate::values::computed::Percentage;
 use crate::values::specified::border::LineWidth;
 use crate::values::specified::color::Color;
 use crate::values::specified::length::LengthPercentage;
 use crate::OwnedStr;
+use cssparser::Parser;
+use style_traits::{CssWriter, ParseError, ToCss};
 
 /// Specified value of `-bd-change-bar-align`.
 ///
-/// Controls which side of the column / page the change bar sits
-/// on. `start` / `end` map to writing-mode-aware sides; explicit
-/// physical keywords are accepted for compatibility.
+/// Controls which side of the column / page the change bar sits on.
+///
+/// This is deliberately structured rather than a flat keyword enum:
+/// the side and reference box are independent components, and
+/// `distribute-column` modifies page-relative placement.  Keeping all
+/// three components preserves declarations such as `outside
+/// distribute-column` through the cascade instead of silently dropping
+/// the later, more specific declaration.
 #[repr(u8)]
 #[derive(
     Clone,
@@ -31,6 +41,7 @@ use crate::OwnedStr;
     Debug,
     Default,
     Eq,
+    Hash,
     MallocSizeOf,
     Parse,
     PartialEq,
@@ -42,7 +53,7 @@ use crate::OwnedStr;
     ToTyped,
 )]
 #[allow(missing_docs)]
-pub enum BdChangeBarAlign {
+pub enum BdChangeBarSide {
     #[default]
     Start,
     End,
@@ -50,6 +61,151 @@ pub enum BdChangeBarAlign {
     Outside,
     Left,
     Right,
+}
+
+/// Reference box used to position a change bar.
+#[repr(u8)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Eq,
+    Hash,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[allow(missing_docs)]
+pub enum BdChangeBarReference {
+    #[default]
+    Page,
+    Column,
+}
+
+/// Fully resolved specified value of `-bd-change-bar-align`.
+#[repr(C)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+pub struct BdChangeBarAlign {
+    /// Logical or physical side used for the selected reference box.
+    pub side: BdChangeBarSide,
+    /// Whether the base position is the page or the containing column.
+    pub reference: BdChangeBarReference,
+    /// Route page-relative bars to the page edge nearest each column.
+    pub distribute_column: bool,
+}
+
+impl BdChangeBarAlign {
+    /// Initial value (`start page`).
+    #[inline]
+    pub fn start_page() -> Self {
+        Self {
+            side: BdChangeBarSide::Start,
+            reference: BdChangeBarReference::Page,
+            distribute_column: false,
+        }
+    }
+}
+
+impl Parse for BdChangeBarAlign {
+    fn parse<'i, 't>(
+        _context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        let mut side = None;
+        let mut saw_page = false;
+        let mut saw_column = false;
+        let mut distribute_column = false;
+        let mut consumed = false;
+
+        while !input.is_exhausted() {
+            if side.is_none() {
+                if let Ok(value) = input.try_parse(BdChangeBarSide::parse) {
+                    side = Some(value);
+                    consumed = true;
+                    continue;
+                }
+            }
+            if !saw_page
+                && input
+                    .try_parse(|input| input.expect_ident_matching("page"))
+                    .is_ok()
+            {
+                saw_page = true;
+                consumed = true;
+                continue;
+            }
+            if !saw_column
+                && input
+                    .try_parse(|input| input.expect_ident_matching("column"))
+                    .is_ok()
+            {
+                saw_column = true;
+                consumed = true;
+                continue;
+            }
+            if !distribute_column
+                && input
+                    .try_parse(|input| input.expect_ident_matching("distribute-column"))
+                    .is_ok()
+            {
+                distribute_column = true;
+                consumed = true;
+                continue;
+            }
+            return Err(input.new_custom_error(style_traits::StyleParseErrorKind::UnspecifiedError));
+        }
+
+        if !consumed || (saw_column && (saw_page || distribute_column)) {
+            return Err(input.new_custom_error(style_traits::StyleParseErrorKind::UnspecifiedError));
+        }
+
+        Ok(Self {
+            side: side.unwrap_or_default(),
+            reference: if saw_column {
+                BdChangeBarReference::Column
+            } else {
+                BdChangeBarReference::Page
+            },
+            distribute_column,
+        })
+    }
+}
+
+impl ToCss for BdChangeBarAlign {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        self.side.to_css(dest)?;
+        match self.reference {
+            BdChangeBarReference::Page if self.distribute_column => {
+                dest.write_str(" distribute-column")?;
+            },
+            BdChangeBarReference::Page => {},
+            BdChangeBarReference::Column => dest.write_str(" column")?,
+        }
+        Ok(())
+    }
 }
 
 /// Specified value of `-bd-change-bar-exclusion`.

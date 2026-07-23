@@ -4571,9 +4571,9 @@ affects = ""
 # extent (see `docs/audits/CSS-COVERAGE-AUDIT-2026-05-14`).
 [-bd-change-bar-align]
 type = "BdChangeBarAlign"
-initial = "computed::BdChangeBarAlign::Start"
+initial = "computed::BdChangeBarAlign::start_page()"
 struct = "counters"
-initial_specified_value = "specified::BdChangeBarAlign::Start"
+initial_specified_value = "specified::BdChangeBarAlign::start_page()"
 spec = "Nonstandard (moegoe -bd-* fork extension; Family 16 change-bar)"
 animation_type = "none"
 affects = ""
