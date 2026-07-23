@@ -68,6 +68,8 @@ pub enum BdBarcodeType {
     #[parse(aliases = "upc-e")]
     Upce,
     Itf,
+    /// ITF-14 with its GS1 bearer frame and modulo-10 GTIN check digit.
+    Itf14,
     Codabar,
     MaxiCode,
     Telepen,
