@@ -1544,6 +1544,37 @@ mod tests {
     }
 
     #[test]
+    fn servo_parses_transform_properties_in_margin_box() {
+        let stylesheet = parse_stylesheet(
+            "@page { @top-left-corner { transform: translate(20px, 30px) rotate(15deg); transform-origin: left top; transform-box: border-box; } }",
+        );
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let page = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Page(p) => Some(p.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected @page rule");
+        let nested = page.rules.read_with(&guard);
+        let margin = nested
+            .0
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Margin(m) => Some(m),
+                _ => None,
+            })
+            .expect("expected @margin rule");
+        assert_eq!(
+            margin.block.read_with(&guard).len(),
+            3,
+            "the transform, transform-origin, and transform-box longhands should parse in a margin box",
+        );
+    }
+
+    #[test]
     fn servo_preserves_env_fallback_in_page_rule_serialization() {
         let stylesheet = parse_stylesheet("@page { margin-top: env(safe-area-inset-top, 12pt); }");
         let guard = stylesheet.shared_lock.read();
