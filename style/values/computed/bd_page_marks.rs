@@ -2,11 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! Computed values for moegoe page-mark + print-shop properties
-//! (Families F4 and F20).
-//!
-//! F4 — `BdPageMarkLength` / `BdPageMarksColour` for the per-mark
-//! crop / cross / registration / bleed tuning longhands.
+//! Computed values for Bloudraad page-mark and print-shop properties.
 //!
 //! F20 — `BdColorBarPosition` + `BdPrintMarkSet` for the
 //! `-bd-page-colorbar-*` / `-bd-page-print-mark-set` print-shop
@@ -50,6 +46,98 @@ impl ToComputedValue for specified::BdPageMarkLength {
 
     fn from_computed_value(computed: &Self::ComputedValue) -> Self {
         Self(ToComputedValue::from_computed_value(&computed.0))
+    }
+}
+
+/// Computed `auto | <non-negative-length>` mark extent.
+#[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, ToCss, ToResolvedValue, ToShmem, ToTyped)]
+#[repr(C)]
+pub struct BdPageMarkLengthOrAuto(pub crate::values::computed::length::NonNegativeLengthOrAuto);
+
+impl BdPageMarkLengthOrAuto {
+    /// Initial automatic extent.
+    #[inline]
+    pub fn auto() -> Self {
+        Self(crate::values::generics::length::LengthPercentageOrAuto::Auto)
+    }
+}
+
+impl ToComputedValue for specified::BdPageMarkLengthOrAuto {
+    type ComputedValue = BdPageMarkLengthOrAuto;
+
+    fn to_computed_value(&self, ctx: &Context) -> Self::ComputedValue {
+        BdPageMarkLengthOrAuto(self.0.to_computed_value(ctx))
+    }
+
+    fn from_computed_value(computed: &Self::ComputedValue) -> Self {
+        Self(ToComputedValue::from_computed_value(&computed.0))
+    }
+}
+
+/// Computed non-negative length-percentage printer-mark offset.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToCss, ToResolvedValue, ToTyped)]
+#[repr(C)]
+pub struct BdPageMarkOffset(pub crate::values::computed::length::NonNegativeLengthPercentage);
+
+impl BdPageMarkOffset {
+    /// Initial 100% offset.
+    #[inline]
+    pub fn hundred_percent() -> Self {
+        Self(crate::values::generics::NonNegative(
+            LengthPercentage::new_percent(crate::values::computed::Percentage::hundred()),
+        ))
+    }
+}
+
+impl ToComputedValue for specified::BdPageMarkOffset {
+    type ComputedValue = BdPageMarkOffset;
+
+    fn to_computed_value(&self, ctx: &Context) -> Self::ComputedValue {
+        BdPageMarkOffset(self.0.to_computed_value(ctx))
+    }
+
+    fn from_computed_value(computed: &Self::ComputedValue) -> Self {
+        Self(ToComputedValue::from_computed_value(&computed.0))
+    }
+}
+
+/// Computed `none | <non-negative-length>` printer-mark width.
+#[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, ToCss, ToResolvedValue, ToShmem, ToTyped)]
+#[repr(C, u8)]
+pub enum BdPageMarkWidth {
+    /// Do not paint mark strokes.
+    None,
+    /// Absolute mark stroke width.
+    Length(NonNegativeLength),
+}
+
+impl BdPageMarkWidth {
+    /// Build an absolute value from points.
+    #[inline]
+    pub fn from_pt(pt: f32) -> Self {
+        Self::Length(NonNegativeLength::new(pt * 96.0 / 72.0))
+    }
+}
+
+impl ToComputedValue for specified::BdPageMarkWidth {
+    type ComputedValue = BdPageMarkWidth;
+
+    fn to_computed_value(&self, ctx: &Context) -> Self::ComputedValue {
+        match self {
+            specified::BdPageMarkWidth::None => BdPageMarkWidth::None,
+            specified::BdPageMarkWidth::Length(length) => {
+                BdPageMarkWidth::Length(length.to_computed_value(ctx))
+            },
+        }
+    }
+
+    fn from_computed_value(computed: &Self::ComputedValue) -> Self {
+        match computed {
+            BdPageMarkWidth::None => Self::None,
+            BdPageMarkWidth::Length(length) => {
+                Self::Length(ToComputedValue::from_computed_value(length))
+            },
+        }
     }
 }
 

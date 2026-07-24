@@ -2,44 +2,19 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! moegoe page-mark + print-shop properties (Families F4 and F20).
+//! Bloudraad page-mark and print-shop properties.
 //!
-//! F4 — per-mark tuning. Replaces the hardcoded crop / cross /
-//! registration-mark constants in
-//! `crates/moegoe-ir/src/page.rs` (`CROP_MARK_LENGTH_PT = 12pt`,
-//! `CROP_MARK_OFFSET_PT = 3pt`, `CROSS_MARK_SIZE_PT = 6pt`) with
-//! CSS-driven @page descriptors. Print shops use these knobs to
-//! line up registration marks against their plate-imposition rig.
-//!
-//! All nine F4 longhands are `@page`-only descriptors:
-//!
-//! | Property | PDFreactor source |
-//! |----------|--------------------|
-//! | `-bd-page-crop-mark-length` | `-ro-crop-mark-length` 14572 |
-//! | `-bd-page-crop-mark-offset` | `-ro-crop-mark-offset` 14589 |
-//! | `-bd-page-bleed-mark-length` | `-ro-bleed-mark-length` 13234 |
-//! | `-bd-page-bleed-mark-offset` | `-ro-bleed-mark-offset` 13251 |
-//! | `-bd-page-registration-mark-offset` | `-ro-registration-mark-offset` 17865 |
-//! | `-bd-page-registration-mark-size` | `-ro-registration-mark-size` 17882 |
-//! | `-bd-page-marks-colour` | `-ro-marks-color` 16345 |
-//! | `-bd-page-marks-offset` | `-ro-marks-offset` 16362 |
-//! | `-bd-page-marks-width` | `-ro-marks-width` 16371 |
-//!
-//! Prince spellings (`-prince-mark-offset` / `-prince-mark-width`)
-//! map onto the corresponding `marks-*` properties via the moegoe
-//! compat translator.
-//!
-//! F20 — `-bd-page-colorbar-*` / `-bd-page-print-mark-set` page-margin
-//! print-shop tooling. Native moegoe fork-extension surface for
-//! PDFreactor's `-ro-colorbar-*` and `-ro-marks` properties (see
-//! `docs/reference-manuals/pdfreactor.md:14026–14043, 16279`). Eight
-//! positional colour-bar slots plus an offset, a marks shorthand,
-//! and a print-mark-set synthesised property. All F20 longhands are
-//! `@page` descriptors (`rule_types_allowed = ["page"]`).
+//! The F4 descriptors tune crop, bleed, and registration marks. The F20
+//! descriptors provide positional colour bars and print-mark sets. All of
+//! these native `-bd-*` longhands are admitted only in `@page`.
 
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
-use crate::values::specified::length::{LengthPercentage, NonNegativeLength};
+use crate::values::generics::{length::LengthPercentageOrAuto, NonNegative};
+use crate::values::specified::length::{
+    LengthPercentage, NonNegativeLength, NonNegativeLengthOrAuto,
+    NonNegativeLengthPercentage,
+};
 use crate::values::specified::url::UrlOrNone;
 use crate::values::specified::Color;
 use crate::OwnedSlice;
@@ -60,7 +35,7 @@ impl BdPageMarkLength {
     #[inline]
     pub fn from_pt(pt: f32) -> Self {
         // 1pt = 1.333… px in CSS px terms — but here we want the
-        // initial values to express the historic moegoe constants
+        // initial values to express authored physical dimensions
         // as authored. The renderer resolves these against the
         // page-box geometry.
         Self(NonNegativeLength::from_px(pt * 96.0 / 72.0))
@@ -76,12 +51,98 @@ impl Parse for BdPageMarkLength {
     }
 }
 
+/// `auto | <non-negative-length>` mark extent.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
+#[repr(C)]
+pub struct BdPageMarkLengthOrAuto(pub NonNegativeLengthOrAuto);
+
+impl BdPageMarkLengthOrAuto {
+    /// Initial automatic extent.
+    #[inline]
+    pub fn auto() -> Self {
+        Self(LengthPercentageOrAuto::Auto)
+    }
+
+    /// Build an absolute value from points.
+    #[inline]
+    pub fn from_pt(pt: f32) -> Self {
+        Self(LengthPercentageOrAuto::LengthPercentage(
+            NonNegativeLength::from_px(pt * 96.0 / 72.0),
+        ))
+    }
+}
+
+impl Parse for BdPageMarkLengthOrAuto {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        Ok(Self(NonNegativeLengthOrAuto::parse_with(
+            context,
+            input,
+            NonNegativeLength::parse,
+        )?))
+    }
+}
+
+/// `<non-negative-length-percentage>` printer-mark offset.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
+#[repr(C)]
+pub struct BdPageMarkOffset(pub NonNegativeLengthPercentage);
+
+impl BdPageMarkOffset {
+    /// Initial 100% offset.
+    #[inline]
+    pub fn hundred_percent() -> Self {
+        Self(NonNegative(LengthPercentage::hundred_percent()))
+    }
+}
+
+impl Parse for BdPageMarkOffset {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        Ok(Self(NonNegativeLengthPercentage::parse(context, input)?))
+    }
+}
+
+/// `none | <non-negative-length>` printer-mark width.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
+#[repr(C, u8)]
+pub enum BdPageMarkWidth {
+    /// Do not paint mark strokes.
+    None,
+    /// Absolute mark stroke width.
+    Length(NonNegativeLength),
+}
+
+impl BdPageMarkWidth {
+    /// Build an absolute value from points.
+    #[inline]
+    pub fn from_pt(pt: f32) -> Self {
+        Self::Length(NonNegativeLength::from_px(pt * 96.0 / 72.0))
+    }
+}
+
+impl Parse for BdPageMarkWidth {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if input
+            .try_parse(|i| i.expect_ident_matching("none"))
+            .is_ok()
+        {
+            return Ok(Self::None);
+        }
+        Ok(Self::Length(NonNegativeLength::parse(context, input)?))
+    }
+}
+
 /// `-bd-page-marks-colour`.
 ///
-/// Colour applied to crop / cross / registration marks (PDFreactor
-/// `-ro-marks-color`). `auto` (initial) defers to the renderer's
-/// default — typically the "registration" colour space (100% of
-/// every separation channel).
+/// `auto` (initial) defers to the renderer's registration colour.
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
 #[repr(C, u8)]
 pub enum BdPageMarksColour {
@@ -613,6 +674,25 @@ mod tests {
             .expect("mark length should parse")
     }
 
+    fn parse_offset(css: &str) -> BdPageMarkOffset {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Page),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input = ParserInput::new(css);
+        let mut parser = Parser::new(&mut input);
+        parser
+            .parse_entirely(|input| BdPageMarkOffset::parse(&context, input))
+            .expect("mark offset should parse")
+    }
+
     fn parse_colour_bar(css: &str) -> BdColorBarPosition {
         let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
         let context = ParserContext::new(
@@ -637,6 +717,13 @@ mod tests {
         // Numbers serialise canonically; check parse + serialise consistency.
         let value = parse_length("12pt");
         assert!(value.to_css_string().contains("pt"));
+    }
+
+    #[test]
+    fn mark_offset_preserves_percentage() {
+        assert_eq!(parse_offset("66%").to_css_string(), "66%");
+        assert_eq!(BdPageMarkLengthOrAuto::auto().to_css_string(), "auto");
+        assert_eq!(BdPageMarkWidth::None.to_css_string(), "none");
     }
 
     #[test]

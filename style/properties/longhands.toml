@@ -3316,30 +3316,30 @@ affects = "paint"
 # constants. Each carries either a non-negative length (mark
 # size / offset / width) or a colour.
 [-bd-page-crop-mark-length]
-type = "BdPageMarkLength"
-initial = "computed::BdPageMarkLength::from_pt(12.0)"
+type = "BdPageMarkLengthOrAuto"
+initial = "computed::BdPageMarkLengthOrAuto::auto()"
 struct = "page"
-initial_specified_value = "specified::BdPageMarkLength::from_pt(12.0)"
+initial_specified_value = "specified::BdPageMarkLengthOrAuto::auto()"
 spec = "Nonstandard (moegoe -bd-* fork extension; F4 crop-mark length)"
 animation_type = "none"
 rule_types_allowed = ["page"]
 affects = "paint"
 
 [-bd-page-crop-mark-offset]
-type = "BdPageMarkLength"
-initial = "computed::BdPageMarkLength::from_pt(3.0)"
+type = "BdPageMarkOffset"
+initial = "computed::BdPageMarkOffset::hundred_percent()"
 struct = "page"
-initial_specified_value = "specified::BdPageMarkLength::from_pt(3.0)"
+initial_specified_value = "specified::BdPageMarkOffset::hundred_percent()"
 spec = "Nonstandard (moegoe -bd-* fork extension; F4 crop-mark offset)"
 animation_type = "none"
 rule_types_allowed = ["page"]
 affects = "paint"
 
 [-bd-page-bleed-mark-length]
-type = "BdPageMarkLength"
-initial = "computed::BdPageMarkLength::from_pt(12.0)"
+type = "BdPageMarkLengthOrAuto"
+initial = "computed::BdPageMarkLengthOrAuto::auto()"
 struct = "page"
-initial_specified_value = "specified::BdPageMarkLength::from_pt(12.0)"
+initial_specified_value = "specified::BdPageMarkLengthOrAuto::auto()"
 spec = "Nonstandard (moegoe -bd-* fork extension; F4 bleed-mark length)"
 animation_type = "none"
 rule_types_allowed = ["page"]
@@ -3356,10 +3356,10 @@ rule_types_allowed = ["page"]
 affects = "paint"
 
 [-bd-page-registration-mark-offset]
-type = "BdPageMarkLength"
-initial = "computed::BdPageMarkLength::from_pt(6.0)"
+type = "BdPageMarkOffset"
+initial = "computed::BdPageMarkOffset::hundred_percent()"
 struct = "page"
-initial_specified_value = "specified::BdPageMarkLength::from_pt(6.0)"
+initial_specified_value = "specified::BdPageMarkOffset::hundred_percent()"
 spec = "Nonstandard (moegoe -bd-* fork extension; F4 registration-mark offset)"
 animation_type = "none"
 rule_types_allowed = ["page"]
@@ -3367,9 +3367,9 @@ affects = "paint"
 
 [-bd-page-registration-mark-size]
 type = "BdPageMarkLength"
-initial = "computed::BdPageMarkLength::from_pt(6.0)"
+initial = "computed::BdPageMarkLength::from_pt(14.173228)"
 struct = "page"
-initial_specified_value = "specified::BdPageMarkLength::from_pt(6.0)"
+initial_specified_value = "specified::BdPageMarkLength::from_pt(14.173228)"
 spec = "Nonstandard (moegoe -bd-* fork extension; F4 registration-mark size)"
 animation_type = "none"
 rule_types_allowed = ["page"]
@@ -3386,20 +3386,20 @@ rule_types_allowed = ["page"]
 affects = "paint"
 
 [-bd-page-marks-offset]
-type = "BdPageMarkLength"
-initial = "computed::BdPageMarkLength::from_pt(0.0)"
+type = "BdPageMarkOffset"
+initial = "computed::BdPageMarkOffset::hundred_percent()"
 struct = "page"
-initial_specified_value = "specified::BdPageMarkLength::from_pt(0.0)"
+initial_specified_value = "specified::BdPageMarkOffset::hundred_percent()"
 spec = "Nonstandard (moegoe -bd-* fork extension; F4 all-marks offset)"
 animation_type = "none"
 rule_types_allowed = ["page"]
 affects = "paint"
 
 [-bd-page-marks-width]
-type = "BdPageMarkLength"
-initial = "computed::BdPageMarkLength::from_pt(0.24)"
+type = "BdPageMarkWidth"
+initial = "computed::BdPageMarkWidth::from_pt(0.5)"
 struct = "page"
-initial_specified_value = "specified::BdPageMarkLength::from_pt(0.24)"
+initial_specified_value = "specified::BdPageMarkWidth::from_pt(0.5)"
 spec = "Nonstandard (moegoe -bd-* fork extension; F4 marks line width)"
 animation_type = "none"
 rule_types_allowed = ["page"]

@@ -138,7 +138,8 @@ pub use self::bd_page_group::BdPageGroup;
 pub use self::bd_page_margin::BdPageMarginEdge;
 pub use self::bd_page_marks::{
     BdBleedColour, BdColorBarPosition, BdColourBarPositionSide, BdColourBarSwatches, BdCropColour,
-    BdPageMarkEnabled, BdPageMarkLength, BdPageMarksColour, BdPrintMarkSet, BdRegistrationColour,
+    BdPageMarkEnabled, BdPageMarkLength, BdPageMarkLengthOrAuto, BdPageMarkOffset,
+    BdPageMarkWidth, BdPageMarksColour, BdPrintMarkSet, BdRegistrationColour,
     BdRegistrationPosition, BdSidenoteGlyph, BdSidenoteMarkerOffset,
 };
 pub use self::bd_page_rotation::{BdPdfPageRotation, BdRotateBody};
