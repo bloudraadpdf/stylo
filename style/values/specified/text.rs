@@ -189,6 +189,9 @@ pub enum TextOverflowSide {
     Clip,
     /// Render ellipsis to represent clipped inline content.
     Ellipsis,
+    /// Uniformly scale overflowing text down to the available inline size.
+    #[css(keyword = "-bd-scale-down")]
+    BdScaleDown,
     /// Render a given string to represent clipped inline content.
     String(crate::values::AtomString),
 }
