@@ -6157,12 +6157,11 @@ spec = "Nonstandard (moegoe -bd-* fork extension; F32.7 cross-ref target candida
 animation_type = "none"
 affects = ""
 
-# F32.8 — preserve margin after forced break
-# (PDFreactor -ro-truncate-margin-after-break).
+# F32.8 — inherited fragmentation-margin policy.
 [-bd-truncate-margin-after-break]
 type = "BdTruncateMarginAfterBreak"
 initial = "computed::BdTruncateMarginAfterBreak::Auto"
-struct = "counters"
+struct = "inherited_text"
 initial_specified_value = "specified::BdTruncateMarginAfterBreak::Auto"
 spec = "Nonstandard (moegoe -bd-* fork extension; F32.8 margin truncation after break)"
 animation_type = "none"

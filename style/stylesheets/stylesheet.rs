@@ -2462,6 +2462,16 @@ mod tests {
         );
     }
 
+    /// Fragmentation containers pass their leading-margin policy to nested
+    /// fragmentation content through the normal inherited cascade.
+    #[test]
+    fn servo_bd_truncate_margin_after_break_is_inherited() {
+        assert!(
+            LonghandId::BdTruncateMarginAfterBreak.inherited(),
+            "-bd-truncate-margin-after-break must inherit into fragmentation containers"
+        );
+    }
+
     /// moegoe F21 — gap fillers: mask-border-* family, border-clip,
     /// overlay, and text-justify: prince-cjk must all parse.
     #[test]
