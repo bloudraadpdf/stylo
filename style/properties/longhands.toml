@@ -1186,6 +1186,7 @@ struct = "font"
 initial_specified_value = "specified::FontStretch::normal()"
 gecko_ffi_name = "mFont.stretch"
 spec = "https://drafts.csswg.org/css-fonts/#propdef-font-stretch"
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
