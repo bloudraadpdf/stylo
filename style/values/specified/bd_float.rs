@@ -261,9 +261,10 @@ impl crate::parser::Parse for BdFloatDeferPage {
 
 /// Specified value of `-bd-float-displace`.
 ///
-/// Controls how content surrounding a page float is laid out
-/// around the float's reserved band. CSS Page Floats Module
-/// Level 3 §3.3 describes the four displacement strategies:
+/// Controls how content surrounding a page float is laid out around the
+/// float's reserved band. This is a native compatibility surface whose
+/// vocabulary follows the older CSS Basic Box Model `float-displace`
+/// proposal; CSS Page Floats Level 3 does not define this property.
 ///
 /// * `indent` — surrounding content is indented by the float's
 ///   inline measure (text wraps alongside the float).
