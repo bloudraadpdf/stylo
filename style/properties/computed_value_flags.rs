@@ -141,6 +141,10 @@ bitflags! {
 
         /// Whether there are author-specific rules for `text-shadow`.
         const HAS_AUTHOR_SPECIFIED_TEXT_SHADOW = 1 << 28;
+
+        /// Whether the winning cascade declaration for
+        /// `-bd-float-displace` comes from the author origin.
+        const HAS_AUTHOR_SPECIFIED_BD_FLOAT_DISPLACE = 1 << 29;
     }
 }
 
