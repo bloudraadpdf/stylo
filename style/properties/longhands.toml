@@ -2094,7 +2094,6 @@ initial_specified_value = "specified::Bleed::auto()"
 spec = "https://drafts.csswg.org/css-page-3/#bleed"
 animation_type = "none"
 rule_types_allowed = ["page"]
-boxed = true
 affects = "layout"
 
 # moegoe -bd-pdf-* document metadata longhands. Native fork-extension
@@ -3408,10 +3407,10 @@ affects = "paint"
 
 # moegoe G10 — per-side `bleed` longhands. Mirror PDFreactor's
 # `-ro-bleed-top` / Prince's `prince-bleed-top` per-side surfaces.
-# The standard `bleed` shorthand already accepts the 2/3/4-value
-# expansion, so these longhands provide author-facing per-side
-# precision plus a 1-to-1 mapping for the compat-translator's
-# PDFreactor / Prince spellings. All four are non-negative
+# CSS Paged Media defines standard `bleed` as one signed scalar, so
+# these distinct longhands provide author-facing per-side precision
+# plus a 1-to-1 mapping for the compat-translator's PDFreactor /
+# Prince spellings. All four native values are non-negative
 # `<length>` initial `0`; reuse `BdPageMarkLength` as the type
 # carrier (it is just `NonNegativeLength` underneath).
 [-bd-page-bleed-top]

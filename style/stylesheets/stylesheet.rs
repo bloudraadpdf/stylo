@@ -581,6 +581,7 @@ mod tests {
     use crate::color::AbsoluteColor;
     use crate::font_metrics::FontMetrics;
     use crate::media_queries::MediaType;
+    use crate::parser::Parse;
     use crate::properties::{
         declaration_block::PropertyDeclarationBlock, style_structs::Font, ComputedValues,
         Importance, LonghandId, PropertyDeclaration, StyleBuilder,
@@ -592,7 +593,7 @@ mod tests {
     use crate::stylesheets::CssRule;
     use crate::test_support::{pref_lock, BoolPrefGuard};
     use crate::values::computed::font::GenericFontFamily;
-    use crate::values::computed::{CSSPixelLength, Length};
+    use crate::values::computed::{CSSPixelLength, Length, ToComputedValue};
     use crate::Atom;
     use cssparser::TokenSerializationType;
     use euclid::{Scale, Size2D};
@@ -1610,6 +1611,94 @@ mod tests {
             page_rule_css.contains("bleed: -3pt"),
             "expected serialized @page rule to preserve negative bleed, got: {page_rule_css}",
         );
+    }
+
+    #[test]
+    fn servo_rejects_multivalue_standard_bleed_at_the_parser_boundary() {
+        for invalid in ["1pt 2pt", "1pt 2pt 3pt", "1pt 2pt 3pt 4pt"] {
+            let stylesheet = parse_stylesheet(&format!("@page {{ bleed: {invalid}; }}"));
+            let guard = stylesheet.shared_lock.read();
+            let contents = stylesheet.contents.read_with(&guard);
+            let rules = contents.rules(&guard);
+            let page_rule_css = rules
+                .iter()
+                .find_map(|rule| match rule {
+                    CssRule::Page(_) => Some(rule.to_css_string(&guard)),
+                    _ => None,
+                })
+                .expect("expected @page rule");
+            assert!(
+                !page_rule_css.contains("bleed:"),
+                "invalid standard bleed must not enter the declaration block: {page_rule_css}",
+            );
+        }
+    }
+
+    #[test]
+    fn invalid_later_multivalue_bleed_cannot_erase_an_earlier_scalar() {
+        for css in [
+            "@page { bleed: 5pt; bleed: 1pt 2pt; }",
+            "@page { bleed: 5pt; bleed: 1pt 2pt !important; }",
+        ] {
+            let stylesheet = parse_stylesheet(css);
+            let guard = stylesheet.shared_lock.read();
+            let contents = stylesheet.contents.read_with(&guard);
+            let rules = contents.rules(&guard);
+            let page_rule_css = rules
+                .iter()
+                .find_map(|rule| match rule {
+                    CssRule::Page(_) => Some(rule.to_css_string(&guard)),
+                    _ => None,
+                })
+                .expect("expected @page rule");
+            assert!(
+                page_rule_css.contains("bleed: 5pt"),
+                "the valid scalar must survive the invalid later declaration: {page_rule_css}",
+            );
+            assert!(
+                !page_rule_css.contains("1pt 2pt"),
+                "the invalid multivalue declaration must never enter the typed block: {page_rule_css}",
+            );
+        }
+    }
+
+    #[test]
+    fn negative_bleed_remains_signed_in_the_computed_value() {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let parser_context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            None,
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input = ParserInput::new("-3px");
+        let mut parser = Parser::new(&mut input);
+        let specified = crate::values::specified::page::Bleed::parse(&parser_context, &mut parser)
+            .expect("negative standard bleed is valid");
+        parser
+            .expect_exhausted()
+            .expect("the scalar consumes the whole value");
+
+        let stylist = test_stylist();
+        let computed = crate::values::computed::Context::for_media_query_evaluation(
+            stylist.device(),
+            QuirksMode::NoQuirks,
+            |context| specified.to_computed_value(context),
+        );
+        match computed {
+            crate::values::computed::page::Bleed::Length(length) => {
+                assert_eq!(
+                    length.px(),
+                    -3.0,
+                    "computed bleed must preserve its valid sign"
+                );
+            },
+            crate::values::computed::page::Bleed::Auto => panic!("expected computed signed length"),
+        }
     }
 
     #[test]
