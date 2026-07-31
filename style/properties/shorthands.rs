@@ -720,7 +720,7 @@ pub mod page_break_inside {
 
 /// CSS Page Floats 3 §3.2 — `snap-block` shorthand.
 ///
-/// PDFreactor and Prince support `snap-block: <threshold>? <alignment>?` as a
+/// PDFreactor and Prince support `snap-block: <threshold> <alignment>?` as a
 /// separate CSS property (shorthand) that expands to
 /// `float: snap-block(<threshold>, <alignment>)`. This compatibility shorthand
 /// lets authors write both forms:
@@ -736,36 +736,31 @@ pub mod snap_block {
         context: &ParserContext,
         input: &mut Parser<'i, '_>,
     ) -> Result<Longhands, ParseError<'i>> {
-        // Grammar: <threshold>? [<threshold>]? <alignment>?
+        // Grammar: <threshold> [<threshold>]? <alignment>?
         // Space-separated (no function parentheses, no comma separator).
-        let mut start_threshold = None;
-        let mut end_threshold = None;
-        let mut alignment = None;
+        let start = SnapBlockThreshold::parse(context, input)?;
+        let end = input
+            .try_parse(|i| SnapBlockThreshold::parse(context, i))
+            .ok();
+        let alignment = input
+            .try_parse(|i| SnapBlockAlignment::parse(context, i))
+            .ok();
+        input.expect_exhausted()?;
 
-        if let Ok(value) = input.try_parse(|i| SnapBlockThreshold::parse(context, i)) {
-            start_threshold = Some(value);
-            // Optional second length-percentage for two-threshold form.
-            if let Ok(value) = input.try_parse(|i| SnapBlockThreshold::parse(context, i)) {
-                end_threshold = Some(value);
-            }
-        }
-
-        if let Ok(value) = input.try_parse(|i| SnapBlockAlignment::parse(context, i)) {
-            alignment = Some(value);
-        }
-
-        if start_threshold.is_none() && end_threshold.is_none() && alignment.is_none() {
-            return Err(input.new_custom_error(
-                style_traits::StyleParseErrorKind::UnspecifiedError,
-            ));
-        }
+        let snap = match end {
+            Some(end) => GenericSnapBlock::Two {
+                start,
+                end,
+                alignment,
+            },
+            None => GenericSnapBlock::One {
+                threshold: start,
+                alignment,
+            },
+        };
 
         Ok(expanded! {
-            float: Float::SnapBlock(GenericSnapBlock {
-                start_threshold,
-                end_threshold,
-                alignment,
-            }),
+            float: Float::SnapBlock(snap),
         })
     }
 
@@ -779,20 +774,31 @@ pub mod snap_block {
                 Float::SnapBlock(ref s) => s,
                 _ => return Ok(()),
             };
-            let mut wrote = false;
-            if let Some(ref t) = snap.start_threshold {
-                t.to_css(dest)?;
-                wrote = true;
-                if let Some(ref t2) = snap.end_threshold {
+            match snap {
+                GenericSnapBlock::Default => {},
+                GenericSnapBlock::One {
+                    threshold,
+                    alignment,
+                } => {
+                    threshold.to_css(dest)?;
+                    if let Some(alignment) = alignment {
+                        dest.write_char(' ')?;
+                        alignment.to_css(dest)?;
+                    }
+                },
+                GenericSnapBlock::Two {
+                    start,
+                    end,
+                    alignment,
+                } => {
+                    start.to_css(dest)?;
                     dest.write_char(' ')?;
-                    t2.to_css(dest)?;
-                }
-            }
-            if let Some(alignment) = snap.alignment {
-                if wrote {
-                    dest.write_char(' ')?;
-                }
-                alignment.to_css(dest)?;
+                    end.to_css(dest)?;
+                    if let Some(alignment) = alignment {
+                        dest.write_char(' ')?;
+                        alignment.to_css(dest)?;
+                    }
+                },
             }
             Ok(())
         }
@@ -806,33 +812,37 @@ pub mod snap_block {
 pub mod snap_inline {
     use super::*;
     pub use crate::properties::shorthands_generated::snap_inline::*;
-    use crate::values::generics::box_::{GenericSnapInline, SnapBlockAlignment};
+    use crate::values::generics::box_::{GenericSnapInline, SnapInlineAlignment};
     use crate::values::specified::box_::{Float, SnapBlockThreshold};
 
     pub fn parse_value<'i>(
         context: &ParserContext,
         input: &mut Parser<'i, '_>,
     ) -> Result<Longhands, ParseError<'i>> {
-        // Grammar: <threshold>? <alignment>?
-        let mut threshold = None;
-        let mut alignment = None;
+        // Grammar: <threshold> [<threshold>]? <line-relative-alignment>?
+        let start = SnapBlockThreshold::parse(context, input)?;
+        let end = input
+            .try_parse(|i| SnapBlockThreshold::parse(context, i))
+            .ok();
+        let alignment = input
+            .try_parse(|i| SnapInlineAlignment::parse(context, i))
+            .ok();
+        input.expect_exhausted()?;
 
-        if let Ok(value) = input.try_parse(|i| SnapBlockThreshold::parse(context, i)) {
-            threshold = Some(value);
-        }
-
-        if let Ok(value) = input.try_parse(|i| SnapBlockAlignment::parse(context, i)) {
-            alignment = Some(value);
-        }
-
-        if threshold.is_none() && alignment.is_none() {
-            return Err(input.new_custom_error(
-                style_traits::StyleParseErrorKind::UnspecifiedError,
-            ));
-        }
+        let snap = match end {
+            Some(end) => GenericSnapInline::Two {
+                start,
+                end,
+                alignment,
+            },
+            None => GenericSnapInline::One {
+                threshold: start,
+                alignment,
+            },
+        };
 
         Ok(expanded! {
-            float: Float::SnapInline(GenericSnapInline { threshold, alignment }),
+            float: Float::SnapInline(snap),
         })
     }
 
@@ -845,16 +855,31 @@ pub mod snap_inline {
                 Float::SnapInline(ref s) => s,
                 _ => return Ok(()),
             };
-            let mut wrote = false;
-            if let Some(ref t) = snap.threshold {
-                t.to_css(dest)?;
-                wrote = true;
-            }
-            if let Some(alignment) = snap.alignment {
-                if wrote {
+            match snap {
+                GenericSnapInline::Default => {},
+                GenericSnapInline::One {
+                    threshold,
+                    alignment,
+                } => {
+                    threshold.to_css(dest)?;
+                    if let Some(alignment) = alignment {
+                        dest.write_char(' ')?;
+                        alignment.to_css(dest)?;
+                    }
+                },
+                GenericSnapInline::Two {
+                    start,
+                    end,
+                    alignment,
+                } => {
+                    start.to_css(dest)?;
                     dest.write_char(' ')?;
-                }
-                alignment.to_css(dest)?;
+                    end.to_css(dest)?;
+                    if let Some(alignment) = alignment {
+                        dest.write_char(' ')?;
+                        alignment.to_css(dest)?;
+                    }
+                },
             }
             Ok(())
         }

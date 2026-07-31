@@ -128,14 +128,56 @@ impl ToCss for SnapBlockAlignment {
     }
 }
 
+/// Line-relative alignment accepted by `snap-inline()`.
+///
+/// CSS Page Floats 3 intentionally uses `left | right | near` here, not
+/// `snap-block()`'s `start | end | near`. Keeping the vocabularies nominally
+/// separate prevents a block-axis alignment from entering inline snapping.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(u8)]
+pub enum SnapInlineAlignment {
+    /// Snap toward line-left.
+    Left,
+    /// Snap toward line-right.
+    Right,
+    /// Snap toward the nearer inline edge.
+    Near,
+}
+
+impl ToCss for SnapInlineAlignment {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        dest.write_str(match self {
+            Self::Left => "left",
+            Self::Right => "right",
+            Self::Near => "near",
+        })
+    }
+}
+
 /// Payload for `float: snap-block(...)` — CSS Page Floats 3 section 3.2.
 ///
 /// Supports both the single-threshold form
 /// `snap-block(<length-percentage>, <alignment>)` and the two-threshold
 /// form `snap-block(<start-threshold> <end-threshold>, <alignment>)`.
-/// When `start_threshold` is `None` the consumer applies the spec default
-/// (2em). When `end_threshold` is `None` the consumer mirrors
-/// `start_threshold` (single-threshold shape).
+/// The bare keyword, one-threshold function, and two-threshold function are
+/// disjoint variants. End-without-start and alignment-without-threshold have
+/// no representation.
 #[derive(
     Clone,
     Copy,
@@ -147,14 +189,25 @@ impl ToCss for SnapBlockAlignment {
     ToShmem,
     ToTyped,
 )]
-pub struct GenericSnapBlock<LengthPercentage> {
-    /// Optional block-start snap threshold. `None` means spec default.
-    pub start_threshold: Option<LengthPercentage>,
-    /// Optional block-end snap threshold — populated only for the
-    /// explicit two-length form. `None` means "mirror `start_threshold`".
-    pub end_threshold: Option<LengthPercentage>,
-    /// Optional snap alignment. When omitted, the consumer applies the spec default.
-    pub alignment: Option<SnapBlockAlignment>,
+pub enum GenericSnapBlock<LengthPercentage> {
+    /// Bare `snap-block`; the used threshold is `2em` and alignment is `near`.
+    Default,
+    /// Function form with one threshold shared by both edges.
+    One {
+        /// Shared start/end threshold.
+        threshold: LengthPercentage,
+        /// Optional authored alignment; absent means `near`.
+        alignment: Option<SnapBlockAlignment>,
+    },
+    /// Function form with independent start/end thresholds.
+    Two {
+        /// Block-start threshold.
+        start: LengthPercentage,
+        /// Block-end threshold.
+        end: LengthPercentage,
+        /// Optional authored alignment; absent means `near`.
+        alignment: Option<SnapBlockAlignment>,
+    },
 }
 
 impl<LengthPercentage: ToCss> ToCss for GenericSnapBlock<LengthPercentage> {
@@ -162,32 +215,36 @@ impl<LengthPercentage: ToCss> ToCss for GenericSnapBlock<LengthPercentage> {
     where
         W: Write,
     {
-        dest.write_str("snap-block")?;
-        if self.start_threshold.is_none()
-            && self.end_threshold.is_none()
-            && self.alignment.is_none()
-        {
-            return Ok(());
-        }
-
-        dest.write_char('(')?;
-        let wrote_threshold = if let Some(start) = &self.start_threshold {
-            start.to_css(dest)?;
-            if let Some(end) = &self.end_threshold {
+        match self {
+            Self::Default => dest.write_str("snap-block"),
+            Self::One {
+                threshold,
+                alignment,
+            } => {
+                dest.write_str("snap-block(")?;
+                threshold.to_css(dest)?;
+                if let Some(alignment) = alignment {
+                    dest.write_str(", ")?;
+                    alignment.to_css(dest)?;
+                }
+                dest.write_char(')')
+            },
+            Self::Two {
+                start,
+                end,
+                alignment,
+            } => {
+                dest.write_str("snap-block(")?;
+                start.to_css(dest)?;
                 dest.write_char(' ')?;
                 end.to_css(dest)?;
-            }
-            true
-        } else {
-            false
-        };
-        if let Some(alignment) = self.alignment {
-            if wrote_threshold {
-                dest.write_str(", ")?;
-            }
-            alignment.to_css(dest)?;
+                if let Some(alignment) = alignment {
+                    dest.write_str(", ")?;
+                    alignment.to_css(dest)?;
+                }
+                dest.write_char(')')
+            },
         }
-        dest.write_char(')')
     }
 }
 
@@ -195,10 +252,10 @@ pub use self::GenericSnapBlock as SnapBlock;
 
 /// Payload for `float: snap-inline(...)` — CSS Page Floats 3 section 3.2.
 ///
-/// Inline-axis analogue of `GenericSnapBlock`. The spec grammar is
-/// `snap-inline( <length-percentage>? [, <alignment-keyword>]? )`; the
-/// alignment enum is shared with block-axis snap because the keywords
-/// (`start`, `end`, `near`) are identical between the two axes.
+/// Inline-axis analogue of `GenericSnapBlock`. The function form requires a
+/// start threshold, accepts an optional independent end threshold, and uses
+/// the distinct `left | right | near` alignment vocabulary. End-without-start
+/// and alignment-without-threshold have no representation.
 #[derive(
     Clone,
     Copy,
@@ -210,11 +267,25 @@ pub use self::GenericSnapBlock as SnapBlock;
     ToShmem,
     ToTyped,
 )]
-pub struct GenericSnapInline<LengthPercentage> {
-    /// Optional snap threshold. `None` means spec default (2em).
-    pub threshold: Option<LengthPercentage>,
-    /// Optional snap alignment (`start` / `end` / `near`).
-    pub alignment: Option<SnapBlockAlignment>,
+pub enum GenericSnapInline<LengthPercentage> {
+    /// Bare `snap-inline`; the used threshold is `2em` and alignment is `near`.
+    Default,
+    /// Function form with a required threshold.
+    One {
+        /// Authored inline threshold.
+        threshold: LengthPercentage,
+        /// Optional line-relative alignment; absent means `near`.
+        alignment: Option<SnapInlineAlignment>,
+    },
+    /// Function form with independent line-start/line-end thresholds.
+    Two {
+        /// Line-start threshold.
+        start: LengthPercentage,
+        /// Line-end threshold.
+        end: LengthPercentage,
+        /// Optional line-relative alignment; absent means `near`.
+        alignment: Option<SnapInlineAlignment>,
+    },
 }
 
 impl<LengthPercentage: ToCss> ToCss for GenericSnapInline<LengthPercentage> {
@@ -222,22 +293,36 @@ impl<LengthPercentage: ToCss> ToCss for GenericSnapInline<LengthPercentage> {
     where
         W: Write,
     {
-        dest.write_str("snap-inline")?;
-        if self.threshold.is_none() && self.alignment.is_none() {
-            return Ok(());
+        match self {
+            Self::Default => dest.write_str("snap-inline"),
+            Self::One {
+                threshold,
+                alignment,
+            } => {
+                dest.write_str("snap-inline(")?;
+                threshold.to_css(dest)?;
+                if let Some(alignment) = alignment {
+                    dest.write_str(", ")?;
+                    alignment.to_css(dest)?;
+                }
+                dest.write_char(')')
+            },
+            Self::Two {
+                start,
+                end,
+                alignment,
+            } => {
+                dest.write_str("snap-inline(")?;
+                start.to_css(dest)?;
+                dest.write_char(' ')?;
+                end.to_css(dest)?;
+                if let Some(alignment) = alignment {
+                    dest.write_str(", ")?;
+                    alignment.to_css(dest)?;
+                }
+                dest.write_char(')')
+            },
         }
-
-        dest.write_char('(')?;
-        if let Some(threshold) = &self.threshold {
-            threshold.to_css(dest)?;
-            if self.alignment.is_some() {
-                dest.write_str(", ")?;
-            }
-        }
-        if let Some(alignment) = self.alignment {
-            alignment.to_css(dest)?;
-        }
-        dest.write_char(')')
     }
 }
 

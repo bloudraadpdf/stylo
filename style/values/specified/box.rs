@@ -11,7 +11,7 @@ use crate::properties::{LonghandId, PropertyDeclarationId, PropertyId};
 use crate::values::generics::box_::{
     BaselineShiftKeyword, GenericBaselineShift, GenericContainIntrinsicSize, GenericFloat,
     GenericLineClamp, GenericOverflowClipMargin, GenericPerspective, GenericSnapBlock,
-    GenericSnapInline, OverflowClipMarginBox, SnapBlockAlignment,
+    GenericSnapInline, OverflowClipMarginBox, SnapBlockAlignment, SnapInlineAlignment,
 };
 use crate::values::computed::{Context, ToComputedValue};
 use crate::values::specified::length::{LengthPercentage, NonNegativeLength};
@@ -1575,6 +1575,27 @@ impl Parse for SnapBlockAlignment {
     }
 }
 
+impl Parse for SnapInlineAlignment {
+    fn parse<'i, 't>(
+        _context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        let location = input.current_source_location();
+        let ident = input.expect_ident()?;
+        Ok(match_ignore_ascii_case! { &ident,
+            "left" => Self::Left,
+            "right" => Self::Right,
+            "near" => Self::Near,
+            _ => {
+                let ident = ident.clone();
+                return Err(location.new_custom_error(
+                    StyleParseErrorKind::UnexpectedIdent(ident)
+                ));
+            }
+        })
+    }
+}
+
 impl GenericSnapBlock<SnapBlockThreshold> {
     fn parse_function<'i, 't>(
         context: &ParserContext,
@@ -1583,38 +1604,29 @@ impl GenericSnapBlock<SnapBlockThreshold> {
         input.expect_function_matching("snap-block")?;
         input.parse_nested_block(|input| {
             // Grammar (CSS Page Floats 3 section 3.2):
-            //   snap-block( [<length-percentage> [<length-percentage>]?]?
+            //   snap-block( <length-percentage> [<length-percentage>]?
             //               [, <alignment>]? )
-            let mut start_threshold = None;
-            let mut end_threshold = None;
-            let mut alignment = None;
+            let start = SnapBlockThreshold::parse(context, input)?;
+            let end = input
+                .try_parse(|i| SnapBlockThreshold::parse(context, i))
+                .ok();
+            let alignment = if input.try_parse(|i| i.expect_comma()).is_ok() {
+                Some(SnapBlockAlignment::parse(context, input)?)
+            } else {
+                None
+            };
+            input.expect_exhausted()?;
 
-            if let Ok(value) = input.try_parse(|i| SnapBlockThreshold::parse(context, i)) {
-                start_threshold = Some(value);
-                // Space-separated second length-percentage -> two-threshold form.
-                if let Ok(value) = input.try_parse(|i| SnapBlockThreshold::parse(context, i)) {
-                    end_threshold = Some(value);
-                }
-            }
-
-            let _ = input.try_parse(|i| i.expect_comma());
-
-            if let Ok(value) = input.try_parse(|i| SnapBlockAlignment::parse(context, i)) {
-                alignment = Some(value);
-            }
-
-            if !input.is_exhausted() {
-                return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
-            }
-
-            if start_threshold.is_none() && end_threshold.is_none() && alignment.is_none() {
-                return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
-            }
-
-            Ok(Self {
-                start_threshold,
-                end_threshold,
-                alignment,
+            Ok(match end {
+                Some(end) => Self::Two {
+                    start,
+                    end,
+                    alignment,
+                },
+                None => Self::One {
+                    threshold: start,
+                    alignment,
+                },
             })
         })
     }
@@ -1644,30 +1656,46 @@ impl ToComputedValue for GenericSnapBlock<SnapBlockThreshold> {
     type ComputedValue = GenericSnapBlock<crate::values::computed::box_::SnapBlockThreshold>;
 
     fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
-        Self::ComputedValue {
-            start_threshold: self
-                .start_threshold
-                .as_ref()
-                .map(|value| value.to_computed_value(context)),
-            end_threshold: self
-                .end_threshold
-                .as_ref()
-                .map(|value| value.to_computed_value(context)),
-            alignment: self.alignment,
+        match self {
+            Self::Default => Self::ComputedValue::Default,
+            Self::One {
+                threshold,
+                alignment,
+            } => Self::ComputedValue::One {
+                threshold: threshold.to_computed_value(context),
+                alignment: *alignment,
+            },
+            Self::Two {
+                start,
+                end,
+                alignment,
+            } => Self::ComputedValue::Two {
+                start: start.to_computed_value(context),
+                end: end.to_computed_value(context),
+                alignment: *alignment,
+            },
         }
     }
 
     fn from_computed_value(computed: &Self::ComputedValue) -> Self {
-        Self {
-            start_threshold: computed
-                .start_threshold
-                .as_ref()
-                .map(SnapBlockThreshold::from_computed_value),
-            end_threshold: computed
-                .end_threshold
-                .as_ref()
-                .map(SnapBlockThreshold::from_computed_value),
-            alignment: computed.alignment,
+        match computed {
+            Self::ComputedValue::Default => Self::Default,
+            Self::ComputedValue::One {
+                threshold,
+                alignment,
+            } => Self::One {
+                threshold: SnapBlockThreshold::from_computed_value(threshold),
+                alignment: *alignment,
+            },
+            Self::ComputedValue::Two {
+                start,
+                end,
+                alignment,
+            } => Self::Two {
+                start: SnapBlockThreshold::from_computed_value(start),
+                end: SnapBlockThreshold::from_computed_value(end),
+                alignment: *alignment,
+            },
         }
     }
 }
@@ -1680,29 +1708,30 @@ impl GenericSnapInline<SnapBlockThreshold> {
         input.expect_function_matching("snap-inline")?;
         input.parse_nested_block(|input| {
             // Grammar (CSS Page Floats 3 section 3.2):
-            //   snap-inline( <length-percentage>? [, <alignment>]? )
-            let mut threshold = None;
-            let mut alignment = None;
+            //   snap-inline( <length-percentage> [<length-percentage>]?
+            //                [, <alignment>]? )
+            let start = SnapBlockThreshold::parse(context, input)?;
+            let end = input
+                .try_parse(|i| SnapBlockThreshold::parse(context, i))
+                .ok();
+            let alignment = if input.try_parse(|i| i.expect_comma()).is_ok() {
+                Some(SnapInlineAlignment::parse(context, input)?)
+            } else {
+                None
+            };
+            input.expect_exhausted()?;
 
-            if let Ok(value) = input.try_parse(|i| SnapBlockThreshold::parse(context, i)) {
-                threshold = Some(value);
-            }
-
-            let _ = input.try_parse(|i| i.expect_comma());
-
-            if let Ok(value) = input.try_parse(|i| SnapBlockAlignment::parse(context, i)) {
-                alignment = Some(value);
-            }
-
-            if !input.is_exhausted() {
-                return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
-            }
-
-            if threshold.is_none() && alignment.is_none() {
-                return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
-            }
-
-            Ok(Self { threshold, alignment })
+            Ok(match end {
+                Some(end) => Self::Two {
+                    start,
+                    end,
+                    alignment,
+                },
+                None => Self::One {
+                    threshold: start,
+                    alignment,
+                },
+            })
         })
     }
 }
@@ -1711,22 +1740,46 @@ impl ToComputedValue for GenericSnapInline<SnapBlockThreshold> {
     type ComputedValue = GenericSnapInline<crate::values::computed::box_::SnapBlockThreshold>;
 
     fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
-        Self::ComputedValue {
-            threshold: self
-                .threshold
-                .as_ref()
-                .map(|value| value.to_computed_value(context)),
-            alignment: self.alignment,
+        match self {
+            Self::Default => Self::ComputedValue::Default,
+            Self::One {
+                threshold,
+                alignment,
+            } => Self::ComputedValue::One {
+                threshold: threshold.to_computed_value(context),
+                alignment: *alignment,
+            },
+            Self::Two {
+                start,
+                end,
+                alignment,
+            } => Self::ComputedValue::Two {
+                start: start.to_computed_value(context),
+                end: end.to_computed_value(context),
+                alignment: *alignment,
+            },
         }
     }
 
     fn from_computed_value(computed: &Self::ComputedValue) -> Self {
-        Self {
-            threshold: computed
-                .threshold
-                .as_ref()
-                .map(SnapBlockThreshold::from_computed_value),
-            alignment: computed.alignment,
+        match computed {
+            Self::ComputedValue::Default => Self::Default,
+            Self::ComputedValue::One {
+                threshold,
+                alignment,
+            } => Self::One {
+                threshold: SnapBlockThreshold::from_computed_value(threshold),
+                alignment: *alignment,
+            },
+            Self::ComputedValue::Two {
+                start,
+                end,
+                alignment,
+            } => Self::Two {
+                start: SnapBlockThreshold::from_computed_value(start),
+                end: SnapBlockThreshold::from_computed_value(end),
+                alignment: *alignment,
+            },
         }
     }
 }
@@ -1827,15 +1880,8 @@ impl Parse for GenericFloat<SnapBlockThreshold> {
             "-bd-bottom" => Self::BdBottom,
             "top-unless-room" => Self::TopUnlessRoom,
             "bottom-unless-room" => Self::BottomUnlessRoom,
-            "snap-block" => Self::SnapBlock(GenericSnapBlock {
-                start_threshold: None,
-                end_threshold: None,
-                alignment: None,
-            }),
-            "snap-inline" => Self::SnapInline(GenericSnapInline {
-                threshold: None,
-                alignment: None,
-            }),
+            "snap-block" => Self::SnapBlock(GenericSnapBlock::Default),
+            "snap-inline" => Self::SnapInline(GenericSnapInline::Default),
             _ => {
                 let ident = ident.clone();
                 return Err(location.new_custom_error(

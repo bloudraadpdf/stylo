@@ -902,7 +902,10 @@ mod tests {
                 .block-end { float: block-end; }
                 .snap-bare { float: snap-block; }
                 .snap-near { float: snap-block(2em, near); }
-                .snap-end { float: snap-block(end); }
+                .snap-two { float: snap-block(2em 3em, end); }
+                .snap-inline-bare { float: snap-inline; }
+                .snap-inline-left { float: snap-inline(4em, left); }
+                .snap-inline-two { float: snap-inline(4em 6em, right); }
                 .clear-block-start { clear: block-start; }
                 .clear-block-end { clear: block-end; }
                 .clear-top { clear: top; }
@@ -951,9 +954,12 @@ mod tests {
                 "block-end".to_string(),
                 "snap-block".to_string(),
                 "snap-block(2em, near)".to_string(),
-                "snap-block(end)".to_string(),
+                "snap-block(2em 3em, end)".to_string(),
+                "snap-inline".to_string(),
+                "snap-inline(4em, left)".to_string(),
+                "snap-inline(4em 6em, right)".to_string(),
             ],
-            "typed Servo rules should preserve logical page-float keywords and snap-block arguments",
+            "typed Servo rules should preserve every closed page-float snap shape",
         );
         assert_eq!(
             clear_values,
@@ -966,6 +972,106 @@ mod tests {
             ],
             "typed Servo rules should preserve extended page-float clear values",
         );
+    }
+
+    #[test]
+    fn servo_rejects_unrepresentable_snap_function_shapes() {
+        for value in [
+            "snap-block()",
+            "snap-block(start)",
+            "snap-block(2px,)",
+            "snap-block(2px, left)",
+            "snap-inline()",
+            "snap-inline(left)",
+            "snap-inline(2px, start)",
+            "snap-inline(2px 3px, end)",
+        ] {
+            let stylesheet = parse_stylesheet(&format!(".test {{ float: {value}; }}"));
+            let guard = stylesheet.shared_lock.read();
+            let contents = stylesheet.contents.read_with(&guard);
+            let rules = contents.rules(&guard);
+            let has_float = rules
+                .iter()
+                .filter_map(|rule| match rule {
+                    CssRule::Style(rule) => Some(rule.read_with(&guard)),
+                    _ => None,
+                })
+                .any(|style| {
+                    style
+                        .block
+                        .read_with(&guard)
+                        .declaration_importance_iter()
+                        .any(|(decl, _)| matches!(decl, PropertyDeclaration::Float(_)))
+                });
+            assert!(!has_float, "invalid float value must be dropped: {value}");
+        }
+    }
+
+    #[test]
+    fn servo_parses_typed_snap_shorthands() {
+        let stylesheet = parse_stylesheet(
+            r#"
+                .block-one { snap-block: 3px end; }
+                .block-two { snap-block: 3px 5px near; }
+                .inline-one { snap-inline: 2em left; }
+                .inline-two { snap-inline: 2em 4em right; }
+            "#,
+        );
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let values: Vec<_> = rules
+            .iter()
+            .filter_map(|rule| match rule {
+                CssRule::Style(rule) => Some(rule.read_with(&guard)),
+                _ => None,
+            })
+            .filter_map(|style| {
+                style
+                    .block
+                    .read_with(&guard)
+                    .declaration_importance_iter()
+                    .find_map(|(decl, _)| match decl {
+                        PropertyDeclaration::Float(value) => Some(value.to_css_string()),
+                        _ => None,
+                    })
+            })
+            .collect();
+        assert_eq!(
+            values,
+            [
+                "snap-block(3px, end)",
+                "snap-block(3px 5px, near)",
+                "snap-inline(2em, left)",
+                "snap-inline(2em 4em, right)",
+            ],
+        );
+
+        for declaration in [
+            "snap-block: end",
+            "snap-block: 2px left",
+            "snap-inline: left",
+            "snap-inline: 2px start",
+        ] {
+            let stylesheet = parse_stylesheet(&format!(".test {{ {declaration}; }}"));
+            let guard = stylesheet.shared_lock.read();
+            let contents = stylesheet.contents.read_with(&guard);
+            let rules = contents.rules(&guard);
+            let has_float = rules
+                .iter()
+                .filter_map(|rule| match rule {
+                    CssRule::Style(rule) => Some(rule.read_with(&guard)),
+                    _ => None,
+                })
+                .any(|style| {
+                    style
+                        .block
+                        .read_with(&guard)
+                        .declaration_importance_iter()
+                        .any(|(decl, _)| matches!(decl, PropertyDeclaration::Float(_)))
+                });
+            assert!(!has_float, "invalid shorthand must be dropped: {declaration}");
+        }
     }
 
     #[test]
