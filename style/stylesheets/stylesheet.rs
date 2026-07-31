@@ -1075,6 +1075,125 @@ mod tests {
     }
 
     #[test]
+    fn servo_line_clamp_is_only_a_three_longhand_expansion() {
+        let stylesheet =
+            parse_stylesheet(r#".test { line-clamp: 3 "CUSTOM"; }"#);
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let style = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Style(rule) => Some(rule.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected style rule");
+        let block = style.block.read_with(&guard);
+        let mut expansion = block
+            .declaration_importance_iter()
+            .filter_map(|(declaration, _)| match declaration {
+                PropertyDeclaration::MaxLines(value) => {
+                    Some(("max-lines", value.to_css_string()))
+                },
+                PropertyDeclaration::Continue(value) => {
+                    Some(("continue", value.to_css_string()))
+                },
+                PropertyDeclaration::BlockEllipsis(value) => {
+                    Some(("block-ellipsis", value.to_css_string()))
+                },
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        expansion.sort_unstable();
+
+        assert_eq!(
+            expansion,
+            [
+                ("block-ellipsis", r#""CUSTOM""#.to_owned()),
+                ("continue", "discard".to_owned()),
+                ("max-lines", "3".to_owned()),
+            ]
+        );
+        assert_eq!(
+            block.len(),
+            3,
+            "no independent line-clamp declaration may survive"
+        );
+    }
+
+    #[test]
+    fn servo_line_clamp_globals_and_variables_expand_atomically() {
+        for keyword in [
+            "initial",
+            "inherit",
+            "unset",
+            "revert",
+            "revert-layer",
+        ] {
+            let stylesheet = parse_stylesheet(&format!(".test {{ line-clamp: {keyword}; }}"));
+            let guard = stylesheet.shared_lock.read();
+            let contents = stylesheet.contents.read_with(&guard);
+            let rules = contents.rules(&guard);
+            let style = rules
+                .iter()
+                .find_map(|rule| match rule {
+                    CssRule::Style(rule) => Some(rule.read_with(&guard)),
+                    _ => None,
+                })
+                .expect("expected style rule");
+            let block = style.block.read_with(&guard);
+            let mut expansion = block
+                .declaration_importance_iter()
+                .filter_map(|(declaration, _)| {
+                    declaration
+                        .get_css_wide_keyword()
+                        .map(|wide| (declaration.id().to_css_string(), wide.to_str()))
+                })
+                .collect::<Vec<_>>();
+            expansion.sort_unstable();
+            assert_eq!(
+                expansion,
+                [
+                    ("block-ellipsis".to_owned(), keyword),
+                    ("continue".to_owned(), keyword),
+                    ("max-lines".to_owned(), keyword),
+                ]
+            );
+            assert_eq!(block.len(), 3);
+        }
+
+        let stylesheet = parse_stylesheet(".test { line-clamp: var(--clamp); }");
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let style = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Style(rule) => Some(rule.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected style rule");
+        let block = style.block.read_with(&guard);
+        let mut ids = block
+            .declaration_importance_iter()
+            .filter_map(|(declaration, _)| {
+                matches!(declaration, PropertyDeclaration::WithVariables(..))
+                    .then(|| declaration.id().to_css_string())
+            })
+            .collect::<Vec<_>>();
+        ids.sort_unstable();
+        assert_eq!(ids, ["block-ellipsis", "continue", "max-lines"]);
+        assert_eq!(block.len(), 3);
+    }
+
+    #[test]
+    fn servo_line_clamp_longhands_have_their_specified_inheritance() {
+        assert!(LonghandId::BlockEllipsis.inherited());
+        assert!(!LonghandId::MaxLines.inherited());
+        assert!(!LonghandId::Continue.inherited());
+    }
+
+    #[test]
     fn servo_preserves_dominant_baseline_declaration() {
         let stylesheet = parse_stylesheet(
             r#"

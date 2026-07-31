@@ -5036,6 +5036,75 @@ where
     }
 }
 
+/// CSS Overflow 4 §5.1 — `line-clamp` shorthand.
+///
+/// The shorthand expands immediately into `max-lines`, `continue`, and
+/// `block-ellipsis`. There is intentionally no specified or computed
+/// `line-clamp` value, so a cascaded shorthand value cannot disagree with the
+/// longhands it controls.
+pub mod line_clamp {
+    use super::*;
+    pub use crate::properties::shorthands_generated::line_clamp::*;
+    use crate::values::specified::{
+        BlockEllipsis, Continue, MaxLines, PositiveInteger,
+    };
+
+    pub fn parse_value<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Longhands, ParseError<'i>> {
+        if input
+            .try_parse(|input| input.expect_ident_matching("none"))
+            .is_ok()
+        {
+            return Ok(expanded! {
+                max_lines: MaxLines::None,
+                continue_: Continue::Auto,
+                block_ellipsis: BlockEllipsis::None,
+            });
+        }
+
+        let count = PositiveInteger::parse(context, input)?.0;
+        let block_ellipsis = input
+            .try_parse(|input| BlockEllipsis::parse(context, input))
+            .unwrap_or(BlockEllipsis::Auto);
+
+        Ok(expanded! {
+            max_lines: MaxLines::Integer(count),
+            continue_: Continue::Discard,
+            block_ellipsis: block_ellipsis,
+        })
+    }
+
+    impl<'a> ToCss for LonghandsToSerialize<'a> {
+        fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+        where
+            W: fmt::Write,
+        {
+            match (self.max_lines, self.continue_, self.block_ellipsis) {
+                (MaxLines::None, Continue::Auto, BlockEllipsis::None) => {
+                    dest.write_str("none")
+                },
+                (MaxLines::Integer(count), Continue::Discard, block_ellipsis) => {
+                    count.to_css(dest)?;
+                    if block_ellipsis != &BlockEllipsis::Auto {
+                        dest.write_char(' ')?;
+                        block_ellipsis.to_css(dest)?;
+                    }
+                    Ok(())
+                },
+                _ => Ok(()),
+            }
+        }
+    }
+
+    impl SpecifiedValueInfo for Longhands {
+        fn collect_completion_keywords(f: KeywordsCollectFn) {
+            f(&["none"]);
+        }
+    }
+}
+
 pub mod overflow_clip_margin {
     pub use crate::properties::shorthands_generated::overflow_clip_margin::*;
 
@@ -5188,6 +5257,76 @@ pub mod overflow_clip_margin_inline {
                     self.overflow_clip_margin_inline_end,
                 ],
             )
+        }
+    }
+}
+
+#[cfg(all(test, feature = "servo"))]
+mod line_clamp_tests {
+    use super::line_clamp;
+    use crate::context::QuirksMode;
+    use crate::parser::ParserContext;
+    use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
+    use cssparser::{Parser, ParserInput};
+    use style_traits::{ParsingMode, ToCss};
+
+    fn try_parse(css: &str) -> Result<line_clamp::Longhands, ()> {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input = ParserInput::new(css);
+        let mut parser = Parser::new(&mut input);
+        parser
+            .parse_entirely(|input| line_clamp::parse_value(&context, input))
+            .map_err(|_| ())
+    }
+
+    fn assert_expansion(
+        css: &str,
+        max_lines: &str,
+        continue_: &str,
+        block_ellipsis: &str,
+    ) {
+        let longhands = try_parse(css).expect("line-clamp should parse");
+        assert_eq!(longhands.max_lines.to_css_string(), max_lines);
+        assert_eq!(longhands.continue_.to_css_string(), continue_);
+        assert_eq!(longhands.block_ellipsis.to_css_string(), block_ellipsis);
+    }
+
+    #[test]
+    fn line_clamp_expands_to_its_three_typed_longhands() {
+        for (css, max_lines, continue_, block_ellipsis) in [
+            ("none", "none", "auto", "none"),
+            ("3", "3", "discard", "auto"),
+            ("3 auto", "3", "discard", "auto"),
+            ("3 none", "3", "discard", "none"),
+            (r#"3 "CUSTOM""#, "3", "discard", r#""CUSTOM""#),
+            (r#"3 """#, "3", "discard", r#""""#),
+            (r#"4 "続く""#, "4", "discard", r#""続く""#),
+        ] {
+            assert_expansion(css, max_lines, continue_, block_ellipsis);
+        }
+    }
+
+    #[test]
+    fn line_clamp_rejects_values_that_cannot_form_a_valid_triplet() {
+        for css in [
+            "0",
+            "-1",
+            "1.5",
+            "none auto",
+            r#""CUSTOM" 3"#,
+            "3 inherit",
+        ] {
+            assert!(try_parse(css).is_err(), "{css:?} must be invalid");
         }
     }
 }

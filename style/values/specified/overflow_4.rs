@@ -4,8 +4,9 @@
 
 //! CSS Overflow Module Level 4 longhands and CSS Inline 3 §6.
 //!
-//! Implements `line-clamp`, `block-ellipsis`, `max-lines`,
-//! `continue` (Overflow 4 §5) and `leading-trim` (Inline 3 §6):
+//! Implements the `block-ellipsis`, `max-lines`, and `continue`
+//! longhands of the `line-clamp` shorthand (Overflow 4 §5), plus
+//! `leading-trim` (Inline 3 §6):
 //!
 //! - <https://drafts.csswg.org/css-overflow-4/#line-clamp>
 //! - <https://drafts.csswg.org/css-overflow-4/#block-ellipsis>
@@ -13,21 +14,20 @@
 //! - <https://drafts.csswg.org/css-overflow-4/#continue>
 //! - <https://drafts.csswg.org/css-inline-3/#leading-trim>
 //!
-//! These cap block-container line content (line-clamp shorthand
-//! triplet — block-ellipsis, max-lines, continue) and trim the
-//! first/last line leading respectively. They cascade through
-//! `inherited_text` so descendants inherit the cap policy.
+//! These cap block-container line content (`line-clamp` shorthand triplet —
+//! `block-ellipsis`, `max-lines`, `continue`) and trim the first/last line
+//! leading respectively. Only `block-ellipsis` is inherited; `max-lines` and
+//! `continue` are reset properties, as required by their definitions.
 //!
-//! The standardised `line-clamp` is distinct from the WebKit-prefixed
-//! `-webkit-line-clamp`: the standardised property carries an optional
-//! ellipsis `<string>`; the legacy WebKit variant carries only an
-//! integer.
+//! The shorthand parser lives in `crate::properties::shorthands::line_clamp`.
+//! There is deliberately no specified or computed `line-clamp` value:
+//! successful parsing immediately produces the three typed longhands, so an
+//! independent shorthand value cannot disagree with the cascade result.
 //!
-//! `StandardLineClamp` and `MaxLines` both store `specified::Integer`
-//! which does not derive `ToResolvedValue` / `ToTyped`; consequently
-//! their computed-side counterparts are bespoke types declared in
-//! `crate::values::computed::overflow_4`, with manual `ToComputedValue`
-//! impls bridging the two.
+//! `MaxLines` stores `specified::Integer`, which does not derive
+//! `ToResolvedValue` / `ToTyped`; consequently its computed-side counterpart
+//! is declared in `crate::values::computed::overflow_4`, with a manual
+//! `ToComputedValue` implementation bridging the two.
 
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
@@ -35,63 +35,6 @@ use crate::values::specified::Integer;
 use crate::OwnedStr;
 use cssparser::Parser;
 use style_traits::ParseError;
-
-/// Specified value of the standardised `line-clamp` property
-/// (<https://drafts.csswg.org/css-overflow-4/#line-clamp>).
-///
-/// Grammar: `none | <integer> <string>?`. The integer must be
-/// positive; the optional string overrides the block-ellipsis glyph.
-/// Setting `line-clamp` is equivalent to setting the triplet
-/// `max-lines`, `continue: discard`, and `block-ellipsis`.
-#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
-#[repr(C, u8)]
-pub enum StandardLineClamp {
-    /// `none` — no cap; default.
-    None,
-    /// `<integer> <string>?` — cap at N lines with optional ellipsis.
-    Lines {
-        /// Maximum number of lines retained.
-        count: Integer,
-        /// Optional `<string>` overriding the block-ellipsis glyph.
-        ellipsis: Option<OwnedStr>,
-    },
-}
-
-impl StandardLineClamp {
-    /// Initial value (`none`).
-    #[inline]
-    pub fn none() -> Self {
-        Self::None
-    }
-
-    /// Whether the value is `none`.
-    #[inline]
-    pub fn is_none(&self) -> bool {
-        matches!(self, Self::None)
-    }
-}
-
-impl Parse for StandardLineClamp {
-    fn parse<'i, 't>(
-        context: &ParserContext,
-        input: &mut Parser<'i, 't>,
-    ) -> Result<Self, ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
-            return Ok(Self::None);
-        }
-        let count = crate::values::specified::PositiveInteger::parse(context, input)?.0;
-        let ellipsis = input
-            .try_parse(|i| {
-                let s = i.expect_string()?;
-                Ok::<OwnedStr, ParseError<'i>>(s.as_ref().to_owned().into())
-            })
-            .ok();
-        Ok(Self::Lines { count, ellipsis })
-    }
-}
 
 /// Specified value of the `block-ellipsis` property
 /// (<https://drafts.csswg.org/css-overflow-4/#block-ellipsis>).

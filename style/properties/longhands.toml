@@ -103,20 +103,6 @@ struct = "box"
 spec = "https://drafts.csswg.org/css-overflow-3/#line-clamp"
 affects = "layout"
 
-# CSS Overflow 4 §5 — block-container line cap. `line-clamp` is the
-# shorthand-style standardised counterpart of `-webkit-line-clamp`;
-# it accepts an optional ellipsis `<string>` and cascades through
-# `inherited_text` so descendants observe the cap policy.
-[line-clamp]
-type = "StandardLineClamp"
-initial = "computed::StandardLineClamp::None"
-struct = "inherited_text"
-initial_specified_value = "specified::StandardLineClamp::None"
-spec = "https://drafts.csswg.org/css-overflow-4/#line-clamp"
-animation_type = "discrete"
-boxed = true
-affects = "layout"
-
 [block-ellipsis]
 type = "BlockEllipsis"
 initial = "computed::BlockEllipsis::None"
@@ -129,7 +115,7 @@ affects = "layout"
 [max-lines]
 type = "MaxLines"
 initial = "computed::MaxLines::None"
-struct = "inherited_text"
+struct = "box"
 initial_specified_value = "specified::MaxLines::None"
 spec = "https://drafts.csswg.org/css-overflow-4/#max-lines"
 animation_type = "discrete"
@@ -138,7 +124,7 @@ affects = "layout"
 [continue]
 type = "Continue"
 initial = "computed::Continue::Auto"
-struct = "inherited_text"
+struct = "box"
 initial_specified_value = "specified::Continue::Auto"
 spec = "https://drafts.csswg.org/css-overflow-4/#continue"
 animation_type = "discrete"

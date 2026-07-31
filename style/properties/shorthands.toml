@@ -223,6 +223,15 @@ spec="https://drafts.csswg.org/css-overflow/#propdef-overflow"
 kind = "two_properties"
 rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 
+# CSS Overflow 4 §5.1 — standard block-container line clamp. Keeping
+# `line-clamp` exclusively in the shorthand table makes it impossible for
+# computed style to contain an independent clamp value that disagrees with
+# its three longhands.
+[line-clamp]
+sub_properties = ["max-lines", "continue", "block-ellipsis"]
+spec = "https://www.w3.org/TR/css-overflow-4/#propdef-line-clamp"
+derive_value_info = false
+
 # CSS Overflow 4 §3.4 — `overflow-clip-margin` shorthand. Spec syntax
 # `<visual-box> || <length [0,∞]>{1,4}`: an optional reference-box
 # keyword that applies uniformly across all four sides, plus 1–4
