@@ -1050,15 +1050,11 @@ impl ContainerRelativeLength {
 /// moegoe -bd-* fork extension (F24): PDFreactor-compatible page-
 /// and bleed-box relative length units.
 ///
-/// Each unit is 1% of a page-axis dimension. `-bd-p*` units track
-/// the page area (incl. margins); `-bd-b*` units track the bleed
-/// area (page + bleed marks outset). Inline / block aliases follow
-/// the writing-mode of the containing block. moegoe configures the
-/// Stylo viewport size to match the first-page dimensions, so
-/// page-relative units resolve via the same machinery as `vw` /
-/// `vh` today; bleed-relative units share the same path and pick
-/// up the bleed-box once that pipeline is threaded through Context
-/// (TODO).
+/// Each unit is 1% of a first-page dimension. `-bd-p*` units use the full
+/// page box including margins; `-bd-b*` units use the bleed box. Inline /
+/// block aliases follow the writing-mode of the containing block. The two
+/// bases occupy distinct Device slots and cannot be substituted for each
+/// other.
 ///
 /// Source: `pdfreactor-inventory.md:725-740`. Compat translation
 /// from PDFreactor `-ro-p*` / `-ro-b*` tokens lives in moegoe-css.
@@ -1190,19 +1186,9 @@ impl PageRelativeLength {
 
     /// Computes the given page-relative length.
     ///
-    /// moegoe sets the Stylo viewport size to match the first-page
-    /// **content area** (page dimensions minus `@page` margins), so
-    /// the `Pw|Pi|Ph|Pb|Pmin|Pmax` arms resolve via
-    /// `viewport_size_for_viewport_unit_resolution`. Inline / block
-    /// aliases respect the writing-mode.
-    ///
-    /// The `Bw|Bi|Bh|Bb|Bmin|Bmax` arms resolve against the
-    /// **bleed box** (CSS Paged Media L3 §7.1 — the trim box outset
-    /// by the cascaded `bleed` value). moegoe surfaces that size to
-    /// Stylo through `viewport_size_for_bleed_box_resolution`, which
-    /// falls back to the page-content viewport when no bleed cascade
-    /// is in effect — so bleed-free pages keep their numerical
-    /// behaviour unchanged.
+    /// P arms resolve against the full first-page box including margins;
+    /// B arms resolve against the first-page bleed box. Both bases are
+    /// installed explicitly by the embedder.
     pub fn to_computed_value(&self, context: &Context) -> CSSPixelLength {
         use self::PageRelativeLength::*;
 
@@ -1211,17 +1197,17 @@ impl PageRelativeLength {
         let (factor, length): (CSSFloat, app_units::Au) = match *self {
             Pw(v) => {
                 let size = context
-                    .viewport_size_for_viewport_unit_resolution(ViewportVariant::UADefault);
+                    .viewport_size_for_page_box_resolution();
                 (v, size.width)
             }
             Ph(v) => {
                 let size = context
-                    .viewport_size_for_viewport_unit_resolution(ViewportVariant::UADefault);
+                    .viewport_size_for_page_box_resolution();
                 (v, size.height)
             }
             Pi(v) => {
                 let size = context
-                    .viewport_size_for_viewport_unit_resolution(ViewportVariant::UADefault);
+                    .viewport_size_for_page_box_resolution();
                 (
                     v,
                     if writing_mode_vertical {
@@ -1233,7 +1219,7 @@ impl PageRelativeLength {
             }
             Pb(v) => {
                 let size = context
-                    .viewport_size_for_viewport_unit_resolution(ViewportVariant::UADefault);
+                    .viewport_size_for_page_box_resolution();
                 (
                     v,
                     if writing_mode_vertical {
@@ -1245,12 +1231,12 @@ impl PageRelativeLength {
             }
             Pmin(v) => {
                 let size = context
-                    .viewport_size_for_viewport_unit_resolution(ViewportVariant::UADefault);
+                    .viewport_size_for_page_box_resolution();
                 (v, cmp::min(size.width, size.height))
             }
             Pmax(v) => {
                 let size = context
-                    .viewport_size_for_viewport_unit_resolution(ViewportVariant::UADefault);
+                    .viewport_size_for_page_box_resolution();
                 (v, cmp::max(size.width, size.height))
             }
             Bw(v) => {
@@ -1297,15 +1283,6 @@ impl PageRelativeLength {
         let trunc_scaled =
             ((length as f64 * factor as f64 / 100.).trunc() / AU_PER_PX as f64) as f32;
         CSSPixelLength::new(crate::values::normalize(trunc_scaled))
-    }
-}
-
-impl PartialOrd for PageRelativeLength {
-    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
-        if std::mem::discriminant(self) != std::mem::discriminant(other) {
-            return None;
-        }
-        self.unitless_value().partial_cmp(&other.unitless_value())
     }
 }
 
@@ -1679,7 +1656,13 @@ impl PartialOrd for NoCalcLength {
                 one.partial_cmp(other)
             },
             (&ContainerRelative(ref one), &ContainerRelative(ref other)) => one.partial_cmp(other),
-            (&PageRelative(ref one), &PageRelative(ref other)) => one.partial_cmp(other),
+            (&PageRelative(ref one), &PageRelative(ref other)) => {
+                if std::mem::discriminant(one) != std::mem::discriminant(other) {
+                    None
+                } else {
+                    one.unitless_value().partial_cmp(&other.unitless_value())
+                }
+            },
             (&ServoCharacterWidth(ref one), &ServoCharacterWidth(ref other)) => {
                 one.0.partial_cmp(&other.0)
             },

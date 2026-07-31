@@ -1741,6 +1741,85 @@ mod tests {
     }
 
     #[test]
+    fn servo_parses_typed_prince_bleed_grammar() {
+        for value in [
+            "auto",
+            "1pt",
+            "1pt 2pt",
+            "1pt 2pt 3pt",
+            "1pt 2pt 3pt 4pt",
+            "calc(2pt + max(1em, 3pt))",
+            "var(--prince-bleed)",
+        ] {
+            let stylesheet =
+                parse_stylesheet(&format!("@page {{ -bd-prince-bleed: {value}; }}"));
+            let guard = stylesheet.shared_lock.read();
+            let contents = stylesheet.contents.read_with(&guard);
+            let rules = contents.rules(&guard);
+            let page_rule_css = rules
+                .iter()
+                .find_map(|rule| match rule {
+                    CssRule::Page(_) => Some(rule.to_css_string(&guard)),
+                    _ => None,
+                })
+                .expect("expected @page rule");
+            assert!(
+                page_rule_css.contains("-bd-prince-bleed:"),
+                "valid Prince bleed must enter the typed declaration block: {page_rule_css}",
+            );
+        }
+    }
+
+    #[test]
+    fn servo_rejects_invalid_prince_bleed_at_the_parser_boundary() {
+        for invalid in ["none", "auto 1pt", "1pt 2pt 3pt 4pt 5pt"] {
+            let stylesheet =
+                parse_stylesheet(&format!("@page {{ -bd-prince-bleed: {invalid}; }}"));
+            let guard = stylesheet.shared_lock.read();
+            let contents = stylesheet.contents.read_with(&guard);
+            let rules = contents.rules(&guard);
+            let page_rule_css = rules
+                .iter()
+                .find_map(|rule| match rule {
+                    CssRule::Page(_) => Some(rule.to_css_string(&guard)),
+                    _ => None,
+                })
+                .expect("expected @page rule");
+            assert!(
+                !page_rule_css.contains("-bd-prince-bleed:"),
+                "invalid Prince bleed must not enter the typed declaration block: {page_rule_css}",
+            );
+        }
+    }
+
+    #[test]
+    fn page_and_bleed_relative_units_use_distinct_device_bases() {
+        use crate::values::specified::length::PageRelativeLength;
+
+        let mut stylist = test_stylist();
+        stylist
+            .device_mut()
+            .set_page_box_size(Size2D::<f32, CSSPixel>::new(200.0, 300.0));
+        stylist
+            .device_mut()
+            .set_bleed_box_size(Size2D::<f32, CSSPixel>::new(240.0, 360.0));
+        let (pw, ph, bw, bh) = crate::values::computed::Context::for_media_query_evaluation(
+            stylist.device(),
+            QuirksMode::NoQuirks,
+            |context| {
+                (
+                    PageRelativeLength::Pw(1.0).to_computed_value(context),
+                    PageRelativeLength::Ph(1.0).to_computed_value(context),
+                    PageRelativeLength::Bw(1.0).to_computed_value(context),
+                    PageRelativeLength::Bh(1.0).to_computed_value(context),
+                )
+            },
+        );
+        assert_eq!((pw.px(), ph.px()), (2.0, 3.0));
+        assert_eq!((bw.px(), bh.px()), (2.4, 3.6));
+    }
+
+    #[test]
     fn invalid_later_multivalue_bleed_cannot_erase_an_earlier_scalar() {
         for css in [
             "@page { bleed: 5pt; bleed: 1pt 2pt; }",

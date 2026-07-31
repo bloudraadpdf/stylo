@@ -2096,6 +2096,22 @@ animation_type = "none"
 rule_types_allowed = ["page"]
 affects = "layout"
 
+# Typed compatibility carrier for Prince's documented
+# `bleed: auto | <length>{1,4}` page descriptor. The standards `bleed`
+# descriptor above remains scalar-only; moegoe's Prince compatibility
+# boundary rewrites the vendor grammar into this distinct property before
+# cascade parsing.
+[-bd-prince-bleed]
+type = "PrinceBleed"
+initial = "computed::PrinceBleed::auto()"
+struct = "page"
+initial_specified_value = "specified::PrinceBleed::auto()"
+spec = "Nonstandard (Prince compatibility; bleed auto | <length>{1,4})"
+animation_type = "none"
+rule_types_allowed = ["page"]
+boxed = true
+affects = "layout"
+
 # moegoe -bd-pdf-* document metadata longhands. Native fork-extension
 # surface for G6 (PDF document metadata via CSS). Applies to all
 # elements (not @page descriptors); not inherited; initial `none`.

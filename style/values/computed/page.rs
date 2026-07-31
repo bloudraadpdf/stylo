@@ -75,6 +75,108 @@ impl ToComputedValue for specified::Bleed {
     }
 }
 
+/// Fully computed physical sides of Prince's compatibility-only bleed.
+#[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, ToResolvedValue, ToShmem, ToTyped)]
+#[repr(C)]
+pub struct PrinceBleedSides {
+    /// Top edge.
+    pub top: Length,
+    /// Right edge.
+    pub right: Length,
+    /// Bottom edge.
+    pub bottom: Length,
+    /// Left edge.
+    pub left: Length,
+}
+
+/// Computed value of the typed Prince bleed descriptor.
+#[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, ToResolvedValue, ToShmem, ToTyped)]
+#[repr(C, u8)]
+pub enum PrinceBleed {
+    /// `auto`.
+    Auto,
+    /// Fully expanded signed TRBL lengths.
+    Sides(PrinceBleedSides),
+}
+
+impl PrinceBleed {
+    /// `auto` value.
+    #[inline]
+    pub fn auto() -> Self {
+        Self::Auto
+    }
+
+    /// Whether this is the `auto` value.
+    #[inline]
+    pub fn is_auto(&self) -> bool {
+        matches!(self, Self::Auto)
+    }
+}
+
+impl style_traits::ToCss for PrinceBleed {
+    fn to_css<W>(&self, dest: &mut style_traits::CssWriter<W>) -> std::fmt::Result
+    where
+        W: std::fmt::Write,
+    {
+        match self {
+            Self::Auto => dest.write_str("auto"),
+            Self::Sides(PrinceBleedSides {
+                top,
+                right,
+                bottom,
+                left,
+            }) => {
+                top.to_css(dest)?;
+                if right == top && bottom == top && left == top {
+                    return Ok(());
+                }
+                dest.write_char(' ')?;
+                right.to_css(dest)?;
+                if bottom == top && left == right {
+                    return Ok(());
+                }
+                dest.write_char(' ')?;
+                bottom.to_css(dest)?;
+                if left == right {
+                    return Ok(());
+                }
+                dest.write_char(' ')?;
+                left.to_css(dest)
+            },
+        }
+    }
+}
+
+impl ToComputedValue for specified::PrinceBleed {
+    type ComputedValue = PrinceBleed;
+
+    fn to_computed_value(&self, ctx: &Context) -> Self::ComputedValue {
+        match self {
+            specified::PrinceBleed::Auto => PrinceBleed::Auto,
+            specified::PrinceBleed::Sides(sides) => PrinceBleed::Sides(PrinceBleedSides {
+                top: sides.top.to_computed_value(ctx),
+                right: sides.right.to_computed_value(ctx),
+                bottom: sides.bottom.to_computed_value(ctx),
+                left: sides.left.to_computed_value(ctx),
+            }),
+        }
+    }
+
+    fn from_computed_value(computed: &Self::ComputedValue) -> Self {
+        match computed {
+            PrinceBleed::Auto => specified::PrinceBleed::Auto,
+            PrinceBleed::Sides(sides) => {
+                specified::PrinceBleed::Sides(specified::PrinceBleedSides {
+                    top: ToComputedValue::from_computed_value(&sides.top),
+                    right: ToComputedValue::from_computed_value(&sides.right),
+                    bottom: ToComputedValue::from_computed_value(&sides.bottom),
+                    left: ToComputedValue::from_computed_value(&sides.left),
+                })
+            },
+        }
+    }
+}
+
 /// Computed value of the @page size descriptor
 ///
 /// The spec says that the computed value should be the same as the specified

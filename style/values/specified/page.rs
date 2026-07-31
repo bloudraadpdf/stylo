@@ -71,6 +71,120 @@ impl Parse for Bleed {
         Length::parse(context, input).map(Self::Length)
     }
 }
+
+/// Fully expanded specified sides for Prince's compatibility-only bleed
+/// descriptor. This type is deliberately distinct from standards [`Bleed`].
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToShmem, ToTyped)]
+#[repr(C)]
+pub struct PrinceBleedSides {
+    /// Top edge.
+    pub top: Length,
+    /// Right edge.
+    pub right: Length,
+    /// Bottom edge.
+    pub bottom: Length,
+    /// Left edge.
+    pub left: Length,
+}
+
+/// Prince compatibility grammar for `bleed: auto | <length>{1,4}`.
+///
+/// The parser expands every length list atomically into physical TRBL sides.
+/// Standard [`Bleed`] cannot represent this value, so asymmetric syntax can
+/// never leak into the standards descriptor by construction.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToShmem, ToTyped)]
+#[repr(C, u8)]
+pub enum PrinceBleed {
+    /// `auto`.
+    Auto,
+    /// One to four lengths after CSS shorthand expansion.
+    Sides(PrinceBleedSides),
+}
+
+impl PrinceBleed {
+    /// `auto` value.
+    #[inline]
+    pub fn auto() -> Self {
+        Self::Auto
+    }
+
+    /// Whether this is the `auto` value.
+    #[inline]
+    pub fn is_auto(&self) -> bool {
+        matches!(self, Self::Auto)
+    }
+}
+
+impl style_traits::ToCss for PrinceBleed {
+    fn to_css<W>(&self, dest: &mut style_traits::CssWriter<W>) -> std::fmt::Result
+    where
+        W: std::fmt::Write,
+    {
+        match self {
+            Self::Auto => dest.write_str("auto"),
+            Self::Sides(PrinceBleedSides {
+                top,
+                right,
+                bottom,
+                left,
+            }) => {
+                top.to_css(dest)?;
+                if right == top && bottom == top && left == top {
+                    return Ok(());
+                }
+                dest.write_char(' ')?;
+                right.to_css(dest)?;
+                if bottom == top && left == right {
+                    return Ok(());
+                }
+                dest.write_char(' ')?;
+                bottom.to_css(dest)?;
+                if left == right {
+                    return Ok(());
+                }
+                dest.write_char(' ')?;
+                left.to_css(dest)
+            },
+        }
+    }
+}
+
+impl Parse for PrinceBleed {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
+            return Ok(Self::Auto);
+        }
+
+        let first = Length::parse(context, input)?;
+        let Some(second) = input.try_parse(|i| Length::parse(context, i)).ok() else {
+            return Ok(Self::Sides(PrinceBleedSides {
+                top: first.clone(),
+                right: first.clone(),
+                bottom: first.clone(),
+                left: first,
+            }));
+        };
+        let third = input.try_parse(|i| Length::parse(context, i)).ok();
+        let fourth = third
+            .as_ref()
+            .and_then(|_| input.try_parse(|i| Length::parse(context, i)).ok());
+        let (top, right, bottom, left) = match (third, fourth) {
+            (None, _) => (first.clone(), second.clone(), first, second),
+            (Some(third), None) => (first, second.clone(), third, second),
+            (Some(third), Some(fourth)) => (first, second, third, fourth),
+        };
+        Ok(Self::Sides(PrinceBleedSides {
+            top,
+            right,
+            bottom,
+            left,
+        }))
+    }
+}
+
 /// Specified value of the @page size descriptor
 pub type PageSize = generics::page::PageSize<Size2D<NonNegativeLength>>;
 

@@ -538,6 +538,22 @@ impl Device {
         Size2D::new(Au(area.width), Au(area.height))
     }
 
+    /// Returns the full page box for page-relative unit resolution.
+    /// Paginated Gecko exposes the sheet through `mVisibleArea`; continuous
+    /// media falls back to the ordinary viewport basis.
+    pub fn au_page_box_size_for_resolution(&self) -> Size2D<Au> {
+        self.used_viewport_size.store(true, Ordering::Relaxed);
+        let pc = match self.pres_context() {
+            Some(pc) => pc,
+            None => return Size2D::new(Au(0), Au(0)),
+        };
+        if pc.mIsRootPaginatedDocument() != 0 {
+            let area = &pc.mVisibleArea;
+            return Size2D::new(Au(area.width), Au(area.height));
+        }
+        self.au_viewport_size_for_viewport_unit_resolution(ViewportVariant::UADefault)
+    }
+
     /// Returns the current bleed-box size in app units, used to
     /// resolve the moegoe `-bd-b{w,h,i,b,min,max}` length units
     /// (CSS Paged Media L3 §7.1). Gecko does not have a dedicated

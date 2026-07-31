@@ -225,6 +225,7 @@ pub use self::bd_text_decoration::{
 };
 pub use self::page::{
     Bleed, PageMarks, PageName, PageOrientation, PageSize, PageSizeOrientation, PaperSize,
+    PrinceBleed, PrinceBleedSides,
 };
 pub use self::percentage::{NonNegativePercentage, Percentage};
 pub use self::position::AnchorFunction;

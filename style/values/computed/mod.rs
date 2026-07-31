@@ -230,6 +230,7 @@ pub use self::bd_text_decoration::{
 };
 pub use self::page::{
     Bleed, PageMarks, PageName, PageOrientation, PageSize, PageSizeOrientation, PaperSize,
+    PrinceBleed, PrinceBleedSides,
 };
 pub use self::percentage::{NonNegativePercentage, Percentage};
 pub use self::position::AnchorFunction;
@@ -637,6 +638,15 @@ impl<'a> Context<'a> {
         self.builder
             .device
             .au_viewport_size_for_viewport_unit_resolution(variant)
+    }
+
+    /// The current full page-box size, used by moegoe's
+    /// `-bd-p{w,h,i,b,min,max}` units. Unlike viewport units this includes
+    /// the page margins and is pinned to the first page by the embedder.
+    pub fn viewport_size_for_page_box_resolution(&self) -> default::Size2D<Au> {
+        self.builder
+            .add_flags(ComputedValueFlags::USES_VIEWPORT_UNITS);
+        self.builder.device.au_page_box_size_for_resolution()
     }
 
     /// The current bleed-box size, used to resolve the moegoe

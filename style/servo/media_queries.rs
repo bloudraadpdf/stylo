@@ -461,6 +461,16 @@ impl Device {
         self.au_viewport_size()
     }
 
+    /// Returns the configured full page-box size in app units, recording that
+    /// a page-relative unit participated in computed-value resolution.
+    pub fn au_page_box_size_for_resolution(&self) -> UntypedSize2D<Au> {
+        self.used_viewport_units.store(true, Ordering::Relaxed);
+        Size2D::new(
+            Au::from_f32_px(self.page_box_size.width),
+            Au::from_f32_px(self.page_box_size.height),
+        )
+    }
+
     /// Returns the bleed-box size of the current device in app units,
     /// used to resolve the moegoe `-bd-b{w,h,i,b,min,max}` length
     /// units (CSS Paged Media L3 §7.1). Mirrors
