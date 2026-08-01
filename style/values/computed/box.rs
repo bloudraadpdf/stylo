@@ -6,7 +6,7 @@
 
 use crate::derives::*;
 use crate::values::animated::{Animate, Procedure, ToAnimatedValue};
-use crate::values::computed::length::{FiniteLength, Length, LengthPercentage, NonNegativeLength};
+use crate::values::computed::length::{FiniteLength, LengthPercentage, NonNegativeLength};
 use crate::values::computed::{Context, Integer, Number, ToComputedValue};
 use crate::values::generics::box_::{
     GenericBaselineShift, GenericContainIntrinsicSize, GenericFloat, GenericLineClamp,
@@ -40,11 +40,11 @@ pub trait FloatOffsetCalculationFold {
     type Output;
 
     /// Fold one absolute-length leaf (in computed CSS pixels).
-    fn length(&mut self, value: Length) -> Self::Output;
+    fn length(&mut self, value: FloatOffsetCalculationScalar) -> Self::Output;
     /// Fold one percentage leaf (stored as a fraction, where `1` is 100%).
-    fn percentage(&mut self, value: crate::values::computed::Percentage) -> Self::Output;
+    fn percentage(&mut self, value: FloatOffsetCalculationScalar) -> Self::Output;
     /// Fold one dimensionless number leaf.
-    fn number(&mut self, value: f32) -> Self::Output;
+    fn number(&mut self, value: FloatOffsetCalculationScalar) -> Self::Output;
     /// Fold unary negation.
     fn negate(&mut self, value: Self::Output) -> Self::Output;
     /// Fold multiplicative inversion.
@@ -78,6 +78,55 @@ pub trait FloatOffsetCalculationFold {
     fn abs(&mut self, value: Self::Output) -> Self::Output;
     /// Fold `sign()`.
     fn sign(&mut self, value: Self::Output) -> Self::Output;
+}
+
+/// A finite scalar leaf in a computed `float-offset` calculation.
+///
+/// Construction is private to Stylo. Downstream folds may recover the value,
+/// knowing that it is finite (including a semantically significant `-0`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[repr(transparent)]
+pub struct FiniteFloatOffsetCalculationScalar(f32);
+
+impl FiniteFloatOffsetCalculationScalar {
+    /// Recover the finite scalar.
+    #[inline]
+    pub const fn get(self) -> f32 {
+        self.0
+    }
+}
+
+/// Exact numeric state of a leaf in a computed `float-offset` calculation.
+///
+/// CSS Values 4 permits infinities and NaN inside calculations. They remain
+/// semantic math values here instead of crossing the crate boundary as raw
+/// nonfinite floats that could be mistaken for geometry.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum FloatOffsetCalculationScalar {
+    /// A finite scalar, with private construction.
+    Finite(FiniteFloatOffsetCalculationScalar),
+    /// Positive infinity.
+    PositiveInfinity,
+    /// Negative infinity.
+    NegativeInfinity,
+    /// Not-a-number.
+    NaN,
+}
+
+impl FloatOffsetCalculationScalar {
+    #[inline]
+    pub(crate) fn from_css_number(value: f32) -> Self {
+        if value.is_nan() {
+            Self::NaN
+        } else if value == f32::INFINITY {
+            Self::PositiveInfinity
+        } else if value == f32::NEG_INFINITY {
+            Self::NegativeInfinity
+        } else {
+            debug_assert!(value.is_finite());
+            Self::Finite(FiniteFloatOffsetCalculationScalar(value))
+        }
+    }
 }
 
 /// A computed `float-offset` construct whose used value requires layout
@@ -134,7 +183,7 @@ impl ToComputedValue for specified::FloatOffset {
 
     #[inline]
     fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
-        FloatOffset(self.0.to_computed_value(context))
+        FloatOffset(self.0.to_computed_float_offset_value(context))
     }
 
     #[inline]

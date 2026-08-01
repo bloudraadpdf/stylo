@@ -471,8 +471,16 @@ impl LengthPercentage {
         fold: &mut F,
     ) -> Result<F::Output, crate::values::computed::box_::UnsupportedFloatOffsetCalculation> {
         match self.unpack() {
-            Unpacked::Length(length) => Ok(fold.length(length)),
-            Unpacked::Percentage(percentage) => Ok(fold.percentage(percentage)),
+            Unpacked::Length(length) => Ok(fold.length(
+                crate::values::computed::box_::FloatOffsetCalculationScalar::from_css_number(
+                    length.px(),
+                ),
+            )),
+            Unpacked::Percentage(percentage) => Ok(fold.percentage(
+                crate::values::computed::box_::FloatOffsetCalculationScalar::from_css_number(
+                    percentage.0,
+                ),
+            )),
             Unpacked::Calc(calc) => fold_float_offset_calc_node(&calc.node, fold),
         }
     }
@@ -636,6 +644,19 @@ impl ToComputedValue for specified::LengthPercentage {
                     specified::CalcLengthPercentage::from_computed_value(c),
                 ))
             },
+        }
+    }
+}
+
+impl specified::LengthPercentage {
+    /// Compute a `float-offset` without applying top-level numeric censorship
+    /// to calculation leaves. CSS Values 4 infinities, NaN, and signed zero
+    /// must remain semantic values until layout supplies the percentage basis.
+    pub(crate) fn to_computed_float_offset_value(&self, context: &Context) -> LengthPercentage {
+        match self {
+            Self::Length(value) => LengthPercentage::new_length(value.to_computed_value(context)),
+            Self::Percentage(value) => LengthPercentage::new_percent(*value),
+            Self::Calc(calc) => calc.to_computed_float_offset_value(context),
         }
     }
 }
@@ -936,11 +957,21 @@ fn fold_float_offset_calc_node<F: crate::values::computed::box_::FloatOffsetCalc
     }
 
     match node {
-        GenericCalcNode::Leaf(CalcLengthPercentageLeaf::Length(value)) => Ok(fold.length(*value)),
+        GenericCalcNode::Leaf(CalcLengthPercentageLeaf::Length(value)) => Ok(fold.length(
+            crate::values::computed::box_::FloatOffsetCalculationScalar::from_css_number(
+                value.px(),
+            ),
+        )),
         GenericCalcNode::Leaf(CalcLengthPercentageLeaf::Percentage(value)) => {
-            Ok(fold.percentage(*value))
+            Ok(fold.percentage(
+                crate::values::computed::box_::FloatOffsetCalculationScalar::from_css_number(
+                    value.0,
+                ),
+            ))
         },
-        GenericCalcNode::Leaf(CalcLengthPercentageLeaf::Number(value)) => Ok(fold.number(*value)),
+        GenericCalcNode::Leaf(CalcLengthPercentageLeaf::Number(value)) => Ok(fold.number(
+            crate::values::computed::box_::FloatOffsetCalculationScalar::from_css_number(*value),
+        )),
         GenericCalcNode::Negate(value) => {
             let value = fold_float_offset_calc_node(value, fold)?;
             Ok(fold.negate(value))
@@ -1245,6 +1276,39 @@ impl PartialEq for CalcLengthPercentage {
 }
 
 impl specified::CalcLengthPercentage {
+    fn to_computed_float_offset_value(&self, context: &Context) -> LengthPercentage {
+        use crate::values::specified::calc::Leaf;
+        use crate::values::specified::length::NoCalcLength;
+
+        let node = self.node.map_leaves(|leaf| match *leaf {
+            Leaf::Percentage(value) => {
+                CalcLengthPercentageLeaf::Percentage(Percentage(value))
+            },
+            Leaf::Length(value) => {
+                let computed = match value {
+                    NoCalcLength::Absolute(absolute) if !absolute.to_px().is_finite() => {
+                        Length::new(absolute.to_px()).zoom(context.builder.effective_zoom)
+                    },
+                    _ => value.to_computed_value_with_base_size(
+                        context,
+                        FontBaseSize::CurrentStyle,
+                        LineHeightBase::CurrentStyle,
+                    ),
+                };
+                CalcLengthPercentageLeaf::Length(computed)
+            },
+            Leaf::Number(value) => CalcLengthPercentageLeaf::Number(value),
+            Leaf::Angle(..) | Leaf::Time(..) | Leaf::Resolution(..) | Leaf::ColorComponent(..) => {
+                unreachable!("float-offset grammar accepts only length-percentage calculations")
+            },
+        });
+
+        LengthPercentage::new_calc_unchecked(Box::new(CalcLengthPercentage {
+            clamping_mode: self.clamping_mode,
+            node,
+        }))
+    }
+
     /// Compute the value, zooming any absolute units by the zoom function.
     fn to_computed_value_with_zoom<F>(
         &self,

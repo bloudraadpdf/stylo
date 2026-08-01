@@ -1288,6 +1288,234 @@ mod tests {
     }
 
     #[test]
+    fn servo_float_offset_closed_fold_preserves_operator_and_nonfinite_semantics() {
+        use crate::values::computed::box_::{
+            FloatOffsetCalculationFold, FloatOffsetCalculationScalar,
+        };
+
+        #[derive(Debug)]
+        enum Folded {
+            Length(FloatOffsetCalculationScalar),
+            Percentage(FloatOffsetCalculationScalar),
+            Number(FloatOffsetCalculationScalar),
+            Negate(Box<Self>),
+            Invert(Box<Self>),
+            Sum(Vec<Self>),
+            Product(Vec<Self>),
+            Min(Vec<Self>),
+            Max(Vec<Self>),
+            Clamp(Box<Self>, Box<Self>, Box<Self>),
+        }
+
+        impl Folded {
+            fn scalar(value: FloatOffsetCalculationScalar) -> f32 {
+                match value {
+                    FloatOffsetCalculationScalar::Finite(value) => value.get(),
+                    FloatOffsetCalculationScalar::PositiveInfinity => f32::INFINITY,
+                    FloatOffsetCalculationScalar::NegativeInfinity => f32::NEG_INFINITY,
+                    FloatOffsetCalculationScalar::NaN => f32::NAN,
+                }
+            }
+
+            fn resolve(&self, basis: f32) -> f32 {
+                match self {
+                    Self::Length(value) | Self::Number(value) => Self::scalar(*value),
+                    Self::Percentage(value) => basis * Self::scalar(*value),
+                    Self::Negate(value) => -value.resolve(basis),
+                    Self::Invert(value) => 1.0 / value.resolve(basis),
+                    Self::Sum(values) => values.iter().map(|value| value.resolve(basis)).sum(),
+                    Self::Product(values) => values.iter().map(|value| value.resolve(basis)).product(),
+                    Self::Min(values) => values
+                        .iter()
+                        .map(|value| value.resolve(basis))
+                        .fold(f32::INFINITY, f32::min),
+                    Self::Max(values) => values
+                        .iter()
+                        .map(|value| value.resolve(basis))
+                        .fold(f32::NEG_INFINITY, f32::max),
+                    Self::Clamp(min, center, max) => center.resolve(basis)
+                        .max(min.resolve(basis))
+                        .min(max.resolve(basis)),
+                }
+            }
+
+            fn contains_scalar(&self, expected: FloatOffsetCalculationScalar) -> bool {
+                match self {
+                    Self::Length(value) | Self::Percentage(value) | Self::Number(value) => {
+                        *value == expected
+                    },
+                    Self::Negate(value) | Self::Invert(value) => value.contains_scalar(expected),
+                    Self::Sum(values) | Self::Product(values) | Self::Min(values) | Self::Max(values) => {
+                        values.iter().any(|value| value.contains_scalar(expected))
+                    },
+                    Self::Clamp(min, center, max) => {
+                        min.contains_scalar(expected)
+                            || center.contains_scalar(expected)
+                            || max.contains_scalar(expected)
+                    },
+                }
+            }
+        }
+
+        struct Fold;
+
+        impl FloatOffsetCalculationFold for Fold {
+            type Output = Folded;
+
+            fn length(&mut self, value: FloatOffsetCalculationScalar) -> Self::Output {
+                Folded::Length(value)
+            }
+            fn percentage(&mut self, value: FloatOffsetCalculationScalar) -> Self::Output {
+                Folded::Percentage(value)
+            }
+            fn number(&mut self, value: FloatOffsetCalculationScalar) -> Self::Output {
+                Folded::Number(value)
+            }
+            fn negate(&mut self, value: Self::Output) -> Self::Output {
+                Folded::Negate(Box::new(value))
+            }
+            fn invert(&mut self, value: Self::Output) -> Self::Output {
+                Folded::Invert(Box::new(value))
+            }
+            fn sum(&mut self, values: Vec<Self::Output>) -> Self::Output {
+                Folded::Sum(values)
+            }
+            fn product(&mut self, values: Vec<Self::Output>) -> Self::Output {
+                Folded::Product(values)
+            }
+            fn min(&mut self, values: Vec<Self::Output>) -> Self::Output {
+                Folded::Min(values)
+            }
+            fn max(&mut self, values: Vec<Self::Output>) -> Self::Output {
+                Folded::Max(values)
+            }
+            fn clamp(
+                &mut self,
+                min: Self::Output,
+                center: Self::Output,
+                max: Self::Output,
+            ) -> Self::Output {
+                Folded::Clamp(Box::new(min), Box::new(center), Box::new(max))
+            }
+            fn round_nearest(&mut self, _: Self::Output, _: Self::Output) -> Self::Output {
+                unreachable!("round() is outside this fold-dispatch test")
+            }
+            fn round_up(&mut self, _: Self::Output, _: Self::Output) -> Self::Output {
+                unreachable!("round() is outside this fold-dispatch test")
+            }
+            fn round_down(&mut self, _: Self::Output, _: Self::Output) -> Self::Output {
+                unreachable!("round() is outside this fold-dispatch test")
+            }
+            fn round_to_zero(&mut self, _: Self::Output, _: Self::Output) -> Self::Output {
+                unreachable!("round() is outside this fold-dispatch test")
+            }
+            fn modulo(&mut self, _: Self::Output, _: Self::Output) -> Self::Output {
+                unreachable!("mod() is outside this fold-dispatch test")
+            }
+            fn remainder(&mut self, _: Self::Output, _: Self::Output) -> Self::Output {
+                unreachable!("rem() is outside this fold-dispatch test")
+            }
+            fn hypot(&mut self, _: Vec<Self::Output>) -> Self::Output {
+                unreachable!("hypot() is outside this fold-dispatch test")
+            }
+            fn abs(&mut self, _: Self::Output) -> Self::Output {
+                unreachable!("abs() is outside this fold-dispatch test")
+            }
+            fn sign(&mut self, _: Self::Output) -> Self::Output {
+                unreachable!("sign() is outside this fold-dispatch test")
+            }
+        }
+
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let parser_context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            None,
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let stylist = test_stylist();
+        let compute = |css: &str| {
+            let mut input = ParserInput::new(css);
+            let mut parser = Parser::new(&mut input);
+            let specified = crate::values::specified::box_::FloatOffset::parse(
+                &parser_context,
+                &mut parser,
+            )
+            .expect("test float-offset must parse");
+            crate::values::computed::Context::for_media_query_evaluation(
+                stylist.device(),
+                QuirksMode::NoQuirks,
+                |context| specified.to_computed_value(context),
+            )
+        };
+
+        #[derive(Clone, Copy)]
+        enum ExpectedRoot {
+            Min,
+            Max,
+            Clamp,
+        }
+
+        for (css, expected_root, resolutions) in [
+            ("min(10%, 5px)", ExpectedRoot::Min, &[(20.0, 2.0), (100.0, 5.0)][..]),
+            ("max(10%, 5px)", ExpectedRoot::Max, &[(20.0, 5.0), (100.0, 10.0)][..]),
+            (
+                "clamp(5px, 10%, 20px)",
+                ExpectedRoot::Clamp,
+                &[(20.0, 5.0), (100.0, 10.0), (300.0, 20.0)][..],
+            ),
+        ] {
+            let folded = compute(css).fold_calculation(&mut Fold).unwrap();
+            assert!(
+                matches!(
+                    (expected_root, &folded),
+                    (ExpectedRoot::Min, Folded::Min(_))
+                        | (ExpectedRoot::Max, Folded::Max(_))
+                        | (ExpectedRoot::Clamp, Folded::Clamp(..))
+                ),
+                "`{css}` dispatched to the wrong callback: {folded:?}",
+            );
+            for &(basis, expected) in resolutions {
+                assert_eq!(folded.resolve(basis), expected, "folded `{css}` at {basis}px");
+            }
+        }
+
+        for (css, semantic, censored) in [
+            (
+                "calc(infinity * 1px)",
+                FloatOffsetCalculationScalar::PositiveInfinity,
+                crate::values::computed::length::MAX_FINITE_CSS_LENGTH_PX,
+            ),
+            (
+                "calc(-infinity * 1px)",
+                FloatOffsetCalculationScalar::NegativeInfinity,
+                -crate::values::computed::length::MAX_FINITE_CSS_LENGTH_PX,
+            ),
+            ("calc(NaN * 1px)", FloatOffsetCalculationScalar::NaN, 0.0),
+        ] {
+            let computed = compute(css);
+            let folded = computed.fold_calculation(&mut Fold).unwrap();
+            assert!(folded.contains_scalar(semantic), "`{css}` lost {semantic:?}: {folded:?}");
+            let zero = crate::values::computed::FiniteLength::new_censored(Length::new(0.0));
+            assert_eq!(computed.resolve_finite(zero).px(), censored);
+        }
+
+        for css in ["anchor(--target top)", "anchor-size(--target width)"] {
+            let mut input = ParserInput::new(css);
+            let mut parser = Parser::new(&mut input);
+            assert!(
+                crate::values::specified::box_::FloatOffset::parse(&parser_context, &mut parser)
+                    .is_err(),
+                "`{css}` must not bypass the float-offset grammar boundary",
+            );
+        }
+    }
+
+    #[test]
     fn servo_line_clamp_is_only_a_three_longhand_expansion() {
         let stylesheet =
             parse_stylesheet(r#".test { line-clamp: 3 "CUSTOM"; }"#);
