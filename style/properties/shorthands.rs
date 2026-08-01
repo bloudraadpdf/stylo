@@ -4878,7 +4878,7 @@ pub mod line_clamp {
     use super::*;
     pub use crate::properties::shorthands_generated::line_clamp::*;
     use crate::values::specified::{
-        BlockEllipsis, Continue, MaxLines, PositiveInteger,
+        BlockEllipsis, Continue, MaxLines, PositiveLineCount,
     };
 
     pub fn parse_value<'i, 't>(
@@ -4896,13 +4896,13 @@ pub mod line_clamp {
             });
         }
 
-        let count = PositiveInteger::parse(context, input)?.0;
+        let count = PositiveLineCount::parse(context, input)?;
         let block_ellipsis = input
             .try_parse(|input| BlockEllipsis::parse(context, input))
             .unwrap_or(BlockEllipsis::Auto);
 
         Ok(expanded! {
-            max_lines: MaxLines::Integer(count),
+            max_lines: MaxLines::Lines(count),
             continue_: Continue::Discard,
             block_ellipsis: block_ellipsis,
         })
@@ -4917,7 +4917,7 @@ pub mod line_clamp {
                 (MaxLines::None, Continue::Auto, BlockEllipsis::None) => {
                     dest.write_str("none")
                 },
-                (MaxLines::Integer(count), Continue::Discard, block_ellipsis) => {
+                (MaxLines::Lines(count), Continue::Discard, block_ellipsis) => {
                     count.to_css(dest)?;
                     if block_ellipsis != &BlockEllipsis::Auto {
                         dest.write_char(' ')?;

@@ -1172,6 +1172,87 @@ mod tests {
     }
 
     #[test]
+    fn servo_line_limits_compute_to_private_positive_counts() {
+        fn parse_max_lines(css: &str) -> Result<crate::values::specified::MaxLines, ()> {
+            let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+            let context = ParserContext::new(
+                Origin::Author,
+                &url_data,
+                None,
+                ParsingMode::DEFAULT,
+                QuirksMode::NoQuirks,
+                Default::default(),
+                None,
+                None,
+            );
+            let mut input = ParserInput::new(css);
+            let mut parser = Parser::new(&mut input);
+            parser
+                .parse_entirely(|input| crate::values::specified::MaxLines::parse(&context, input))
+                .map_err(|_| ())
+        }
+
+        fn parse_legacy_line_clamp(
+            css: &str,
+        ) -> Result<crate::values::specified::box_::LineClamp, ()> {
+            let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+            let context = ParserContext::new(
+                Origin::Author,
+                &url_data,
+                None,
+                ParsingMode::DEFAULT,
+                QuirksMode::NoQuirks,
+                Default::default(),
+                None,
+                None,
+            );
+            let mut input = ParserInput::new(css);
+            let mut parser = Parser::new(&mut input);
+            parser
+                .parse_entirely(|input| {
+                    crate::values::specified::box_::LineClamp::parse(&context, input)
+                })
+                .map_err(|_| ())
+        }
+
+        for invalid in ["0", "-1"] {
+            assert!(parse_max_lines(invalid).is_err());
+            assert!(parse_legacy_line_clamp(invalid).is_err());
+        }
+
+        let stylist = test_stylist();
+        let (standard, legacy, legacy_none) =
+            crate::values::computed::Context::for_media_query_evaluation(
+                stylist.device(),
+                QuirksMode::NoQuirks,
+                |context| {
+                    (
+                        parse_max_lines("7")
+                            .expect("positive max-lines parses")
+                            .to_computed_value(context),
+                        parse_legacy_line_clamp("5")
+                            .expect("positive -webkit-line-clamp parses")
+                            .to_computed_value(context),
+                        parse_legacy_line_clamp("none")
+                            .expect("legacy none parses")
+                            .to_computed_value(context),
+                    )
+                },
+            );
+
+        let crate::values::computed::MaxLines::Lines(standard_count) = standard else {
+            panic!("positive max-lines must compute to Lines")
+        };
+        let standard_count: std::num::NonZeroU32 = standard_count.get();
+        assert_eq!(standard_count.get(), 7);
+
+        let legacy_count: std::num::NonZeroU32 =
+            legacy.lines().expect("positive legacy clamp has lines").get();
+        assert_eq!(legacy_count.get(), 5);
+        assert!(legacy_none.lines().is_none());
+    }
+
+    #[test]
     fn servo_line_clamp_globals_and_variables_expand_atomically() {
         for keyword in [
             "initial",

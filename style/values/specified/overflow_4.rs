@@ -24,14 +24,15 @@
 //! successful parsing immediately produces the three typed longhands, so an
 //! independent shorthand value cannot disagree with the cascade result.
 //!
-//! `MaxLines` stores `specified::Integer`, which does not derive
-//! `ToResolvedValue` / `ToTyped`; consequently its computed-side counterpart
+//! `MaxLines` stores a private [`PositiveLineCount`] rather than an unrefined
+//! `specified::Integer`. Consequently, once parsing succeeds, later stages
+//! cannot construct a non-positive line limit. Its computed-side counterpart
 //! is declared in `crate::values::computed::overflow_4`, with a manual
-//! `ToComputedValue` implementation bridging the two.
+//! `ToComputedValue` implementation preserving that proof.
 
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
-use crate::values::specified::Integer;
+use crate::values::specified::{Integer, PositiveInteger};
 use crate::OwnedStr;
 use cssparser::Parser;
 use style_traits::ParseError;
@@ -100,6 +101,43 @@ impl Parse for BlockEllipsis {
     }
 }
 
+/// A parser-validated positive specified line count.
+#[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
+#[repr(transparent)]
+pub struct PositiveLineCount(Integer);
+
+impl PositiveLineCount {
+    /// Retains the positive-integer proof established by the CSS parser.
+    #[inline]
+    pub(crate) fn from_positive(value: PositiveInteger) -> Self {
+        Self(value.0)
+    }
+
+    /// Returns the underlying specified integer for computed-value conversion.
+    #[inline]
+    pub(crate) fn integer(&self) -> &Integer {
+        &self.0
+    }
+
+    /// Reconstructs a specified value from its proof-carrying computed value.
+    #[inline]
+    pub(crate) fn from_computed(
+        value: crate::values::computed::overflow_4::PositiveLineCount,
+    ) -> Self {
+        Self(Integer::new(value.raw()))
+    }
+}
+
+impl Parse for PositiveLineCount {
+    #[inline]
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        PositiveInteger::parse(context, input).map(Self::from_positive)
+    }
+}
+
 /// Specified value of the `max-lines` property
 /// (<https://drafts.csswg.org/css-overflow-4/#max-lines>).
 ///
@@ -112,7 +150,7 @@ pub enum MaxLines {
     /// `none` — no cap.
     None,
     /// `<integer>` — line cap; must be positive.
-    Integer(Integer),
+    Lines(PositiveLineCount),
 }
 
 impl MaxLines {
@@ -140,8 +178,7 @@ impl Parse for MaxLines {
         {
             return Ok(Self::None);
         }
-        let i = crate::values::specified::PositiveInteger::parse(context, input)?.0;
-        Ok(Self::Integer(i))
+        Ok(Self::Lines(PositiveLineCount::parse(context, input)?))
     }
 }
 

@@ -95,7 +95,7 @@ pub use self::list::ListStyleType;
 pub use self::list::Quotes;
 pub use self::motion::{OffsetPath, OffsetPosition, OffsetRotate};
 pub use self::outline::OutlineStyle;
-pub use self::overflow_4::{BlockEllipsis, Continue, LeadingTrim, MaxLines};
+pub use self::overflow_4::{BlockEllipsis, Continue, LeadingTrim, MaxLines, PositiveLineCount};
 pub use self::bd_a11y::{
     BdTextReplace, BdTextReplacement, BdTextReplacementMethod, BdTextReplacementPoint, BdTooltip,
 };

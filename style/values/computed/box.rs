@@ -58,6 +58,20 @@ impl ContainIntrinsicSize {
 /// A computed value for the `line-clamp` property.
 pub type LineClamp = GenericLineClamp<Integer>;
 
+impl LineClamp {
+    /// Returns the line count when this value is not `none`.
+    ///
+    /// The returned type cannot represent zero or a negative count.
+    #[inline]
+    pub fn lines(self) -> Option<crate::values::computed::overflow_4::PositiveLineCount> {
+        if self.is_none() {
+            None
+        } else {
+            Some(crate::values::computed::overflow_4::PositiveLineCount::from_legacy(&self))
+        }
+    }
+}
+
 impl Animate for LineClamp {
     #[inline]
     fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
@@ -67,7 +81,10 @@ impl Animate for LineClamp {
         if self.is_none() {
             return Ok(Self::none());
         }
-        Ok(Self(self.0.animate(&other.0, procedure)?.max(1)))
+        let value = self.value().animate(other.value(), procedure)?.max(1);
+        Ok(Self::from_positive(
+            crate::values::generics::GreaterThanOrEqualToOne(value),
+        ))
     }
 }
 

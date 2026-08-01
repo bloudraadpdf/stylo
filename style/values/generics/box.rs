@@ -499,7 +499,7 @@ impl<L: ToCss> ToCss for ContainIntrinsicSize<L> {
 )]
 #[repr(transparent)]
 #[value_info(other_values = "none")]
-pub struct GenericLineClamp<I>(pub I);
+pub struct GenericLineClamp<I>(I);
 
 pub use self::GenericLineClamp as LineClamp;
 
@@ -512,6 +512,23 @@ impl<I: Zero> LineClamp<I> {
     /// Returns whether we're the `none` value.
     pub fn is_none(&self) -> bool {
         self.0.is_zero()
+    }
+
+    /// Returns the private zero-or-positive payload to invariant-preserving
+    /// code inside Stylo.
+    #[inline]
+    pub(crate) fn value(&self) -> &I {
+        &self.0
+    }
+}
+
+impl<I> LineClamp<I> {
+    /// Constructs a non-`none` line clamp from a parser-proven positive value.
+    #[inline]
+    pub(crate) fn from_positive(
+        value: crate::values::generics::GreaterThanOrEqualToOne<I>,
+    ) -> Self {
+        Self(value.0)
     }
 }
 

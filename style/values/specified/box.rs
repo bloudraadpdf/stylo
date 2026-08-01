@@ -1325,7 +1325,7 @@ impl Parse for LineClamp {
         if let Ok(i) =
             input.try_parse(|i| crate::values::specified::PositiveInteger::parse(context, i))
         {
-            return Ok(Self(i.0));
+            return Ok(Self::from_positive(i));
         }
         input.expect_ident_matching("none")?;
         Ok(Self::none())
