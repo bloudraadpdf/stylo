@@ -346,7 +346,6 @@ affects = ""
 type = "Appearance"
 initial = "computed::Appearance::None"
 struct = "box"
-engine = "gecko"
 extra_prefixes = ["moz:layout.css.moz-appearance.enabled", "webkit"]
 spec = "https://drafts.csswg.org/css-ui-4/#propdef-appearance"
 animation_type = "discrete"
