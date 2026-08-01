@@ -1065,6 +1065,56 @@ mod tests {
     }
 
     #[test]
+    fn servo_censors_non_finite_snap_thresholds_at_the_computed_boundary() {
+        use crate::values::computed::length::MAX_FINITE_CSS_LENGTH_PX;
+
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let parser_context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            None,
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let stylist = test_stylist();
+
+        for (css, expected) in [
+            ("snap-block(calc(infinity * 1px), near)", MAX_FINITE_CSS_LENGTH_PX),
+            ("snap-block(calc(-infinity * 1px), near)", -MAX_FINITE_CSS_LENGTH_PX),
+            ("snap-block(calc(NaN * 1px), near)", 0.0),
+            ("snap-block(calc(-0 * 1px), near)", 0.0),
+        ] {
+            let mut input = ParserInput::new(css);
+            let mut parser = Parser::new(&mut input);
+            let specified = crate::values::specified::box_::Float::parse(
+                &parser_context,
+                &mut parser,
+            )
+            .expect("CSS Values 4 math constants are valid authored lengths");
+            parser.expect_exhausted().expect("float value is fully consumed");
+            let computed = crate::values::computed::Context::for_media_query_evaluation(
+                stylist.device(),
+                QuirksMode::NoQuirks,
+                |context| specified.to_computed_value(context),
+            );
+            let crate::values::computed::box_::Float::SnapBlock(
+                crate::values::generics::box_::GenericSnapBlock::One { threshold, .. },
+            ) = computed
+            else {
+                panic!("expected the one-threshold snap-block computed variant");
+            };
+            assert_eq!(threshold.px(), expected, "computed threshold for `{css}`");
+            assert!(threshold.px().is_finite(), "`{css}` must not leak non-finite geometry");
+            if expected == 0.0 {
+                assert!(threshold.px().is_sign_positive(), "zero is censored to +0 for `{css}`");
+            }
+        }
+    }
+
+    #[test]
     fn servo_preserves_signed_float_offset_through_computation() {
         let stylesheet = parse_stylesheet(".test { float-offset: -10px; }");
         let guard = stylesheet.shared_lock.read();
@@ -1102,9 +1152,11 @@ mod tests {
         );
         let mut input = ParserInput::new("-10px");
         let mut parser = Parser::new(&mut input);
-        let specified =
-            crate::values::specified::LengthPercentage::parse(&parser_context, &mut parser)
-                .expect("signed float-offset grammar is length-percentage");
+        let specified = crate::values::specified::box_::FloatOffset::parse(
+            &parser_context,
+            &mut parser,
+        )
+        .expect("signed float-offset grammar is length-percentage");
         parser
             .expect_exhausted()
             .expect("offset consumes its value");
@@ -1115,13 +1167,70 @@ mod tests {
             QuirksMode::NoQuirks,
             |context| specified.to_computed_value(context),
         );
-        assert_eq!(
-            computed
-                .to_length()
-                .expect("absolute negative offset computes to a length")
-                .px(),
-            -10.0,
+        assert_eq!(computed.at_zero_basis().px(), -10.0);
+    }
+
+    #[test]
+    fn servo_censors_float_offset_and_font_size_before_geometry_consumers() {
+        use crate::values::computed::length::MAX_FINITE_CSS_LENGTH_PX;
+
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let parser_context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            None,
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
         );
+        let stylist = test_stylist();
+
+        let mut offset_input = ParserInput::new("calc(infinity * 1px + 25%)");
+        let mut offset_parser = Parser::new(&mut offset_input);
+        let specified_offset = crate::values::specified::box_::FloatOffset::parse(
+            &parser_context,
+            &mut offset_parser,
+        )
+        .expect("mixed non-finite float-offset is valid CSS Values 4 syntax");
+        let computed_offset = crate::values::computed::Context::for_media_query_evaluation(
+            stylist.device(),
+            QuirksMode::NoQuirks,
+            |context| specified_offset.to_computed_value(context),
+        );
+        for endpoint in [
+            computed_offset.at_zero_basis(),
+            computed_offset.at_hundred_px_basis(),
+        ] {
+            assert_eq!(endpoint.px(), MAX_FINITE_CSS_LENGTH_PX);
+            assert!(endpoint.px().is_finite());
+        }
+
+        for (css, expected) in [
+            ("calc(infinity * 1px)", MAX_FINITE_CSS_LENGTH_PX),
+            ("calc(-infinity * 1px)", 0.0),
+            ("calc(NaN * 1px)", 0.0),
+        ] {
+            let mut font_input = ParserInput::new(css);
+            let mut font_parser = Parser::new(&mut font_input);
+            let specified_font = crate::values::specified::FontSize::parse(
+                &parser_context,
+                &mut font_parser,
+            )
+            .expect("CSS Values 4 math constants are valid font-size lengths");
+            let computed_font = crate::values::computed::Context::for_media_query_evaluation(
+                stylist.device(),
+                QuirksMode::NoQuirks,
+                |context| specified_font.to_computed_value(context),
+            );
+            let size = computed_font.finite_computed_size().px();
+            assert_eq!(size, expected, "computed font size for `{css}`");
+            assert!(size.is_finite());
+            if expected == 0.0 {
+                assert!(size.is_sign_positive());
+            }
+        }
     }
 
     #[test]
@@ -2683,8 +2792,13 @@ mod tests {
     #[test]
     fn servo_preserves_bd_pdf_attachment_location_declaration() {
         assert_bd_roundtrip(
-            "p { -bd-pdf-attachment-location: after; }",
+            "p { -bd-pdf-attachment-location: document; }",
             "-bd-pdf-attachment-location",
+            "document",
+        );
+        assert_bd_roundtrip(
+            "p { -bd-pdf-attachment-order: after; }",
+            "-bd-pdf-attachment-order",
             "after",
         );
     }
@@ -2996,8 +3110,8 @@ mod tests {
         );
     }
 
-    /// moegoe F21 — gap fillers: mask-border-* family, border-clip,
-    /// overlay, and text-justify: prince-cjk must all parse.
+    /// moegoe F21 — gap fillers: mask-border-* family, the native
+    /// border-clip extension, overlay, and native CJK justification parse.
     #[test]
     fn servo_parses_f21_gap_fillers() {
         let css = "
@@ -3008,9 +3122,9 @@ mod tests {
                 mask-border-outset: 0;
                 mask-border-repeat: round;
                 mask-border-mode: luminance;
-                border-clip: clip;
+                -bd-border-clip: square;
                 overlay: auto;
-                text-justify: prince-cjk;
+                text-justify: -bd-cjk;
             }
         ";
         let stylesheet = parse_stylesheet(css);

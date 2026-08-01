@@ -51,7 +51,7 @@ pub use self::border::{
 pub use self::box_::{
     AlignmentBaseline, Appearance, BaselineShift, BaselineSource, BookmarkLevel, BookmarkState,
     BreakBetween, BreakWithin, Clear, Contain, ContainIntrinsicSize, ContainerName, ContainerType,
-    ContentVisibility, Display, Float, FloatDefer, FloatReference, FootnoteDisplay, FootnotePolicy,
+    ContentVisibility, Display, Float, FloatDefer, FloatOffset, FloatReference, FootnoteDisplay, FootnotePolicy,
     LineClamp, MarginBreak, MarginTrim, Overflow, OverflowAnchor, OverflowClipMargin,
     OverscrollBehavior, Perspective, PositionProperty, Resize, ScrollSnapAlign, ScrollSnapAxis,
     ScrollSnapStop, ScrollSnapStrictness, ScrollSnapType, ScrollbarGutter, TouchAction, WillChange,

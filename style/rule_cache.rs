@@ -10,7 +10,7 @@ use crate::properties::{ComputedValues, StyleBuilder};
 use crate::rule_tree::StrongRuleNode;
 use crate::selector_parser::PseudoElement;
 use crate::shared_lock::StylesheetGuards;
-use crate::values::computed::{NonNegativeLength, Zoom};
+use crate::values::computed::{NonNegativeFiniteLength, NonNegativeLength, Zoom};
 use crate::values::specified::color::ColorSchemeFlags;
 use rustc_hash::FxHashMap;
 use servo_arc::Arc;
@@ -20,7 +20,7 @@ use smallvec::SmallVec;
 #[derive(Clone, Debug, Default)]
 pub struct RuleCacheConditions {
     uncacheable: bool,
-    font_size: Option<NonNegativeLength>,
+    font_size: Option<NonNegativeFiniteLength>,
     line_height: Option<NonNegativeLength>,
     writing_mode: Option<WritingMode>,
     color_scheme: Option<ColorSchemeFlags>,
@@ -28,7 +28,7 @@ pub struct RuleCacheConditions {
 
 impl RuleCacheConditions {
     /// Sets the style as depending in the font-size value.
-    pub fn set_font_size_dependency(&mut self, font_size: NonNegativeLength) {
+    pub fn set_font_size_dependency(&mut self, font_size: NonNegativeFiniteLength) {
         debug_assert!(self.font_size.map_or(true, |f| f == font_size));
         self.font_size = Some(font_size);
     }
@@ -64,7 +64,7 @@ impl RuleCacheConditions {
 
 #[derive(Debug)]
 struct CachedConditions {
-    font_size: Option<NonNegativeLength>,
+    font_size: Option<NonNegativeFiniteLength>,
     line_height: Option<NonNegativeLength>,
     color_scheme: Option<ColorSchemeFlags>,
     writing_mode: Option<WritingMode>,

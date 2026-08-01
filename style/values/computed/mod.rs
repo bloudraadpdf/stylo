@@ -59,7 +59,7 @@ pub use self::border::{
 pub use self::box_::{
     AlignmentBaseline, Appearance, BaselineShift, BaselineSource, BookmarkLevel, BookmarkState,
     BreakBetween, BreakWithin, Clear, Contain, ContainIntrinsicSize, ContainerName, ContainerType,
-    ContentVisibility, Display, Float, FloatDefer, FloatReference, FootnoteDisplay, FootnotePolicy,
+    ContentVisibility, Display, Float, FloatDefer, FloatOffset, FloatReference, FootnoteDisplay, FootnotePolicy,
     LineClamp, MarginBreak, MarginTrim, Overflow, OverflowAnchor, OverflowClipMargin,
     OverscrollBehavior, Perspective, PositionProperty, Resize, ScrollSnapAlign, ScrollSnapAxis,
     ScrollSnapStop, ScrollSnapStrictness, ScrollSnapType, ScrollbarGutter, TouchAction, WillChange,
@@ -89,7 +89,7 @@ pub use self::font::{FontVariantAlternates, FontWeight};
 pub use self::font::{FontVariantEastAsian, FontVariationSettings};
 pub use self::font::{MathDepth, MozScriptMinSize, MozScriptSizeMultiplier, XLang, XTextScale};
 pub use self::image::{Gradient, Image, ImageRendering, LineDirection};
-pub use self::length::{CSSPixelLength, NonNegativeLength};
+pub use self::length::{CSSPixelLength, FiniteLength, NonNegativeFiniteLength, NonNegativeLength};
 pub use self::length::{Length, LengthOrNumber, LengthPercentage, NonNegativeLengthOrNumber};
 pub use self::length::{LengthOrAuto, LengthPercentageOrAuto, Margin, MaxSize, Size};
 pub use self::length::{NonNegativeLengthPercentage, NonNegativeLengthPercentageOrAuto};

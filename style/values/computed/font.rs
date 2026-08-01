@@ -8,13 +8,13 @@ use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
 use crate::values::animated::ToAnimatedValue;
 use crate::values::computed::{
-    Angle, Context, Integer, Length, NonNegativeLength, NonNegativeNumber, Number, Percentage,
-    ToComputedValue, Zoom,
+    Angle, Context, Integer, Length, NonNegativeFiniteLength, NonNegativeLength, NonNegativeNumber,
+    Number, Percentage, ToComputedValue, Zoom,
 };
+use crate::values::generics::font as generics;
 use crate::values::generics::font::{
     FeatureTagValue, FontSettings, TaggedFontValue, VariationValue,
 };
-use crate::values::generics::{font as generics, NonNegative};
 use crate::values::resolved::{Context as ResolvedContext, ToResolvedValue};
 use crate::values::specified::font::{
     self as specified, KeywordInfo, MAX_FONT_WEIGHT, MIN_FONT_WEIGHT,
@@ -264,11 +264,11 @@ impl FontWeight {
 pub struct FontSize {
     /// The computed size, that we use to compute ems etc. This accounts for
     /// e.g., text-zoom.
-    pub computed_size: NonNegativeLength,
+    pub computed_size: NonNegativeFiniteLength,
     /// The actual used size. This is the computed font size, potentially
     /// constrained by other factors like minimum font-size settings and so on.
     #[css(skip)]
-    pub used_size: NonNegativeLength,
+    pub used_size: NonNegativeFiniteLength,
     /// If derived from a keyword, the keyword and additional transformations applied to it
     #[css(skip)]
     pub keyword_info: KeywordInfo,
@@ -278,21 +278,37 @@ impl FontSize {
     /// The actual computed font size.
     #[inline]
     pub fn computed_size(&self) -> Length {
-        self.computed_size.0
+        self.computed_size.into_length()
+    }
+
+    /// The actual computed font size, retaining the finite non-negative proof.
+    #[inline]
+    pub fn finite_computed_size(&self) -> NonNegativeFiniteLength {
+        self.computed_size
     }
 
     /// The actual used font size.
     #[inline]
     pub fn used_size(&self) -> Length {
-        self.used_size.0
+        self.used_size.into_length()
+    }
+
+    /// The actual used font size, retaining the finite non-negative proof.
+    #[inline]
+    pub fn finite_used_size(&self) -> NonNegativeFiniteLength {
+        self.used_size
     }
 
     /// Apply zoom to the font-size. This is usually done by ToComputedValue.
     #[inline]
     pub fn zoom(&self, zoom: Zoom) -> Self {
         Self {
-            computed_size: NonNegative(Length::new(zoom.zoom(self.computed_size.0.px()))),
-            used_size: NonNegative(Length::new(zoom.zoom(self.used_size.0.px()))),
+            computed_size: NonNegativeFiniteLength::new_censored(Length::new(
+                zoom.zoom(self.computed_size.px()),
+            )),
+            used_size: NonNegativeFiniteLength::new_censored(Length::new(
+                zoom.zoom(self.used_size.px()),
+            )),
             keyword_info: self.keyword_info,
         }
     }
@@ -301,8 +317,12 @@ impl FontSize {
     /// Get default value of font size.
     pub fn medium() -> Self {
         Self {
-            computed_size: NonNegative(Length::new(specified::FONT_MEDIUM_PX)),
-            used_size: NonNegative(Length::new(specified::FONT_MEDIUM_PX)),
+            computed_size: NonNegativeFiniteLength::new_censored(Length::new(
+                specified::FONT_MEDIUM_PX,
+            )),
+            used_size: NonNegativeFiniteLength::new_censored(Length::new(
+                specified::FONT_MEDIUM_PX,
+            )),
             keyword_info: KeywordInfo::medium(),
         }
     }
@@ -313,21 +333,21 @@ impl ToAnimatedValue for FontSize {
 
     #[inline]
     fn to_animated_value(self, context: &crate::values::animated::Context) -> Self::AnimatedValue {
-        self.computed_size.0.to_animated_value(context)
+        self.computed_size.into_length().to_animated_value(context)
     }
 
     #[inline]
     fn from_animated_value(animated: Self::AnimatedValue) -> Self {
         FontSize {
-            computed_size: NonNegative(animated.clamp_to_non_negative()),
-            used_size: NonNegative(animated.clamp_to_non_negative()),
+            computed_size: NonNegativeFiniteLength::new_censored(animated),
+            used_size: NonNegativeFiniteLength::new_censored(animated),
             keyword_info: KeywordInfo::none(),
         }
     }
 }
 
 impl ToResolvedValue for FontSize {
-    type ResolvedValue = NonNegativeLength;
+    type ResolvedValue = NonNegativeFiniteLength;
 
     #[inline]
     fn to_resolved_value(self, context: &ResolvedContext) -> Self::ResolvedValue {
@@ -336,7 +356,7 @@ impl ToResolvedValue for FontSize {
 
     #[inline]
     fn from_resolved_value(resolved: Self::ResolvedValue) -> Self {
-        let computed_size = NonNegativeLength::from_resolved_value(resolved);
+        let computed_size = NonNegativeFiniteLength::from_resolved_value(resolved);
         Self {
             computed_size,
             used_size: computed_size,

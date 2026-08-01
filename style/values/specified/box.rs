@@ -1509,6 +1509,34 @@ pub type Perspective = GenericPerspective<NonNegativeLength>;
 #[allow(missing_docs)]
 pub type Float = GenericFloat<Length>;
 
+/// Specified value of `float-offset`.
+///
+/// The raw `<length-percentage>` syntax remains available while specified;
+/// computation seals it inside the opaque computed counterpart, whose only
+/// resolution APIs return bounded finite lengths.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
+#[repr(transparent)]
+pub struct FloatOffset(pub(crate) LengthPercentage);
+
+impl FloatOffset {
+    /// The initial zero offset.
+    #[inline]
+    pub fn zero() -> Self {
+        use crate::Zero;
+        Self(LengthPercentage::zero())
+    }
+}
+
+impl Parse for FloatOffset {
+    #[inline]
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        LengthPercentage::parse(context, input).map(Self)
+    }
+}
+
 impl Parse for SnapBlockAlignment {
     fn parse<'i, 't>(
         _context: &ParserContext,
@@ -1586,7 +1614,7 @@ impl GenericSnapBlock<Length> {
 }
 
 impl ToComputedValue for GenericSnapBlock<Length> {
-    type ComputedValue = GenericSnapBlock<crate::values::computed::length::Length>;
+    type ComputedValue = GenericSnapBlock<crate::values::computed::length::FiniteLength>;
 
     fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
         match self {
@@ -1595,7 +1623,9 @@ impl ToComputedValue for GenericSnapBlock<Length> {
                 threshold,
                 alignment,
             } => Self::ComputedValue::One {
-                threshold: threshold.to_computed_value(context),
+                threshold: crate::values::computed::length::FiniteLength::new_censored(
+                    threshold.to_computed_value(context),
+                ),
                 alignment: *alignment,
             },
             Self::Two {
@@ -1603,8 +1633,12 @@ impl ToComputedValue for GenericSnapBlock<Length> {
                 end,
                 alignment,
             } => Self::ComputedValue::Two {
-                start: start.to_computed_value(context),
-                end: end.to_computed_value(context),
+                start: crate::values::computed::length::FiniteLength::new_censored(
+                    start.to_computed_value(context),
+                ),
+                end: crate::values::computed::length::FiniteLength::new_censored(
+                    end.to_computed_value(context),
+                ),
                 alignment: *alignment,
             },
         }
@@ -1617,7 +1651,7 @@ impl ToComputedValue for GenericSnapBlock<Length> {
                 threshold,
                 alignment,
             } => Self::One {
-                threshold: Length::from_computed_value(threshold),
+                threshold: Length::from_computed_value(&threshold.into_length()),
                 alignment: *alignment,
             },
             Self::ComputedValue::Two {
@@ -1625,8 +1659,8 @@ impl ToComputedValue for GenericSnapBlock<Length> {
                 end,
                 alignment,
             } => Self::Two {
-                start: Length::from_computed_value(start),
-                end: Length::from_computed_value(end),
+                start: Length::from_computed_value(&start.into_length()),
+                end: Length::from_computed_value(&end.into_length()),
                 alignment: *alignment,
             },
         }
@@ -1668,7 +1702,7 @@ impl GenericSnapInline<Length> {
 }
 
 impl ToComputedValue for GenericSnapInline<Length> {
-    type ComputedValue = GenericSnapInline<crate::values::computed::length::Length>;
+    type ComputedValue = GenericSnapInline<crate::values::computed::length::FiniteLength>;
 
     fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
         match self {
@@ -1677,7 +1711,9 @@ impl ToComputedValue for GenericSnapInline<Length> {
                 threshold,
                 alignment,
             } => Self::ComputedValue::One {
-                threshold: threshold.to_computed_value(context),
+                threshold: crate::values::computed::length::FiniteLength::new_censored(
+                    threshold.to_computed_value(context),
+                ),
                 alignment: *alignment,
             },
             Self::Two {
@@ -1685,8 +1721,12 @@ impl ToComputedValue for GenericSnapInline<Length> {
                 end,
                 alignment,
             } => Self::ComputedValue::Two {
-                start: start.to_computed_value(context),
-                end: end.to_computed_value(context),
+                start: crate::values::computed::length::FiniteLength::new_censored(
+                    start.to_computed_value(context),
+                ),
+                end: crate::values::computed::length::FiniteLength::new_censored(
+                    end.to_computed_value(context),
+                ),
                 alignment: *alignment,
             },
         }
@@ -1699,7 +1739,7 @@ impl ToComputedValue for GenericSnapInline<Length> {
                 threshold,
                 alignment,
             } => Self::One {
-                threshold: Length::from_computed_value(threshold),
+                threshold: Length::from_computed_value(&threshold.into_length()),
                 alignment: *alignment,
             },
             Self::ComputedValue::Two {
@@ -1707,8 +1747,8 @@ impl ToComputedValue for GenericSnapInline<Length> {
                 end,
                 alignment,
             } => Self::Two {
-                start: Length::from_computed_value(start),
-                end: Length::from_computed_value(end),
+                start: Length::from_computed_value(&start.into_length()),
+                end: Length::from_computed_value(&end.into_length()),
                 alignment: *alignment,
             },
         }
@@ -1716,7 +1756,7 @@ impl ToComputedValue for GenericSnapInline<Length> {
 }
 
 impl ToComputedValue for GenericFloat<Length> {
-    type ComputedValue = GenericFloat<crate::values::computed::length::Length>;
+    type ComputedValue = GenericFloat<crate::values::computed::length::FiniteLength>;
 
     fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
         match self {

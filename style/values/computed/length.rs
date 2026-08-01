@@ -7,7 +7,9 @@
 use super::{Context, Number, ToComputedValue};
 use crate::derives::*;
 use crate::logical_geometry::PhysicalSide;
-use crate::values::animated::{Context as AnimatedContext, ToAnimatedValue};
+use crate::values::animated::{
+    Animate, Context as AnimatedContext, Procedure, ToAnimatedValue, ToAnimatedZero,
+};
 use crate::values::computed::position::TryTacticAdjustment;
 use crate::values::computed::{NonNegativeNumber, Percentage, Zoom};
 use crate::values::generics::length::{
@@ -451,6 +453,224 @@ impl From<CSSPixelLength> for euclid::Length<CSSFloat, CSSPixel> {
 
 /// An alias of computed `<length>` value.
 pub type Length = CSSPixelLength;
+
+/// The implementation-defined magnitude limit for computed CSS lengths that
+/// cross a finite geometry boundary.
+///
+/// `2^24` CSS pixels is exactly representable as `f32`, converts to fewer than
+/// `i32::MAX` app units at 60 app units per CSS pixel, and leaves substantial
+/// headroom for downstream derived arithmetic. Operations on the nominal
+/// wrappers below still censor their result; the input bound alone is not
+/// treated as proof that an arbitrary sum or product remains in range.
+pub const MAX_FINITE_CSS_LENGTH_PX: CSSFloat = 16_777_216.0;
+
+#[inline]
+fn censor_css_length(value: f64, minimum: f64, maximum: f64) -> CSSFloat {
+    if value.is_nan() || value == 0.0 {
+        return 0.0;
+    }
+    value.clamp(minimum, maximum) as CSSFloat
+}
+
+/// A finite computed CSS `<length>` with a bounded magnitude.
+///
+/// The field is private and every constructor performs CSS Values 4
+/// top-level numeric censorship: NaN becomes positive zero and infinities (or
+/// finite overflow) clamp to the implementation-defined range. Derived
+/// arithmetic returns this same nominal type after computing in `f64` and
+/// censoring again.
+#[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, PartialOrd, ToCss, ToShmem, ToTyped)]
+#[repr(transparent)]
+pub struct FiniteLength(Length);
+
+impl FiniteLength {
+    /// Censor an arbitrary computed length into the bounded finite domain.
+    #[inline]
+    pub fn new_censored(length: Length) -> Self {
+        Self::from_f64_censored(length.px() as f64)
+    }
+
+    /// Censor an arbitrary double-precision intermediate into the bounded
+    /// finite domain.
+    #[inline]
+    pub fn from_f64_censored(px: f64) -> Self {
+        Self(Length::new(censor_css_length(
+            px,
+            -(MAX_FINITE_CSS_LENGTH_PX as f64),
+            MAX_FINITE_CSS_LENGTH_PX as f64,
+        )))
+    }
+
+    /// Return the proven finite, bounded CSS-pixel value.
+    #[inline]
+    pub fn px(self) -> CSSFloat {
+        self.0.px()
+    }
+
+    /// Recover a regular computed length after crossing a boundary that only
+    /// accepts this finite nominal.
+    #[inline]
+    pub fn into_length(self) -> Length {
+        self.0
+    }
+
+    /// Add two finite lengths in double precision and censor the result.
+    #[inline]
+    pub fn saturating_add(self, other: Self) -> Self {
+        Self::from_f64_censored(self.px() as f64 + other.px() as f64)
+    }
+
+    /// Scale a finite length in double precision and censor the result.
+    #[inline]
+    pub fn saturating_scale(self, factor: CSSFloat) -> Self {
+        Self::from_f64_censored(self.px() as f64 * factor as f64)
+    }
+}
+
+impl ToResolvedValue for FiniteLength {
+    type ResolvedValue = Self;
+
+    #[inline]
+    fn to_resolved_value(self, context: &ResolvedContext) -> Self::ResolvedValue {
+        Self::new_censored(self.0.to_resolved_value(context))
+    }
+
+    #[inline]
+    fn from_resolved_value(value: Self::ResolvedValue) -> Self {
+        value
+    }
+}
+
+impl Zero for FiniteLength {
+    #[inline]
+    fn zero() -> Self {
+        Self(Length::zero())
+    }
+
+    #[inline]
+    fn is_zero(&self) -> bool {
+        self.0.is_zero()
+    }
+}
+
+/// A finite computed CSS `<length>` constrained to the non-negative range.
+///
+/// This is the storage type for computed and used font sizes. Its private
+/// field prevents NaN, infinity, negative values, and negative zero from
+/// entering the computed style.
+#[derive(
+    Clone,
+    Copy,
+    ComputeSquaredDistance,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    PartialOrd,
+    ToCss,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(transparent)]
+pub struct NonNegativeFiniteLength(Length);
+
+impl serde::Serialize for NonNegativeFiniteLength {
+    #[inline]
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serde::Serialize::serialize(&self.0, serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for NonNegativeFiniteLength {
+    #[inline]
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Length::deserialize(deserializer).map(Self::new_censored)
+    }
+}
+
+impl NonNegativeFiniteLength {
+    /// Censor an arbitrary computed length into the bounded non-negative
+    /// domain.
+    #[inline]
+    pub fn new_censored(length: Length) -> Self {
+        Self::from_f64_censored(length.px() as f64)
+    }
+
+    /// Censor an arbitrary double-precision intermediate into the bounded
+    /// non-negative domain.
+    #[inline]
+    pub fn from_f64_censored(px: f64) -> Self {
+        Self(Length::new(censor_css_length(
+            px,
+            0.0,
+            MAX_FINITE_CSS_LENGTH_PX as f64,
+        )))
+    }
+
+    /// Return the proven finite, bounded CSS-pixel value.
+    #[inline]
+    pub fn px(self) -> CSSFloat {
+        self.0.px()
+    }
+
+    /// Recover a regular computed length for APIs whose result is censored at
+    /// their own computed-value boundary.
+    #[inline]
+    pub fn into_length(self) -> Length {
+        self.0
+    }
+
+    /// Scale the length in double precision and retain the nominal invariant.
+    #[inline]
+    pub fn saturating_scale(self, factor: CSSFloat) -> Self {
+        Self::from_f64_censored(self.px() as f64 * factor as f64)
+    }
+}
+
+impl Animate for NonNegativeFiniteLength {
+    #[inline]
+    fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
+        Ok(Self::new_censored(self.0.animate(&other.0, procedure)?))
+    }
+}
+
+impl ToAnimatedZero for NonNegativeFiniteLength {
+    #[inline]
+    fn to_animated_zero(&self) -> Result<Self, ()> {
+        Ok(Self::from_f64_censored(0.0))
+    }
+}
+
+impl ToResolvedValue for NonNegativeFiniteLength {
+    type ResolvedValue = Self;
+
+    #[inline]
+    fn to_resolved_value(self, context: &ResolvedContext) -> Self::ResolvedValue {
+        Self::new_censored(self.0.to_resolved_value(context))
+    }
+
+    #[inline]
+    fn from_resolved_value(value: Self::ResolvedValue) -> Self {
+        value
+    }
+}
+
+impl Zero for NonNegativeFiniteLength {
+    #[inline]
+    fn zero() -> Self {
+        Self(Length::zero())
+    }
+
+    #[inline]
+    fn is_zero(&self) -> bool {
+        self.0.is_zero()
+    }
+}
 
 /// Either a computed `<length>` or the `auto` keyword.
 pub type LengthOrAuto = generics::GenericLengthPercentageOrAuto<Length>;
