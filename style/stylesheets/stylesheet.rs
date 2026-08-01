@@ -979,10 +979,14 @@ mod tests {
         for value in [
             "snap-block()",
             "snap-block(start)",
+            "snap-block(20%, near)",
+            "snap-block(calc(1em + 5%), near)",
             "snap-block(2px,)",
             "snap-block(2px, left)",
             "snap-inline()",
             "snap-inline(left)",
+            "snap-inline(25%, left)",
+            "snap-inline(calc(2pt + 5%), right)",
             "snap-inline(2px, start)",
             "snap-inline(2px 3px, end)",
         ] {
@@ -1008,70 +1012,116 @@ mod tests {
     }
 
     #[test]
-    fn servo_parses_typed_snap_shorthands() {
-        let stylesheet = parse_stylesheet(
-            r#"
-                .block-one { snap-block: 3px end; }
-                .block-two { snap-block: 3px 5px near; }
-                .inline-one { snap-inline: 2em left; }
-                .inline-two { snap-inline: 2em 4em right; }
-            "#,
+    fn servo_does_not_register_compatibility_names_as_standard_properties() {
+        for property in ["snap-block", "snap-inline", "float-defer-page"] {
+            assert!(
+                crate::properties::PropertyId::parse_enabled_for_all_content(property).is_err(),
+                "compatibility property must not enter the standards parser: {property}",
+            );
+        }
+    }
+
+    #[test]
+    fn servo_computes_pure_length_snap_calc_without_percentage_state() {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let parser_context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            None,
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
         );
+        let mut input = ParserInput::new("snap-block(calc(1em + 2pt), near)");
+        let mut parser = Parser::new(&mut input);
+        let specified = crate::values::specified::box_::Float::parse(&parser_context, &mut parser)
+            .expect("a pure-length calc is valid in a snap threshold");
+        parser
+            .expect_exhausted()
+            .expect("the snap function consumes the whole value");
+
+        let stylist = test_stylist();
+        let computed = crate::values::computed::Context::for_media_query_evaluation(
+            stylist.device(),
+            QuirksMode::NoQuirks,
+            |context| specified.to_computed_value(context),
+        );
+        let crate::values::computed::box_::Float::SnapBlock(
+            crate::values::generics::box_::GenericSnapBlock::One {
+                threshold,
+                alignment: Some(crate::values::generics::box_::SnapBlockAlignment::Near),
+            },
+        ) = computed
+        else {
+            panic!("expected the one-threshold snap-block computed variant");
+        };
+        let expected = 16.0 + 2.0 * (96.0 / 72.0);
+        assert!(
+            (threshold.px() - expected).abs() < 0.001,
+            "pure-length calc must compute to a Length: {threshold:?}",
+        );
+    }
+
+    #[test]
+    fn servo_preserves_signed_float_offset_through_computation() {
+        let stylesheet = parse_stylesheet(".test { float-offset: -10px; }");
         let guard = stylesheet.shared_lock.read();
         let contents = stylesheet.contents.read_with(&guard);
         let rules = contents.rules(&guard);
-        let values: Vec<_> = rules
+        let authored = rules
             .iter()
             .filter_map(|rule| match rule {
                 CssRule::Style(rule) => Some(rule.read_with(&guard)),
                 _ => None,
             })
-            .filter_map(|style| {
+            .find_map(|style| {
                 style
                     .block
                     .read_with(&guard)
                     .declaration_importance_iter()
-                    .find_map(|(decl, _)| match decl {
-                        PropertyDeclaration::Float(value) => Some(value.to_css_string()),
+                    .find_map(|(declaration, _)| match declaration {
+                        PropertyDeclaration::FloatOffset(value) => Some(value.to_css_string()),
                         _ => None,
                     })
             })
-            .collect();
-        assert_eq!(
-            values,
-            [
-                "snap-block(3px, end)",
-                "snap-block(3px 5px, near)",
-                "snap-inline(2em, left)",
-                "snap-inline(2em 4em, right)",
-            ],
-        );
+            .expect("negative float-offset must enter the typed declaration block");
+        assert_eq!(authored, "-10px");
 
-        for declaration in [
-            "snap-block: end",
-            "snap-block: 2px left",
-            "snap-inline: left",
-            "snap-inline: 2px start",
-        ] {
-            let stylesheet = parse_stylesheet(&format!(".test {{ {declaration}; }}"));
-            let guard = stylesheet.shared_lock.read();
-            let contents = stylesheet.contents.read_with(&guard);
-            let rules = contents.rules(&guard);
-            let has_float = rules
-                .iter()
-                .filter_map(|rule| match rule {
-                    CssRule::Style(rule) => Some(rule.read_with(&guard)),
-                    _ => None,
-                })
-                .any(|style| {
-                    style
-                        .block
-                        .read_with(&guard)
-                        .declaration_importance_iter()
-                        .any(|(decl, _)| matches!(decl, PropertyDeclaration::Float(_)))
-                });
-            assert!(!has_float, "invalid shorthand must be dropped: {declaration}");
-        }
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let parser_context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            None,
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input = ParserInput::new("-10px");
+        let mut parser = Parser::new(&mut input);
+        let specified =
+            crate::values::specified::LengthPercentage::parse(&parser_context, &mut parser)
+                .expect("signed float-offset grammar is length-percentage");
+        parser
+            .expect_exhausted()
+            .expect("offset consumes its value");
+
+        let stylist = test_stylist();
+        let computed = crate::values::computed::Context::for_media_query_evaluation(
+            stylist.device(),
+            QuirksMode::NoQuirks,
+            |context| specified.to_computed_value(context),
+        );
+        assert_eq!(
+            computed
+                .to_length()
+                .expect("absolute negative offset computes to a length")
+                .px(),
+            -10.0,
+        );
     }
 
     #[test]

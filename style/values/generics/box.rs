@@ -173,8 +173,8 @@ impl ToCss for SnapInlineAlignment {
 /// Payload for `float: snap-block(...)` — CSS Page Floats 3 section 3.2.
 ///
 /// Supports both the single-threshold form
-/// `snap-block(<length-percentage>, <alignment>)` and the two-threshold
-/// form `snap-block(<start-threshold> <end-threshold>, <alignment>)`.
+/// `snap-block(<length>, <alignment>)` and the two-threshold form
+/// `snap-block(<start-threshold> <end-threshold>, <alignment>)`.
 /// The bare keyword, one-threshold function, and two-threshold function are
 /// disjoint variants. End-without-start and alignment-without-threshold have
 /// no representation.

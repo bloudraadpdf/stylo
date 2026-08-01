@@ -289,21 +289,6 @@ flags = "IS_LEGACY_SHORTHAND"
 sub_properties = ["break-inside"]
 spec = "https://drafts.csswg.org/css-break-3/#page-break-properties"
 
-# CSS Page Floats 3 §3.2: `snap-block` and `snap-inline` shorthands.
-# These are compatibility aliases supported by PDFreactor and Prince that
-# let authors write `snap-block: <threshold> <alignment>` as a shorthand
-# that expands to `float: snap-block(<threshold>, <alignment>)`.
-# The syntax differs from the function form in the `float` property:
-# the property form uses space-separated values without function
-# parentheses, mirroring the keyword shorthand pattern.
-[snap-block]
-sub_properties = ["float"]
-spec = "https://www.w3.org/TR/css-page-floats-3/#propdef-snap-block"
-
-[snap-inline]
-sub_properties = ["float"]
-spec = "https://www.w3.org/TR/css-page-floats-3/#propdef-snap-inline"
-
 # CSS Text 4 §8.1 — `text-align` is a shorthand for `text-align-all`
 # and `text-align-last`.
 #   Value: <text-align-all> || <text-align-last>

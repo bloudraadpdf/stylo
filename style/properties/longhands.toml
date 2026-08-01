@@ -637,15 +637,10 @@ spec = "https://www.w3.org/TR/css-page-floats-3/#propdef-float-defer"
 animation_type = "discrete"
 affects = "layout"
 servo_restyle_damage = "rebuild_box"
-# Earlier drafts of CSS Page Floats 3 named the property
-# `float-defer-page`. Several reference renderers (PDFreactor, Prince,
-# AHF) and a substantial body of test-suite content still author the
-# legacy spelling, so accept it as an alias of `float-defer`.
-aliases = ["float-defer-page"]
 
 [float-offset]
-type = "NonNegativeLengthPercentage"
-initial = "computed::NonNegativeLengthPercentage::zero()"
+type = "LengthPercentage"
+initial = "computed::LengthPercentage::zero()"
 struct = "box"
 spec = "https://www.w3.org/TR/css-page-floats-3/#propdef-float-offset"
 animation_type = "discrete"
@@ -1082,7 +1077,7 @@ initial = "computed::Float::None"
 struct = "box"
 animation_type = "discrete"
 # CSS Page Floats L3 adds snap-block() and snap-inline() function forms,
-# each carrying an optional length-percentage threshold payload. Together
+# each carrying a typed length threshold payload. Together
 # with the two-threshold snap-block form the float `SpecifiedValue` grows
 # beyond the in-place 24-byte BOX_THRESHOLD, so the longhand is boxed.
 boxed = true

@@ -14,7 +14,7 @@ use crate::values::generics::box_::{
     GenericSnapInline, OverflowClipMarginBox, SnapBlockAlignment, SnapInlineAlignment,
 };
 use crate::values::computed::{Context, ToComputedValue};
-use crate::values::specified::length::{LengthPercentage, NonNegativeLength};
+use crate::values::specified::length::{Length, LengthPercentage, NonNegativeLength};
 use crate::values::specified::{AllowQuirks, Integer, NonNegativeNumberOrPercentage};
 use crate::values::CustomIdent;
 use cssparser::{match_ignore_ascii_case, Parser};
@@ -1505,54 +1505,9 @@ impl Parse for ContainerName {
 /// A specified value for the `perspective` property.
 pub type Perspective = GenericPerspective<NonNegativeLength>;
 
-/// A copyable threshold payload for `snap-block()`.
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    MallocSizeOf,
-    PartialEq,
-    SpecifiedValueInfo,
-    ToShmem,
-    ToTyped,
-)]
-pub enum SnapBlockThreshold {
-    /// A length threshold.
-    Length(crate::values::specified::length::NoCalcLength),
-    /// A percentage threshold.
-    Percentage(crate::values::computed::Percentage),
-}
-
-impl ToCss for SnapBlockThreshold {
-    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
-    where
-        W: Write,
-    {
-        match self {
-            Self::Length(length) => length.to_css(dest),
-            Self::Percentage(percentage) => percentage.to_css(dest),
-        }
-    }
-}
-
-impl Parse for SnapBlockThreshold {
-    fn parse<'i, 't>(
-        context: &ParserContext,
-        input: &mut Parser<'i, 't>,
-    ) -> Result<Self, ParseError<'i>> {
-        match LengthPercentage::parse(context, input)? {
-            LengthPercentage::Length(length) => Ok(Self::Length(length)),
-            LengthPercentage::Percentage(percentage) => Ok(Self::Percentage(percentage)),
-            LengthPercentage::Calc(_) => {
-                Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
-            },
-        }
-    }
-}
-
 /// https://drafts.csswg.org/css-box/#propdef-float
 #[allow(missing_docs)]
-pub type Float = GenericFloat<SnapBlockThreshold>;
+pub type Float = GenericFloat<Length>;
 
 impl Parse for SnapBlockAlignment {
     fn parse<'i, 't>(
@@ -1596,7 +1551,7 @@ impl Parse for SnapInlineAlignment {
     }
 }
 
-impl GenericSnapBlock<SnapBlockThreshold> {
+impl GenericSnapBlock<Length> {
     fn parse_function<'i, 't>(
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
@@ -1604,12 +1559,10 @@ impl GenericSnapBlock<SnapBlockThreshold> {
         input.expect_function_matching("snap-block")?;
         input.parse_nested_block(|input| {
             // Grammar (CSS Page Floats 3 section 3.2):
-            //   snap-block( <length-percentage> [<length-percentage>]?
+            //   snap-block( <length> [<length>]?
             //               [, <alignment>]? )
-            let start = SnapBlockThreshold::parse(context, input)?;
-            let end = input
-                .try_parse(|i| SnapBlockThreshold::parse(context, i))
-                .ok();
+            let start = Length::parse(context, input)?;
+            let end = input.try_parse(|i| Length::parse(context, i)).ok();
             let alignment = if input.try_parse(|i| i.expect_comma()).is_ok() {
                 Some(SnapBlockAlignment::parse(context, input)?)
             } else {
@@ -1632,28 +1585,8 @@ impl GenericSnapBlock<SnapBlockThreshold> {
     }
 }
 
-impl ToComputedValue for SnapBlockThreshold {
-    type ComputedValue = crate::values::computed::box_::SnapBlockThreshold;
-
-    fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
-        match self {
-            Self::Length(length) => Self::ComputedValue::Length(length.to_computed_value(context)),
-            Self::Percentage(percentage) => Self::ComputedValue::Percentage(*percentage),
-        }
-    }
-
-    fn from_computed_value(computed: &Self::ComputedValue) -> Self {
-        match computed {
-            Self::ComputedValue::Length(length) => Self::Length(
-                crate::values::specified::length::NoCalcLength::from_computed_value(length),
-            ),
-            Self::ComputedValue::Percentage(percentage) => Self::Percentage(*percentage),
-        }
-    }
-}
-
-impl ToComputedValue for GenericSnapBlock<SnapBlockThreshold> {
-    type ComputedValue = GenericSnapBlock<crate::values::computed::box_::SnapBlockThreshold>;
+impl ToComputedValue for GenericSnapBlock<Length> {
+    type ComputedValue = GenericSnapBlock<crate::values::computed::length::Length>;
 
     fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
         match self {
@@ -1684,7 +1617,7 @@ impl ToComputedValue for GenericSnapBlock<SnapBlockThreshold> {
                 threshold,
                 alignment,
             } => Self::One {
-                threshold: SnapBlockThreshold::from_computed_value(threshold),
+                threshold: Length::from_computed_value(threshold),
                 alignment: *alignment,
             },
             Self::ComputedValue::Two {
@@ -1692,15 +1625,15 @@ impl ToComputedValue for GenericSnapBlock<SnapBlockThreshold> {
                 end,
                 alignment,
             } => Self::Two {
-                start: SnapBlockThreshold::from_computed_value(start),
-                end: SnapBlockThreshold::from_computed_value(end),
+                start: Length::from_computed_value(start),
+                end: Length::from_computed_value(end),
                 alignment: *alignment,
             },
         }
     }
 }
 
-impl GenericSnapInline<SnapBlockThreshold> {
+impl GenericSnapInline<Length> {
     fn parse_function<'i, 't>(
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
@@ -1708,12 +1641,10 @@ impl GenericSnapInline<SnapBlockThreshold> {
         input.expect_function_matching("snap-inline")?;
         input.parse_nested_block(|input| {
             // Grammar (CSS Page Floats 3 section 3.2):
-            //   snap-inline( <length-percentage> [<length-percentage>]?
+            //   snap-inline( <length> [<length>]?
             //                [, <alignment>]? )
-            let start = SnapBlockThreshold::parse(context, input)?;
-            let end = input
-                .try_parse(|i| SnapBlockThreshold::parse(context, i))
-                .ok();
+            let start = Length::parse(context, input)?;
+            let end = input.try_parse(|i| Length::parse(context, i)).ok();
             let alignment = if input.try_parse(|i| i.expect_comma()).is_ok() {
                 Some(SnapInlineAlignment::parse(context, input)?)
             } else {
@@ -1736,8 +1667,8 @@ impl GenericSnapInline<SnapBlockThreshold> {
     }
 }
 
-impl ToComputedValue for GenericSnapInline<SnapBlockThreshold> {
-    type ComputedValue = GenericSnapInline<crate::values::computed::box_::SnapBlockThreshold>;
+impl ToComputedValue for GenericSnapInline<Length> {
+    type ComputedValue = GenericSnapInline<crate::values::computed::length::Length>;
 
     fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
         match self {
@@ -1768,7 +1699,7 @@ impl ToComputedValue for GenericSnapInline<SnapBlockThreshold> {
                 threshold,
                 alignment,
             } => Self::One {
-                threshold: SnapBlockThreshold::from_computed_value(threshold),
+                threshold: Length::from_computed_value(threshold),
                 alignment: *alignment,
             },
             Self::ComputedValue::Two {
@@ -1776,16 +1707,16 @@ impl ToComputedValue for GenericSnapInline<SnapBlockThreshold> {
                 end,
                 alignment,
             } => Self::Two {
-                start: SnapBlockThreshold::from_computed_value(start),
-                end: SnapBlockThreshold::from_computed_value(end),
+                start: Length::from_computed_value(start),
+                end: Length::from_computed_value(end),
                 alignment: *alignment,
             },
         }
     }
 }
 
-impl ToComputedValue for GenericFloat<SnapBlockThreshold> {
-    type ComputedValue = GenericFloat<crate::values::computed::box_::SnapBlockThreshold>;
+impl ToComputedValue for GenericFloat<Length> {
+    type ComputedValue = GenericFloat<crate::values::computed::length::Length>;
 
     fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
         match self {
@@ -1842,18 +1773,18 @@ impl ToComputedValue for GenericFloat<SnapBlockThreshold> {
     }
 }
 
-impl Parse for GenericFloat<SnapBlockThreshold> {
+impl Parse for GenericFloat<Length> {
     fn parse<'i, 't>(
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
         if let Ok(snap_block) =
-            input.try_parse(|i| GenericSnapBlock::<SnapBlockThreshold>::parse_function(context, i))
+            input.try_parse(|i| GenericSnapBlock::<Length>::parse_function(context, i))
         {
             return Ok(Self::SnapBlock(snap_block));
         }
         if let Ok(snap_inline) =
-            input.try_parse(|i| GenericSnapInline::<SnapBlockThreshold>::parse_function(context, i))
+            input.try_parse(|i| GenericSnapInline::<Length>::parse_function(context, i))
         {
             return Ok(Self::SnapInline(snap_inline));
         }

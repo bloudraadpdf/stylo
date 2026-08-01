@@ -9,8 +9,8 @@ use crate::values::animated::{Animate, Procedure, ToAnimatedValue};
 use crate::values::computed::length::{Length, LengthPercentage, NonNegativeLength};
 use crate::values::computed::{Context, Integer, Number, ToComputedValue};
 use crate::values::generics::box_::{
-    GenericBaselineShift, GenericContainIntrinsicSize, GenericLineClamp, GenericOverflowClipMargin,
-    GenericFloat, GenericPerspective, GenericSnapBlock, GenericSnapInline,
+    GenericBaselineShift, GenericContainIntrinsicSize, GenericFloat, GenericLineClamp,
+    GenericOverflowClipMargin, GenericPerspective, GenericSnapBlock, GenericSnapInline,
 };
 use crate::values::specified::box_ as specified;
 use std::fmt;
@@ -27,34 +27,13 @@ pub use crate::values::specified::box_::{
 };
 
 /// A computed value for the `float` property.
-#[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, ToResolvedValue, ToShmem, ToTyped)]
-pub enum SnapBlockThreshold {
-    /// A computed length threshold.
-    Length(Length),
-    /// A computed percentage threshold.
-    Percentage(crate::values::computed::Percentage),
-}
-
-impl ToCss for SnapBlockThreshold {
-    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
-    where
-        W: fmt::Write,
-    {
-        match self {
-            Self::Length(length) => length.to_css(dest),
-            Self::Percentage(percentage) => percentage.to_css(dest),
-        }
-    }
-}
-
-/// A computed value for the `float` property.
-pub type Float = GenericFloat<SnapBlockThreshold>;
+pub type Float = GenericFloat<Length>;
 
 /// A computed payload for `float: snap-block(...)`.
-pub type SnapBlock = GenericSnapBlock<SnapBlockThreshold>;
+pub type SnapBlock = GenericSnapBlock<Length>;
 
 /// A computed payload for `float: snap-inline(...)`.
-pub type SnapInline = GenericSnapInline<SnapBlockThreshold>;
+pub type SnapInline = GenericSnapInline<Length>;
 
 /// A computed value for the `baseline-shift` property.
 pub type BaselineShift = GenericBaselineShift<LengthPercentage>;

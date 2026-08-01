@@ -7,9 +7,10 @@
 //!
 //! Native moegoe fork-extension surface mirroring Prince's
 //! `float-policy`, `float-tail`, `float-modifier`,
-//! `float-defer-column`, and `float-defer-page` (the page-defer
-//! property is already covered by the existing `float-defer`
-//! alias). Each tunes Prince's page-floats placement behaviour
+//! `float-defer-column`, and `float-defer-page`. The page-defer
+//! extension remains a distinct `-bd-float-defer-page` property;
+//! unprefixed compatibility aliases do not enter the standard cascade.
+//! Each tunes Prince's page-floats placement behaviour
 //! (see `docs/reference-manuals/prince.md:3236–3530`).
 //!
 //! All properties apply to floated boxes only; they are not
@@ -138,7 +139,7 @@ pub enum BdFloatModifier {
 /// Specified value of `-bd-float-defer-column`.
 ///
 /// `none | <integer>` — column-defer counterpart to
-/// `float-defer-page`. `<integer>` defers the float by N columns;
+/// `-bd-float-defer-page`. `<integer>` defers the float by N columns;
 /// `last` releases the float to the last column of the multicol.
 #[derive(
     Clone, Copy, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue,
@@ -194,12 +195,10 @@ impl crate::parser::Parse for BdFloatDeferColumn {
 /// Specified value of `-bd-float-defer-page`.
 ///
 /// `none | next | last | <integer>` — page-defer counterpart to
-/// `-bd-float-defer-column`. Distinct from the standard
-/// `float-defer-page` alias (which accepts only `none | last |
-/// <integer>` per CSS Page Floats 3 §5.1) by adding the `next`
-/// keyword as authored sugar for `1`. Native moegoe surface; the
-/// renderer reads this side-table value as a per-element override
-/// over the standard `float-defer` cascade.
+/// `-bd-float-defer-column`. Distinct from the standard `float-defer`
+/// property by adding the `next` keyword as authored sugar for `1`.
+/// Native moegoe surface; the renderer reads this side-table value as a
+/// per-element override over the standard `float-defer` cascade.
 #[derive(
     Clone, Copy, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue,
     ToResolvedValue, ToShmem, ToTyped,
