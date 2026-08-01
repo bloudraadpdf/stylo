@@ -6,7 +6,7 @@
 
 use crate::derives::*;
 use crate::values::animated::{Animate, Procedure, ToAnimatedValue};
-use crate::values::computed::length::{FiniteLength, LengthPercentage, NonNegativeLength};
+use crate::values::computed::length::{FiniteLength, Length, LengthPercentage, NonNegativeLength};
 use crate::values::computed::{Context, Integer, Number, ToComputedValue};
 use crate::values::generics::box_::{
     GenericBaselineShift, GenericContainIntrinsicSize, GenericFloat, GenericLineClamp,
@@ -28,6 +28,67 @@ pub use crate::values::specified::box_::{
 
 /// A computed value for the `float` property.
 pub type Float = GenericFloat<FiniteLength>;
+
+/// Closed fold over the semantic operators in a computed `float-offset`.
+///
+/// Implementors receive values only through these operator callbacks; the
+/// private Stylo calculation tree and its raw resolver never escape. Each CSS
+/// math operator has a distinct method, preventing a downstream projection
+/// from silently treating nonlinear functions as an affine expression.
+pub trait FloatOffsetCalculationFold {
+    /// The caller's folded output type.
+    type Output;
+
+    /// Fold one absolute-length leaf (in computed CSS pixels).
+    fn length(&mut self, value: Length) -> Self::Output;
+    /// Fold one percentage leaf (stored as a fraction, where `1` is 100%).
+    fn percentage(&mut self, value: crate::values::computed::Percentage) -> Self::Output;
+    /// Fold one dimensionless number leaf.
+    fn number(&mut self, value: f32) -> Self::Output;
+    /// Fold unary negation.
+    fn negate(&mut self, value: Self::Output) -> Self::Output;
+    /// Fold multiplicative inversion.
+    fn invert(&mut self, value: Self::Output) -> Self::Output;
+    /// Fold an n-ary sum.
+    fn sum(&mut self, values: Vec<Self::Output>) -> Self::Output;
+    /// Fold an n-ary product.
+    fn product(&mut self, values: Vec<Self::Output>) -> Self::Output;
+    /// Fold `min()`.
+    fn min(&mut self, values: Vec<Self::Output>) -> Self::Output;
+    /// Fold `max()`.
+    fn max(&mut self, values: Vec<Self::Output>) -> Self::Output;
+    /// Fold `clamp()`.
+    fn clamp(&mut self, min: Self::Output, center: Self::Output, max: Self::Output)
+        -> Self::Output;
+    /// Fold `round(nearest, …)`.
+    fn round_nearest(&mut self, value: Self::Output, step: Self::Output) -> Self::Output;
+    /// Fold `round(up, …)`.
+    fn round_up(&mut self, value: Self::Output, step: Self::Output) -> Self::Output;
+    /// Fold `round(down, …)`.
+    fn round_down(&mut self, value: Self::Output, step: Self::Output) -> Self::Output;
+    /// Fold `round(to-zero, …)`.
+    fn round_to_zero(&mut self, value: Self::Output, step: Self::Output) -> Self::Output;
+    /// Fold `mod()`.
+    fn modulo(&mut self, dividend: Self::Output, divisor: Self::Output) -> Self::Output;
+    /// Fold `rem()`.
+    fn remainder(&mut self, dividend: Self::Output, divisor: Self::Output) -> Self::Output;
+    /// Fold `hypot()`.
+    fn hypot(&mut self, values: Vec<Self::Output>) -> Self::Output;
+    /// Fold `abs()`.
+    fn abs(&mut self, value: Self::Output) -> Self::Output;
+    /// Fold `sign()`.
+    fn sign(&mut self, value: Self::Output) -> Self::Output;
+}
+
+/// A computed `float-offset` construct whose used value requires layout
+/// context that the closed calculation fold cannot supply.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UnsupportedFloatOffsetCalculation {
+    /// An `anchor()` function requires anchor-positioning context.
+    Anchor,
+    /// An `anchor-size()` function requires anchor-positioning context.
+    AnchorSize,
+}
 
 /// A semantics-preserving computed `float-offset`.
 ///
@@ -52,6 +113,19 @@ impl FloatOffset {
     #[inline]
     pub fn resolve_finite(&self, percentage_basis: FiniteLength) -> FiniteLength {
         FiniteLength::new_censored(self.0.resolve(percentage_basis.into_length()))
+    }
+
+    /// Project this offset through a closed semantics-preserving fold.
+    ///
+    /// A typed error is returned for unresolved anchor functions, which
+    /// require an element/layout context unavailable at the computed-style
+    /// boundary. No raw calculation node or uncensored geometry is exposed.
+    #[inline]
+    pub fn fold_calculation<F: FloatOffsetCalculationFold>(
+        &self,
+        fold: &mut F,
+    ) -> Result<F::Output, UnsupportedFloatOffsetCalculation> {
+        self.0.fold_float_offset_calculation(fold)
     }
 }
 

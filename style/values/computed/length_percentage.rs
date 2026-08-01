@@ -462,6 +462,21 @@ impl LengthPercentage {
         }
     }
 
+    /// Fold the exact semantic structure of a page-float offset without
+    /// exposing this type's private calculation representation.
+    pub(crate) fn fold_float_offset_calculation<
+        F: crate::values::computed::box_::FloatOffsetCalculationFold,
+    >(
+        &self,
+        fold: &mut F,
+    ) -> Result<F::Output, crate::values::computed::box_::UnsupportedFloatOffsetCalculation> {
+        match self.unpack() {
+            Unpacked::Length(length) => Ok(fold.length(length)),
+            Unpacked::Percentage(percentage) => Ok(fold.percentage(percentage)),
+            Unpacked::Calc(calc) => fold_float_offset_calc_node(&calc.node, fold),
+        }
+    }
+
     /// Resolves the percentage. Just an alias of resolve().
     #[inline]
     pub fn percentage_relative_to(&self, basis: Length) -> Length {
@@ -902,6 +917,106 @@ impl calc::CalcNodeLeaf for CalcLengthPercentageLeaf {
 
 /// The computed version of a calc() node for `<length-percentage>` values.
 pub type CalcNode = calc::GenericCalcNode<CalcLengthPercentageLeaf>;
+
+fn fold_float_offset_calc_node<F: crate::values::computed::box_::FloatOffsetCalculationFold>(
+    node: &CalcNode,
+    fold: &mut F,
+) -> Result<F::Output, crate::values::computed::box_::UnsupportedFloatOffsetCalculation> {
+    use crate::values::generics::calc::{GenericCalcNode, MinMaxOp, ModRemOp, RoundingStrategy};
+
+    fn fold_children<F: crate::values::computed::box_::FloatOffsetCalculationFold>(
+        children: &[CalcNode],
+        fold: &mut F,
+    ) -> Result<Vec<F::Output>, crate::values::computed::box_::UnsupportedFloatOffsetCalculation>
+    {
+        children
+            .iter()
+            .map(|child| fold_float_offset_calc_node(child, fold))
+            .collect()
+    }
+
+    match node {
+        GenericCalcNode::Leaf(CalcLengthPercentageLeaf::Length(value)) => Ok(fold.length(*value)),
+        GenericCalcNode::Leaf(CalcLengthPercentageLeaf::Percentage(value)) => {
+            Ok(fold.percentage(*value))
+        },
+        GenericCalcNode::Leaf(CalcLengthPercentageLeaf::Number(value)) => Ok(fold.number(*value)),
+        GenericCalcNode::Negate(value) => {
+            let value = fold_float_offset_calc_node(value, fold)?;
+            Ok(fold.negate(value))
+        },
+        GenericCalcNode::Invert(value) => {
+            let value = fold_float_offset_calc_node(value, fold)?;
+            Ok(fold.invert(value))
+        },
+        GenericCalcNode::Sum(values) => {
+            let values = fold_children(values, fold)?;
+            Ok(fold.sum(values))
+        },
+        GenericCalcNode::Product(values) => {
+            let values = fold_children(values, fold)?;
+            Ok(fold.product(values))
+        },
+        GenericCalcNode::MinMax(values, MinMaxOp::Min) => {
+            let values = fold_children(values, fold)?;
+            Ok(fold.min(values))
+        },
+        GenericCalcNode::MinMax(values, MinMaxOp::Max) => {
+            let values = fold_children(values, fold)?;
+            Ok(fold.max(values))
+        },
+        GenericCalcNode::Clamp { min, center, max } => {
+            let min = fold_float_offset_calc_node(min, fold)?;
+            let center = fold_float_offset_calc_node(center, fold)?;
+            let max = fold_float_offset_calc_node(max, fold)?;
+            Ok(fold.clamp(min, center, max))
+        },
+        GenericCalcNode::Round {
+            strategy,
+            value,
+            step,
+        } => {
+            let value = fold_float_offset_calc_node(value, fold)?;
+            let step = fold_float_offset_calc_node(step, fold)?;
+            Ok(match strategy {
+                RoundingStrategy::Nearest => fold.round_nearest(value, step),
+                RoundingStrategy::Up => fold.round_up(value, step),
+                RoundingStrategy::Down => fold.round_down(value, step),
+                RoundingStrategy::ToZero => fold.round_to_zero(value, step),
+            })
+        },
+        GenericCalcNode::ModRem {
+            dividend,
+            divisor,
+            op,
+        } => {
+            let dividend = fold_float_offset_calc_node(dividend, fold)?;
+            let divisor = fold_float_offset_calc_node(divisor, fold)?;
+            Ok(match op {
+                ModRemOp::Mod => fold.modulo(dividend, divisor),
+                ModRemOp::Rem => fold.remainder(dividend, divisor),
+            })
+        },
+        GenericCalcNode::Hypot(values) => {
+            let values = fold_children(values, fold)?;
+            Ok(fold.hypot(values))
+        },
+        GenericCalcNode::Abs(value) => {
+            let value = fold_float_offset_calc_node(value, fold)?;
+            Ok(fold.abs(value))
+        },
+        GenericCalcNode::Sign(value) => {
+            let value = fold_float_offset_calc_node(value, fold)?;
+            Ok(fold.sign(value))
+        },
+        GenericCalcNode::Anchor(_) => {
+            Err(crate::values::computed::box_::UnsupportedFloatOffsetCalculation::Anchor)
+        },
+        GenericCalcNode::AnchorSize(_) => {
+            Err(crate::values::computed::box_::UnsupportedFloatOffsetCalculation::AnchorSize)
+        },
+    }
+}
 
 /// The representation of a calc() function with mixed lengths and percentages.
 #[derive(
