@@ -1167,7 +1167,10 @@ mod tests {
             QuirksMode::NoQuirks,
             |context| specified.to_computed_value(context),
         );
-        assert_eq!(computed.at_zero_basis().px(), -10.0);
+        let zero_basis = crate::values::computed::FiniteLength::new_censored(
+            crate::values::computed::Length::new(0.0),
+        );
+        assert_eq!(computed.resolve_finite(zero_basis).px(), -10.0);
     }
 
     #[test]
@@ -1199,10 +1202,12 @@ mod tests {
             QuirksMode::NoQuirks,
             |context| specified_offset.to_computed_value(context),
         );
-        for endpoint in [
-            computed_offset.at_zero_basis(),
-            computed_offset.at_hundred_px_basis(),
-        ] {
+        for basis in [0.0, 100.0] {
+            let endpoint = computed_offset.resolve_finite(
+                crate::values::computed::FiniteLength::new_censored(
+                    crate::values::computed::Length::new(basis),
+                ),
+            );
             assert_eq!(endpoint.px(), MAX_FINITE_CSS_LENGTH_PX);
             assert!(endpoint.px().is_finite());
         }
@@ -1229,6 +1234,55 @@ mod tests {
             assert!(size.is_finite());
             if expected == 0.0 {
                 assert!(size.is_sign_positive());
+            }
+        }
+    }
+
+    #[test]
+    fn servo_float_offset_preserves_nonlinear_percentage_basis_semantics() {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let parser_context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            None,
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let stylist = test_stylist();
+        let cases: [(&str, &[(f32, f32)]); 3] = [
+            ("min(10%, 5px)", &[(20.0, 2.0), (100.0, 5.0)]),
+            ("max(10%, 5px)", &[(20.0, 5.0), (100.0, 10.0)]),
+            (
+                "clamp(5px, 10%, 20px)",
+                &[(20.0, 5.0), (100.0, 10.0), (300.0, 20.0)],
+            ),
+        ];
+
+        for (css, resolutions) in cases {
+            let mut input = ParserInput::new(css);
+            let mut parser = Parser::new(&mut input);
+            let specified = crate::values::specified::box_::FloatOffset::parse(
+                &parser_context,
+                &mut parser,
+            )
+            .expect("nonlinear length-percentage math is valid for float-offset");
+            let computed = crate::values::computed::Context::for_media_query_evaluation(
+                stylist.device(),
+                QuirksMode::NoQuirks,
+                |context| specified.to_computed_value(context),
+            );
+            for &(basis, expected) in resolutions {
+                let basis = crate::values::computed::FiniteLength::new_censored(
+                    crate::values::computed::Length::new(basis),
+                );
+                assert_eq!(
+                    computed.resolve_finite(basis).px(),
+                    expected,
+                    "`{css}` must retain its exact semantics at a {basis:?} basis",
+                );
             }
         }
     }

@@ -6,15 +6,14 @@
 
 use crate::derives::*;
 use crate::values::animated::{Animate, Procedure, ToAnimatedValue};
-use crate::values::computed::length::{FiniteLength, Length, LengthPercentage, NonNegativeLength};
+use crate::values::computed::length::{FiniteLength, LengthPercentage, NonNegativeLength};
 use crate::values::computed::{Context, Integer, Number, ToComputedValue};
 use crate::values::generics::box_::{
     GenericBaselineShift, GenericContainIntrinsicSize, GenericFloat, GenericLineClamp,
     GenericOverflowClipMargin, GenericPerspective, GenericSnapBlock, GenericSnapInline,
 };
 use crate::values::specified::box_ as specified;
-use crate::values::resolved::{Context as ResolvedContext, ToResolvedValue};
-use std::fmt::{self, Write};
+use std::fmt;
 use style_traits::{CssWriter, ToCss};
 
 pub use crate::values::generics::box_::{SnapBlockAlignment, SnapInlineAlignment};
@@ -30,97 +29,29 @@ pub use crate::values::specified::box_::{
 /// A computed value for the `float` property.
 pub type Float = GenericFloat<FiniteLength>;
 
-/// A computed `float-offset` represented solely by two bounded finite
-/// endpoints. The raw calculation tree cannot inhabit computed style, so NaN
-/// and infinity have no representation after this boundary.
-#[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, ToTyped)]
-#[repr(C)]
-pub struct FloatOffset {
-    at_zero_basis: FiniteLength,
-    at_hundred_px_basis: FiniteLength,
-}
+/// A semantics-preserving computed `float-offset`.
+///
+/// The calculation tree is private and cannot be unpacked or resolved to a raw
+/// length. Every public resolution returns [`FiniteLength`], applying CSS
+/// Values 4 top-level censorship after the exact calculation has been
+/// evaluated for the caller's percentage basis.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToCss, ToResolvedValue, ToTyped)]
+#[repr(transparent)]
+pub struct FloatOffset(LengthPercentage);
 
 impl FloatOffset {
     /// The initial zero offset.
     #[inline]
     pub fn zero() -> Self {
-        Self {
-            at_zero_basis: FiniteLength::new_censored(Length::new(0.0)),
-            at_hundred_px_basis: FiniteLength::new_censored(Length::new(0.0)),
-        }
+        use crate::Zero;
+        Self(LengthPercentage::zero())
     }
 
     /// Resolve against a percentage basis and censor the used value into the
     /// finite computed-length domain.
     #[inline]
     pub fn resolve_finite(&self, percentage_basis: FiniteLength) -> FiniteLength {
-        let length = self.at_zero_basis.px() as f64;
-        let percentage_points =
-            self.at_hundred_px_basis.px() as f64 - self.at_zero_basis.px() as f64;
-        FiniteLength::from_f64_censored(
-            length + percentage_basis.px() as f64 * percentage_points / 100.0,
-        )
-    }
-
-    /// Resolve the affine value at a zero basis. Together with
-    /// [`Self::at_hundred_px_basis`], this recovers the length and percentage
-    /// components without exposing the raw calculation tree.
-    #[inline]
-    pub fn at_zero_basis(&self) -> FiniteLength {
-        self.at_zero_basis
-    }
-
-    /// Resolve the affine value at a 100 CSS-pixel basis.
-    #[inline]
-    pub fn at_hundred_px_basis(&self) -> FiniteLength {
-        self.at_hundred_px_basis
-    }
-}
-
-impl ToCss for FloatOffset {
-    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
-    where
-        W: Write,
-    {
-        let length = self.at_zero_basis;
-        let percentage_points = self.at_hundred_px_basis.px() - length.px();
-        if percentage_points == 0.0 {
-            return length.to_css(dest);
-        }
-        if length.px() == 0.0 {
-            percentage_points.to_css(dest)?;
-            return dest.write_char('%');
-        }
-        dest.write_str("calc(")?;
-        length.to_css(dest)?;
-        if percentage_points >= 0.0 {
-            dest.write_str(" + ")?;
-        } else {
-            dest.write_str(" - ")?;
-        }
-        percentage_points.abs().to_css(dest)?;
-        dest.write_str("%)")
-    }
-}
-
-impl ToResolvedValue for FloatOffset {
-    type ResolvedValue = Self;
-
-    fn to_resolved_value(self, context: &ResolvedContext) -> Self::ResolvedValue {
-        let percentage_points =
-            self.at_hundred_px_basis.px() as f64 - self.at_zero_basis.px() as f64;
-        let at_zero_basis = self.at_zero_basis.to_resolved_value(context);
-        Self {
-            at_zero_basis,
-            at_hundred_px_basis: FiniteLength::from_f64_censored(
-                at_zero_basis.px() as f64 + percentage_points,
-            ),
-        }
-    }
-
-    #[inline]
-    fn from_resolved_value(value: Self::ResolvedValue) -> Self {
-        value
+        FiniteLength::new_censored(self.0.resolve(percentage_basis.into_length()))
     }
 }
 
@@ -129,42 +60,12 @@ impl ToComputedValue for specified::FloatOffset {
 
     #[inline]
     fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
-        let computed = self.0.to_computed_value(context);
-        FloatOffset {
-            at_zero_basis: FiniteLength::new_censored(computed.resolve(Length::new(0.0))),
-            at_hundred_px_basis: FiniteLength::new_censored(
-                computed.resolve(Length::new(100.0)),
-            ),
-        }
+        FloatOffset(self.0.to_computed_value(context))
     }
 
     #[inline]
     fn from_computed_value(computed: &Self::ComputedValue) -> Self {
-        let percentage_points =
-            computed.at_hundred_px_basis.px() - computed.at_zero_basis.px();
-        let value = LengthPercentage::new_length(computed.at_zero_basis.into_length());
-        if percentage_points == 0.0 {
-            return specified::FloatOffset(ToComputedValue::from_computed_value(&value));
-        }
-        let value = LengthPercentage::new_calc(
-            crate::values::computed::length_percentage::CalcNode::Sum(
-                vec![
-                    crate::values::computed::length_percentage::CalcNode::Leaf(
-                        crate::values::computed::length_percentage::CalcLengthPercentageLeaf::Length(
-                            computed.at_zero_basis.into_length(),
-                        ),
-                    ),
-                    crate::values::computed::length_percentage::CalcNode::Leaf(
-                        crate::values::computed::length_percentage::CalcLengthPercentageLeaf::Percentage(
-                            crate::values::computed::Percentage(percentage_points / 100.0),
-                        ),
-                    ),
-                ]
-                .into(),
-            ),
-            style_traits::values::specified::AllowedNumericType::All,
-        );
-        specified::FloatOffset(ToComputedValue::from_computed_value(&value))
+        specified::FloatOffset(ToComputedValue::from_computed_value(&computed.0))
     }
 }
 
