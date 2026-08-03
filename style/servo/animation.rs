@@ -458,6 +458,69 @@ impl Animation {
         }
     }
 
+    /// The number of whole iterations a negative `animation-delay` skips past,
+    /// given how far beyond the first iteration it lands (`starting_progress`,
+    /// measured in iterations) and how many iterations remain before the last
+    /// one (`iterations_left`, infinite for an infinite count).
+    ///
+    /// This is the closed form of stepping one iteration at a time while the
+    /// remaining progress exceeds a single iteration. Stepping cannot be used:
+    /// the delay is author-controlled and unbounded, so `animation: 1s -1e16s
+    /// infinite` asks for 1e16 steps, and beyond 2^53 a `-= 1.` is lost to
+    /// floating point outright, so the loop never terminates at all.
+    fn iterations_skipped_by_delay(starting_progress: f64, iterations_left: f64) -> f64 {
+        // `max` and `min` both discard a NaN operand, so a non-finite progress
+        // folds to "nothing to skip" rather than propagating into the state.
+        let iterations = (starting_progress - 1.).ceil().max(0.).min(iterations_left);
+        if iterations.is_finite() {
+            iterations
+        } else {
+            0.
+        }
+    }
+
+    /// Fast-forwards a newly-created animation to the iteration that a negative
+    /// `animation-delay` starts it in, given how far past its first iteration
+    /// that delay lands (`starting_progress`, measured in iterations).
+    fn advance_to_starting_progress(&mut self, starting_progress: f64) {
+        // Stepping stops as soon as it reaches the last iteration, so a finite
+        // count bounds the skip independently of how large the delay is.
+        let iterations_left = match self.iteration_state {
+            KeyframesIterationState::Finite(current, max) => (max - 1. - current).ceil().max(0.),
+            KeyframesIterationState::Infinite(_) => f64::INFINITY,
+        };
+
+        let iterations = Self::iterations_skipped_by_delay(starting_progress, iterations_left);
+        if iterations == 0. {
+            return;
+        }
+
+        if let KeyframesIterationState::Finite(ref mut current, max) = self.iteration_state {
+            *current = (*current + iterations).min(max);
+        }
+
+        if let AnimationState::Paused(ref mut progress) = self.state {
+            *progress -= iterations;
+        }
+
+        self.started_at += iterations * self.duration;
+
+        // An alternating animation flips direction once per iteration, so only
+        // the parity of the skipped run can change where it ends up.
+        if iterations % 2. == 1. {
+            match self.direction {
+                AnimationDirection::Alternate | AnimationDirection::AlternateReverse => {
+                    self.current_direction = match self.current_direction {
+                        AnimationDirection::Normal => AnimationDirection::Reverse,
+                        AnimationDirection::Reverse => AnimationDirection::Normal,
+                        _ => unreachable!(),
+                    };
+                },
+                _ => {},
+            }
+        }
+    }
+
     /// A number (> 0 and <= 1) which represents the fraction of a full iteration
     /// that the current iteration of the animation lasts. This will be less than 1
     /// if the current iteration is the fractional remainder of a non-integral
@@ -1536,7 +1599,7 @@ pub fn maybe_start_animations<E>(
 
         let now = context.current_time_for_animations;
         let started_at = now + delay as f64;
-        let mut starting_progress = (now - started_at) / duration;
+        let starting_progress = (now - started_at) / duration;
         let state = match style.animation_play_state_mod(i) {
             AnimationPlayState::Paused => AnimationState::Paused(starting_progress),
             AnimationPlayState::Running => AnimationState::Pending,
@@ -1569,10 +1632,7 @@ pub fn maybe_start_animations<E>(
 
         // If we started with a negative delay, make sure we iterate the animation if
         // the delay moves us past the first iteration.
-        while starting_progress > 1. && !new_animation.on_last_iteration() {
-            new_animation.iterate();
-            starting_progress -= 1.;
-        }
+        new_animation.advance_to_starting_progress(starting_progress);
 
         animation_state.dirty = true;
 
@@ -1590,5 +1650,104 @@ pub fn maybe_start_animations<E>(
         }
 
         animation_state.animations.push(new_animation);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Animation;
+
+    /// The stepping loop that `iterations_skipped_by_delay` replaced, kept as
+    /// the oracle. `max` is `None` for an infinite iteration count.
+    fn stepped_reference(starting_progress: f64, max: Option<f64>) -> f64 {
+        let mut progress = starting_progress;
+        let mut current = 0f64;
+        // `Animation::on_last_iteration()`: `current >= max - 1` for a finite
+        // count, always false for an infinite one.
+        while progress > 1. && !max.is_some_and(|max| current >= max - 1.) {
+            current += 1.;
+            progress -= 1.;
+        }
+        current
+    }
+
+    fn skipped(starting_progress: f64, max: Option<f64>) -> f64 {
+        let iterations_left = match max {
+            Some(max) => (max - 1.).ceil().max(0.),
+            None => f64::INFINITY,
+        };
+        Animation::iterations_skipped_by_delay(starting_progress, iterations_left)
+    }
+
+    #[test]
+    fn matches_stepping_over_tractable_inputs() {
+        let progresses = [
+            0., 0.5, 1., 1.000_001, 1.5, 2., 2.5, 3., 3.5, 7., 7.25, 16., 33.75,
+        ];
+        let counts = [
+            None,
+            Some(1.),
+            Some(1.5),
+            Some(2.),
+            Some(3.),
+            Some(3.5),
+            Some(8.),
+            Some(64.),
+        ];
+
+        for progress in progresses {
+            for max in counts {
+                assert_eq!(
+                    skipped(progress, max),
+                    stepped_reference(progress, max),
+                    "progress {progress}, iteration count {max:?}",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn resolves_unbounded_delay_in_closed_form() {
+        // `animation: 1s -1e16s infinite`, which the stepping loop could never
+        // finish: past 2^53 its `progress -= 1.` is a no-op.
+        let iterations = skipped(1e16, None);
+        assert!(
+            iterations.is_finite() && iterations > 0.,
+            "expected a finite skip, got {iterations}",
+        );
+        assert!(
+            iterations <= 1e16,
+            "skip {iterations} may not exceed the progress it came from",
+        );
+    }
+
+    #[test]
+    fn caps_an_unbounded_delay_at_a_finite_iteration_count() {
+        // A finite count bounds the skip however large the delay is; stepping
+        // stopped on the last iteration for the same reason.
+        assert_eq!(skipped(1e16, Some(4.)), 3.);
+        assert_eq!(skipped(1e16, Some(1.)), 0.);
+    }
+
+    #[test]
+    fn folds_an_unbounded_progress_against_an_infinite_count() {
+        // Stepping had no answer here at all - it would run forever - so there
+        // is no oracle to match, only a defensible fold.
+        assert_eq!(skipped(f64::INFINITY, None), 0.);
+        assert_eq!(skipped(f64::NAN, None), 0.);
+        assert_eq!(skipped(f64::NEG_INFINITY, None), 0.);
+    }
+
+    #[test]
+    fn caps_a_non_finite_progress_at_a_finite_iteration_count() {
+        // Stepping does terminate once a count bounds it, so the oracle still
+        // applies however degenerate the progress is.
+        for progress in [f64::INFINITY, f64::NAN, f64::NEG_INFINITY] {
+            assert_eq!(
+                skipped(progress, Some(4.)),
+                stepped_reference(progress, Some(4.)),
+                "progress {progress}",
+            );
+        }
     }
 }
