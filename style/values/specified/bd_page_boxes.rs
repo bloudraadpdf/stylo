@@ -74,10 +74,7 @@ impl Parse for BdPdfPageBoxSize {
         // `PageSize::Auto`. PageSize parses `auto` too but we want
         // the renderer to distinguish "page box explicitly auto"
         // from "box inherits via size".
-        if input
-            .try_parse(|i| i.expect_ident_matching("auto"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
             return Ok(Self::Auto);
         }
         // Re-use the existing PageSize grammar for the rest.
@@ -163,15 +160,7 @@ impl Parse for BdPdfArtSize {
 /// CSS `margin` shorthand expansion rules. All four lengths must be
 /// non-negative (a negative inset would push the box outside the
 /// MediaBox, which the PDF specification forbids).
-#[derive(
-    Clone,
-    Debug,
-    MallocSizeOf,
-    PartialEq,
-    SpecifiedValueInfo,
-    ToShmem,
-    ToTyped,
-)]
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToShmem, ToTyped)]
 #[repr(C)]
 pub struct BdPdfPageBoxInsetsSides {
     /// Top edge inset.
@@ -198,15 +187,7 @@ pub struct BdPdfPageBoxInsetsSides {
 /// top/bottom = first and right/left = second; three assign
 /// top = first, right/left = second, bottom = third; four assign
 /// top, right, bottom, left in source order.
-#[derive(
-    Clone,
-    Debug,
-    MallocSizeOf,
-    PartialEq,
-    SpecifiedValueInfo,
-    ToShmem,
-    ToTyped,
-)]
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToShmem, ToTyped)]
 #[repr(C, u8)]
 pub enum BdPdfPageBoxInsets {
     /// `auto` — defer to the moegoe default for this box.
@@ -261,10 +242,7 @@ impl Parse for BdPdfPageBoxInsets {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("auto"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
             return Ok(Self::Auto);
         }
 

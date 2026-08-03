@@ -80,7 +80,7 @@ impl ToCss for TextDecorationTrim {
                     end.to_css(dest)?;
                 }
                 Ok(())
-            }
+            },
         }
     }
 }
@@ -90,14 +90,13 @@ impl Parse for TextDecorationTrim {
         ctx: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("auto"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
             return Ok(Self::Auto);
         }
         let start = Length::parse(ctx, input)?;
-        let end = input.try_parse(|i| Length::parse(ctx, i)).unwrap_or_else(|_| start.clone());
+        let end = input
+            .try_parse(|i| Length::parse(ctx, i))
+            .unwrap_or_else(|_| start.clone());
         Ok(Self::Length { start, end })
     }
 }
@@ -198,8 +197,17 @@ impl ToCss for TextEmphasisSkip {
 /// `text-decoration-skip-spaces` — modelled here as a sub-enum so the
 /// shared serialiser preserves the authored shape.
 #[derive(
-    Clone, Copy, Debug, Eq, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToComputedValue,
-    ToResolvedValue, ToShmem, ToTyped,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
 )]
 #[repr(C, u8)]
 pub enum TextDecorationSkipKind {
@@ -275,7 +283,7 @@ impl ToCss for TextDecorationSkipKind {
                     writer.raw_item("none")?;
                 }
                 Ok(())
-            }
+            },
             Self::Edges => dest.write_str("edges"),
             Self::BoxDecoration => dest.write_str("box-decoration"),
         }

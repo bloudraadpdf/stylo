@@ -71,7 +71,6 @@ pub use self::font_face_rule::FontFaceRule;
 pub use self::font_feature_values_rule::FontFeatureValuesRule;
 pub use self::font_palette_values_rule::FontPaletteValuesRule;
 pub use self::footnote_rule::FootnoteRule;
-pub use self::sidenote_rule::SidenoteRule;
 pub use self::import_rule::ImportRule;
 pub use self::keyframes_rule::KeyframesRule;
 pub use self::layer_rule::{LayerBlockRule, LayerStatementRule};
@@ -94,6 +93,7 @@ pub use self::rules_iterator::{
     EffectiveRulesIterator, NestedRuleIterationCondition, RulesIterator,
 };
 pub use self::scope_rule::ScopeRule;
+pub use self::sidenote_rule::SidenoteRule;
 pub use self::starting_style_rule::StartingStyleRule;
 pub use self::style_rule::StyleRule;
 pub use self::stylesheet::{AllowImportRules, SanitizationData, SanitizationKind};

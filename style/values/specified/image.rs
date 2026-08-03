@@ -326,11 +326,7 @@ impl ImageImage {
             return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
         }
 
-        Ok(GenericImageImage {
-            tag,
-            src,
-            fallback,
-        })
+        Ok(GenericImageImage { tag, src, fallback })
     }
 }
 

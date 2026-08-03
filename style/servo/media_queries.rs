@@ -356,7 +356,8 @@ impl Device {
     /// The generic family that governs font-size keyword resolution for
     /// `family` -- see [`FontMetricsProvider::keyword_size_generic_for_family`].
     pub fn keyword_size_generic_for_family(&self, family: &FontFamilyList) -> GenericFontFamily {
-        self.font_metrics_provider.keyword_size_generic_for_family(family)
+        self.font_metrics_provider
+            .keyword_size_generic_for_family(family)
     }
 
     /// Whether a given animation name may be referenced from style.
@@ -697,7 +698,10 @@ fn eval_orientation(context: &Context, value: Option<Orientation>) -> bool {
     // sufficient here — this is a width-vs-height comparison, not an exact
     // length boundary (unlike `width`/`height`, which read f32 directly).
     let page_box = context.device().page_box_size();
-    let au = UntypedSize2D::new(Au::from_f32_px(page_box.width), Au::from_f32_px(page_box.height));
+    let au = UntypedSize2D::new(
+        Au::from_f32_px(page_box.width),
+        Au::from_f32_px(page_box.height),
+    );
     Orientation::eval(au, value)
 }
 

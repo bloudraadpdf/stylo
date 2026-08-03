@@ -31,8 +31,18 @@ use style_traits::ParseError;
 /// - `Auto` — viewer / renderer default.
 /// - `None` — explicitly empty slot.
 /// - `Literal(...)` — `<string>` value.
-#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue,
-    ToResolvedValue, ToShmem, ToTyped)]
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
 #[repr(C, u8)]
 pub enum BdPdfStringSlot {
     /// `auto` — viewer / renderer default.
@@ -246,8 +256,16 @@ pub enum BdPdfAttachmentRelationship {
 /// keeps the renderer's document-level fallback in play so PDF/A-3
 /// finalisation stays green when no per-file date is authored.
 #[derive(
-    Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue,
-    ToResolvedValue, ToShmem, ToTyped,
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
 )]
 #[repr(C, u8)]
 pub enum BdPdfAttachmentModificationDate {

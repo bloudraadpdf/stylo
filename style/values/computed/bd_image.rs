@@ -180,9 +180,7 @@ impl ToComputedValue for specified::BdImageClipPath {
     fn to_computed_value(&self, ctx: &Context) -> Self::ComputedValue {
         match self {
             Self::None => BdImageClipPath::None,
-            Self::Shape(s) => {
-                BdImageClipPath::Shape(Box::new(s.as_ref().to_computed_value(ctx)))
-            },
+            Self::Shape(s) => BdImageClipPath::Shape(Box::new(s.as_ref().to_computed_value(ctx))),
             Self::Url(u) => BdImageClipPath::Url(u.to_computed_value(ctx)),
         }
     }
@@ -190,9 +188,9 @@ impl ToComputedValue for specified::BdImageClipPath {
     fn from_computed_value(computed: &Self::ComputedValue) -> Self {
         match computed {
             BdImageClipPath::None => Self::None,
-            BdImageClipPath::Shape(s) => Self::Shape(Box::new(
-                ToComputedValue::from_computed_value(s.as_ref()),
-            )),
+            BdImageClipPath::Shape(s) => {
+                Self::Shape(Box::new(ToComputedValue::from_computed_value(s.as_ref())))
+            },
             BdImageClipPath::Url(u) => Self::Url(ToComputedValue::from_computed_value(u)),
         }
     }
@@ -244,9 +242,7 @@ impl ToComputedValue for specified::BdImageOrientation {
         match self {
             Self::None => BdImageOrientation::None,
             Self::FromImage => BdImageOrientation::FromImage,
-            Self::Angle(a) => {
-                BdImageOrientation::Angle(a.to_computed_value(ctx).degrees().into())
-            },
+            Self::Angle(a) => BdImageOrientation::Angle(a.to_computed_value(ctx).degrees().into()),
         }
     }
 

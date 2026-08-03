@@ -83,10 +83,7 @@ impl Parse for BdSource {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
         Ok(Self::Url(SpecifiedUrl::parse(context, input)?))
@@ -106,9 +103,7 @@ impl Parse for BdSource {
 /// "computed type matches specified type" round-trip the property
 /// generator emits for identity-computed wrappers. Identity-compute
 /// instead.
-#[derive(
-    Clone, Copy, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToShmem, ToTyped,
-)]
+#[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToShmem, ToTyped)]
 #[repr(C)]
 pub struct BdSourcePage(pub PositiveInteger);
 
@@ -227,7 +222,7 @@ impl ToCss for BdSourceArea {
                 dest.write_char(' ')?;
                 left.to_css(dest)?;
                 dest.write_char(')')
-            }
+            },
         }
     }
 }
@@ -273,4 +268,3 @@ impl Parse for BdSourceArea {
         })
     }
 }
-

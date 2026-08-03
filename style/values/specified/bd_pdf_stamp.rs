@@ -128,9 +128,11 @@ impl Parse for BdPdfStampIcon {
             let location = i.current_source_location();
             let function = i.expect_function()?.clone();
             if !function.eq_ignore_ascii_case("custom") {
-                return Err(location.new_custom_error::<_, style_traits::StyleParseErrorKind>(
-                    style_traits::StyleParseErrorKind::UnexpectedFunction(function.clone()),
-                ));
+                return Err(
+                    location.new_custom_error::<_, style_traits::StyleParseErrorKind>(
+                        style_traits::StyleParseErrorKind::UnexpectedFunction(function.clone()),
+                    ),
+                );
             }
             i.parse_nested_block(|i| {
                 let s = i.expect_string()?;

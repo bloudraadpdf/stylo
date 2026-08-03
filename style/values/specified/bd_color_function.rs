@@ -216,7 +216,7 @@ impl ToCss for BdColorFunction {
                     tint.to_css(dest)?;
                 }
                 dest.write_char(')')
-            }
+            },
             Self::DeviceCmyk { c, m, y, k, alpha } => {
                 dest.write_str("device-cmyk(")?;
                 c.to_css(dest)?;
@@ -231,7 +231,7 @@ impl ToCss for BdColorFunction {
                     alpha.to_css(dest)?;
                 }
                 dest.write_char(')')
-            }
+            },
             Self::DeviceN { pairs } => {
                 dest.write_str("device-n(")?;
                 for (index, pair) in pairs.iter().enumerate() {
@@ -247,7 +247,7 @@ impl ToCss for BdColorFunction {
                     pair.tint.to_css(dest)?;
                 }
                 dest.write_char(')')
-            }
+            },
         }
     }
 }

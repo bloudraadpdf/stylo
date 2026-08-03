@@ -61,10 +61,7 @@ impl Parse for BdTextDecorationLineColour {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, style_traits::ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("auto"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
             return Ok(Self::Auto);
         }
         Ok(Self::Colour(Color::parse(context, input)?))
@@ -81,8 +78,18 @@ impl Parse for BdTextDecorationLineColour {
 /// this specified-value type (Stylo's generated property tables expect
 /// non-`Copy` specified values for non-trivial enums).
 #[derive(
-    Clone, Debug, Eq, MallocSizeOf, Parse, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue,
-    ToResolvedValue, ToShmem, ToTyped,
+    Clone,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
 )]
 #[repr(u8)]
 pub enum BdTextDecorationLineStyle {
@@ -189,9 +196,9 @@ impl Parse for BdTextUnderlineOffset {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, style_traits::ParseError<'i>> {
-        Ok(Self(crate::values::specified::LengthPercentageOrAuto::parse(
-            context, input,
-        )?))
+        Ok(Self(
+            crate::values::specified::LengthPercentageOrAuto::parse(context, input)?,
+        ))
     }
 }
 
@@ -414,7 +421,7 @@ impl ToCss for BdTextDecorationSkip {
                     first = false;
                 }
                 Ok(())
-            }
+            },
         }
     }
 }
@@ -424,14 +431,10 @@ impl Parse for BdTextDecorationSkip {
         _ctx: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
-        let categories =
-            input.parse_comma_separated(|i| BdTextDecorationSkipCategory::parse(i))?;
+        let categories = input.parse_comma_separated(|i| BdTextDecorationSkipCategory::parse(i))?;
         if categories.is_empty() {
             return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
         }

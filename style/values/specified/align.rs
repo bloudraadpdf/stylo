@@ -736,8 +736,7 @@ fn list_legacy_keywords(f: KeywordsCollectFn) {
 #[css(comma)]
 #[repr(transparent)]
 pub struct AlignTracks(
-    #[css(iterable, if_empty = "normal")]
-    pub crate::OwnedSlice<ContentDistribution>,
+    #[css(iterable, if_empty = "normal")] pub crate::OwnedSlice<ContentDistribution>,
 );
 
 impl AlignTracks {
@@ -760,9 +759,8 @@ impl Parse for AlignTracks {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        let values = input.parse_comma_separated(|i| {
-            ContentDistribution::parse_block(context, i)
-        })?;
+        let values =
+            input.parse_comma_separated(|i| ContentDistribution::parse_block(context, i))?;
         Ok(AlignTracks(crate::OwnedSlice::from(values)))
     }
 }
@@ -790,8 +788,7 @@ impl Parse for AlignTracks {
 #[css(comma)]
 #[repr(transparent)]
 pub struct JustifyTracks(
-    #[css(iterable, if_empty = "normal")]
-    pub crate::OwnedSlice<ContentDistribution>,
+    #[css(iterable, if_empty = "normal")] pub crate::OwnedSlice<ContentDistribution>,
 );
 
 impl JustifyTracks {
@@ -814,9 +811,8 @@ impl Parse for JustifyTracks {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        let values = input.parse_comma_separated(|i| {
-            ContentDistribution::parse_inline(context, i)
-        })?;
+        let values =
+            input.parse_comma_separated(|i| ContentDistribution::parse_inline(context, i))?;
         Ok(JustifyTracks(crate::OwnedSlice::from(values)))
     }
 }

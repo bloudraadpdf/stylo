@@ -50,7 +50,9 @@ impl ToComputedValue for specified::BdNLines {
     fn from_computed_value(computed: &Self::ComputedValue) -> Self {
         match computed {
             BdNLines::Auto => specified::BdNLines::Auto,
-            BdNLines::Count(i) => specified::BdNLines::Count(ToComputedValue::from_computed_value(i)),
+            BdNLines::Count(i) => {
+                specified::BdNLines::Count(ToComputedValue::from_computed_value(i))
+            },
         }
     }
 }

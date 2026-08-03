@@ -11,8 +11,9 @@ use crate::values::computed::{Context, ToComputedValue};
 use crate::values::specified::bd_pdf_destination as specified;
 
 pub use specified::{
-    BdDestinationArea, BdPdfAttachmentIcon, BdPdfAttachmentLocation, BdPdfAttachmentOrder,
-    BdPdfAttachmentModificationDate, BdPdfAttachmentRelationship, BdPdfStringSlot,
+    BdDestinationArea, BdPdfAttachmentIcon, BdPdfAttachmentLocation,
+    BdPdfAttachmentModificationDate, BdPdfAttachmentOrder, BdPdfAttachmentRelationship,
+    BdPdfStringSlot,
 };
 
 /// Computed value of `-bd-pdf-attachment-url`.
@@ -47,7 +48,7 @@ impl ToComputedValue for specified::BdPdfAttachmentUrl {
             specified::BdPdfAttachmentUrl::None => BdPdfAttachmentUrl::None,
             specified::BdPdfAttachmentUrl::Url(u) => {
                 BdPdfAttachmentUrl::Url(u.to_computed_value(ctx))
-            }
+            },
         }
     }
 
@@ -56,7 +57,7 @@ impl ToComputedValue for specified::BdPdfAttachmentUrl {
             BdPdfAttachmentUrl::None => specified::BdPdfAttachmentUrl::None,
             BdPdfAttachmentUrl::Url(u) => {
                 specified::BdPdfAttachmentUrl::Url(ToComputedValue::from_computed_value(u))
-            }
+            },
         }
     }
 }

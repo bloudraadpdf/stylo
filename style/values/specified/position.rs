@@ -1741,16 +1741,7 @@ impl Parse for MasonryAutoFlow {
 /// inline size on the grid axis).
 ///
 /// Reference: <https://drafts.csswg.org/css-grid-3/#masonry-slack>
-#[derive(
-    Clone,
-    Debug,
-    MallocSizeOf,
-    PartialEq,
-    SpecifiedValueInfo,
-    ToCss,
-    ToShmem,
-    ToTyped,
-)]
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
 #[repr(C, u8)]
 pub enum MasonrySlack {
     /// `infinite` — no slack constraint; the placer prefers the

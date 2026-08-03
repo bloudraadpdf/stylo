@@ -486,9 +486,7 @@ fn parse_bd_spot<'i, 't>(
 
     let tint = if arguments.try_parse(|p| p.expect_comma()).is_ok() {
         let value = ColorComponent::<NumberOrPercentageComponent>::parse(
-            _context,
-            arguments,
-            /* allow_none = */ false,
+            _context, arguments, /* allow_none = */ false,
         )?;
         if !value.could_be_number() && !value.could_be_percentage() {
             return Err(arguments.new_custom_error(StyleParseErrorKind::UnspecifiedError));
@@ -544,14 +542,13 @@ fn parse_bd_device_n<'i, 't>(
                 let name_location = p.current_source_location();
                 let name_ident = p.expect_ident()?.clone();
                 if name_ident.is_empty() {
-                    return Err(name_location
-                        .new_custom_error(StyleParseErrorKind::UnspecifiedError));
+                    return Err(
+                        name_location.new_custom_error(StyleParseErrorKind::UnspecifiedError)
+                    );
                 }
                 let colorant = crate::Atom::from(&*name_ident);
                 let tint = ColorComponent::<NumberOrPercentageComponent>::parse(
-                    context,
-                    p,
-                    /* allow_none = */ false,
+                    context, p, /* allow_none = */ false,
                 )?;
                 if !tint.could_be_number() && !tint.could_be_percentage() {
                     return Err(p.new_custom_error(StyleParseErrorKind::UnspecifiedError));
@@ -570,9 +567,7 @@ fn parse_bd_device_n<'i, 't>(
                     // No comma → no fallback. Rewind to the pair to
                     // surface a sensible error message.
                     arguments.reset(&pair_state);
-                    return Err(
-                        arguments.new_custom_error(StyleParseErrorKind::UnspecifiedError)
-                    );
+                    return Err(arguments.new_custom_error(StyleParseErrorKind::UnspecifiedError));
                 }
             },
             Err(_) => {

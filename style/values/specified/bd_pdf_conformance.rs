@@ -163,8 +163,10 @@ impl Parse for BdPdfVersionValue {
         }) {
             return match version_key(version) {
                 Some(v) => Ok(v),
-                None => Err(location
-                    .new_custom_error(style_traits::StyleParseErrorKind::UnspecifiedError)),
+                None => {
+                    Err(location
+                        .new_custom_error(style_traits::StyleParseErrorKind::UnspecifiedError))
+                },
             };
         }
         let ident = input.expect_ident()?;

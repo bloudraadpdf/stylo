@@ -2336,7 +2336,7 @@ fn substitute_one_reference<'a>(
                         .environment()
                         .get(&reference.name, device, url_data)
                         .map(Substitution::from_value)
-                }
+                },
                 EnvironmentResolutionMode::TreatAsMissing => None,
                 EnvironmentResolutionMode::ResolvePagedMediaEnvOnly => {
                     // CSS env-1 §3 paged-media path: only the six
@@ -2353,7 +2353,7 @@ fn substitute_one_reference<'a>(
                     } else {
                         None
                     }
-                }
+                },
             }
         },
         // https://drafts.csswg.org/css-values-5/#attr-substitution

@@ -662,7 +662,7 @@ fn synthesise_bd_color_function_companion(
                 tint: tint_value,
                 is_separation: *is_separation,
             }))
-        }
+        },
         ColorFunction::DeviceCmyk(c, m, y, k, alpha, fallback) => {
             // F2 — only carry CMYK on the side channel when the author
             // did NOT supply an explicit fallback. With a fallback,
@@ -680,9 +680,7 @@ fn synthesise_bd_color_function_companion(
             // does not resolve drops the companion to `None` so the
             // sRGB collapse runs as a fail-safe.
             let resolve = |comp: &ColorComponent<NumberOrPercentageComponent>| -> Option<f32> {
-                comp.resolve(None)
-                    .ok()?
-                    .map(|value| value.to_number(1.0))
+                comp.resolve(None).ok()?.map(|value| value.to_number(1.0))
             };
             let (cy, ma, ye, ke) = match (resolve(c), resolve(m), resolve(y), resolve(k)) {
                 (Some(cy), Some(ma), Some(ye), Some(ke)) => (cy, ma, ye, ke),
@@ -703,7 +701,7 @@ fn synthesise_bd_color_function_companion(
                 k: ke,
                 alpha: alpha_value,
             }))
-        }
+        },
         ColorFunction::BdDeviceN(pairs, _fallback) => {
             // F2 — resolve each authored tint to a concrete `f32`.
             // Numbers and percentages normalise via
@@ -715,9 +713,7 @@ fn synthesise_bd_color_function_companion(
             // colorant would render against a stale tint and
             // produce a wrong PDF colour.
             let resolve = |comp: &ColorComponent<NumberOrPercentageComponent>| -> Option<f32> {
-                comp.resolve(None)
-                    .ok()?
-                    .map(|value| value.to_number(1.0))
+                comp.resolve(None).ok()?.map(|value| value.to_number(1.0))
             };
             use crate::values::specified::bd_color_function::BdDeviceNCompanionComponent;
             let mut resolved_pairs: Vec<BdDeviceNCompanionComponent> =
@@ -739,7 +735,7 @@ fn synthesise_bd_color_function_companion(
             PropertyDeclaration::BdColorFunction(Box::new(SpecifiedBdColorFunction::DeviceN {
                 pairs: resolved_pairs,
             }))
-        }
+        },
         _ => none_decl(),
     }
 }
@@ -1211,9 +1207,7 @@ impl<'b> Cascade<'b> {
         // matching companion declaration and apply it in lock-step so
         // the side channel inherits and resets exactly when `color`
         // does.
-        if longhand_id == LonghandId::Color
-            && !self.seen.contains(LonghandId::BdColorFunction)
-        {
+        if longhand_id == LonghandId::Color && !self.seen.contains(LonghandId::BdColorFunction) {
             let companion_decl = synthesise_bd_color_function_companion(&*declaration);
             self.apply_synthesised_companion(
                 context,
@@ -1265,7 +1259,7 @@ impl<'b> Cascade<'b> {
                     CSSWideKeyword::Inherit => inherited && !zoomed,
                     CSSWideKeyword::Initial => !inherited,
                 }
-            }
+            },
             None => false,
         };
 
@@ -1390,10 +1384,7 @@ impl<'b> Cascade<'b> {
             builder.add_flags(ComputedValueFlags::HAS_AUTHOR_SPECIFIED_WORD_SPACING);
         }
 
-        if self
-            .author_specified
-            .contains(LonghandId::BdFloatDisplace)
-        {
+        if self.author_specified.contains(LonghandId::BdFloatDisplace) {
             builder.add_flags(ComputedValueFlags::HAS_AUTHOR_SPECIFIED_BD_FLOAT_DISPLACE);
         }
 

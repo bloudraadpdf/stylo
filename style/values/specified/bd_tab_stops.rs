@@ -82,8 +82,15 @@ pub enum BdTabStopAlignment {
 /// variant carries an author-supplied `<string>` (e.g. `"·"`,
 /// `"--"`) that the renderer repeats verbatim.
 #[derive(
-    Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToComputedValue, ToResolvedValue,
-    ToShmem, ToTyped,
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
 )]
 #[repr(C, u8)]
 #[allow(missing_docs)]
@@ -139,7 +146,7 @@ impl ToCss for BdTabStopLeader {
                     }
                 }
                 dest.write_char('"')
-            }
+            },
         }
     }
 }
@@ -244,7 +251,7 @@ impl ToCss for BdTabStops {
                     first = false;
                 }
                 Ok(())
-            }
+            },
         }
     }
 }
@@ -274,10 +281,7 @@ impl Parse for BdTabStops {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
         let stops = input.parse_comma_separated(|i| BdTabStop::parse(context, i))?;

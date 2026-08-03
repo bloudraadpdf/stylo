@@ -20,7 +20,9 @@ use crate::values::specified::length::LengthPercentage;
 /// Length of the short typographic rule drawn above the footnote
 /// area. Initial `100%` (full inline-size). Maps onto
 /// PDFreactor `-ro-border-length` per the audit.
-#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped, Parse)]
+#[derive(
+    Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped, Parse,
+)]
 #[repr(C)]
 pub struct BdFootnoteRuleLength(pub LengthPercentage);
 

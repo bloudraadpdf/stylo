@@ -242,9 +242,7 @@ pub enum BdChangeBarExclusion {
 }
 
 /// Specified value of `-bd-change-bar-colour`.
-#[derive(
-    Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped,
-)]
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
 #[repr(C, u8)]
 pub enum BdChangeBarColour {
     /// `auto` — fall back to `currentcolor`.
@@ -272,10 +270,7 @@ impl crate::parser::Parse for BdChangeBarColour {
         context: &crate::parser::ParserContext,
         input: &mut cssparser::Parser<'i, 't>,
     ) -> Result<Self, style_traits::ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("auto"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
             return Ok(Self::Auto);
         }
         Ok(Self::Colour(Color::parse(context, input)?))
@@ -284,8 +279,16 @@ impl crate::parser::Parse for BdChangeBarColour {
 
 /// Specified value of `-bd-change-bar-name`.
 #[derive(
-    Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue,
-    ToResolvedValue, ToShmem, ToTyped,
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
 )]
 #[repr(C, u8)]
 pub enum BdChangeBarName {
@@ -315,10 +318,7 @@ impl crate::parser::Parse for BdChangeBarName {
         _: &crate::parser::ParserContext,
         input: &mut cssparser::Parser<'i, 't>,
     ) -> Result<Self, style_traits::ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
         let ident = input.expect_ident()?;

@@ -12,8 +12,7 @@ use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
 use crate::values::generics::{length::LengthPercentageOrAuto, NonNegative};
 use crate::values::specified::length::{
-    LengthPercentage, NonNegativeLength, NonNegativeLengthOrAuto,
-    NonNegativeLengthPercentage,
+    LengthPercentage, NonNegativeLength, NonNegativeLengthOrAuto, NonNegativeLengthPercentage,
 };
 use crate::values::specified::url::UrlOrNone;
 use crate::values::specified::Color;
@@ -130,10 +129,7 @@ impl Parse for BdPageMarkWidth {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
         Ok(Self::Length(NonNegativeLength::parse(context, input)?))
@@ -171,10 +167,7 @@ impl Parse for BdPageMarksColour {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("auto"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
             return Ok(Self::Auto);
         }
         Ok(Self::Colour(Color::parse(context, input)?))
@@ -255,16 +248,10 @@ impl Parse for BdColorBarPosition {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
-        if input
-            .try_parse(|i| i.expect_ident_matching("auto"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
             return Ok(Self::Auto);
         }
         if input
@@ -488,8 +475,20 @@ impl Parse for BdBleedColour {
 /// Specified value of `-bd-pdf-mark-registration-position`.
 #[repr(u8)]
 #[derive(
-    Clone, Copy, Debug, Default, Eq, MallocSizeOf, Parse, PartialEq, SpecifiedValueInfo,
-    ToCss, ToComputedValue, ToResolvedValue, ToShmem, ToTyped,
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
 )]
 #[allow(missing_docs)]
 pub enum BdRegistrationPosition {
@@ -544,7 +543,7 @@ impl ToCss for BdColourBarSwatches {
                     c.to_css(dest)?;
                 }
                 Ok(())
-            }
+            },
         }
     }
 }
@@ -570,8 +569,20 @@ impl Parse for BdColourBarSwatches {
 /// Specified value of `-bd-pdf-mark-colour-bar-position`.
 #[repr(u8)]
 #[derive(
-    Clone, Copy, Debug, Default, Eq, MallocSizeOf, Parse, PartialEq, SpecifiedValueInfo,
-    ToCss, ToComputedValue, ToResolvedValue, ToShmem, ToTyped,
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
 )]
 #[allow(missing_docs)]
 pub enum BdColourBarPositionSide {
@@ -587,7 +598,18 @@ pub enum BdColourBarPositionSide {
 /// The computed value equals the specified value: keyword variants
 /// are `Copy` data, the `Literal(String)` variant inherits its data
 /// directly into computed style without further resolution.
-#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue, ToResolvedValue, ToShmem, ToTyped)]
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
 #[repr(C, u8)]
 pub enum BdSidenoteGlyph {
     /// `asterisk`.
@@ -635,7 +657,9 @@ impl Parse for BdSidenoteGlyph {
 }
 
 /// Specified value of `-bd-pdf-mark-sidenote-offset`.
-#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped, Parse)]
+#[derive(
+    Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped, Parse,
+)]
 #[repr(C)]
 pub struct BdSidenoteMarkerOffset(pub LengthPercentage);
 

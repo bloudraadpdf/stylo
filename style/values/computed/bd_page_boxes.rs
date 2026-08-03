@@ -60,9 +60,7 @@ impl ToComputedValue for specified::BdPdfPageBoxSize {
     fn from_computed_value(computed: &Self::ComputedValue) -> Self {
         match computed {
             BdPdfPageBoxSize::Auto => Self::Auto,
-            BdPdfPageBoxSize::Page(p) => {
-                Self::Page(ToComputedValue::from_computed_value(p))
-            },
+            BdPdfPageBoxSize::Page(p) => Self::Page(ToComputedValue::from_computed_value(p)),
         }
     }
 }

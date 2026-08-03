@@ -10,8 +10,7 @@ use crate::values::computed::{Context, ToComputedValue};
 use crate::values::specified::bd_sidenote as specified;
 
 pub use specified::{
-    BdFloatReferenceSidenote, BdSidenoteAlign, BdSidenoteAlignment,
-    BdSidenoteAvoid, BdSidenoteSide,
+    BdFloatReferenceSidenote, BdSidenoteAlign, BdSidenoteAlignment, BdSidenoteAvoid, BdSidenoteSide,
 };
 
 /// Computed value of `-bd-sidenote-offset`.
@@ -24,7 +23,9 @@ impl BdSidenoteOffset {
     #[inline]
     pub fn zero() -> Self {
         use crate::Zero;
-        Self(LengthPercentage::new_percent(crate::values::computed::Percentage::zero()))
+        Self(LengthPercentage::new_percent(
+            crate::values::computed::Percentage::zero(),
+        ))
     }
 }
 

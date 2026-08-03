@@ -876,7 +876,7 @@ mod tests {
                     .find_map(|(decl, _)| match decl {
                         PropertyDeclaration::AlignmentBaseline(value) => {
                             Some(value.to_css_string())
-                        }
+                        },
                         _ => None,
                     })
             })
@@ -1082,19 +1082,25 @@ mod tests {
         let stylist = test_stylist();
 
         for (css, expected) in [
-            ("snap-block(calc(infinity * 1px), near)", MAX_FINITE_CSS_LENGTH_PX),
-            ("snap-block(calc(-infinity * 1px), near)", -MAX_FINITE_CSS_LENGTH_PX),
+            (
+                "snap-block(calc(infinity * 1px), near)",
+                MAX_FINITE_CSS_LENGTH_PX,
+            ),
+            (
+                "snap-block(calc(-infinity * 1px), near)",
+                -MAX_FINITE_CSS_LENGTH_PX,
+            ),
             ("snap-block(calc(NaN * 1px), near)", 0.0),
             ("snap-block(calc(-0 * 1px), near)", 0.0),
         ] {
             let mut input = ParserInput::new(css);
             let mut parser = Parser::new(&mut input);
-            let specified = crate::values::specified::box_::Float::parse(
-                &parser_context,
-                &mut parser,
-            )
-            .expect("CSS Values 4 math constants are valid authored lengths");
-            parser.expect_exhausted().expect("float value is fully consumed");
+            let specified =
+                crate::values::specified::box_::Float::parse(&parser_context, &mut parser)
+                    .expect("CSS Values 4 math constants are valid authored lengths");
+            parser
+                .expect_exhausted()
+                .expect("float value is fully consumed");
             let computed = crate::values::computed::Context::for_media_query_evaluation(
                 stylist.device(),
                 QuirksMode::NoQuirks,
@@ -1107,9 +1113,15 @@ mod tests {
                 panic!("expected the one-threshold snap-block computed variant");
             };
             assert_eq!(threshold.px(), expected, "computed threshold for `{css}`");
-            assert!(threshold.px().is_finite(), "`{css}` must not leak non-finite geometry");
+            assert!(
+                threshold.px().is_finite(),
+                "`{css}` must not leak non-finite geometry"
+            );
             if expected == 0.0 {
-                assert!(threshold.px().is_sign_positive(), "zero is censored to +0 for `{css}`");
+                assert!(
+                    threshold.px().is_sign_positive(),
+                    "zero is censored to +0 for `{css}`"
+                );
             }
         }
     }
@@ -1152,11 +1164,9 @@ mod tests {
         );
         let mut input = ParserInput::new("-10px");
         let mut parser = Parser::new(&mut input);
-        let specified = crate::values::specified::box_::FloatOffset::parse(
-            &parser_context,
-            &mut parser,
-        )
-        .expect("signed float-offset grammar is length-percentage");
+        let specified =
+            crate::values::specified::box_::FloatOffset::parse(&parser_context, &mut parser)
+                .expect("signed float-offset grammar is length-percentage");
         parser
             .expect_exhausted()
             .expect("offset consumes its value");
@@ -1192,11 +1202,9 @@ mod tests {
 
         let mut offset_input = ParserInput::new("calc(infinity * 1px + 25%)");
         let mut offset_parser = Parser::new(&mut offset_input);
-        let specified_offset = crate::values::specified::box_::FloatOffset::parse(
-            &parser_context,
-            &mut offset_parser,
-        )
-        .expect("mixed non-finite float-offset is valid CSS Values 4 syntax");
+        let specified_offset =
+            crate::values::specified::box_::FloatOffset::parse(&parser_context, &mut offset_parser)
+                .expect("mixed non-finite float-offset is valid CSS Values 4 syntax");
         let computed_offset = crate::values::computed::Context::for_media_query_evaluation(
             stylist.device(),
             QuirksMode::NoQuirks,
@@ -1219,11 +1227,9 @@ mod tests {
         ] {
             let mut font_input = ParserInput::new(css);
             let mut font_parser = Parser::new(&mut font_input);
-            let specified_font = crate::values::specified::FontSize::parse(
-                &parser_context,
-                &mut font_parser,
-            )
-            .expect("CSS Values 4 math constants are valid font-size lengths");
+            let specified_font =
+                crate::values::specified::FontSize::parse(&parser_context, &mut font_parser)
+                    .expect("CSS Values 4 math constants are valid font-size lengths");
             let computed_font = crate::values::computed::Context::for_media_query_evaluation(
                 stylist.device(),
                 QuirksMode::NoQuirks,
@@ -1264,11 +1270,9 @@ mod tests {
         for (css, resolutions) in cases {
             let mut input = ParserInput::new(css);
             let mut parser = Parser::new(&mut input);
-            let specified = crate::values::specified::box_::FloatOffset::parse(
-                &parser_context,
-                &mut parser,
-            )
-            .expect("nonlinear length-percentage math is valid for float-offset");
+            let specified =
+                crate::values::specified::box_::FloatOffset::parse(&parser_context, &mut parser)
+                    .expect("nonlinear length-percentage math is valid for float-offset");
             let computed = crate::values::computed::Context::for_media_query_evaluation(
                 stylist.device(),
                 QuirksMode::NoQuirks,
@@ -1324,7 +1328,9 @@ mod tests {
                     Self::Negate(value) => -value.resolve(basis),
                     Self::Invert(value) => 1.0 / value.resolve(basis),
                     Self::Sum(values) => values.iter().map(|value| value.resolve(basis)).sum(),
-                    Self::Product(values) => values.iter().map(|value| value.resolve(basis)).product(),
+                    Self::Product(values) => {
+                        values.iter().map(|value| value.resolve(basis)).product()
+                    },
                     Self::Min(values) => values
                         .iter()
                         .map(|value| value.resolve(basis))
@@ -1333,7 +1339,8 @@ mod tests {
                         .iter()
                         .map(|value| value.resolve(basis))
                         .fold(f32::NEG_INFINITY, f32::max),
-                    Self::Clamp(min, center, max) => center.resolve(basis)
+                    Self::Clamp(min, center, max) => center
+                        .resolve(basis)
                         .max(min.resolve(basis))
                         .min(max.resolve(basis)),
                 }
@@ -1345,7 +1352,10 @@ mod tests {
                         *value == expected
                     },
                     Self::Negate(value) | Self::Invert(value) => value.contains_scalar(expected),
-                    Self::Sum(values) | Self::Product(values) | Self::Min(values) | Self::Max(values) => {
+                    Self::Sum(values)
+                    | Self::Product(values)
+                    | Self::Min(values)
+                    | Self::Max(values) => {
                         values.iter().any(|value| value.contains_scalar(expected))
                     },
                     Self::Clamp(min, center, max) => {
@@ -1441,11 +1451,9 @@ mod tests {
         let compute = |css: &str| {
             let mut input = ParserInput::new(css);
             let mut parser = Parser::new(&mut input);
-            let specified = crate::values::specified::box_::FloatOffset::parse(
-                &parser_context,
-                &mut parser,
-            )
-            .expect("test float-offset must parse");
+            let specified =
+                crate::values::specified::box_::FloatOffset::parse(&parser_context, &mut parser)
+                    .expect("test float-offset must parse");
             crate::values::computed::Context::for_media_query_evaluation(
                 stylist.device(),
                 QuirksMode::NoQuirks,
@@ -1461,8 +1469,16 @@ mod tests {
         }
 
         for (css, expected_root, resolutions) in [
-            ("min(10%, 5px)", ExpectedRoot::Min, &[(20.0, 2.0), (100.0, 5.0)][..]),
-            ("max(10%, 5px)", ExpectedRoot::Max, &[(20.0, 5.0), (100.0, 10.0)][..]),
+            (
+                "min(10%, 5px)",
+                ExpectedRoot::Min,
+                &[(20.0, 2.0), (100.0, 5.0)][..],
+            ),
+            (
+                "max(10%, 5px)",
+                ExpectedRoot::Max,
+                &[(20.0, 5.0), (100.0, 10.0)][..],
+            ),
             (
                 "clamp(5px, 10%, 20px)",
                 ExpectedRoot::Clamp,
@@ -1480,7 +1496,11 @@ mod tests {
                 "`{css}` dispatched to the wrong callback: {folded:?}",
             );
             for &(basis, expected) in resolutions {
-                assert_eq!(folded.resolve(basis), expected, "folded `{css}` at {basis}px");
+                assert_eq!(
+                    folded.resolve(basis),
+                    expected,
+                    "folded `{css}` at {basis}px"
+                );
             }
         }
 
@@ -1499,7 +1519,10 @@ mod tests {
         ] {
             let computed = compute(css);
             let folded = computed.fold_calculation(&mut Fold).unwrap();
-            assert!(folded.contains_scalar(semantic), "`{css}` lost {semantic:?}: {folded:?}");
+            assert!(
+                folded.contains_scalar(semantic),
+                "`{css}` lost {semantic:?}: {folded:?}"
+            );
             let zero = crate::values::computed::FiniteLength::new_censored(Length::new(0.0));
             assert_eq!(computed.resolve_finite(zero).px(), censored);
         }
@@ -1517,8 +1540,7 @@ mod tests {
 
     #[test]
     fn servo_line_clamp_is_only_a_three_longhand_expansion() {
-        let stylesheet =
-            parse_stylesheet(r#".test { line-clamp: 3 "CUSTOM"; }"#);
+        let stylesheet = parse_stylesheet(r#".test { line-clamp: 3 "CUSTOM"; }"#);
         let guard = stylesheet.shared_lock.read();
         let contents = stylesheet.contents.read_with(&guard);
         let rules = contents.rules(&guard);
@@ -1533,12 +1555,8 @@ mod tests {
         let mut expansion = block
             .declaration_importance_iter()
             .filter_map(|(declaration, _)| match declaration {
-                PropertyDeclaration::MaxLines(value) => {
-                    Some(("max-lines", value.to_css_string()))
-                },
-                PropertyDeclaration::Continue(value) => {
-                    Some(("continue", value.to_css_string()))
-                },
+                PropertyDeclaration::MaxLines(value) => Some(("max-lines", value.to_css_string())),
+                PropertyDeclaration::Continue(value) => Some(("continue", value.to_css_string())),
                 PropertyDeclaration::BlockEllipsis(value) => {
                     Some(("block-ellipsis", value.to_css_string()))
                 },
@@ -1637,21 +1655,17 @@ mod tests {
         let standard_count: std::num::NonZeroU32 = standard_count.get();
         assert_eq!(standard_count.get(), 7);
 
-        let legacy_count: std::num::NonZeroU32 =
-            legacy.lines().expect("positive legacy clamp has lines").get();
+        let legacy_count: std::num::NonZeroU32 = legacy
+            .lines()
+            .expect("positive legacy clamp has lines")
+            .get();
         assert_eq!(legacy_count.get(), 5);
         assert!(legacy_none.lines().is_none());
     }
 
     #[test]
     fn servo_line_clamp_globals_and_variables_expand_atomically() {
-        for keyword in [
-            "initial",
-            "inherit",
-            "unset",
-            "revert",
-            "revert-layer",
-        ] {
+        for keyword in ["initial", "inherit", "unset", "revert", "revert-layer"] {
             let stylesheet = parse_stylesheet(&format!(".test {{ line-clamp: {keyword}; }}"));
             let guard = stylesheet.shared_lock.read();
             let contents = stylesheet.contents.read_with(&guard);
@@ -1739,9 +1753,7 @@ mod tests {
                     .read_with(&guard)
                     .declaration_importance_iter()
                     .find_map(|(decl, _)| match decl {
-                        PropertyDeclaration::DominantBaseline(value) => {
-                            Some(value.to_css_string())
-                        }
+                        PropertyDeclaration::DominantBaseline(value) => Some(value.to_css_string()),
                         _ => None,
                     })
             })
@@ -2392,8 +2404,7 @@ mod tests {
             "calc(2pt + max(1em, 3pt))",
             "var(--prince-bleed)",
         ] {
-            let stylesheet =
-                parse_stylesheet(&format!("@page {{ -bd-prince-bleed: {value}; }}"));
+            let stylesheet = parse_stylesheet(&format!("@page {{ -bd-prince-bleed: {value}; }}"));
             let guard = stylesheet.shared_lock.read();
             let contents = stylesheet.contents.read_with(&guard);
             let rules = contents.rules(&guard);
@@ -2414,8 +2425,7 @@ mod tests {
     #[test]
     fn servo_rejects_invalid_prince_bleed_at_the_parser_boundary() {
         for invalid in ["none", "auto 1pt", "1pt 2pt 3pt 4pt 5pt"] {
-            let stylesheet =
-                parse_stylesheet(&format!("@page {{ -bd-prince-bleed: {invalid}; }}"));
+            let stylesheet = parse_stylesheet(&format!("@page {{ -bd-prince-bleed: {invalid}; }}"));
             let guard = stylesheet.shared_lock.read();
             let contents = stylesheet.contents.read_with(&guard);
             let rules = contents.rules(&guard);
@@ -2862,11 +2872,7 @@ mod tests {
     /// Helper: parse a declaration and assert the round-tripped value.
     /// Used by the moegoe -bd-* fork-extension family round-trip tests
     /// (F6–F12, F22, F28–F31).
-    fn assert_bd_roundtrip(
-        css: &str,
-        property_name: &str,
-        expected_value: &str,
-    ) {
+    fn assert_bd_roundtrip(css: &str, property_name: &str, expected_value: &str) {
         let stylesheet = parse_stylesheet(css);
         let guard = stylesheet.shared_lock.read();
         let contents = stylesheet.contents.read_with(&guard);
@@ -3036,11 +3042,7 @@ mod tests {
     // ----- F8 ----------------------------------------------------------
     #[test]
     fn servo_preserves_bd_line_grid_declaration() {
-        assert_bd_roundtrip(
-            "p { -bd-line-grid: create; }",
-            "-bd-line-grid",
-            "create",
-        );
+        assert_bd_roundtrip("p { -bd-line-grid: create; }", "-bd-line-grid", "create");
     }
 
     #[test]
@@ -3088,11 +3090,7 @@ mod tests {
     // ----- F10 ---------------------------------------------------------
     #[test]
     fn servo_preserves_bookmark_target_counter_declaration() {
-        assert_bd_roundtrip(
-            "p { bookmark-target: 3; }",
-            "bookmark-target",
-            "3",
-        );
+        assert_bd_roundtrip("p { bookmark-target: 3; }", "bookmark-target", "3");
     }
 
     #[test]
@@ -3107,20 +3105,12 @@ mod tests {
     // ----- F11 ---------------------------------------------------------
     #[test]
     fn servo_preserves_bd_link_declaration() {
-        assert_bd_roundtrip(
-            "p { -bd-link: none; }",
-            "-bd-link",
-            "none",
-        );
+        assert_bd_roundtrip("p { -bd-link: none; }", "-bd-link", "none");
     }
 
     #[test]
     fn servo_preserves_bd_link_area_declaration() {
-        assert_bd_roundtrip(
-            "p { -bd-link-area: text; }",
-            "-bd-link-area",
-            "text",
-        );
+        assert_bd_roundtrip("p { -bd-link-area: text; }", "-bd-link-area", "text");
     }
 
     // ----- F12 ---------------------------------------------------------
@@ -3150,13 +3140,9 @@ mod tests {
             "-bd-barcode-colour must reset on descendants"
         );
 
-        let initial =
-            ComputedValues::initial_values_with_font_override(Font::initial_values());
+        let initial = ComputedValues::initial_values_with_font_override(Font::initial_values());
         assert_eq!(
-            initial
-                .get_counters()
-                ._bd_barcode_colour
-                .to_css_string(),
+            initial.get_counters()._bd_barcode_colour.to_css_string(),
             "rgb(0, 0, 0)"
         );
     }
@@ -3198,20 +3184,12 @@ mod tests {
     // ----- F28 ---------------------------------------------------------
     #[test]
     fn servo_preserves_bd_text_wrap_declaration() {
-        assert_bd_roundtrip(
-            "p { -bd-text-wrap: balance; }",
-            "-bd-text-wrap",
-            "balance",
-        );
+        assert_bd_roundtrip("p { -bd-text-wrap: balance; }", "-bd-text-wrap", "balance");
     }
 
     #[test]
     fn servo_preserves_bd_n_lines_declaration() {
-        assert_bd_roundtrip(
-            "p { -bd-n-lines: 5; }",
-            "-bd-n-lines",
-            "5",
-        );
+        assert_bd_roundtrip("p { -bd-n-lines: 5; }", "-bd-n-lines", "5");
     }
 
     // ----- F29 ---------------------------------------------------------
@@ -3460,8 +3438,7 @@ mod tests {
         let _guard = pref_lock().lock().unwrap();
         let _attr_pref = BoolPrefGuard::set("layout.css.attr.enabled", true);
 
-        let stylesheet =
-            parse_stylesheet(r#"p::after { content: -bd-attr(data-label); }"#);
+        let stylesheet = parse_stylesheet(r#"p::after { content: -bd-attr(data-label); }"#);
         let guard = stylesheet.shared_lock.read();
         let contents = stylesheet.contents.read_with(&guard);
         let rules = contents.rules(&guard);
@@ -3495,9 +3472,8 @@ mod tests {
         let _guard = pref_lock().lock().unwrap();
         let _attr_pref = BoolPrefGuard::set("layout.css.attr.enabled", true);
 
-        let stylesheet = parse_stylesheet(
-            r#"span::before { content: -bd-attr-ancestor(data-section); }"#,
-        );
+        let stylesheet =
+            parse_stylesheet(r#"span::before { content: -bd-attr-ancestor(data-section); }"#);
         let guard = stylesheet.shared_lock.read();
         let contents = stylesheet.contents.read_with(&guard);
         let rules = contents.rules(&guard);
@@ -3663,9 +3639,8 @@ mod tests {
     // with explicit tint preserved.
     #[test]
     fn servo_preserves_bd_spot_with_tint() {
-        let serialised =
-            bd_spot_color_declaration("p { color: -bd-spot(PANTONE-185, 0.5); }")
-                .expect("expected color declaration");
+        let serialised = bd_spot_color_declaration("p { color: -bd-spot(PANTONE-185, 0.5); }")
+            .expect("expected color declaration");
         assert_eq!(
             serialised, "-bd-spot(PANTONE-185, 0.5)",
             "explicit non-unity tint preserved through OM round-trip"
@@ -3719,8 +3694,7 @@ mod tests {
     // moegoe Family 30 — `:first-of-group` page pseudo-class.
     #[test]
     fn servo_parses_first_of_group_page_pseudo() {
-        let stylesheet =
-            parse_stylesheet("@page :first-of-group { margin-top: 5cm; }");
+        let stylesheet = parse_stylesheet("@page :first-of-group { margin-top: 5cm; }");
         let guard = stylesheet.shared_lock.read();
         let contents = stylesheet.contents.read_with(&guard);
         let rules = contents.rules(&guard);
@@ -3740,9 +3714,10 @@ mod tests {
         );
         let pseudos = &selectors[0].pseudos;
         assert!(
-            pseudos
-                .iter()
-                .any(|pc| matches!(pc, crate::stylesheets::page_rule::PagePseudoClass::FirstOfGroup)),
+            pseudos.iter().any(|pc| matches!(
+                pc,
+                crate::stylesheets::page_rule::PagePseudoClass::FirstOfGroup
+            )),
             "selector should carry the :first-of-group page pseudo"
         );
     }

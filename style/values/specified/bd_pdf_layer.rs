@@ -189,10 +189,7 @@ impl Parse for BdPdfLayer {
         _context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, style_traits::ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
         Ok(Self::Named(CustomIdent::parse(input, &["none"])?))

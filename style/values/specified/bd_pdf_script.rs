@@ -82,10 +82,7 @@ impl Parse for BdPdfScript {
         _: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
         let mut strings: Vec<OwnedStr> = Vec::new();
@@ -244,7 +241,7 @@ impl style_traits::ToCss for BdPdfEventScripts {
                     first = false;
                 }
                 Ok(())
-            }
+            },
         }
     }
 }
@@ -268,31 +265,30 @@ impl Parse for BdPdfEventScripts {
         _: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
-        let specs = input.parse_comma_separated(|inner| -> Result<BdPdfEventScript, ParseError<'i>> {
-            let location = inner.current_source_location();
-            let function = inner.expect_function()?.clone();
-            let event = match_ignore_ascii_case! { &function,
-                "wc" => BdPdfEventKind::Wc,
-                "ws" => BdPdfEventKind::Ws,
-                "ds" => BdPdfEventKind::Ds,
-                "wp" => BdPdfEventKind::Wp,
-                "dp" => BdPdfEventKind::Dp,
-                _ => return Err(location.new_custom_error::<_, StyleParseErrorKind>(
-                    StyleParseErrorKind::UnexpectedFunction(function.clone()),
-                )),
-            };
-            let script = inner.parse_nested_block(|nested| -> Result<OwnedStr, ParseError<'i>> {
-                let s = nested.expect_string()?;
-                Ok(s.as_ref().to_owned().into())
+        let specs =
+            input.parse_comma_separated(|inner| -> Result<BdPdfEventScript, ParseError<'i>> {
+                let location = inner.current_source_location();
+                let function = inner.expect_function()?.clone();
+                let event = match_ignore_ascii_case! { &function,
+                    "wc" => BdPdfEventKind::Wc,
+                    "ws" => BdPdfEventKind::Ws,
+                    "ds" => BdPdfEventKind::Ds,
+                    "wp" => BdPdfEventKind::Wp,
+                    "dp" => BdPdfEventKind::Dp,
+                    _ => return Err(location.new_custom_error::<_, StyleParseErrorKind>(
+                        StyleParseErrorKind::UnexpectedFunction(function.clone()),
+                    )),
+                };
+                let script =
+                    inner.parse_nested_block(|nested| -> Result<OwnedStr, ParseError<'i>> {
+                        let s = nested.expect_string()?;
+                        Ok(s.as_ref().to_owned().into())
+                    })?;
+                Ok(BdPdfEventScript { event, script })
             })?;
-            Ok(BdPdfEventScript { event, script })
-        })?;
         if specs.is_empty() {
             return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
         }
@@ -357,10 +353,7 @@ impl Parse for BdPdfWidgetActionScript {
         _: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
         let s = input.expect_string()?;
@@ -421,10 +414,7 @@ impl Parse for BdPdfOpenActionScript {
         _: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
         let s = input.expect_string()?;
@@ -482,7 +472,7 @@ mod tests {
         match &value {
             BdPdfOpenActionScript::Literal(s) => {
                 assert_eq!(&**s, "app.alert('hello')")
-            }
+            },
             _ => panic!("expected Literal variant"),
         }
         assert_eq!(value.to_css_string(), "\"app.alert('hello')\"");

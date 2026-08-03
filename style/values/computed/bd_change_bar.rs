@@ -16,9 +16,7 @@ use app_units::Au;
 pub use specified::{BdChangeBarAlign, BdChangeBarExclusion, BdChangeBarName};
 
 /// Computed value of `-bd-change-bar-colour`.
-#[derive(
-    Clone, Debug, MallocSizeOf, PartialEq, ToCss, ToResolvedValue, ToShmem, ToTyped,
-)]
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToCss, ToResolvedValue, ToShmem, ToTyped)]
 #[repr(C, u8)]
 pub enum BdChangeBarColour {
     /// `auto` — fall back to `currentcolor`.
@@ -56,9 +54,9 @@ impl ToComputedValue for specified::BdChangeBarColour {
     fn from_computed_value(computed: &Self::ComputedValue) -> Self {
         match computed {
             BdChangeBarColour::Auto => specified::BdChangeBarColour::Auto,
-            BdChangeBarColour::Colour(c) => specified::BdChangeBarColour::Colour(
-                ToComputedValue::from_computed_value(c),
-            ),
+            BdChangeBarColour::Colour(c) => {
+                specified::BdChangeBarColour::Colour(ToComputedValue::from_computed_value(c))
+            },
         }
     }
 }

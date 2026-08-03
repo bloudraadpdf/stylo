@@ -264,7 +264,6 @@ pub mod corner_shape {
             <CornerShapeRect as ToCss>::to_css(&rect, dest)
         }
     }
-
 }
 
 pub mod border_image {
@@ -1494,32 +1493,27 @@ pub mod block_step {
         let mut round = None;
         loop {
             if size.is_none() {
-                if let Ok(value) =
-                    input.try_parse(|input| block_step_size::parse(context, input))
-                {
+                if let Ok(value) = input.try_parse(|input| block_step_size::parse(context, input)) {
                     size = Some(value);
                     continue;
                 }
             }
             if insert.is_none() {
-                if let Ok(value) =
-                    input.try_parse(|input| block_step_insert::parse(context, input))
+                if let Ok(value) = input.try_parse(|input| block_step_insert::parse(context, input))
                 {
                     insert = Some(value);
                     continue;
                 }
             }
             if align.is_none() {
-                if let Ok(value) =
-                    input.try_parse(|input| block_step_align::parse(context, input))
+                if let Ok(value) = input.try_parse(|input| block_step_align::parse(context, input))
                 {
                     align = Some(value);
                     continue;
                 }
             }
             if round.is_none() {
-                if let Ok(value) =
-                    input.try_parse(|input| block_step_round::parse(context, input))
+                if let Ok(value) = input.try_parse(|input| block_step_round::parse(context, input))
                 {
                     round = Some(value);
                     continue;
@@ -3407,7 +3401,12 @@ pub mod _bd_text_overline {
             parsed += 1;
             try_parse_one!(context, input, color, _bd_text_overline_color::parse);
             try_parse_one!(context, input, style, _bd_text_overline_style::parse);
-            try_parse_one!(context, input, thickness, _bd_text_overline_thickness::parse);
+            try_parse_one!(
+                context,
+                input,
+                thickness,
+                _bd_text_overline_thickness::parse
+            );
             parsed -= 1;
             break;
         }
@@ -3442,7 +3441,12 @@ pub mod _bd_text_underline {
             parsed += 1;
             try_parse_one!(context, input, color, _bd_text_underline_color::parse);
             try_parse_one!(context, input, style, _bd_text_underline_style::parse);
-            try_parse_one!(context, input, thickness, _bd_text_underline_thickness::parse);
+            try_parse_one!(
+                context,
+                input,
+                thickness,
+                _bd_text_underline_thickness::parse
+            );
             parsed -= 1;
             break;
         }
@@ -3477,7 +3481,12 @@ pub mod _bd_text_linethrough {
             parsed += 1;
             try_parse_one!(context, input, color, _bd_text_linethrough_color::parse);
             try_parse_one!(context, input, style, _bd_text_linethrough_style::parse);
-            try_parse_one!(context, input, thickness, _bd_text_linethrough_thickness::parse);
+            try_parse_one!(
+                context,
+                input,
+                thickness,
+                _bd_text_linethrough_thickness::parse
+            );
             parsed -= 1;
             break;
         }
@@ -4588,8 +4597,7 @@ pub mod mask_border {
         let mut parsed_mode = false;
         loop {
             if !parsed_slice {
-                if let Ok(value) =
-                    input.try_parse(|input| mask_border_slice::parse(context, input))
+                if let Ok(value) = input.try_parse(|input| mask_border_slice::parse(context, input))
                 {
                     parsed_slice = true;
                     any = true;
@@ -4644,8 +4652,7 @@ pub mod mask_border {
                 }
             }
             if !parsed_mode {
-                if let Ok(value) =
-                    input.try_parse(|input| mask_border_mode::parse(context, input))
+                if let Ok(value) = input.try_parse(|input| mask_border_mode::parse(context, input))
                 {
                     mode = value;
                     parsed_mode = true;
@@ -4837,7 +4844,12 @@ where
         dest.write_char(' ')?;
     }
     if sides.len() == 4 {
-        let (t, r, b, l) = (&sides[0].offset, &sides[1].offset, &sides[2].offset, &sides[3].offset);
+        let (t, r, b, l) = (
+            &sides[0].offset,
+            &sides[1].offset,
+            &sides[2].offset,
+            &sides[3].offset,
+        );
         t.to_css(dest)?;
         let lr_same = l == r;
         let tb_same = t == b;
@@ -4877,9 +4889,7 @@ where
 pub mod line_clamp {
     use super::*;
     pub use crate::properties::shorthands_generated::line_clamp::*;
-    use crate::values::specified::{
-        BlockEllipsis, Continue, MaxLines, PositiveLineCount,
-    };
+    use crate::values::specified::{BlockEllipsis, Continue, MaxLines, PositiveLineCount};
 
     pub fn parse_value<'i, 't>(
         context: &ParserContext,
@@ -4914,9 +4924,7 @@ pub mod line_clamp {
             W: fmt::Write,
         {
             match (self.max_lines, self.continue_, self.block_ellipsis) {
-                (MaxLines::None, Continue::Auto, BlockEllipsis::None) => {
-                    dest.write_str("none")
-                },
+                (MaxLines::None, Continue::Auto, BlockEllipsis::None) => dest.write_str("none"),
                 (MaxLines::Lines(count), Continue::Discard, block_ellipsis) => {
                     count.to_css(dest)?;
                     if block_ellipsis != &BlockEllipsis::Auto {
@@ -4946,16 +4954,15 @@ pub mod overflow_clip_margin {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Longhands, ParseError<'i>> {
-        let (visual_box, offsets) =
-            parse_overflow_clip_margin_values(context, input, 4)?;
+        let (visual_box, offsets) = parse_overflow_clip_margin_values(context, input, 4)?;
         // Distribute lengths per the standard 1-2-3-4 CSS pattern.
         let (top, right, bottom, left) = match offsets.len() {
             0 => {
-                use crate::Zero;
                 use crate::values::specified::length::NonNegativeLength;
+                use crate::Zero;
                 let zero = NonNegativeLength::zero();
                 (zero.clone(), zero.clone(), zero.clone(), zero)
-            }
+            },
             1 => (
                 offsets[0].clone(),
                 offsets[0].clone(),
@@ -5016,15 +5023,14 @@ pub mod overflow_clip_margin_block {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Longhands, ParseError<'i>> {
-        let (visual_box, offsets) =
-            parse_overflow_clip_margin_values(context, input, 2)?;
+        let (visual_box, offsets) = parse_overflow_clip_margin_values(context, input, 2)?;
         let (start, end) = match offsets.len() {
             0 => {
-                use crate::Zero;
                 use crate::values::specified::length::NonNegativeLength;
+                use crate::Zero;
                 let zero = NonNegativeLength::zero();
                 (zero.clone(), zero)
-            }
+            },
             1 => (offsets[0].clone(), offsets[0].clone()),
             _ => (offsets[0].clone(), offsets[1].clone()),
         };
@@ -5059,15 +5065,14 @@ pub mod overflow_clip_margin_inline {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Longhands, ParseError<'i>> {
-        let (visual_box, offsets) =
-            parse_overflow_clip_margin_values(context, input, 2)?;
+        let (visual_box, offsets) = parse_overflow_clip_margin_values(context, input, 2)?;
         let (start, end) = match offsets.len() {
             0 => {
-                use crate::Zero;
                 use crate::values::specified::length::NonNegativeLength;
+                use crate::Zero;
                 let zero = NonNegativeLength::zero();
                 (zero.clone(), zero)
-            }
+            },
             1 => (offsets[0].clone(), offsets[0].clone()),
             _ => (offsets[0].clone(), offsets[1].clone()),
         };
@@ -5121,12 +5126,7 @@ mod line_clamp_tests {
             .map_err(|_| ())
     }
 
-    fn assert_expansion(
-        css: &str,
-        max_lines: &str,
-        continue_: &str,
-        block_ellipsis: &str,
-    ) {
+    fn assert_expansion(css: &str, max_lines: &str, continue_: &str, block_ellipsis: &str) {
         let longhands = try_parse(css).expect("line-clamp should parse");
         assert_eq!(longhands.max_lines.to_css_string(), max_lines);
         assert_eq!(longhands.continue_.to_css_string(), continue_);
@@ -5150,14 +5150,7 @@ mod line_clamp_tests {
 
     #[test]
     fn line_clamp_rejects_values_that_cannot_form_a_valid_triplet() {
-        for css in [
-            "0",
-            "-1",
-            "1.5",
-            "none auto",
-            r#""CUSTOM" 3"#,
-            "3 inherit",
-        ] {
+        for css in ["0", "-1", "1.5", "none auto", r#""CUSTOM" 3"#, "3 inherit"] {
             assert!(try_parse(css).is_err(), "{css:?} must be invalid");
         }
     }

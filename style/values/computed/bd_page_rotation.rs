@@ -62,9 +62,7 @@ impl ToComputedValue for specified::BdRotateBody {
     fn from_computed_value(computed: &Self::ComputedValue) -> Self {
         match computed {
             BdRotateBody::None => Self::None,
-            BdRotateBody::Angle(a) => {
-                Self::Angle(ToComputedValue::from_computed_value(a))
-            },
+            BdRotateBody::Angle(a) => Self::Angle(ToComputedValue::from_computed_value(a)),
         }
     }
 }

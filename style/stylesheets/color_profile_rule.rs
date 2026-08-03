@@ -192,11 +192,7 @@ impl ToCssWithGuard for ColorProfileRule {
 }
 
 impl DeepCloneWithLock for ColorProfileRule {
-    fn deep_clone_with_lock(
-        &self,
-        _lock: &SharedRwLock,
-        _guard: &SharedRwLockReadGuard,
-    ) -> Self {
+    fn deep_clone_with_lock(&self, _lock: &SharedRwLock, _guard: &SharedRwLockReadGuard) -> Self {
         // No `Locked<>` payloads — `Clone` is enough.
         self.clone()
     }

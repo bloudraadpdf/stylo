@@ -21,7 +21,10 @@ use crate::values::specified::bd_page_marks as specified;
 use std::fmt::{self, Write};
 use style_traits::{CssWriter, ToCss};
 
-pub use specified::{BdColourBarPositionSide, BdPageMarkEnabled, BdPrintMarkSet, BdRegistrationPosition, BdSidenoteGlyph};
+pub use specified::{
+    BdColourBarPositionSide, BdPageMarkEnabled, BdPrintMarkSet, BdRegistrationPosition,
+    BdSidenoteGlyph,
+};
 
 /// Computed value of a `-bd-page-*-mark-length` / `-offset` property.
 #[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, ToCss, ToResolvedValue, ToShmem, ToTyped)]
@@ -187,9 +190,7 @@ impl ToComputedValue for specified::BdPageMarksColour {
     fn from_computed_value(computed: &Self::ComputedValue) -> Self {
         match computed {
             BdPageMarksColour::Auto => Self::Auto,
-            BdPageMarksColour::Colour(c) => {
-                Self::Colour(ToComputedValue::from_computed_value(c))
-            },
+            BdPageMarksColour::Colour(c) => Self::Colour(ToComputedValue::from_computed_value(c)),
         }
     }
 }
@@ -340,7 +341,9 @@ impl ToComputedValue for specified::BdRegistrationColour {
     fn from_computed_value(computed: &Self::ComputedValue) -> Self {
         match computed {
             BdRegistrationColour::Auto => Self::Auto,
-            BdRegistrationColour::Colour(c) => Self::Colour(ToComputedValue::from_computed_value(c)),
+            BdRegistrationColour::Colour(c) => {
+                Self::Colour(ToComputedValue::from_computed_value(c))
+            },
         }
     }
 }
@@ -489,7 +492,7 @@ impl ToCss for BdColourBarSwatches {
                     c.to_css(dest)?;
                 }
                 Ok(())
-            }
+            },
         }
     }
 }
@@ -506,7 +509,7 @@ impl ToComputedValue for specified::BdColourBarSwatches {
                     out.push(c.to_computed_value(ctx));
                 }
                 BdColourBarSwatches::Colours(crate::OwnedSlice::from(out))
-            }
+            },
         }
     }
 
@@ -519,7 +522,7 @@ impl ToComputedValue for specified::BdColourBarSwatches {
                     out.push(ToComputedValue::from_computed_value(c));
                 }
                 Self::Colours(crate::OwnedSlice::from(out))
-            }
+            },
         }
     }
 }

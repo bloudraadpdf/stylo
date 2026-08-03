@@ -155,10 +155,7 @@ impl Parse for BdPdfFallbackCmykProfile {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
         Ok(Self::Url(SpecifiedUrl::parse(context, input)?))
@@ -301,19 +298,13 @@ impl Parse for BdPdfColourOptions {
         _context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::none());
         }
         let mut value = Self::none();
         let first = BdPdfColourOption::parse(input)?;
         value.insert(first);
-        while input
-            .try_parse(|i| i.expect_comma())
-            .is_ok()
-        {
+        while input.try_parse(|i| i.expect_comma()).is_ok() {
             let option = BdPdfColourOption::parse(input)?;
             if value.contains(option) {
                 return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));

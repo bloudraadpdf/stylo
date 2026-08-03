@@ -586,10 +586,7 @@ impl ColorFunction<SpecifiedColor> {
 impl<Color> ColorFunction<Color> {
     /// Map colour dependencies to another type. Return None from `f` if the
     /// conversion fails.
-    pub fn map_origin_color<U>(
-        &self,
-        mut f: impl FnMut(&Color) -> Option<U>,
-    ) -> ColorFunction<U> {
+    pub fn map_origin_color<U>(&self, mut f: impl FnMut(&Color) -> Option<U>) -> ColorFunction<U> {
         macro_rules! map {
             ($f:ident, $o:expr, $c0:expr, $c1:expr, $c2:expr, $alpha:expr) => {{
                 ColorFunction::$f(

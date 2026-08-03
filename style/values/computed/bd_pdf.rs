@@ -61,7 +61,7 @@ impl ToCss for BdPdfMetaValue {
                     first = false;
                 }
                 Ok(())
-            }
+            },
             Self::Url(url) => url.to_css(dest),
         }
     }
@@ -82,9 +82,7 @@ impl ToComputedValue for specified::BdPdfMetaValue {
         match computed {
             BdPdfMetaValue::None => Self::None,
             BdPdfMetaValue::Strings(strings) => Self::Strings(strings.clone()),
-            BdPdfMetaValue::Url(url) => {
-                Self::Url(ToComputedValue::from_computed_value(url))
-            }
+            BdPdfMetaValue::Url(url) => Self::Url(ToComputedValue::from_computed_value(url)),
         }
     }
 }

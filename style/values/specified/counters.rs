@@ -263,7 +263,10 @@ fn parse_target_counter_name<'i, 't>(
         }
         return Ok(generics::CounterName::Attr(attr));
     }
-    Ok(generics::CounterName::Ident(CustomIdent::parse(input, &[])?))
+    Ok(generics::CounterName::Ident(CustomIdent::parse(
+        input,
+        &[],
+    )?))
 }
 
 fn parse_target_text_keyword<'i, 't>(
@@ -732,9 +735,8 @@ mod tests {
         let _guard = pref_lock().lock().unwrap();
         let _attr_pref = BoolPrefGuard::set("layout.css.attr.enabled", true);
 
-        let content = parse_content_value(
-            r##"target-counter(attr(href), attr(data-counter -bd-ident))"##,
-        );
+        let content =
+            parse_content_value(r##"target-counter(attr(href), attr(data-counter -bd-ident))"##);
         let Content::Items(items) = content else {
             panic!("expected content items");
         };

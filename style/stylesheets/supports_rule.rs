@@ -255,15 +255,15 @@ fn eval_font_format(kw: &FontFaceSourceFormatKeyword) -> bool {
     // - `None` / `Unknown`: sentinels never authored in a `@supports`
     //   predicate.
     match *kw {
-        FontFaceSourceFormatKeyword::Truetype |
-        FontFaceSourceFormatKeyword::Opentype |
-        FontFaceSourceFormatKeyword::Woff |
-        FontFaceSourceFormatKeyword::Woff2 => true,
-        FontFaceSourceFormatKeyword::EmbeddedOpentype |
-        FontFaceSourceFormatKeyword::Svg |
-        FontFaceSourceFormatKeyword::Collection |
-        FontFaceSourceFormatKeyword::None |
-        FontFaceSourceFormatKeyword::Unknown => false,
+        FontFaceSourceFormatKeyword::Truetype
+        | FontFaceSourceFormatKeyword::Opentype
+        | FontFaceSourceFormatKeyword::Woff
+        | FontFaceSourceFormatKeyword::Woff2 => true,
+        FontFaceSourceFormatKeyword::EmbeddedOpentype
+        | FontFaceSourceFormatKeyword::Svg
+        | FontFaceSourceFormatKeyword::Collection
+        | FontFaceSourceFormatKeyword::None
+        | FontFaceSourceFormatKeyword::Unknown => false,
     }
 }
 

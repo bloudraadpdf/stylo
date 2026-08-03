@@ -109,8 +109,17 @@ impl BdPdfFormFieldFlags {
 /// `none` (initial) — no length cap; `<integer>` — non-negative
 /// cap on the text-field input.
 #[derive(
-    Clone, Copy, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue,
-    ToResolvedValue, ToShmem, ToTyped,
+    Clone,
+    Copy,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
 )]
 #[repr(C, u8)]
 pub enum BdPdfFormFieldMaxLength {
@@ -140,10 +149,7 @@ impl Parse for BdPdfFormFieldMaxLength {
         _: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
         let n = input.expect_integer()?;
@@ -238,8 +244,16 @@ pub enum BdPdfSignatureFieldLock {
 /// renderer per ISO 32000-2 §12.7.4.5 Table 232 (the `/Fields` entry
 /// is only emitted with `/Action /Include` or `/Action /Exclude`).
 #[derive(
-    Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue,
-    ToResolvedValue, ToShmem, ToTyped,
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
 )]
 #[repr(C, u8)]
 pub enum BdPdfSignatureFieldLockFields {
@@ -271,10 +285,7 @@ impl Parse for BdPdfSignatureFieldLockFields {
         _: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
         let mut names: Vec<CustomIdent> = Vec::new();
@@ -301,8 +312,16 @@ impl Parse for BdPdfSignatureFieldLockFields {
 /// `none` (initial) — no explicit name; `<string>` — the AcroForm
 /// dictionary `/T` entry for the signature widget.
 #[derive(
-    Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue,
-    ToResolvedValue, ToShmem, ToTyped,
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
 )]
 #[repr(C, u8)]
 pub enum BdPdfSignatureFieldName {
@@ -332,10 +351,7 @@ impl Parse for BdPdfSignatureFieldName {
         _: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
         let s = input.expect_string()?;
@@ -361,9 +377,7 @@ impl Parse for BdPdfSignatureFieldName {
 /// writes the device-space colour array per Table 167. Wide-gamut
 /// colours collapse to a three-component DeviceRGB array because
 /// `/MK` colour entries are device-space only.
-#[derive(
-    Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped,
-)]
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
 #[repr(C, u8)]
 pub enum BdPdfFormFieldMkColour {
     /// `none` — entry omitted from `/MK`.
@@ -392,10 +406,7 @@ impl Parse for BdPdfFormFieldMkColour {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
         Ok(Self::Colour(Color::parse(context, input)?))
@@ -487,8 +498,16 @@ impl BdPdfFormFieldMkRotation {
 /// entry. A `<string>` value writes the caption verbatim; meaningful
 /// only on pushbutton widgets.
 #[derive(
-    Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue,
-    ToResolvedValue, ToShmem, ToTyped,
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
 )]
 #[repr(C, u8)]
 pub enum BdPdfFormFieldMkCaption {
@@ -518,10 +537,7 @@ impl Parse for BdPdfFormFieldMkCaption {
         _: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
         let s = input.expect_string()?;
@@ -567,10 +583,7 @@ impl Parse for BdPdfFormFieldMkIcon {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
         let url = SpecifiedUrl::parse(context, input)?;
@@ -696,10 +709,7 @@ impl Parse for BdPdfFormFieldMkIconFit {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
         // `<scale-type> || <scale-when> || <align-x> <align-y>` —
@@ -724,11 +734,13 @@ impl Parse for BdPdfFormFieldMkIconFit {
                 }
             }
             if align.is_none() {
-                if let Ok(pair) = input.try_parse(|i| -> Result<(Percentage, Percentage), ParseError<'i>> {
-                    let x = Percentage::parse(context, i)?;
-                    let y = Percentage::parse(context, i)?;
-                    Ok((x, y))
-                }) {
+                if let Ok(pair) =
+                    input.try_parse(|i| -> Result<(Percentage, Percentage), ParseError<'i>> {
+                        let x = Percentage::parse(context, i)?;
+                        let y = Percentage::parse(context, i)?;
+                        Ok((x, y))
+                    })
+                {
                     align = Some(pair);
                     continue;
                 }
@@ -738,9 +750,8 @@ impl Parse for BdPdfFormFieldMkIconFit {
         if scale_type.is_none() && scale_when.is_none() && align.is_none() {
             return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
         }
-        let (align_x, align_y) = align.unwrap_or_else(|| {
-            (Percentage::new(0.5), Percentage::new(0.5))
-        });
+        let (align_x, align_y) =
+            align.unwrap_or_else(|| (Percentage::new(0.5), Percentage::new(0.5)));
         Ok(Self::Fit(BdPdfFormFieldMkIconFitValue {
             scale_type: scale_type.unwrap_or_default(),
             scale_when: scale_when.unwrap_or_default(),

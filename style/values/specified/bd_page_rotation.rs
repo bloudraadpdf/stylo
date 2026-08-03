@@ -122,9 +122,7 @@ impl Parse for BdPdfPageRotation {
 /// `ToComputedValue` is implemented manually in
 /// [`crate::values::computed::bd_page_rotation`] so the inner `Angle`
 /// resolves into its computed counterpart.
-#[derive(
-    Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped,
-)]
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
 #[repr(C, u8)]
 pub enum BdRotateBody {
     /// `none` — body is not rotated.
@@ -152,10 +150,7 @@ impl Parse for BdRotateBody {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
         Ok(Self::Angle(Angle::parse(context, input)?))

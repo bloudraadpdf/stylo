@@ -164,9 +164,7 @@ impl Parse for BdSidenoteAlign {
                     | BdSidenoteAlignment::ContainerEnd
             )
         {
-            return Err(input.new_custom_error(
-                style_traits::StyleParseErrorKind::UnspecifiedError,
-            ));
+            return Err(input.new_custom_error(style_traits::StyleParseErrorKind::UnspecifiedError));
         }
         Ok(Self { alignment, strict })
     }
@@ -188,8 +186,18 @@ impl ToCss for BdSidenoteAlign {
 /// Specified value of `-bd-sidenote-avoid`.
 ///
 /// `none` or a list of region names to avoid collisions against.
-#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue,
-    ToResolvedValue, ToShmem, ToTyped)]
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
 #[repr(C, u8)]
 pub enum BdSidenoteAvoid {
     /// `none` — no collision avoidance.
@@ -217,10 +225,7 @@ impl Parse for BdSidenoteAvoid {
         _: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
         let mut names: Vec<CustomIdent> = Vec::new();
@@ -236,9 +241,7 @@ impl Parse for BdSidenoteAvoid {
             }
         }
         if names.is_empty() {
-            return Err(input.new_custom_error(
-                style_traits::StyleParseErrorKind::UnspecifiedError,
-            ));
+            return Err(input.new_custom_error(style_traits::StyleParseErrorKind::UnspecifiedError));
         }
         Ok(Self::Names(OwnedSlice::from(names)))
     }
@@ -247,7 +250,9 @@ impl Parse for BdSidenoteAvoid {
 /// Specified value of `-bd-sidenote-offset`.
 ///
 /// Distance the sidenote anchor is shifted from its callout point.
-#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped, Parse)]
+#[derive(
+    Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped, Parse,
+)]
 #[repr(C)]
 pub struct BdSidenoteOffset(pub LengthPercentage);
 

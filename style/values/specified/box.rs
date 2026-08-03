@@ -8,12 +8,12 @@ use crate::derives::*;
 pub use crate::logical_geometry::WritingModeProperty;
 use crate::parser::{Parse, ParserContext};
 use crate::properties::{LonghandId, PropertyDeclarationId, PropertyId};
+use crate::values::computed::{Context, ToComputedValue};
 use crate::values::generics::box_::{
     BaselineShiftKeyword, GenericBaselineShift, GenericContainIntrinsicSize, GenericFloat,
     GenericLineClamp, GenericOverflowClipMargin, GenericPerspective, GenericSnapBlock,
     GenericSnapInline, OverflowClipMarginBox, SnapBlockAlignment, SnapInlineAlignment,
 };
-use crate::values::computed::{Context, ToComputedValue};
 use crate::values::specified::length::{Length, LengthPercentage, NonNegativeLength};
 use crate::values::specified::{AllowQuirks, Integer, NonNegativeNumberOrPercentage};
 use crate::values::CustomIdent;

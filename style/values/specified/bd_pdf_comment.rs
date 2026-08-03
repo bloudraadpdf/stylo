@@ -224,10 +224,7 @@ impl Parse for BdPdfCommentString {
         _: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, style_traits::ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
         let s = input.expect_string()?;
@@ -264,10 +261,7 @@ impl Parse for BdPdfCommentColour {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, style_traits::ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("auto"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
             return Ok(Self::Auto);
         }
         Ok(Self::Colour(Color::parse(context, input)?))
@@ -278,8 +272,18 @@ impl Parse for BdPdfCommentColour {
 ///
 /// `auto | <string>`. `auto` defers to the render-time signed-in user
 /// (mirroring Prince `-prince-pdf-annotation-author` behaviour).
-#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue,
-    ToResolvedValue, ToShmem, ToTyped)]
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
 #[repr(C, u8)]
 pub enum BdPdfCommentAuthor {
     /// `auto` — defer to render-time author.
@@ -320,8 +324,18 @@ impl Parse for BdPdfCommentAuthor {
 /// `auto | <string>`. `auto` defers to the render timestamp. The
 /// `<string>` form is parsed verbatim and validated downstream
 /// (ISO 8601 / PDF D: format).
-#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue,
-    ToResolvedValue, ToShmem, ToTyped)]
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
 #[repr(C, u8)]
 pub enum BdPdfCommentDate {
     /// `auto` — defer to render timestamp.
@@ -361,8 +375,18 @@ impl Parse for BdPdfCommentDate {
 /// ISO 32000-2 §12.5.6.4 Table 169). `auto` (initial) suppresses
 /// `/Subj` so the viewer falls back to its default; a literal
 /// `<string>` projects verbatim onto the annotation dictionary.
-#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue,
-    ToResolvedValue, ToShmem, ToTyped)]
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
 #[repr(C, u8)]
 pub enum BdPdfCommentSubject {
     /// `auto` — no `/Subj` emission.
@@ -403,8 +427,18 @@ impl Parse for BdPdfCommentSubject {
 /// timestamp (see PDFreactor `-ro-comment-dateformat`); mirrors
 /// Java `SimpleDateFormat` syntax. `none` (initial) leaves the
 /// renderer's default ISO 32000-2 §7.9.4 PDF date format untouched.
-#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue,
-    ToResolvedValue, ToShmem, ToTyped)]
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
 #[repr(C, u8)]
 pub enum BdPdfCommentDateFormat {
     /// `none` — renderer default (`D:YYYYMMDDhhmmssZ`).
@@ -504,10 +538,7 @@ impl Parse for BdPdfLinkBorder {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, style_traits::ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
         let width = NonNegativeLength::parse(context, input)?;
@@ -645,10 +676,7 @@ impl Parse for BdPdfLinkBorderColor {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, style_traits::ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("auto"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
             return Ok(Self::Auto);
         }
         Ok(Self::Colour(Color::parse(context, input)?))
@@ -691,10 +719,7 @@ impl Parse for BdPdfLinkBorderWidth {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, style_traits::ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("auto"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
             return Ok(Self::Auto);
         }
         Ok(Self::Length(NonNegativeLength::parse(context, input)?))

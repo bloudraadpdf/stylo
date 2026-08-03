@@ -48,16 +48,16 @@ impl ToComputedValue for specified::BdPdfCommentColour {
             specified::BdPdfCommentColour::Auto => BdPdfCommentColour::Auto,
             specified::BdPdfCommentColour::Colour(c) => {
                 BdPdfCommentColour::Colour(c.to_computed_value(ctx))
-            }
+            },
         }
     }
 
     fn from_computed_value(computed: &Self::ComputedValue) -> Self {
         match computed {
             BdPdfCommentColour::Auto => specified::BdPdfCommentColour::Auto,
-            BdPdfCommentColour::Colour(c) => specified::BdPdfCommentColour::Colour(
-                ToComputedValue::from_computed_value(c),
-            ),
+            BdPdfCommentColour::Colour(c) => {
+                specified::BdPdfCommentColour::Colour(ToComputedValue::from_computed_value(c))
+            },
         }
     }
 }
@@ -155,7 +155,7 @@ impl ToComputedValue for specified::BdPdfLinkBorderColor {
             specified::BdPdfLinkBorderColor::Auto => BdPdfLinkBorderColor::Auto,
             specified::BdPdfLinkBorderColor::Colour(c) => {
                 BdPdfLinkBorderColor::Colour(c.to_computed_value(ctx))
-            }
+            },
         }
     }
 
@@ -164,7 +164,7 @@ impl ToComputedValue for specified::BdPdfLinkBorderColor {
             BdPdfLinkBorderColor::Auto => specified::BdPdfLinkBorderColor::Auto,
             BdPdfLinkBorderColor::Colour(c) => {
                 specified::BdPdfLinkBorderColor::Colour(ToComputedValue::from_computed_value(c))
-            }
+            },
         }
     }
 }
@@ -201,7 +201,7 @@ impl ToComputedValue for specified::BdPdfLinkBorderWidth {
             specified::BdPdfLinkBorderWidth::Auto => BdPdfLinkBorderWidth::Auto,
             specified::BdPdfLinkBorderWidth::Length(l) => {
                 BdPdfLinkBorderWidth::Length(l.to_computed_value(ctx))
-            }
+            },
         }
     }
 
@@ -210,7 +210,7 @@ impl ToComputedValue for specified::BdPdfLinkBorderWidth {
             BdPdfLinkBorderWidth::Auto => specified::BdPdfLinkBorderWidth::Auto,
             BdPdfLinkBorderWidth::Length(l) => {
                 specified::BdPdfLinkBorderWidth::Length(ToComputedValue::from_computed_value(l))
-            }
+            },
         }
     }
 }

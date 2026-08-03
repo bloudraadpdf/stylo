@@ -48,10 +48,10 @@ impl ToComputedValue for specified::BdPdfOutputRegistryName {
             specified::BdPdfOutputRegistryName::None => BdPdfOutputRegistryName::None,
             specified::BdPdfOutputRegistryName::Url(u) => {
                 BdPdfOutputRegistryName::Url(u.to_computed_value(ctx))
-            }
+            },
             specified::BdPdfOutputRegistryName::String(s) => {
                 BdPdfOutputRegistryName::String(s.clone())
-            }
+            },
         }
     }
 
@@ -60,10 +60,10 @@ impl ToComputedValue for specified::BdPdfOutputRegistryName {
             BdPdfOutputRegistryName::None => specified::BdPdfOutputRegistryName::None,
             BdPdfOutputRegistryName::Url(u) => {
                 specified::BdPdfOutputRegistryName::Url(ToComputedValue::from_computed_value(u))
-            }
+            },
             BdPdfOutputRegistryName::String(s) => {
                 specified::BdPdfOutputRegistryName::String(s.clone())
-            }
+            },
         }
     }
 }

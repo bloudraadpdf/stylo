@@ -516,10 +516,9 @@ impl NonTSPseudoClass {
             Self::UserValid => ElementState::USER_VALID,
             Self::Valid => ElementState::VALID,
             Self::Visited => ElementState::VISITED,
-            Self::BdNoContent
-            | Self::CustomState(_)
-            | Self::Lang(_)
-            | Self::ServoNonZeroBorder => ElementState::empty(),
+            Self::BdNoContent | Self::CustomState(_) | Self::Lang(_) | Self::ServoNonZeroBorder => {
+                ElementState::empty()
+            },
         }
     }
 

@@ -84,16 +84,10 @@ impl Parse for BlockEllipsis {
         _: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
-        if input
-            .try_parse(|i| i.expect_ident_matching("auto"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
             return Ok(Self::Auto);
         }
         let s = input.expect_string()?;
@@ -102,7 +96,9 @@ impl Parse for BlockEllipsis {
 }
 
 /// A parser-validated positive specified line count.
-#[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
+#[derive(
+    Clone, Copy, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped,
+)]
 #[repr(transparent)]
 pub struct PositiveLineCount(Integer);
 
@@ -144,7 +140,9 @@ impl Parse for PositiveLineCount {
 /// Grammar: `none | <integer>`. The integer is the maximum number of
 /// lines a fragmentation root may produce before triggering the
 /// `continue` policy.
-#[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
+#[derive(
+    Clone, Copy, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped,
+)]
 #[repr(C, u8)]
 pub enum MaxLines {
     /// `none` — no cap.
@@ -172,10 +170,7 @@ impl Parse for MaxLines {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
         Ok(Self::Lines(PositiveLineCount::parse(context, input)?))

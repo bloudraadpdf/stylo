@@ -105,11 +105,7 @@ impl Parse for BdImageResolution {
                 from_image = true;
                 continue;
             }
-            if !snap
-                && input
-                    .try_parse(|i| i.expect_ident_matching("snap"))
-                    .is_ok()
-            {
+            if !snap && input.try_parse(|i| i.expect_ident_matching("snap")).is_ok() {
                 snap = true;
                 continue;
             }
@@ -294,10 +290,7 @@ impl Parse for BdImageClipPath {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
         if let Ok(url) = input.try_parse(|i| SpecifiedUrl::parse(context, i)) {

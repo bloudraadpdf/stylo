@@ -691,8 +691,8 @@ mod tests {
 
     #[test]
     fn bd_pdf_viewer_print_page_range_multi_integer_parses() {
-        let value = parse_print_page_range("1 5 7 9")
-            .expect("space-separated integer list should parse");
+        let value =
+            parse_print_page_range("1 5 7 9").expect("space-separated integer list should parse");
         match &value {
             BdPdfViewerPrintPageRange::Pages(items) => assert_eq!(items.len(), 4),
             _ => panic!("expected Pages variant"),

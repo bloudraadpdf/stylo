@@ -30,7 +30,10 @@ impl PositiveLineCount {
     #[inline]
     fn from_specified(value: &specified::PositiveLineCount, ctx: &Context) -> Self {
         let value = value.integer().to_computed_value(ctx);
-        debug_assert!(value > 0, "specified PositiveLineCount must remain positive");
+        debug_assert!(
+            value > 0,
+            "specified PositiveLineCount must remain positive"
+        );
         Self(value)
     }
 

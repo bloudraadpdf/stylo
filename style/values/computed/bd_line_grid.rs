@@ -44,7 +44,9 @@ impl ToComputedValue for specified::BdBaselineGrid {
         match self {
             specified::BdBaselineGrid::None => BdBaselineGrid::None,
             specified::BdBaselineGrid::Auto => BdBaselineGrid::Auto,
-            specified::BdBaselineGrid::Length(l) => BdBaselineGrid::Length(l.to_computed_value(ctx)),
+            specified::BdBaselineGrid::Length(l) => {
+                BdBaselineGrid::Length(l.to_computed_value(ctx))
+            },
         }
     }
 
@@ -54,7 +56,7 @@ impl ToComputedValue for specified::BdBaselineGrid {
             BdBaselineGrid::Auto => specified::BdBaselineGrid::Auto,
             BdBaselineGrid::Length(l) => {
                 specified::BdBaselineGrid::Length(ToComputedValue::from_computed_value(l))
-            }
+            },
         }
     }
 }

@@ -19,8 +19,17 @@ use style_traits::{CssWriter, ParseError, StyleParseErrorKind, ToCss};
 
 /// Pipeline position at which a text replacement runs.
 #[derive(
-    Clone, Debug, MallocSizeOf, Parse, PartialEq, SpecifiedValueInfo, ToCss,
-    ToComputedValue, ToResolvedValue, ToShmem, ToTyped,
+    Clone,
+    Debug,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
 )]
 #[repr(u8)]
 pub enum BdTextReplacementPoint {
@@ -38,8 +47,17 @@ pub enum BdTextReplacementPoint {
 
 /// Matching or transformation method used by a text replacement.
 #[derive(
-    Clone, Debug, MallocSizeOf, Parse, PartialEq, SpecifiedValueInfo, ToCss,
-    ToComputedValue, ToResolvedValue, ToShmem, ToTyped,
+    Clone,
+    Debug,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
 )]
 #[repr(u8)]
 pub enum BdTextReplacementMethod {
@@ -57,8 +75,15 @@ pub enum BdTextReplacementMethod {
 
 /// One ordered `-bd-text-replace` operation.
 #[derive(
-    Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToComputedValue,
-    ToResolvedValue, ToShmem, ToTyped,
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
 )]
 #[repr(C)]
 pub struct BdTextReplacement {
@@ -92,8 +117,17 @@ impl ToCss for BdTextReplacement {
 /// Specified value of `-bd-text-replace`.
 ///
 /// `none | [ <string> <string> [ <point> || <method> ]? ]#`.
-#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToComputedValue,
-    ToResolvedValue, ToShmem, ToTyped)]
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
 #[repr(C, u8)]
 pub enum BdTextReplace {
     /// `none` — no replacement.
@@ -116,7 +150,7 @@ impl ToCss for BdTextReplace {
                     first = false;
                 }
                 Ok(())
-            }
+            },
         }
     }
 }
@@ -193,8 +227,18 @@ impl Parse for BdTextReplace {
 /// Specified value of `-bd-tooltip`.
 ///
 /// `none | <string>`.
-#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue,
-    ToResolvedValue, ToShmem, ToTyped)]
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
 #[repr(C, u8)]
 pub enum BdTooltip {
     /// `none` — no tooltip.

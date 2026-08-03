@@ -82,7 +82,7 @@ impl ToCss for BdTabStops {
                     first = false;
                 }
                 Ok(())
-            }
+            },
         }
     }
 }
@@ -117,7 +117,7 @@ impl ToComputedValue for specified::BdTabStops {
                 let computed: Vec<BdTabStop> =
                     stops.iter().map(|s| s.to_computed_value(ctx)).collect();
                 BdTabStops::Stops(OwnedSlice::from(computed))
-            }
+            },
         }
     }
 
@@ -130,7 +130,7 @@ impl ToComputedValue for specified::BdTabStops {
                     .map(ToComputedValue::from_computed_value)
                     .collect();
                 specified::BdTabStops::Stops(OwnedSlice::from(specified))
-            }
+            },
         }
     }
 }

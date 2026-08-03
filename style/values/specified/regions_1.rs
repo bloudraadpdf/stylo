@@ -69,8 +69,15 @@ pub enum FlowIntoMode {
 /// `<custom-ident> [element | content]?` — feeds the named flow with
 /// the element's box (`element`, default) or its content (`content`).
 #[derive(
-    Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToComputedValue, ToResolvedValue,
-    ToShmem, ToTyped,
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
 )]
 #[repr(C, u8)]
 pub enum FlowInto {
@@ -112,7 +119,7 @@ impl ToCss for FlowInto {
                     mode.to_css(dest)?;
                 }
                 Ok(())
-            }
+            },
         }
     }
 }
@@ -122,19 +129,14 @@ impl Parse for FlowInto {
         _: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
         let ident = input.expect_ident()?.as_ref().to_owned();
         if is_reserved_flow_ident(&ident) {
             return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
         }
-        let mode = input
-            .try_parse(FlowIntoMode::parse)
-            .unwrap_or_default();
+        let mode = input.try_parse(FlowIntoMode::parse).unwrap_or_default();
         Ok(Self::Named {
             name: ident.into(),
             mode,
@@ -148,8 +150,15 @@ impl Parse for FlowInto {
 /// `none` (initial) — the element is not a region.
 /// `<custom-ident>` — receives content from the named flow.
 #[derive(
-    Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToComputedValue, ToResolvedValue,
-    ToShmem, ToTyped,
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
 )]
 #[repr(C, u8)]
 pub enum FlowFrom {
@@ -188,10 +197,7 @@ impl Parse for FlowFrom {
         _: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
         let ident = input.expect_ident()?.as_ref().to_owned();

@@ -56,8 +56,17 @@ pub enum BdFloatPolicy {
 /// must follow a floated reference before the float is released.
 /// `auto` (initial) — Prince default behaviour.
 #[derive(
-    Clone, Copy, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue,
-    ToResolvedValue, ToShmem, ToTyped,
+    Clone,
+    Copy,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
 )]
 #[repr(C, u8)]
 pub enum BdFloatTail {
@@ -87,10 +96,7 @@ impl crate::parser::Parse for BdFloatTail {
         _: &crate::parser::ParserContext,
         input: &mut cssparser::Parser<'i, 't>,
     ) -> Result<Self, style_traits::ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("auto"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
             return Ok(Self::Auto);
         }
         let n = input.expect_integer()?;
@@ -142,8 +148,17 @@ pub enum BdFloatModifier {
 /// `-bd-float-defer-page`. `<integer>` defers the float by N columns;
 /// `last` releases the float to the last column of the multicol.
 #[derive(
-    Clone, Copy, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue,
-    ToResolvedValue, ToShmem, ToTyped,
+    Clone,
+    Copy,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
 )]
 #[repr(C, u8)]
 pub enum BdFloatDeferColumn {
@@ -175,16 +190,10 @@ impl crate::parser::Parse for BdFloatDeferColumn {
         _: &crate::parser::ParserContext,
         input: &mut cssparser::Parser<'i, 't>,
     ) -> Result<Self, style_traits::ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
-        if input
-            .try_parse(|i| i.expect_ident_matching("last"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("last")).is_ok() {
             return Ok(Self::Last);
         }
         let n = input.expect_integer()?;
@@ -200,8 +209,17 @@ impl crate::parser::Parse for BdFloatDeferColumn {
 /// Native moegoe surface; the renderer reads this side-table value as a
 /// per-element override over the standard `float-defer` cascade.
 #[derive(
-    Clone, Copy, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue,
-    ToResolvedValue, ToShmem, ToTyped,
+    Clone,
+    Copy,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
 )]
 #[repr(C, u8)]
 pub enum BdFloatDeferPage {
@@ -235,22 +253,13 @@ impl crate::parser::Parse for BdFloatDeferPage {
         _: &crate::parser::ParserContext,
         input: &mut cssparser::Parser<'i, 't>,
     ) -> Result<Self, style_traits::ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
-        if input
-            .try_parse(|i| i.expect_ident_matching("next"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("next")).is_ok() {
             return Ok(Self::Next);
         }
-        if input
-            .try_parse(|i| i.expect_ident_matching("last"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("last")).is_ok() {
             return Ok(Self::Last);
         }
         let n = input.expect_integer()?;

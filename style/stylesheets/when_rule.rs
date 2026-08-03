@@ -128,18 +128,18 @@ impl WhenCondition {
         fn build_or(v: Vec<WhenCondition>) -> WhenCondition {
             WhenCondition::Or(v.into_boxed_slice())
         }
-        let (keyword, wrapper): (&str, fn(Vec<WhenCondition>) -> WhenCondition) =
-            match input.next() {
-                Err(..) => return Ok(first),
-                Ok(&Token::Ident(ref ident)) => match_ignore_ascii_case! { &ident,
-                    "and" => ("and", build_and),
-                    "or" => ("or", build_or),
-                    _ => return Err(location.new_custom_error(
-                        StyleParseErrorKind::UnspecifiedError,
-                    )),
-                },
-                Ok(t) => return Err(location.new_unexpected_token_error(t.clone())),
-            };
+        let (keyword, wrapper): (&str, fn(Vec<WhenCondition>) -> WhenCondition) = match input.next()
+        {
+            Err(..) => return Ok(first),
+            Ok(&Token::Ident(ref ident)) => match_ignore_ascii_case! { &ident,
+                "and" => ("and", build_and),
+                "or" => ("or", build_or),
+                _ => return Err(location.new_custom_error(
+                    StyleParseErrorKind::UnspecifiedError,
+                )),
+            },
+            Ok(t) => return Err(location.new_unexpected_token_error(t.clone())),
+        };
 
         let mut conditions: Vec<WhenCondition> = Vec::with_capacity(2);
         conditions.push(first);
@@ -170,9 +170,7 @@ impl WhenCondition {
         match *input.next()? {
             Token::ParenthesisBlock => {
                 let nested = input.try_parse(|input| {
-                    input.parse_nested_block(|input| {
-                        Self::parse(context, shared_lock, input)
-                    })
+                    input.parse_nested_block(|input| Self::parse(context, shared_lock, input))
                 });
                 if let Ok(nested) = nested {
                     return Ok(WhenCondition::InParens(Box::new(nested)));
@@ -321,9 +319,7 @@ fn serialise_condition_with_guard(
             }
             Ok(())
         },
-        WhenCondition::Supports {
-            ref condition, ..
-        } => {
+        WhenCondition::Supports { ref condition, .. } => {
             dest.write_str("supports(")?;
             condition.to_css(&mut CssWriter::new(dest))?;
             dest.write_char(')')
@@ -412,14 +408,7 @@ impl WhenRule {
         custom_media_map: &CustomMediaMap,
         guard: &SharedRwLockReadGuard,
     ) -> bool {
-        chain_member_is_enabled(
-            &self.chain,
-            0,
-            device,
-            quirks_mode,
-            custom_media_map,
-            guard,
-        )
+        chain_member_is_enabled(&self.chain, 0, device, quirks_mode, custom_media_map, guard)
     }
 }
 
@@ -519,4 +508,3 @@ impl DeepCloneWithLock for ElseRule {
         }
     }
 }
-

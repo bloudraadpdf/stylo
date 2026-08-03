@@ -962,13 +962,9 @@ fn fold_float_offset_calc_node<F: crate::values::computed::box_::FloatOffsetCalc
                 value.px(),
             ),
         )),
-        GenericCalcNode::Leaf(CalcLengthPercentageLeaf::Percentage(value)) => {
-            Ok(fold.percentage(
-                crate::values::computed::box_::FloatOffsetCalculationScalar::from_css_number(
-                    value.0,
-                ),
-            ))
-        },
+        GenericCalcNode::Leaf(CalcLengthPercentageLeaf::Percentage(value)) => Ok(fold.percentage(
+            crate::values::computed::box_::FloatOffsetCalculationScalar::from_css_number(value.0),
+        )),
         GenericCalcNode::Leaf(CalcLengthPercentageLeaf::Number(value)) => Ok(fold.number(
             crate::values::computed::box_::FloatOffsetCalculationScalar::from_css_number(*value),
         )),
@@ -1281,9 +1277,7 @@ impl specified::CalcLengthPercentage {
         use crate::values::specified::length::NoCalcLength;
 
         let node = self.node.map_leaves(|leaf| match *leaf {
-            Leaf::Percentage(value) => {
-                CalcLengthPercentageLeaf::Percentage(Percentage(value))
-            },
+            Leaf::Percentage(value) => CalcLengthPercentageLeaf::Percentage(Percentage(value)),
             Leaf::Length(value) => {
                 let computed = match value {
                     NoCalcLength::Absolute(absolute) if !absolute.to_px().is_finite() => {

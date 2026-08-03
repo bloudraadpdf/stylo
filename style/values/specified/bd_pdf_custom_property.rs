@@ -110,7 +110,7 @@ impl ToCss for BdPdfCustomProperty {
                     first = false;
                 }
                 Ok(())
-            }
+            },
         }
     }
 }
@@ -134,20 +134,13 @@ impl Parse for BdPdfCustomProperty {
         _context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
         let mut entries: Vec<BdPdfCustomPropertyEntry> = Vec::new();
         loop {
             let name = CustomIdent::parse(input, &["none"])?;
-            let value = input
-                .expect_string()?
-                .as_ref()
-                .to_owned()
-                .into();
+            let value = input.expect_string()?.as_ref().to_owned().into();
             entries.push(BdPdfCustomPropertyEntry { name, value });
             if input.try_parse(|i| i.expect_comma()).is_err() {
                 break;

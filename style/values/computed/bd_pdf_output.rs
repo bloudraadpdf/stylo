@@ -50,7 +50,7 @@ impl ToComputedValue for specified::BdRasterizationMaxSize {
             specified::BdRasterizationMaxSize::None => BdRasterizationMaxSize::None,
             specified::BdRasterizationMaxSize::Megapixels(n) => {
                 BdRasterizationMaxSize::Megapixels(n.to_computed_value(ctx))
-            }
+            },
         }
     }
 

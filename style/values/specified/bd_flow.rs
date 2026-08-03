@@ -25,8 +25,16 @@ use crate::OwnedStr;
 /// `none` (initial) — the element is not a region-content sink.
 /// `<ident>` — pulls fragments from the named flow.
 #[derive(
-    Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue,
-    ToResolvedValue, ToShmem, ToTyped,
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
 )]
 #[repr(C, u8)]
 pub enum BdFlowFrom {
@@ -56,10 +64,7 @@ impl crate::parser::Parse for BdFlowFrom {
         _: &crate::parser::ParserContext,
         input: &mut cssparser::Parser<'i, 't>,
     ) -> Result<Self, style_traits::ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
         let ident = input.expect_ident()?;
@@ -73,8 +78,16 @@ impl crate::parser::Parse for BdFlowFrom {
 /// named flow. `<ident> [content | element]?` — feeds the named
 /// flow with the element's content or the element itself.
 #[derive(
-    Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToComputedValue,
-    ToResolvedValue, ToShmem, ToTyped,
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
 )]
 #[repr(C, u8)]
 pub enum BdFlowInto {
@@ -172,16 +185,11 @@ impl crate::parser::Parse for BdFlowInto {
         _: &crate::parser::ParserContext,
         input: &mut cssparser::Parser<'i, 't>,
     ) -> Result<Self, style_traits::ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
         let ident = input.expect_ident()?.as_ref().to_owned();
-        let mode = input
-            .try_parse(BdFlowIntoMode::parse)
-            .unwrap_or_default();
+        let mode = input.try_parse(BdFlowIntoMode::parse).unwrap_or_default();
         Ok(Self::Flow {
             name: ident.into(),
             mode,

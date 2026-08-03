@@ -380,7 +380,10 @@ impl Parse for BdBlankPageContent {
         _context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input.try_parse(|i| i.expect_ident_matching("normal")).is_ok() {
+        if input
+            .try_parse(|i| i.expect_ident_matching("normal"))
+            .is_ok()
+        {
             return Ok(Self::Normal);
         }
         let text = input.expect_string()?.as_ref().to_owned();

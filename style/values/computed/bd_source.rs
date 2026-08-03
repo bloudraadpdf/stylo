@@ -130,7 +130,7 @@ impl ToCss for BdSourceArea {
                 dest.write_char(' ')?;
                 left.to_css(dest)?;
                 dest.write_char(')')
-            }
+            },
         }
     }
 }

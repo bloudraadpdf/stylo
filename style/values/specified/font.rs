@@ -892,16 +892,18 @@ impl FontSizeKeyword {
         // monospace default) must scale exactly through the factor
         // ladder rather than snap to the nearest integer row.
         let integral_base = base_size.px().fract() == 0.0;
-        NonNegative(if integral_base && base_size_px >= 9 && base_size_px <= 16 {
-            let mapping = if quirks_mode == QuirksMode::Quirks {
-                QUIRKS_FONT_SIZE_MAPPING
+        NonNegative(
+            if integral_base && base_size_px >= 9 && base_size_px <= 16 {
+                let mapping = if quirks_mode == QuirksMode::Quirks {
+                    QUIRKS_FONT_SIZE_MAPPING
+                } else {
+                    FONT_SIZE_MAPPING
+                };
+                Length::new(mapping[(base_size_px - 9) as usize][html_size] as f32)
             } else {
-                FONT_SIZE_MAPPING
-            };
-            Length::new(mapping[(base_size_px - 9) as usize][html_size] as f32)
-        } else {
-            base_size * FONT_SIZE_FACTORS[html_size] as f32 / 100.0
-        })
+                base_size * FONT_SIZE_FACTORS[html_size] as f32 / 100.0
+            },
+        )
     }
 }
 

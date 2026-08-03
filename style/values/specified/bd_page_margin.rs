@@ -19,7 +19,9 @@ use crate::values::specified::length::LengthPercentageOrAuto;
 
 /// Specified value of `-bd-margin-{inside,outside,alt}` and
 /// `-bd-inset-{inside,outside}`.
-#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped, Parse)]
+#[derive(
+    Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped, Parse,
+)]
 #[repr(C)]
 pub struct BdPageMarginEdge(pub LengthPercentageOrAuto);
 

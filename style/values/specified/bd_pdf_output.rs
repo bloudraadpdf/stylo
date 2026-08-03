@@ -544,13 +544,13 @@ mod tests {
         match parse_rasterization_max_size("2") {
             BdRasterizationMaxSize::Megapixels(n) => {
                 assert!((n.0.get() - 2.0).abs() < f32::EPSILON);
-            }
+            },
             other => panic!("expected Megapixels(2), got {other:?}"),
         }
         match parse_rasterization_max_size("0.5") {
             BdRasterizationMaxSize::Megapixels(n) => {
                 assert!((n.0.get() - 0.5).abs() < f32::EPSILON);
-            }
+            },
             other => panic!("expected Megapixels(0.5), got {other:?}"),
         }
     }

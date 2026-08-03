@@ -50,7 +50,7 @@ impl ToComputedValue for specified::BdTextDecorationLineColour {
             specified::BdTextDecorationLineColour::Auto => BdTextDecorationLineColour::Auto,
             specified::BdTextDecorationLineColour::Colour(c) => {
                 BdTextDecorationLineColour::Colour(c.to_computed_value(ctx))
-            }
+            },
         }
     }
 
@@ -94,9 +94,7 @@ impl ToComputedValue for specified::BdTextDecorationLineThickness {
     }
 
     fn from_computed_value(computed: &Self::ComputedValue) -> Self {
-        specified::BdTextDecorationLineThickness(
-            ToComputedValue::from_computed_value(&computed.0),
-        )
+        specified::BdTextDecorationLineThickness(ToComputedValue::from_computed_value(&computed.0))
     }
 }
 
@@ -130,7 +128,10 @@ impl BdTextUnderlineOffset {
     /// Whether the value is `auto`.
     #[inline]
     pub fn is_auto(&self) -> bool {
-        matches!(self.0, crate::values::computed::LengthPercentageOrAuto::Auto)
+        matches!(
+            self.0,
+            crate::values::computed::LengthPercentageOrAuto::Auto
+        )
     }
 }
 
@@ -194,7 +195,7 @@ impl ToComputedValue for specified::BdTextDecorationTrim {
             specified::BdTextDecorationTrim::None => BdTextDecorationTrim::None,
             specified::BdTextDecorationTrim::Length(len) => {
                 BdTextDecorationTrim::Length(len.to_computed_value(ctx))
-            }
+            },
         }
     }
 
@@ -204,7 +205,7 @@ impl ToComputedValue for specified::BdTextDecorationTrim {
             BdTextDecorationTrim::None => specified::BdTextDecorationTrim::None,
             BdTextDecorationTrim::Length(len) => {
                 specified::BdTextDecorationTrim::Length(ToComputedValue::from_computed_value(len))
-            }
+            },
         }
     }
 }
@@ -266,7 +267,7 @@ impl style_traits::ToCss for BdTextDecorationSkip {
                     first = false;
                 }
                 Ok(())
-            }
+            },
         }
     }
 }
@@ -279,7 +280,7 @@ impl ToComputedValue for specified::BdTextDecorationSkip {
             specified::BdTextDecorationSkip::None => BdTextDecorationSkip::None,
             specified::BdTextDecorationSkip::Categories(cats) => {
                 BdTextDecorationSkip::Categories(cats.clone())
-            }
+            },
         }
     }
 
@@ -288,7 +289,7 @@ impl ToComputedValue for specified::BdTextDecorationSkip {
             BdTextDecorationSkip::None => specified::BdTextDecorationSkip::None,
             BdTextDecorationSkip::Categories(cats) => {
                 specified::BdTextDecorationSkip::Categories(cats.clone())
-            }
+            },
         }
     }
 }

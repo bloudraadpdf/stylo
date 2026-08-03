@@ -284,15 +284,7 @@ pub type AspectRatio = GenericAspectRatio<NonNegativeNumber>;
 /// is a tagged union without a `ToShmem` impl and the computed value
 /// never enters shareable-memory storage (only the specified value
 /// does, and that lives on the specified-side `MasonrySlack`).
-#[derive(
-    Clone,
-    Debug,
-    MallocSizeOf,
-    PartialEq,
-    ToCss,
-    ToResolvedValue,
-    ToTyped,
-)]
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToCss, ToResolvedValue, ToTyped)]
 #[repr(C, u8)]
 pub enum MasonrySlack {
     /// `infinite` — no slack constraint; initial value.

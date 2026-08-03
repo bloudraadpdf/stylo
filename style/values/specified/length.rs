@@ -1196,18 +1196,15 @@ impl PageRelativeLength {
 
         let (factor, length): (CSSFloat, app_units::Au) = match *self {
             Pw(v) => {
-                let size = context
-                    .viewport_size_for_page_box_resolution();
+                let size = context.viewport_size_for_page_box_resolution();
                 (v, size.width)
-            }
+            },
             Ph(v) => {
-                let size = context
-                    .viewport_size_for_page_box_resolution();
+                let size = context.viewport_size_for_page_box_resolution();
                 (v, size.height)
-            }
+            },
             Pi(v) => {
-                let size = context
-                    .viewport_size_for_page_box_resolution();
+                let size = context.viewport_size_for_page_box_resolution();
                 (
                     v,
                     if writing_mode_vertical {
@@ -1216,10 +1213,9 @@ impl PageRelativeLength {
                         size.width
                     },
                 )
-            }
+            },
             Pb(v) => {
-                let size = context
-                    .viewport_size_for_page_box_resolution();
+                let size = context.viewport_size_for_page_box_resolution();
                 (
                     v,
                     if writing_mode_vertical {
@@ -1228,25 +1224,23 @@ impl PageRelativeLength {
                         size.height
                     },
                 )
-            }
+            },
             Pmin(v) => {
-                let size = context
-                    .viewport_size_for_page_box_resolution();
+                let size = context.viewport_size_for_page_box_resolution();
                 (v, cmp::min(size.width, size.height))
-            }
+            },
             Pmax(v) => {
-                let size = context
-                    .viewport_size_for_page_box_resolution();
+                let size = context.viewport_size_for_page_box_resolution();
                 (v, cmp::max(size.width, size.height))
-            }
+            },
             Bw(v) => {
                 let size = context.viewport_size_for_bleed_box_resolution();
                 (v, size.width)
-            }
+            },
             Bh(v) => {
                 let size = context.viewport_size_for_bleed_box_resolution();
                 (v, size.height)
-            }
+            },
             Bi(v) => {
                 let size = context.viewport_size_for_bleed_box_resolution();
                 (
@@ -1257,7 +1251,7 @@ impl PageRelativeLength {
                         size.width
                     },
                 )
-            }
+            },
             Bb(v) => {
                 let size = context.viewport_size_for_bleed_box_resolution();
                 (
@@ -1268,15 +1262,15 @@ impl PageRelativeLength {
                         size.height
                     },
                 )
-            }
+            },
             Bmin(v) => {
                 let size = context.viewport_size_for_bleed_box_resolution();
                 (v, cmp::min(size.width, size.height))
-            }
+            },
             Bmax(v) => {
                 let size = context.viewport_size_for_bleed_box_resolution();
                 (v, cmp::max(size.width, size.height))
-            }
+            },
         };
 
         let length = context.builder.effective_zoom.zoom(length.0 as f32);

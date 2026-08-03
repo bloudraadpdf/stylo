@@ -7,4 +7,6 @@
 //!
 //! Shelved: see specified module docstring.
 
-pub use crate::values::specified::bd_flow::{BdFlowFrom, BdFlowInto, BdFlowIntoMode, BdRegionFragment};
+pub use crate::values::specified::bd_flow::{
+    BdFlowFrom, BdFlowInto, BdFlowIntoMode, BdRegionFragment,
+};

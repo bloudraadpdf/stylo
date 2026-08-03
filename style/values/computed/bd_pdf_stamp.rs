@@ -9,4 +9,6 @@
 //! resolution required), so the computed surface re-exports the
 //! specified types verbatim.
 
-pub use crate::values::specified::bd_pdf_stamp::{BdPdfStampIcon, BdPdfStampIntent, BdPdfStampString};
+pub use crate::values::specified::bd_pdf_stamp::{
+    BdPdfStampIcon, BdPdfStampIntent, BdPdfStampString,
+};

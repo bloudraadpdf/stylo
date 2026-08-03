@@ -38,7 +38,7 @@ impl ToComputedValue for specified::BdHyphenateLimitLines {
             specified::BdHyphenateLimitLines::NoLimit => BdHyphenateLimitLines::NoLimit,
             specified::BdHyphenateLimitLines::Count(i) => {
                 BdHyphenateLimitLines::Count(i.to_computed_value(ctx))
-            }
+            },
         }
     }
 
@@ -47,7 +47,7 @@ impl ToComputedValue for specified::BdHyphenateLimitLines {
             BdHyphenateLimitLines::NoLimit => specified::BdHyphenateLimitLines::NoLimit,
             BdHyphenateLimitLines::Count(i) => {
                 specified::BdHyphenateLimitLines::Count(ToComputedValue::from_computed_value(i))
-            }
+            },
         }
     }
 }
@@ -78,7 +78,7 @@ impl ToComputedValue for specified::BdHyphenatePatterns {
             specified::BdHyphenatePatterns::None => BdHyphenatePatterns::None,
             specified::BdHyphenatePatterns::Url(u) => {
                 BdHyphenatePatterns::Url(u.to_computed_value(ctx))
-            }
+            },
         }
     }
 
@@ -87,7 +87,7 @@ impl ToComputedValue for specified::BdHyphenatePatterns {
             BdHyphenatePatterns::None => specified::BdHyphenatePatterns::None,
             BdHyphenatePatterns::Url(u) => {
                 specified::BdHyphenatePatterns::Url(ToComputedValue::from_computed_value(u))
-            }
+            },
         }
     }
 }
@@ -116,28 +116,28 @@ impl ToComputedValue for specified::BdHyphenateLines {
     fn to_computed_value(&self, ctx: &Context) -> Self::ComputedValue {
         match self {
             specified::BdHyphenateLines::Auto => BdHyphenateLines::Auto,
-            specified::BdHyphenateLines::Counts(counts) => BdHyphenateLines::Counts(
-                OwnedSlice::from(
+            specified::BdHyphenateLines::Counts(counts) => {
+                BdHyphenateLines::Counts(OwnedSlice::from(
                     counts
                         .iter()
                         .map(|c| c.to_computed_value(ctx))
                         .collect::<Vec<_>>(),
-                ),
-            ),
+                ))
+            },
         }
     }
 
     fn from_computed_value(computed: &Self::ComputedValue) -> Self {
         match computed {
             BdHyphenateLines::Auto => specified::BdHyphenateLines::Auto,
-            BdHyphenateLines::Counts(counts) => specified::BdHyphenateLines::Counts(
-                OwnedSlice::from(
+            BdHyphenateLines::Counts(counts) => {
+                specified::BdHyphenateLines::Counts(OwnedSlice::from(
                     counts
                         .iter()
                         .map(ToComputedValue::from_computed_value)
                         .collect::<Vec<_>>(),
-                ),
-            ),
+                ))
+            },
         }
     }
 }
@@ -168,16 +168,16 @@ impl ToComputedValue for specified::BdHyphenateWordLength {
             specified::BdHyphenateWordLength::Auto => BdHyphenateWordLength::Auto,
             specified::BdHyphenateWordLength::Length(i) => {
                 BdHyphenateWordLength::Length(i.to_computed_value(ctx))
-            }
+            },
         }
     }
 
     fn from_computed_value(computed: &Self::ComputedValue) -> Self {
         match computed {
             BdHyphenateWordLength::Auto => specified::BdHyphenateWordLength::Auto,
-            BdHyphenateWordLength::Length(i) => specified::BdHyphenateWordLength::Length(
-                ToComputedValue::from_computed_value(i),
-            ),
+            BdHyphenateWordLength::Length(i) => {
+                specified::BdHyphenateWordLength::Length(ToComputedValue::from_computed_value(i))
+            },
         }
     }
 }

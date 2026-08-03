@@ -94,7 +94,7 @@ impl ToCss for BdPdfRoleMap {
                     first = false;
                 }
                 Ok(())
-            }
+            },
         }
     }
 }
@@ -118,10 +118,7 @@ impl Parse for BdPdfRoleMap {
         _context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
         let mut entries: Vec<BdPdfRoleMapEntry> = Vec::new();

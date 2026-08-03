@@ -67,9 +67,9 @@ impl ToComputedValue for specified::BdPdfFormFieldMkColour {
     fn from_computed_value(computed: &Self::ComputedValue) -> Self {
         match computed {
             BdPdfFormFieldMkColour::None => specified::BdPdfFormFieldMkColour::None,
-            BdPdfFormFieldMkColour::Colour(c) => specified::BdPdfFormFieldMkColour::Colour(
-                ToComputedValue::from_computed_value(c),
-            ),
+            BdPdfFormFieldMkColour::Colour(c) => {
+                specified::BdPdfFormFieldMkColour::Colour(ToComputedValue::from_computed_value(c))
+            },
         }
     }
 }
@@ -122,9 +122,9 @@ impl ToComputedValue for specified::BdPdfFormFieldMkIcon {
     fn from_computed_value(computed: &Self::ComputedValue) -> Self {
         match computed {
             BdPdfFormFieldMkIcon::None => specified::BdPdfFormFieldMkIcon::None,
-            BdPdfFormFieldMkIcon::Url(u) => specified::BdPdfFormFieldMkIcon::Url(
-                ToComputedValue::from_computed_value(u),
-            ),
+            BdPdfFormFieldMkIcon::Url(u) => {
+                specified::BdPdfFormFieldMkIcon::Url(ToComputedValue::from_computed_value(u))
+            },
         }
     }
 }

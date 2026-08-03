@@ -186,11 +186,7 @@ impl ToCssWithGuard for BdColourRule {
 }
 
 impl DeepCloneWithLock for BdColourRule {
-    fn deep_clone_with_lock(
-        &self,
-        _lock: &SharedRwLock,
-        _guard: &SharedRwLockReadGuard,
-    ) -> Self {
+    fn deep_clone_with_lock(&self, _lock: &SharedRwLock, _guard: &SharedRwLockReadGuard) -> Self {
         // `SpecifiedColor` and the rest are `Clone` without lock
         // shenanigans — there's no `Locked<>` payload in this rule.
         self.clone()

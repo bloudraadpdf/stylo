@@ -278,7 +278,10 @@ impl Parse for ShapeOutside {
             return Ok(ShapeOutside::None);
         }
 
-        if input.try_parse(|i| i.expect_ident_matching("-bd-self")).is_ok() {
+        if input
+            .try_parse(|i| i.expect_ident_matching("-bd-self"))
+            .is_ok()
+        {
             return Ok(ShapeOutside::SelfContent);
         }
 

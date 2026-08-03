@@ -574,9 +574,9 @@ impl<'a, 'i> NestedRuleParser<'a, 'i> {
             | AtRulePrelude::BdColour(..)
             | AtRulePrelude::ColorProfile(..)
             | AtRulePrelude::Region(..) => !self.in_style_or_page_rule(),
-            AtRulePrelude::Margin(..)
-            | AtRulePrelude::Footnote
-            | AtRulePrelude::Sidenote(..) => self.in_page_rule(),
+            AtRulePrelude::Margin(..) | AtRulePrelude::Footnote | AtRulePrelude::Sidenote(..) => {
+                self.in_page_rule()
+            },
         }
     }
 
@@ -1157,9 +1157,7 @@ impl<'a, 'i> AtRuleParser<'i> for NestedRuleParser<'a, 'i> {
                     .rules
                     .iter()
                     .enumerate()
-                    .rfind(|(_, r)| {
-                        !matches!(r, CssRule::NestedDeclarations(..))
-                    })
+                    .rfind(|(_, r)| !matches!(r, CssRule::NestedDeclarations(..)))
                     .and_then(|(i, r)| match r {
                         CssRule::When(..) | CssRule::Else(..) => Some(i),
                         _ => None,
@@ -1178,8 +1176,7 @@ impl<'a, 'i> AtRuleParser<'i> for NestedRuleParser<'a, 'i> {
                 let mut extended: Vec<Option<WhenCondition>> =
                     preceding_chain.iter().cloned().collect();
                 extended.push(condition.clone());
-                let new_chain: Arc<Box<ChainConditions>> =
-                    Arc::new(extended.into_boxed_slice());
+                let new_chain: Arc<Box<ChainConditions>> = Arc::new(extended.into_boxed_slice());
                 let new_position = (new_chain.len() - 1) as u32;
 
                 // Parse the body now that chain validity is

@@ -618,7 +618,11 @@ pub enum GenericContentItem<I> {
     /// offset is an authored integer literal, matching the
     /// `-bd-target-counter-offset` grammar above.
     #[css(comma, function = "-bd-counter-offset")]
-    BdCounterOffset(CustomIdent, i32, #[css(skip_if = "is_decimal")] CounterStyleType),
+    BdCounterOffset(
+        CustomIdent,
+        i32,
+        #[css(skip_if = "is_decimal")] CounterStyleType,
+    ),
     /// `leader(dotted | solid | space | <string>)`
     ///
     /// https://www.w3.org/TR/css-gcpm-3/#funcdef-leader

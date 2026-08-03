@@ -5,6 +5,4 @@
 //! Computed values for `-bd-pdf-layer` (K3),
 //! `-bd-pdf-layer-intent` (G66), and `-bd-pdf-layer-visible` (K18).
 
-pub use crate::values::specified::bd_pdf_layer::{
-    BdPdfLayer, BdPdfLayerIntent, BdPdfLayerVisible,
-};
+pub use crate::values::specified::bd_pdf_layer::{BdPdfLayer, BdPdfLayerIntent, BdPdfLayerVisible};

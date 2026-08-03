@@ -65,9 +65,9 @@ impl ToShmem for OutputColorModel {
         Ok(std::mem::ManuallyDrop::new(match self {
             Self::Auto => Self::Auto,
             Self::Predefined(p) => Self::Predefined(*p),
-            Self::Custom(name) => Self::Custom(std::mem::ManuallyDrop::into_inner(
-                name.to_shmem(builder)?,
-            )),
+            Self::Custom(name) => {
+                Self::Custom(std::mem::ManuallyDrop::into_inner(name.to_shmem(builder)?))
+            },
         }))
     }
 }

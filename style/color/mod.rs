@@ -637,9 +637,7 @@ impl AbsoluteColor {
                     Rec2020 => convert::from_xyz::<convert::Rec2020>(&xyz, white_point),
                     Rec2100Pq => convert::from_xyz::<convert::Rec2100Pq>(&xyz, white_point),
                     Rec2100Hlg => convert::from_xyz::<convert::Rec2100Hlg>(&xyz, white_point),
-                    Rec2100Linear => {
-                        convert::from_xyz::<convert::Rec2100Linear>(&xyz, white_point)
-                    },
+                    Rec2100Linear => convert::from_xyz::<convert::Rec2100Linear>(&xyz, white_point),
                     XyzD50 => convert::from_xyz::<convert::XyzD50>(&xyz, white_point),
                     XyzD65 => convert::from_xyz::<convert::XyzD65>(&xyz, white_point),
                 }

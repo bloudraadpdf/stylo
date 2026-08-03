@@ -148,9 +148,7 @@ pub enum BdShrinkToFit {
 /// Single-integer overrides for HTML attributes that would normally
 /// supply the value. `auto` (initial) defers to HTML; a positive
 /// integer overrides.
-#[derive(
-    Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped,
-)]
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
 #[repr(C, u8)]
 pub enum BdIntegerAuto {
     /// `auto` — defer to the HTML attribute.
@@ -220,7 +218,7 @@ impl ToComputedValueTrait for BdIntegerAuto {
             ComputedBdIntegerAuto::Auto => Self::Auto,
             ComputedBdIntegerAuto::Value(v) => {
                 Self::Value(<Integer as ToComputedValueTrait>::from_computed_value(&v))
-            }
+            },
         }
     }
 }
@@ -366,9 +364,7 @@ pub enum BdReplacedElement {
 /// box paint at full size. Layout (line breaks, page breaks,
 /// widows / orphans, multicol balance) is unaffected — only the
 /// visual paint scales.
-#[derive(
-    Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped,
-)]
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
 #[repr(C, u8)]
 pub enum BdScaleContent {
     /// `<percentage>` — uniform scale factor expressed as a
@@ -442,7 +438,7 @@ impl ToComputedValueTrait for BdScaleContent {
         match *self {
             Self::Percentage(ref p) => {
                 ComputedBdScaleContent::Percentage(p.to_computed_value(context).0)
-            }
+            },
             Self::FitPage => ComputedBdScaleContent::FitPage,
         }
     }
@@ -495,8 +491,16 @@ pub enum BdPositionOrigin {
 /// `before` is matched against the text ending at the candidate boundary;
 /// `after`, when present, is matched against the text beginning there.
 #[derive(
-    Clone, Debug, Eq, MallocSizeOf, PartialEq, SpecifiedValueInfo,
-    ToComputedValue, ToResolvedValue, ToShmem, ToTyped,
+    Clone,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
 )]
 #[repr(C)]
 pub struct BdLineBreakRule {
@@ -523,8 +527,16 @@ impl ToCss for BdLineBreakRule {
 /// Unicode line-break opportunities; whitelist rules add opportunities and
 /// blacklist rules remove them, with the blacklist taking precedence.
 #[derive(
-    Clone, Debug, Eq, MallocSizeOf, PartialEq, SpecifiedValueInfo,
-    ToComputedValue, ToResolvedValue, ToShmem, ToTyped,
+    Clone,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
 )]
 #[repr(C)]
 pub struct BdLineBreakOpportunity {
@@ -590,9 +602,13 @@ impl Parse for BdLineBreakOpportunity {
         _: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        let normal = input.try_parse(|i| i.expect_ident_matching("normal")).is_ok();
+        let normal = input
+            .try_parse(|i| i.expect_ident_matching("normal"))
+            .is_ok();
 
-        fn parse_rule<'i, 't>(input: &mut Parser<'i, 't>) -> Result<BdLineBreakRule, ParseError<'i>> {
+        fn parse_rule<'i, 't>(
+            input: &mut Parser<'i, 't>,
+        ) -> Result<BdLineBreakRule, ParseError<'i>> {
             let before: OwnedStr = input.expect_string()?.as_ref().to_owned().into();
             let after = input
                 .try_parse(|i| -> Result<OwnedStr, ParseError<'i>> {

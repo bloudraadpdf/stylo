@@ -52,6 +52,84 @@ pub use self::animation::{
 };
 pub use self::background::{BackgroundRepeat, BackgroundSize};
 pub use self::basic_shape::FillRule;
+pub use self::bd_a11y::{
+    BdTextReplace, BdTextReplacement, BdTextReplacementMethod, BdTextReplacementPoint, BdTooltip,
+};
+pub use self::bd_barcode::{
+    BdBarcodeAffix, BdBarcodeCheckDigitMode, BdBarcodeCompositeType, BdBarcodeContent,
+    BdBarcodeEccLevel, BdBarcodeEncoding, BdBarcodeFontFamily, BdBarcodeHrPosition,
+    BdBarcodeReaderInit, BdBarcodeSize, BdBarcodeStructuredAppend, BdBarcodeType, BdQrEccLetter,
+};
+pub use self::bd_bfo::{BdIndex, BdIndexGrouping};
+pub use self::bd_bookmark::{BdPdfLinkType, BookmarkTarget};
+pub use self::bd_change_bar::{
+    BdChangeBarAlign, BdChangeBarColour, BdChangeBarExclusion, BdChangeBarName, BdChangeBarOffset,
+    BdChangeBarWidth,
+};
+pub use self::bd_color_function::BdColorFunction;
+pub use self::bd_filter_resolution::BdFilterResolution;
+pub use self::bd_float::{
+    BdFloatDeferColumn, BdFloatDeferPage, BdFloatDisplace, BdFloatModifier, BdFloatPolicy,
+    BdFloatTail,
+};
+pub use self::bd_flow::{BdFlowFrom, BdFlowInto, BdFlowIntoMode, BdRegionFragment};
+pub use self::bd_footnote::{
+    BdFootnoteFragmentation, BdFootnoteRuleLength, FloatPlacement, FootnoteStylePosition,
+};
+pub use self::bd_hyphenation::{
+    BdHyphenateLimitLines, BdHyphenateLines, BdHyphenatePatterns, BdHyphenateWordLength,
+    BdLinebreakMagic,
+};
+pub use self::bd_image::{
+    BdImageClipPath, BdImageInteractivity, BdImageMagic, BdImageOrientation, BdImageRecompression,
+    BdImageResampling, BdImageResolution,
+};
+pub use self::bd_line_grid::{BdBaselineGrid, BdLineGrid, BdLineSnap, BdLineStackingStrategy};
+pub use self::bd_link::{BdLink, BdLinkArea};
+pub use self::bd_page_boxes::{
+    BdPdfArtBox, BdPdfArtSize, BdPdfBleedBox, BdPdfCropBox, BdPdfCropSize, BdPdfMediaSize,
+    BdPdfPageBoxInsets, BdPdfPageBoxInsetsSides, BdPdfPageBoxSize, BdPdfPageClip, BdPdfTrimBox,
+};
+pub use self::bd_page_group::BdPageGroup;
+pub use self::bd_page_margin::BdPageMarginEdge;
+pub use self::bd_page_marks::{
+    BdBleedColour, BdColorBarPosition, BdColourBarPositionSide, BdColourBarSwatches, BdCropColour,
+    BdPageMarkEnabled, BdPageMarkLength, BdPageMarkLengthOrAuto, BdPageMarkOffset, BdPageMarkWidth,
+    BdPageMarksColour, BdPrintMarkSet, BdRegistrationColour, BdRegistrationPosition,
+    BdSidenoteGlyph, BdSidenoteMarkerOffset,
+};
+pub use self::bd_page_rotation::{BdPdfPageRotation, BdRotateBody};
+pub use self::bd_pagination::{
+    BdBlankPageContent, BdChangeLineBreaksForPagination, BdForcedBreaks, BdKeepWithPrevious,
+    BdLineBreakChoices, BdNLines, BdOrphansFragments, BdPageFill, BdPdfSignature, BdResizeAdjust,
+    BdResizeOptions, BdSpreadLengthOptions, BdTextWrap, BdWrapInside,
+};
+pub use self::bd_pdf::BdPdfMetaValue;
+pub use self::bd_pdf_colour::{BdPdfOverprint, BdPdfOverprintContent, BdPdfPageColourSpace};
+pub use self::bd_pdf_comment::{
+    BdPdfCommentAuthor, BdPdfCommentColour, BdPdfCommentDate, BdPdfCommentDateFormat,
+    BdPdfCommentIcon, BdPdfCommentKind, BdPdfCommentOpen, BdPdfCommentPosition, BdPdfCommentState,
+    BdPdfCommentStateModel, BdPdfCommentString, BdPdfCommentSubject, BdPdfLinkArea,
+    BdPdfLinkBorder, BdPdfLinkBorderColor, BdPdfLinkBorderStyle, BdPdfLinkBorderWidth,
+};
+pub use self::bd_pdf_conformance::{BdPdfConformanceValue, BdPdfVersionValue};
+pub use self::bd_pdf_custom_property::{BdPdfCustomProperty, BdPdfCustomPropertyEntry};
+pub use self::bd_pdf_destination::{
+    BdDestinationArea, BdPdfAttachmentIcon, BdPdfAttachmentLocation,
+    BdPdfAttachmentModificationDate, BdPdfAttachmentOrder, BdPdfAttachmentRelationship,
+    BdPdfAttachmentUrl, BdPdfStringSlot,
+};
+pub use self::bd_pdf_multimedia::{BdPdfMultimedia, BdPdfMultimediaFormat};
+pub use self::bd_pdf_output_condition::BdPdfOutputCondition;
+pub use self::bd_pdf_output_registry_name::BdPdfOutputRegistryName;
+pub use self::bd_pdf_role_map::{BdPdfRoleMap, BdPdfRoleMapEntry};
+pub use self::bd_pdf_script::{
+    BdPdfEventKind, BdPdfEventScript, BdPdfEventScripts, BdPdfOpenActionScript, BdPdfScript,
+    BdPdfWidgetActionScript,
+};
+pub use self::bd_pdf_stamp::{BdPdfStampIcon, BdPdfStampIntent, BdPdfStampString};
+pub use self::bd_pdf_tagged::BdPdfTagged;
+pub use self::bd_pdf_trapped::BdPdfTrapped;
 pub use self::border::{
     BorderCornerRadius, BorderImageRepeat, BorderImageSideWidth, BorderImageSlice,
     BorderImageWidth, BorderRadius, BorderSideOffset, BorderSideWidth, BorderSpacing, LineWidth,
@@ -59,11 +137,11 @@ pub use self::border::{
 pub use self::box_::{
     AlignmentBaseline, Appearance, BaselineShift, BaselineSource, BookmarkLevel, BookmarkState,
     BreakBetween, BreakWithin, Clear, Contain, ContainIntrinsicSize, ContainerName, ContainerType,
-    ContentVisibility, Display, Float, FloatDefer, FloatOffset, FloatReference, FootnoteDisplay, FootnotePolicy,
-    LineClamp, MarginBreak, MarginTrim, Overflow, OverflowAnchor, OverflowClipMargin,
-    OverscrollBehavior, Perspective, PositionProperty, Resize, ScrollSnapAlign, ScrollSnapAxis,
-    ScrollSnapStop, ScrollSnapStrictness, ScrollSnapType, ScrollbarGutter, TouchAction, WillChange,
-    WritingModeProperty, Zoom,
+    ContentVisibility, Display, Float, FloatDefer, FloatOffset, FloatReference, FootnoteDisplay,
+    FootnotePolicy, LineClamp, MarginBreak, MarginTrim, Overflow, OverflowAnchor,
+    OverflowClipMargin, OverscrollBehavior, Perspective, PositionProperty, Resize, ScrollSnapAlign,
+    ScrollSnapAxis, ScrollSnapStop, ScrollSnapStrictness, ScrollSnapType, ScrollbarGutter,
+    TouchAction, WillChange, WritingModeProperty, Zoom,
 };
 pub use self::color::{
     Color, ColorOrAuto, ColorPropertyValue, ColorScheme, ForcedColorAdjust, PrintColorAdjust,
@@ -99,94 +177,20 @@ pub use self::list::Quotes;
 pub use self::motion::{OffsetPath, OffsetPosition, OffsetRotate};
 pub use self::outline::OutlineStyle;
 pub use self::overflow_4::{BlockEllipsis, Continue, LeadingTrim, MaxLines, PositiveLineCount};
-pub use self::bd_a11y::{
-    BdTextReplace, BdTextReplacement, BdTextReplacementMethod, BdTextReplacementPoint, BdTooltip,
-};
-pub use self::bd_barcode::{
-    BdBarcodeAffix, BdBarcodeCheckDigitMode, BdBarcodeCompositeType, BdBarcodeContent,
-    BdBarcodeEccLevel, BdBarcodeEncoding, BdBarcodeFontFamily, BdBarcodeHrPosition,
-    BdBarcodeReaderInit, BdBarcodeSize, BdBarcodeStructuredAppend, BdBarcodeType,
-    BdQrEccLetter,
-};
-pub use self::bd_bfo::{BdIndex, BdIndexGrouping};
-pub use self::bd_bookmark::{BdPdfLinkType, BookmarkTarget};
-pub use self::bd_change_bar::{
-    BdChangeBarAlign, BdChangeBarColour, BdChangeBarExclusion, BdChangeBarName, BdChangeBarOffset,
-    BdChangeBarWidth,
-};
-pub use self::bd_color_function::BdColorFunction;
-pub use self::bd_float::{
-    BdFloatDeferColumn, BdFloatDeferPage, BdFloatDisplace, BdFloatModifier, BdFloatPolicy,
-    BdFloatTail,
-};
-pub use self::bd_flow::{BdFlowFrom, BdFlowInto, BdFlowIntoMode, BdRegionFragment};
-pub use self::bd_footnote::{
-    BdFootnoteFragmentation, BdFootnoteRuleLength, FloatPlacement, FootnoteStylePosition,
-};
-pub use self::bd_hyphenation::{
-    BdHyphenateLimitLines, BdHyphenateLines, BdHyphenatePatterns, BdHyphenateWordLength,
-    BdLinebreakMagic,
-};
-pub use self::bd_image::{
-    BdImageClipPath, BdImageInteractivity, BdImageMagic, BdImageOrientation, BdImageRecompression,
-    BdImageResampling, BdImageResolution,
-};
-pub use self::bd_line_grid::{BdBaselineGrid, BdLineGrid, BdLineSnap, BdLineStackingStrategy};
-pub use self::bd_link::{BdLink, BdLinkArea};
-pub use self::bd_page_boxes::{
-    BdPdfArtBox, BdPdfArtSize, BdPdfBleedBox, BdPdfCropBox, BdPdfCropSize, BdPdfMediaSize,
-    BdPdfPageBoxInsets, BdPdfPageBoxInsetsSides, BdPdfPageBoxSize, BdPdfPageClip, BdPdfTrimBox,
-};
-pub use self::bd_page_group::BdPageGroup;
-pub use self::bd_page_margin::BdPageMarginEdge;
-pub use self::bd_page_marks::{
-    BdBleedColour, BdColorBarPosition, BdColourBarPositionSide, BdColourBarSwatches, BdCropColour,
-    BdPageMarkEnabled, BdPageMarkLength, BdPageMarkLengthOrAuto, BdPageMarkOffset,
-    BdPageMarkWidth, BdPageMarksColour, BdPrintMarkSet, BdRegistrationColour,
-    BdRegistrationPosition, BdSidenoteGlyph, BdSidenoteMarkerOffset,
-};
-pub use self::bd_page_rotation::{BdPdfPageRotation, BdRotateBody};
-pub use self::bd_pagination::{
-    BdBlankPageContent, BdChangeLineBreaksForPagination, BdForcedBreaks, BdKeepWithPrevious,
-    BdLineBreakChoices, BdNLines, BdOrphansFragments, BdPageFill, BdPdfSignature, BdResizeAdjust,
-    BdResizeOptions, BdSpreadLengthOptions, BdTextWrap, BdWrapInside,
-};
-pub use self::bd_pdf::BdPdfMetaValue;
-pub use self::bd_pdf_colour::{BdPdfOverprint, BdPdfOverprintContent, BdPdfPageColourSpace};
-pub use self::bd_pdf_comment::{
-    BdPdfCommentAuthor, BdPdfCommentColour, BdPdfCommentDate, BdPdfCommentDateFormat,
-    BdPdfCommentIcon, BdPdfCommentKind, BdPdfCommentOpen, BdPdfCommentPosition, BdPdfCommentState,
-    BdPdfCommentStateModel, BdPdfCommentString, BdPdfCommentSubject, BdPdfLinkArea, BdPdfLinkBorder,
-    BdPdfLinkBorderColor, BdPdfLinkBorderStyle, BdPdfLinkBorderWidth,
-};
-pub use self::bd_pdf_conformance::{BdPdfConformanceValue, BdPdfVersionValue};
-pub use self::bd_pdf_destination::{
-    BdDestinationArea, BdPdfAttachmentIcon, BdPdfAttachmentLocation, BdPdfAttachmentOrder,
-    BdPdfAttachmentModificationDate, BdPdfAttachmentRelationship, BdPdfAttachmentUrl,
-    BdPdfStringSlot,
-};
-pub use self::bd_pdf_stamp::{BdPdfStampIcon, BdPdfStampIntent, BdPdfStampString};
-pub use self::bd_pdf_multimedia::{BdPdfMultimedia, BdPdfMultimediaFormat};
-pub use self::bd_filter_resolution::BdFilterResolution;
-pub use self::bd_pdf_custom_property::{BdPdfCustomProperty, BdPdfCustomPropertyEntry};
-pub use self::bd_pdf_output_condition::BdPdfOutputCondition;
-pub use self::bd_pdf_output_registry_name::BdPdfOutputRegistryName;
-pub use self::bd_pdf_role_map::{BdPdfRoleMap, BdPdfRoleMapEntry};
-pub use self::bd_pdf_script::{
-    BdPdfEventKind, BdPdfEventScript, BdPdfEventScripts, BdPdfOpenActionScript, BdPdfScript,
-    BdPdfWidgetActionScript,
-};
-pub use self::bd_pdf_tagged::BdPdfTagged;
-pub use self::bd_pdf_trapped::BdPdfTrapped;
 // re-export by computed path; bd_pdf_destination now declares its own
 // computed `BdPdfAttachmentUrl` that contains `ComputedUrl`.
+pub use self::bd_gaps::{BorderClip, MaskBorderMode, Overlay};
+pub use self::bd_misc::{
+    BdCaptionPage, BdColumnClip, BdFlow, BdIntegerAuto, BdLang, BdLineBreakOpportunity,
+    BdLineBreakRule, BdObjectSlice, BdPositionOrigin, BdReplacedElement, BdScaleContent,
+    BdShrinkToFit, BdTabSnap, BdTargetCandidate, BdTruncateMarginAfterBreak,
+};
 pub use self::bd_pdf_form::{
-    BdPdfAnnotationHidden, BdPdfFormFieldFlags, BdPdfFormFieldMaxLength,
-    BdPdfFormFieldMkCaption, BdPdfFormFieldMkColour, BdPdfFormFieldMkIcon,
-    BdPdfFormFieldMkIconFit, BdPdfFormFieldMkIconFitScaleType,
-    BdPdfFormFieldMkIconFitScaleWhen, BdPdfFormFieldMkIconFitValue,
-    BdPdfFormFieldMkRotation, BdPdfFormFieldMkTextPosition, BdPdfSignatureFieldLock,
-    BdPdfSignatureFieldLockFields, BdPdfSignatureFieldName,
+    BdPdfAnnotationHidden, BdPdfFormFieldFlags, BdPdfFormFieldMaxLength, BdPdfFormFieldMkCaption,
+    BdPdfFormFieldMkColour, BdPdfFormFieldMkIcon, BdPdfFormFieldMkIconFit,
+    BdPdfFormFieldMkIconFitScaleType, BdPdfFormFieldMkIconFitScaleWhen,
+    BdPdfFormFieldMkIconFitValue, BdPdfFormFieldMkRotation, BdPdfFormFieldMkTextPosition,
+    BdPdfSignatureFieldLock, BdPdfSignatureFieldLockFields, BdPdfSignatureFieldName,
 };
 pub use self::bd_pdf_format::BdPdfFormat;
 pub use self::bd_pdf_layer::{BdPdfLayer, BdPdfLayerIntent, BdPdfLayerVisible};
@@ -210,18 +214,12 @@ pub use self::bd_pdf_viewer::{
     BdPdfViewerNumCopies, BdPdfViewerPageBox, BdPdfViewerPageLayout, BdPdfViewerPageMode,
     BdPdfViewerPrintPageRange, BdPdfViewerPrintScaling,
 };
-pub use self::bd_source::{BdSource, BdSourceArea, BdSourcePage};
-pub use self::bd_gaps::{BorderClip, MaskBorderMode, Overlay};
-pub use self::bd_misc::{
-    BdCaptionPage, BdColumnClip, BdFlow, BdIntegerAuto, BdLang, BdLineBreakOpportunity, BdLineBreakRule,
-    BdObjectSlice, BdPositionOrigin, BdReplacedElement, BdScaleContent, BdShrinkToFit, BdTabSnap,
-    BdTargetCandidate, BdTruncateMarginAfterBreak,
-};
 pub use self::bd_running_copy::BdRunningCopy;
 pub use self::bd_sidenote::{
-    BdFloatReferenceSidenote, BdSidenoteAlign, BdSidenoteAlignment,
-    BdSidenoteAvoid, BdSidenoteOffset, BdSidenoteSide,
+    BdFloatReferenceSidenote, BdSidenoteAlign, BdSidenoteAlignment, BdSidenoteAvoid,
+    BdSidenoteOffset, BdSidenoteSide,
 };
+pub use self::bd_source::{BdSource, BdSourceArea, BdSourcePage};
 pub use self::bd_tab_stops::{BdTabStop, BdTabStopAlignment, BdTabStopLeader, BdTabStops};
 pub use self::bd_text_decoration::{
     BdTextDecorationLineColour, BdTextDecorationLineStyle, BdTextDecorationLineThickness,
@@ -270,9 +268,7 @@ pub use self::text::{TextAutospace, TextUnderlinePosition};
 pub use self::text::{
     TextDecorationInset, TextDecorationLength, TextDecorationSkipInk, TextJustify,
 };
-pub use self::text_decor_4::{
-    TextDecorationSkipKind, TextDecorationTrim, TextEmphasisSkip,
-};
+pub use self::text_decor_4::{TextDecorationSkipKind, TextDecorationTrim, TextEmphasisSkip};
 pub use self::time::Time;
 pub use self::transform::{Rotate, Scale, Transform, TransformBox, TransformOperation};
 pub use self::transform::{TransformOrigin, TransformStyle, Translate};
@@ -297,6 +293,7 @@ pub mod bd_bfo;
 pub mod bd_bookmark;
 pub mod bd_change_bar;
 pub mod bd_color_function;
+pub mod bd_filter_resolution;
 pub mod bd_float;
 pub mod bd_flow;
 pub mod bd_footnote;
@@ -324,7 +321,6 @@ pub mod bd_pdf_layer;
 pub mod bd_pdf_multimedia;
 pub mod bd_pdf_output;
 pub mod bd_pdf_output_condition;
-pub mod bd_filter_resolution;
 pub mod bd_pdf_output_intent;
 pub mod bd_pdf_output_registry_name;
 pub mod bd_pdf_role_map;
@@ -334,9 +330,9 @@ pub mod bd_pdf_tag;
 pub mod bd_pdf_tagged;
 pub mod bd_pdf_trapped;
 pub mod bd_pdf_viewer;
-pub mod bd_source;
 pub mod bd_running_copy;
 pub mod bd_sidenote;
+pub mod bd_source;
 pub mod bd_tab_stops;
 pub mod bd_text_decoration;
 pub mod border;

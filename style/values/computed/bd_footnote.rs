@@ -20,7 +20,9 @@ impl BdFootnoteRuleLength {
     /// Initial value (`100%`).
     #[inline]
     pub fn full() -> Self {
-        Self(LengthPercentage::new_percent(crate::values::computed::Percentage::hundred()))
+        Self(LengthPercentage::new_percent(
+            crate::values::computed::Percentage::hundred(),
+        ))
     }
 }
 

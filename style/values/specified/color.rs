@@ -942,9 +942,8 @@ impl Color {
                 // the fail-closed contract) and the colorant name
                 // would be unrecoverable.
                 if matches!(&**color_function, ColorFunction::BdSpot(..)) {
-                    let color_function = color_function.map_origin_color(|origin_color| {
-                        origin_color.to_computed_color(context)
-                    });
+                    let color_function = color_function
+                        .map_origin_color(|origin_color| origin_color.to_computed_color(context));
                     return Some(ComputedColor::ColorFunction(Box::new(color_function)));
                 }
 
@@ -957,9 +956,8 @@ impl Color {
                 // colour and the colorant references would be
                 // unrecoverable.
                 if matches!(&**color_function, ColorFunction::BdDeviceN(..)) {
-                    let color_function = color_function.map_origin_color(|origin_color| {
-                        origin_color.to_computed_color(context)
-                    });
+                    let color_function = color_function
+                        .map_origin_color(|origin_color| origin_color.to_computed_color(context));
                     return Some(ComputedColor::ColorFunction(Box::new(color_function)));
                 }
 

@@ -105,7 +105,7 @@ impl ToComputedValue for specified::BdInitialZoom {
             specified::BdInitialZoom::Auto => BdInitialZoom::Auto,
             specified::BdInitialZoom::Percentage(p) => {
                 BdInitialZoom::Percentage(p.to_computed_value(ctx))
-            }
+            },
             specified::BdInitialZoom::FitPage => BdInitialZoom::FitPage,
             specified::BdInitialZoom::FitPageHeight => BdInitialZoom::FitPageHeight,
             specified::BdInitialZoom::FitPageWidth => BdInitialZoom::FitPageWidth,
@@ -120,7 +120,7 @@ impl ToComputedValue for specified::BdInitialZoom {
             BdInitialZoom::Auto => specified::BdInitialZoom::Auto,
             BdInitialZoom::Percentage(p) => {
                 specified::BdInitialZoom::Percentage(ToComputedValue::from_computed_value(p))
-            }
+            },
             BdInitialZoom::FitPage => specified::BdInitialZoom::FitPage,
             BdInitialZoom::FitPageHeight => specified::BdInitialZoom::FitPageHeight,
             BdInitialZoom::FitPageWidth => specified::BdInitialZoom::FitPageWidth,
@@ -166,7 +166,7 @@ impl ToComputedValue for specified::BdPdfViewerNumCopies {
             specified::BdPdfViewerNumCopies::Auto => BdPdfViewerNumCopies::Auto,
             specified::BdPdfViewerNumCopies::Count(i) => {
                 BdPdfViewerNumCopies::Count(i.to_computed_value(ctx))
-            }
+            },
         }
     }
 
@@ -175,7 +175,7 @@ impl ToComputedValue for specified::BdPdfViewerNumCopies {
             BdPdfViewerNumCopies::Auto => specified::BdPdfViewerNumCopies::Auto,
             BdPdfViewerNumCopies::Count(i) => {
                 specified::BdPdfViewerNumCopies::Count(ToComputedValue::from_computed_value(i))
-            }
+            },
         }
     }
 }
@@ -219,7 +219,7 @@ impl ToComputedValue for specified::BdPdfViewerPrintPageRange {
                         .map(|i| i.to_computed_value(ctx))
                         .collect::<Vec<_>>(),
                 ))
-            }
+            },
         }
     }
 
@@ -233,7 +233,7 @@ impl ToComputedValue for specified::BdPdfViewerPrintPageRange {
                         .map(ToComputedValue::from_computed_value)
                         .collect::<Vec<_>>(),
                 ))
-            }
+            },
         }
     }
 }

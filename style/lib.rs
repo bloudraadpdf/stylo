@@ -110,9 +110,9 @@ pub mod style_resolver;
 pub mod stylesheet_set;
 pub mod stylesheets;
 pub mod stylist;
-pub mod thread_state;
 #[cfg(all(test, feature = "servo"))]
 pub(crate) mod test_support;
+pub mod thread_state;
 pub mod traversal;
 pub mod traversal_flags;
 pub mod use_counters;

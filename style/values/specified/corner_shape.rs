@@ -129,7 +129,7 @@ impl ToCss for CornerShape {
                 dest.write_str("superellipse(")?;
                 k.to_css(dest)?;
                 dest.write_char(')')
-            }
+            },
         }
     }
 }
@@ -240,7 +240,7 @@ impl Parse for CornerShapeRect {
                     bottom_right: a,
                     bottom_left: a,
                 });
-            }
+            },
         };
         let c = match input.try_parse(|i| CornerShape::parse(context, i)) {
             Ok(c) => c,
@@ -251,7 +251,7 @@ impl Parse for CornerShapeRect {
                     bottom_right: a,
                     bottom_left: b,
                 });
-            }
+            },
         };
         let d = match input.try_parse(|i| CornerShape::parse(context, i)) {
             Ok(d) => d,
@@ -262,7 +262,7 @@ impl Parse for CornerShapeRect {
                     bottom_right: c,
                     bottom_left: b,
                 });
-            }
+            },
         };
         Ok(Self {
             top_left: a,

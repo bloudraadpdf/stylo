@@ -210,9 +210,11 @@ impl Parse for BdPdfTagValue {
             let location = i.current_source_location();
             let function = i.expect_function()?.clone();
             if !function.eq_ignore_ascii_case("artifact") {
-                return Err(location.new_custom_error::<_, style_traits::StyleParseErrorKind>(
-                    style_traits::StyleParseErrorKind::UnexpectedFunction(function.clone()),
-                ));
+                return Err(
+                    location.new_custom_error::<_, style_traits::StyleParseErrorKind>(
+                        style_traits::StyleParseErrorKind::UnexpectedFunction(function.clone()),
+                    ),
+                );
             }
             i.parse_nested_block(|i| {
                 let kind = BdPdfArtifactKind::parse(i)?;
@@ -339,10 +341,7 @@ impl Parse for BdPdfTagStringPlain {
         _: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, style_traits::ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
         let s = input.expect_string()?;
@@ -453,10 +452,7 @@ impl Parse for BdPdfTagTableSummary {
         _: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, style_traits::ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
         let s = input.expect_string()?;
@@ -625,10 +621,7 @@ impl Parse for BdPdfTagFormName {
         _: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, style_traits::ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("none"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
         let s = input.expect_string()?;

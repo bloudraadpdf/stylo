@@ -70,7 +70,7 @@ impl ToComputedValue for specified::BookmarkTarget {
             BookmarkTarget::None => specified::BookmarkTarget::None,
             BookmarkTarget::Url(u) => {
                 specified::BookmarkTarget::Url(ToComputedValue::from_computed_value(u))
-            }
+            },
             BookmarkTarget::Counter(i) => specified::BookmarkTarget::Counter(*i),
         }
     }

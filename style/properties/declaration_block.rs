@@ -1066,7 +1066,7 @@ impl PropertyDeclarationBlock {
                         )
                         .into_owned(),
                 ))
-            }
+            },
             (ref d, _) => Ok(std::borrow::Cow::Borrowed(d)),
         }
     }

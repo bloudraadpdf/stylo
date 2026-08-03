@@ -81,9 +81,7 @@ impl ToComputedValue for specified::BdPdfOutputIntent {
             BdPdfOutputIntent::Auto => Self::Auto,
             BdPdfOutputIntent::None => Self::None,
             BdPdfOutputIntent::Named(name) => Self::Named(name.clone()),
-            BdPdfOutputIntent::Url(url) => {
-                Self::Url(ToComputedValue::from_computed_value(url))
-            },
+            BdPdfOutputIntent::Url(url) => Self::Url(ToComputedValue::from_computed_value(url)),
         }
     }
 }
