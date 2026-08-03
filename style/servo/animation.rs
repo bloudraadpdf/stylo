@@ -479,6 +479,22 @@ impl Animation {
         }
     }
 
+    /// The keyframes bracketing `directed_progress`, as `(from, to)` indices
+    /// into ascending keyframe offsets. `to` is `None` when the progress lies
+    /// past the last offset, which leaves nothing to interpolate towards.
+    ///
+    /// The offsets are walked in their authored order whichever way the
+    /// iteration runs: Web Animations 1 § 4.9.1 folds the playback direction
+    /// into the progress before the keyframes are consulted, so a reversed
+    /// iteration retraces the forward curve rather than its reflection.
+    fn bracketing_keyframes(
+        mut start_percentages: impl Iterator<Item = f32>,
+        directed_progress: f64,
+    ) -> (usize, Option<usize>) {
+        let to = start_percentages.position(|start| directed_progress as f32 <= start);
+        (to.and_then(|index| index.checked_sub(1)).unwrap_or(0), to)
+    }
+
     /// Fast-forwards a newly-created animation to the iteration that a negative
     /// `animation-delay` starts it in, given how far past its first iteration
     /// that delay lands (`starting_progress`, measured in iterations).
@@ -671,39 +687,22 @@ impl Animation {
             .min(self.current_iteration_end_progress())
             .max(0.0);
 
-        // Get the indices of the previous (from) keyframe and the next (to) keyframe.
-        let next_keyframe_index;
-        let prev_keyframe_index;
-        let num_steps = self.computed_steps.len();
-        match self.current_direction {
-            AnimationDirection::Normal => {
-                next_keyframe_index = self
-                    .computed_steps
-                    .iter()
-                    .position(|step| total_progress as f32 <= step.start_percentage);
-                prev_keyframe_index = next_keyframe_index
-                    .and_then(|pos| if pos != 0 { Some(pos - 1) } else { None })
-                    .unwrap_or(0);
-            },
-            AnimationDirection::Reverse => {
-                next_keyframe_index = self
-                    .computed_steps
-                    .iter()
-                    .rev()
-                    .position(|step| total_progress as f32 <= 1. - step.start_percentage)
-                    .map(|pos| num_steps - pos - 1);
-                prev_keyframe_index = next_keyframe_index
-                    .and_then(|pos| {
-                        if pos != num_steps - 1 {
-                            Some(pos + 1)
-                        } else {
-                            None
-                        }
-                    })
-                    .unwrap_or(num_steps - 1)
-            },
+        // Reversing an iteration mirrors the progress and nothing else
+        // (Web Animations 1 § 4.9.1 "Calculating the directed progress"). The
+        // keyframes are then walked, bracketed, and eased in ordinary offset
+        // order, so a reversed iteration retraces the very curve the forward
+        // one drew rather than its reflection.
+        let directed_progress = match self.current_direction {
+            AnimationDirection::Normal => total_progress,
+            AnimationDirection::Reverse => 1. - total_progress,
             _ => unreachable!(),
-        }
+        };
+
+        // Get the indices of the previous (from) keyframe and the next (to) keyframe.
+        let (prev_keyframe_index, next_keyframe_index) = Self::bracketing_keyframes(
+            self.computed_steps.iter().map(|step| step.start_percentage),
+            directed_progress,
+        );
 
         debug!(
             "Animation::get_property_declaration_at_time: keyframe from {:?} to {:?}",
@@ -723,11 +722,11 @@ impl Animation {
                 map.insert(value.id().to_owned(), value.clone());
             }
         };
-        if total_progress <= 0.0 {
+        if directed_progress <= 0.0 {
             add_declarations_to_map(&prev_keyframe);
             return;
         }
-        if total_progress >= 1.0 {
+        if directed_progress >= 1.0 {
             add_declarations_to_map(&next_keyframe);
             return;
         }
@@ -735,13 +734,8 @@ impl Animation {
         let percentage_between_keyframes =
             (next_keyframe.start_percentage - prev_keyframe.start_percentage).abs() as f64;
         let duration_between_keyframes = percentage_between_keyframes * self.duration;
-        let direction_aware_prev_keyframe_start_percentage = match self.current_direction {
-            AnimationDirection::Normal => prev_keyframe.start_percentage as f64,
-            AnimationDirection::Reverse => 1. - prev_keyframe.start_percentage as f64,
-            _ => unreachable!(),
-        };
-        let progress_between_keyframes = (total_progress
-            - direction_aware_prev_keyframe_start_percentage)
+        let progress_between_keyframes = (directed_progress
+            - prev_keyframe.start_percentage as f64)
             / percentage_between_keyframes;
 
         for (from, to) in prev_keyframe.values.iter().zip(next_keyframe.values.iter()) {
@@ -1749,5 +1743,32 @@ mod tests {
                 "progress {progress}",
             );
         }
+    }
+
+    /// Ascending keyframe offsets for `from { } 50% { } to { }`.
+    const OFFSETS: [f32; 3] = [0., 0.5, 1.];
+
+    fn bracketing(directed_progress: f64) -> (usize, Option<usize>) {
+        Animation::bracketing_keyframes(OFFSETS.into_iter(), directed_progress)
+    }
+
+    #[test]
+    fn brackets_a_progress_between_two_keyframes() {
+        assert_eq!(bracketing(0.25), (0, Some(1)));
+        assert_eq!(bracketing(0.75), (1, Some(2)));
+    }
+
+    #[test]
+    fn brackets_a_progress_sitting_on_a_keyframe() {
+        // The offset a progress lands exactly on is the one it is heading
+        // towards, so the interval that closes there is the one still in play.
+        assert_eq!(bracketing(0.5), (0, Some(1)));
+    }
+
+    #[test]
+    fn brackets_the_ends_of_the_animation() {
+        // Nothing precedes the first keyframe, and nothing follows the last.
+        assert_eq!(bracketing(0.), (0, Some(0)));
+        assert_eq!(bracketing(1.), (1, Some(2)));
     }
 }
