@@ -113,13 +113,13 @@ pub enum DisplayInside {
 }
 
 impl DisplayInside {
+    /// https://drafts.csswg.org/css-display-3/#typedef-display-listitem:
+    ///     <display-listitem> = <display-outside>? && [ flow | flow-root ]? && list-item
+    ///
+    /// Both flow inner types are valid in every engine configuration; the
+    /// grammar draws no distinction between them.
     fn is_valid_for_list_item(self) -> bool {
-        match self {
-            DisplayInside::Flow => true,
-            #[cfg(feature = "gecko")]
-            DisplayInside::FlowRoot => true,
-            _ => false,
-        }
+        matches!(self, DisplayInside::Flow | DisplayInside::FlowRoot)
     }
 
     /// https://drafts.csswg.org/css-display/#inside-model:
