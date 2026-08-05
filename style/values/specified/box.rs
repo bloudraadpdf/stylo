@@ -367,10 +367,11 @@ impl Display {
         }
 
         match self.outside() {
-            DisplayOutside::Inline => {
+            DisplayOutside::Inline | DisplayOutside::RunIn => {
                 let inside = match self.inside() {
                     // `inline-block` blockifies to `block` rather than
-                    // `flow-root`, for legacy reasons.
+                    // `flow-root`, for legacy reasons. For consistency,
+                    // `run-in flow-root` does the same.
                     DisplayInside::FlowRoot => DisplayInside::Flow,
                     inside => inside,
                 };
@@ -385,7 +386,7 @@ impl Display {
     /// https://drafts.csswg.org/css-display/#inlinify
     pub fn inlinify(&self) -> Self {
         match self.outside() {
-            DisplayOutside::Block | DisplayOutside::RunIn => {
+            DisplayOutside::Block => {
                 let inside = match self.inside() {
                     // `display: block` inlinifies to `display: inline-block`,
                     // rather than `inline`, for legacy reasons.
@@ -393,6 +394,12 @@ impl Display {
                     inside => inside,
                 };
                 Display::from3(DisplayOutside::Inline, inside, self.is_list_item())
+            },
+            // A run-in is already an inline-level box. Inlinification changes
+            // only its outer display type; in particular, `run-in flow` must
+            // become `inline flow`, not `inline flow-root`.
+            DisplayOutside::RunIn => {
+                Display::from3(DisplayOutside::Inline, self.inside(), self.is_list_item())
             },
             _ => *self,
         }
@@ -453,7 +460,7 @@ impl DisplayKeyword {
             /// https://drafts.csswg.org/css-display/#typedef-display-outside
             "block" => Outside(DisplayOutside::Block),
             "inline" => Outside(DisplayOutside::Inline),
-            "run-in" => Full(Display::RunIn),
+            "run-in" => Outside(DisplayOutside::RunIn),
 
             "list-item" => ListItem,
 
@@ -499,6 +506,10 @@ impl ToCss for Display {
                             dest.write_char(' ')?;
                         }
                         dest.write_str("list-item")
+                    } else if outside == DisplayOutside::RunIn {
+                        outside.to_css(dest)?;
+                        dest.write_char(' ')?;
+                        inside.to_css(dest)
                     } else {
                         inside.to_css(dest)
                     }
@@ -551,6 +562,108 @@ impl Parse for Display {
         }
 
         return Ok(Display::from3(outside, inside, got_list_item));
+    }
+}
+
+#[cfg(all(test, feature = "servo"))]
+mod display_tests {
+    use super::*;
+    use crate::context::QuirksMode;
+    use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
+    use crate::test_support::{pref_lock, BoolPrefGuard};
+    use cssparser::{Parser, ParserInput};
+    use style_traits::{ParsingMode, ToCss};
+
+    fn parse_display(css: &str) -> Display {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input = ParserInput::new(css);
+        Parser::new(&mut input)
+            .parse_entirely(|input| Display::parse(&context, input))
+            .expect("display value should parse")
+    }
+
+    #[test]
+    fn run_in_parses_and_serializes_with_each_inner_display_type() {
+        let _lock = pref_lock().lock().unwrap();
+        let _grid_pref = BoolPrefGuard::set("layout.grid.enabled", true);
+
+        for (css, inside, serialized) in [
+            ("run-in", DisplayInside::Flow, "run-in"),
+            ("flow run-in", DisplayInside::Flow, "run-in"),
+            (
+                "flow-root run-in",
+                DisplayInside::FlowRoot,
+                "run-in flow-root",
+            ),
+            ("run-in flex", DisplayInside::Flex, "run-in flex"),
+            ("run-in grid", DisplayInside::Grid, "run-in grid"),
+            ("run-in table", DisplayInside::Table, "run-in table"),
+            ("run-in ruby", DisplayInside::Ruby, "run-in ruby"),
+        ] {
+            let display = parse_display(css);
+            assert_eq!(display.outside(), DisplayOutside::RunIn, "{css}");
+            assert_eq!(display.inside(), inside, "{css}");
+            assert!(!display.is_list_item(), "{css}");
+            assert_eq!(display.to_css_string(), serialized, "{css}");
+        }
+
+        let list_item = parse_display("flow-root list-item run-in");
+        assert_eq!(list_item.outside(), DisplayOutside::RunIn);
+        assert_eq!(list_item.inside(), DisplayInside::FlowRoot);
+        assert!(list_item.is_list_item());
+        assert_eq!(list_item.to_css_string(), "run-in flow-root list-item");
+    }
+
+    #[test]
+    fn blockifying_run_in_preserves_its_inner_display_type() {
+        let _lock = pref_lock().lock().unwrap();
+        let _grid_pref = BoolPrefGuard::set("layout.grid.enabled", true);
+
+        for (css, expected) in [
+            ("run-in", Display::Block),
+            // CSS Display 3 §2.7's legacy exception.
+            ("run-in flow-root", Display::Block),
+            ("run-in flex", Display::Flex),
+            ("run-in grid", Display::Grid),
+            ("run-in table", Display::Table),
+        ] {
+            assert_eq!(
+                parse_display(css).equivalent_block_display(false),
+                expected,
+                "{css}"
+            );
+        }
+
+        let ruby = parse_display("run-in ruby").equivalent_block_display(false);
+        assert_eq!(ruby.outside(), DisplayOutside::Block);
+        assert_eq!(ruby.inside(), DisplayInside::Ruby);
+    }
+
+    #[test]
+    fn inlinifying_run_in_preserves_its_inner_display_type() {
+        let _lock = pref_lock().lock().unwrap();
+        let _grid_pref = BoolPrefGuard::set("layout.grid.enabled", true);
+
+        for (css, expected) in [
+            ("run-in", Display::Inline),
+            ("run-in flow-root", Display::InlineBlock),
+            ("run-in flex", Display::InlineFlex),
+            ("run-in grid", Display::InlineGrid),
+            ("run-in table", Display::InlineTable),
+            ("run-in ruby", Display::Ruby),
+        ] {
+            assert_eq!(parse_display(css).inlinify(), expected, "{css}");
+        }
     }
 }
 
