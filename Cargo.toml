@@ -17,6 +17,9 @@ members = [
 ]
 default-members = ["style"]
 
+[patch.crates-io]
+cssparser = { git = "https://github.com/jacquesg/rust-cssparser.git", rev = "8cb2016ec7344f0d252b524b883f64043a39b0e0" }
+
 [workspace.package]
 version = "0.12.0"
 

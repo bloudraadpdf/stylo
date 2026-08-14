@@ -18,7 +18,7 @@ use crate::stylesheets::{
 };
 use crate::use_counters::UseCounters;
 use crate::{Namespace, Prefix};
-use cssparser::{Parser, ParserInput, StyleSheetParser};
+use cssparser::{Parser, ParserInput, StyleSheetParser, UrlErrorRecovery};
 #[cfg(feature = "gecko")]
 use malloc_size_of::{MallocSizeOfOps, MallocUnconditionalShallowSizeOf};
 use rustc_hash::FxHashMap;
@@ -434,7 +434,7 @@ impl Stylesheet {
         allow_import_rules: AllowImportRules,
         mut sanitization_data: Option<&mut SanitizationData>,
     ) -> (Namespaces, Vec<CssRule>, Option<String>, Option<String>) {
-        let mut input = ParserInput::new(css);
+        let mut input = ParserInput::new_with_url_error_recovery(css, UrlErrorRecovery::Css2);
         let mut input = Parser::new(&mut input);
 
         let context = ParserContext::new(
@@ -703,6 +703,63 @@ mod tests {
         let contents = stylesheet.contents.read_with(&guard);
         let rules = contents.rules(&guard);
         assert!(rules.iter().any(|rule| matches!(rule, CssRule::Page(..))));
+    }
+
+    #[test]
+    fn servo_recovers_css2_malformed_urls_at_stylesheet_boundaries() {
+        fn background_colors(css: &str, selector: &str) -> Vec<String> {
+            use cssparser::ToCss;
+
+            let stylesheet = parse_stylesheet(css);
+            let guard = stylesheet.shared_lock.read();
+            let contents = stylesheet.contents.read_with(&guard);
+            contents
+                .rules(&guard)
+                .iter()
+                .filter_map(|rule| match rule {
+                    CssRule::Style(rule) => Some(rule.read_with(&guard)),
+                    _ => None,
+                })
+                .filter(|rule| rule.selectors.to_css_string() == selector)
+                .flat_map(|rule| {
+                    rule.block
+                        .read_with(&guard)
+                        .declaration_importance_iter()
+                        .filter_map(|(declaration, _)| match declaration {
+                            PropertyDeclaration::BackgroundColor(value) => {
+                                Some(value.to_css_string())
+                            },
+                            _ => None,
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .collect()
+        }
+
+        for (css, selector) in [
+            (
+                "#three { background-color: green; }\n#foo { background: url(foo\"bar) }\n#three { background-color: red; }",
+                "#three",
+            ),
+            (
+                "#foo { background: url(foo\"bar) }\n) }\n#four { background-color: green; }",
+                "#four",
+            ),
+            (
+                "#twelve { background: url(}{\"\"{)}); background-color: green; }",
+                "#twelve",
+            ),
+            (
+                "#fourteen { background-color: green; }\n#foo { background: url(() }\n#fourteen { background-color: red; }",
+                "#fourteen",
+            ),
+        ] {
+            assert_eq!(
+                background_colors(css, selector),
+                ["green"],
+                "CSS 2 malformed-URL recovery must preserve the authored rule boundary for {selector}",
+            );
+        }
     }
 
     #[test]
