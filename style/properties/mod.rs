@@ -802,7 +802,8 @@ fn parse_non_custom_property_declaration_value_into<'i>(
         return Err(err);
     }
     input.reset(start);
-    let value = custom_properties::VariableValue::parse(input, &context.url_data)?;
+    let value =
+        custom_properties::VariableValue::parse(input, &context.url_data, &context.namespaces)?;
     parsed_custom(declarations, value);
     Ok(())
 }
@@ -897,7 +898,11 @@ impl PropertyDeclaration {
                 let value = match input.try_parse(CSSWideKeyword::parse) {
                     Ok(keyword) => CustomDeclarationValue::CSSWideKeyword(keyword),
                     Err(()) => CustomDeclarationValue::Unparsed(Arc::new(
-                        custom_properties::VariableValue::parse(input, &context.url_data)?,
+                        custom_properties::VariableValue::parse(
+                            input,
+                            &context.url_data,
+                            &context.namespaces,
+                        )?,
                     )),
                 };
                 declarations.push(PropertyDeclaration::Custom(CustomDeclaration {

@@ -321,7 +321,8 @@ impl SpecifiedValue {
         allow_computationally_dependent: AllowComputationallyDependent,
     ) -> Result<Self, StyleParseError<'i>> {
         if syntax.is_universal() {
-            let parsed = ComputedPropertyValue::parse(&mut input, url_data)?;
+            let namespaces = crate::stylesheets::Namespaces::default();
+            let parsed = ComputedPropertyValue::parse(&mut input, url_data, &namespaces)?;
             return Ok(SpecifiedValue {
                 v: ValueInner::Universal(Arc::new(parsed)),
                 url_data: url_data.clone(),

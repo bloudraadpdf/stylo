@@ -82,6 +82,7 @@ impl StyleFeature {
             Some(Arc::new(custom_properties::SpecifiedValue::parse(
                 input,
                 &context.url_data,
+                &context.namespaces,
             )?))
         } else {
             None

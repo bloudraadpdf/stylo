@@ -409,6 +409,10 @@ impl Parse for InitialValue {
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
         input.skip_whitespace();
-        Ok(Arc::new(SpecifiedValue::parse(input, &context.url_data)?))
+        Ok(Arc::new(SpecifiedValue::parse(
+            input,
+            &context.url_data,
+            &context.namespaces,
+        )?))
     }
 }

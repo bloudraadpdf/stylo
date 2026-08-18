@@ -12,6 +12,7 @@ use crate::context::SharedStyleContext;
 #[cfg(feature = "gecko")]
 use crate::context::UpdateAnimationsTasks;
 use crate::data::ElementData;
+use crate::derives::*;
 use crate::media_queries::Device;
 use crate::properties::{AnimationDeclarations, ComputedValues, PropertyDeclarationBlock};
 use crate::selector_map::PrecomputedHashSet;
@@ -982,21 +983,30 @@ pub trait TElement:
     }
 }
 
-/// The attribute provider trait
+/// An attribute's expanded name.
+#[derive(Clone, Debug, Eq, Hash, MallocSizeOf, PartialEq, ToShmem)]
+pub struct ExpandedAttributeName {
+    /// The namespace URL, or the empty namespace for an unqualified attribute.
+    pub namespace: crate::Namespace,
+    /// The attribute's case-sensitive local name.
+    pub local_name: LocalName,
+}
+
+/// The attribute provider trait.
 pub trait AttributeProvider {
-    /// Return the value of the given custom attibute if it exists.
-    fn get_attr(&self, attr: &LocalName) -> Option<String>;
+    /// Return the value of the attribute with the given expanded name if it exists.
+    fn get_attr(&self, attr: &ExpandedAttributeName) -> Option<String>;
 }
 
 /// A set of the attributes used to compute a style that uses `attr()`
-pub type AttributeReferences = Option<Box<PrecomputedHashSet<LocalName>>>;
+pub type AttributeReferences = Option<Box<PrecomputedHashSet<ExpandedAttributeName>>>;
 
 /// A data structure to keep track of the names queried from a provider.
 pub struct AttributeTracker<'a> {
     /// The element that queries for attributes.
     pub provider: &'a dyn AttributeProvider,
     /// The set of attributes we have queried.
-    pub references: Box<PrecomputedHashSet<LocalName>>,
+    pub references: Box<PrecomputedHashSet<ExpandedAttributeName>>,
 }
 
 impl<'a> AttributeTracker<'a> {
@@ -1017,12 +1027,12 @@ impl<'a> AttributeTracker<'a> {
     }
 
     /// Extract the queried references and consume self
-    pub fn finalize(self) -> Box<PrecomputedHashSet<LocalName>> {
+    pub fn finalize(self) -> Box<PrecomputedHashSet<ExpandedAttributeName>> {
         self.references
     }
 
     /// Query the value and save the name of the attribtue.
-    pub fn query(&mut self, name: &LocalName) -> Option<String> {
+    pub fn query(&mut self, name: &ExpandedAttributeName) -> Option<String> {
         self.references.insert(name.clone());
         self.provider.get_attr(name)
     }
@@ -1033,7 +1043,7 @@ impl<'a> AttributeTracker<'a> {
 pub struct DummyAttributeProvider;
 
 impl AttributeProvider for DummyAttributeProvider {
-    fn get_attr(&self, _attr: &LocalName) -> Option<String> {
+    fn get_attr(&self, _attr: &ExpandedAttributeName) -> Option<String> {
         None
     }
 }

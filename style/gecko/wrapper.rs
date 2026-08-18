@@ -1823,11 +1823,16 @@ impl<'le> TElement for GeckoElement<'le> {
 }
 
 impl<'le> AttributeProvider for GeckoElement<'le> {
-    fn get_attr(&self, attr: &LocalName) -> Option<String> {
+    fn get_attr(&self, attr: &crate::dom::ExpandedAttributeName) -> Option<String> {
+        if attr.namespace != Namespace::default() {
+            return None;
+        }
         //TODO(bug 2003334): Avoid unnecessary string copies/conversions here.
         let mut result = nsString::new();
 
-        if unsafe { bindings::Gecko_LookupAttrValue(self.0, attr.0.as_ptr(), &mut *result) } {
+        if unsafe {
+            bindings::Gecko_LookupAttrValue(self.0, attr.local_name.0.as_ptr(), &mut *result)
+        } {
             Some(result.to_string())
         } else {
             None

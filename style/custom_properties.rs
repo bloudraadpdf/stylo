@@ -9,7 +9,7 @@
 use crate::applicable_declarations::CascadePriority;
 use crate::custom_properties_map::CustomPropertiesMap;
 use crate::derives::*;
-use crate::dom::AttributeTracker;
+use crate::dom::{AttributeTracker, ExpandedAttributeName};
 use crate::media_queries::Device;
 use crate::properties::{
     CSSWideKeyword, CustomDeclaration, CustomDeclarationValue, LonghandId, LonghandIdSet,
@@ -24,12 +24,12 @@ use crate::properties_and_values::{
     },
 };
 use crate::selector_map::{PrecomputedHashMap, PrecomputedHashSet};
-use crate::stylesheets::UrlExtraData;
+use crate::stylesheets::{Namespaces, UrlExtraData};
 use crate::stylist::Stylist;
 use crate::values::computed::{self, ToComputedValue};
 use crate::values::generics::calc::SortKey as AttrUnit;
 use crate::values::specified::FontRelativeLength;
-use crate::{Atom, LocalName};
+use crate::{Atom, LocalName, Namespace, Prefix};
 use cssparser::{
     CowRcStr, Delimiter, Parser, ParserInput, SourcePosition, Token, TokenSerializationType,
 };
@@ -602,7 +602,7 @@ pub enum DeferFontRelativeCustomPropertyResolution {
     No,
 }
 
-#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem, Parse)]
+#[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, ToShmem, Parse)]
 enum SubstitutionFunctionKind {
     Var,
     Env,
@@ -618,6 +618,35 @@ enum AttributeType {
 }
 
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
+enum ParsedAttributeName {
+    Resolved(ExpandedAttributeName),
+    UnresolvedNamespace,
+}
+
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
+enum SubstitutionFunction {
+    Var(Name),
+    Env(Name),
+    Attr {
+        name: ParsedAttributeName,
+        syntax: AttributeType,
+    },
+}
+
+impl SubstitutionFunction {
+    fn variable_name(&self) -> Option<&Name> {
+        match self {
+            Self::Var(name) => Some(name),
+            Self::Env(_) | Self::Attr { .. } => None,
+        }
+    }
+
+    fn is_attr(&self) -> bool {
+        matches!(self, Self::Attr { .. })
+    }
+}
+
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
 struct VariableFallback {
     // NOTE(emilio): We don't track fallback end, because we rely on the missing closing
     // parenthesis, if any, to be inserted, which means that we can rely on our end being
@@ -629,14 +658,12 @@ struct VariableFallback {
 
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
 struct SubstitutionFunctionReference {
-    name: Name,
+    function: SubstitutionFunction,
     start: usize,
     end: usize,
     fallback: Option<VariableFallback>,
-    attribute_syntax: AttributeType,
     prev_token_type: TokenSerializationType,
     next_token_type: TokenSerializationType,
-    substitution_kind: SubstitutionFunctionKind,
 }
 
 /// A struct holding information about the external references to that a custom
@@ -737,6 +764,7 @@ impl VariableValue {
     pub fn parse<'i, 't>(
         input: &mut Parser<'i, 't>,
         url_data: &UrlExtraData,
+        namespaces: &Namespaces,
     ) -> Result<Self, ParseError<'i>> {
         let mut references = References::default();
         let mut missing_closing_characters = String::new();
@@ -744,6 +772,7 @@ impl VariableValue {
         let (first_token_type, last_token_type) = parse_declaration_value(
             input,
             start_position,
+            namespaces,
             &mut references,
             &mut missing_closing_characters,
         )?;
@@ -863,11 +892,18 @@ impl VariableValue {
 fn parse_declaration_value<'i, 't>(
     input: &mut Parser<'i, 't>,
     input_start: SourcePosition,
+    namespaces: &Namespaces,
     references: &mut References,
     missing_closing_characters: &mut String,
 ) -> Result<(TokenSerializationType, TokenSerializationType), ParseError<'i>> {
     input.parse_until_before(Delimiter::Bang | Delimiter::Semicolon, |input| {
-        parse_declaration_value_block(input, input_start, references, missing_closing_characters)
+        parse_declaration_value_block(
+            input,
+            input_start,
+            namespaces,
+            references,
+            missing_closing_characters,
+        )
     })
 }
 
@@ -875,6 +911,7 @@ fn parse_declaration_value<'i, 't>(
 fn parse_declaration_value_block<'i, 't>(
     input: &mut Parser<'i, 't>,
     input_start: SourcePosition,
+    namespaces: &Namespaces,
     references: &mut References,
     missing_closing_characters: &mut String,
 ) -> Result<(TokenSerializationType, TokenSerializationType), ParseError<'i>> {
@@ -903,6 +940,7 @@ fn parse_declaration_value_block<'i, 't>(
                     let result = parse_declaration_value_block(
                         input,
                         input_start,
+                        namespaces,
                         references,
                         missing_closing_characters,
                     )?;
@@ -966,10 +1004,10 @@ fn parse_declaration_value_block<'i, 't>(
                     let fallback = input.parse_nested_block(|input| {
                         // TODO(emilio): For env() this should be <custom-ident> per spec, but no other browser does
                         // that, see https://github.com/w3c/csswg-drafts/issues/3262.
-                        let name = input.expect_ident()?;
-                        let name =
-                            Atom::from(if substitution_kind == SubstitutionFunctionKind::Var {
-                                match parse_name(name.as_ref()) {
+                        let function = match substitution_kind {
+                            SubstitutionFunctionKind::Var => {
+                                let name = input.expect_ident()?;
+                                let name = match parse_name(name.as_ref()) {
                                     Ok(name) => name,
                                     Err(()) => {
                                         let name = name.clone();
@@ -977,24 +1015,24 @@ fn parse_declaration_value_block<'i, 't>(
                                             SelectorParseErrorKind::UnexpectedIdent(name),
                                         ));
                                     },
-                                }
-                            } else {
-                                name.as_ref()
-                            });
-
-                        let attribute_syntax =
-                            if substitution_kind == SubstitutionFunctionKind::Attr {
-                                parse_attr_type(input)
-                            } else {
-                                AttributeType::None
-                            };
+                                };
+                                SubstitutionFunction::Var(Atom::from(name))
+                            },
+                            SubstitutionFunctionKind::Env => SubstitutionFunction::Env(Atom::from(
+                                input.expect_ident()?.as_ref(),
+                            )),
+                            SubstitutionFunctionKind::Attr => SubstitutionFunction::Attr {
+                                name: parse_attribute_name(input, namespaces)?,
+                                syntax: parse_attr_type(input),
+                            },
+                        };
 
                         // We want the order of the references to match source order. So we need to reserve our slot
                         // now, _before_ parsing our fallback. Note that we don't care if parsing fails after all, since
                         // if this fails we discard the whole result anyways.
                         let start = token_start.byte_index() - input_start.byte_index();
                         references.refs.push(SubstitutionFunctionReference {
-                            name,
+                            function,
                             start,
                             // To be fixed up after parsing fallback and auto-closing via our_ref_index.
                             end: start,
@@ -1003,8 +1041,6 @@ fn parse_declaration_value_block<'i, 't>(
                             next_token_type: TokenSerializationType::Nothing,
                             // To be fixed up after parsing fallback.
                             fallback: None,
-                            attribute_syntax,
-                            substitution_kind: substitution_kind.clone(),
                         });
 
                         let mut fallback = None;
@@ -1019,6 +1055,7 @@ fn parse_declaration_value_block<'i, 't>(
                             let (first, last) = parse_declaration_value(
                                 input,
                                 input_start,
+                                namespaces,
                                 references,
                                 missing_closing_characters,
                             )?;
@@ -1036,6 +1073,7 @@ fn parse_declaration_value_block<'i, 't>(
                             parse_declaration_value_block(
                                 input,
                                 input_start,
+                                namespaces,
                                 references,
                                 missing_closing_characters,
                             )?;
@@ -1105,6 +1143,51 @@ fn parse_declaration_value_block<'i, 't>(
         };
     }
     Ok((first_token_type, last_token_type))
+}
+
+fn parse_attribute_name<'i, 't>(
+    input: &mut Parser<'i, 't>,
+    namespaces: &Namespaces,
+) -> Result<ParsedAttributeName, ParseError<'i>> {
+    let location = input.current_source_location();
+    let first = match input.next()? {
+        Token::Ident(name) => Some(name.clone()),
+        Token::Delim('|') => None,
+        token => return Err(location.new_unexpected_token_error(token.clone())),
+    };
+
+    let Some(prefix) = first else {
+        let local_name = match input.next_including_whitespace()? {
+            Token::Ident(name) => LocalName::from(name.as_ref()),
+            token => return Err(location.new_unexpected_token_error(token.clone())),
+        };
+        return Ok(ParsedAttributeName::Resolved(ExpandedAttributeName {
+            namespace: Namespace::default(),
+            local_name,
+        }));
+    };
+
+    let after_name = input.state();
+    if !matches!(input.next_including_whitespace(), Ok(Token::Delim('|'))) {
+        input.reset(&after_name);
+        return Ok(ParsedAttributeName::Resolved(ExpandedAttributeName {
+            namespace: Namespace::default(),
+            local_name: LocalName::from(prefix.as_ref()),
+        }));
+    }
+
+    let local_name = match input.next_including_whitespace()? {
+        Token::Ident(name) => LocalName::from(name.as_ref()),
+        token => return Err(location.new_unexpected_token_error(token.clone())),
+    };
+    let prefix = Prefix::from(prefix.as_ref());
+    Ok(match namespaces.prefixes.get(&prefix) {
+        Some(namespace) => ParsedAttributeName::Resolved(ExpandedAttributeName {
+            namespace: namespace.clone(),
+            local_name,
+        }),
+        None => ParsedAttributeName::UnresolvedNamespace,
+    })
 }
 
 /// Parse <attr-type> = type( <syntax> ) | raw-string | number | <attr-unit>.
@@ -1369,12 +1452,8 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
             .refs
             .iter()
             .filter_map(|reference| {
-                if reference.substitution_kind != SubstitutionFunctionKind::Var {
-                    return None;
-                }
-                let registration = self
-                    .stylist
-                    .get_custom_property_registration(&reference.name);
+                let name = reference.function.variable_name()?;
+                let registration = self.stylist.get_custom_property_registration(name);
                 if !registration
                     .syntax
                     .dependent_types()
@@ -1382,7 +1461,7 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
                 {
                     return None;
                 }
-                Some(reference.name.clone())
+                Some(name.clone())
             })
             .collect();
         references.for_each(|idx| {
@@ -1833,11 +1912,11 @@ fn substitute_all(
             // Visit other custom properties...
             // FIXME: Maybe avoid visiting the same var twice if not needed?
             for next in &v.references.refs {
-                if next.substitution_kind != SubstitutionFunctionKind::Var {
+                let Some(name) = next.function.variable_name() else {
                     continue;
-                }
+                };
                 visit_link(
-                    VarType::Custom(next.name.clone()),
+                    VarType::Custom(name.clone()),
                     context,
                     &mut lowlink,
                     &mut self_ref,
@@ -1959,9 +2038,11 @@ fn substitute_all(
                 )
                 .is_some()
                     || v.references.refs.iter().any(|reference| {
-                        (reference.substitution_kind == SubstitutionFunctionKind::Var
-                            && deferred.get(&reference.name).is_some())
-                            || reference.substitution_kind == SubstitutionFunctionKind::Attr
+                        reference
+                            .function
+                            .variable_name()
+                            .is_some_and(|name| deferred.get(name).is_some())
+                            || reference.function.is_attr()
                     });
 
                 if defer {
@@ -2321,20 +2402,20 @@ fn substitute_one_reference<'a>(
             TokenSerializationType::Nothing,
         ))
     };
-    let substitution: Option<_> = match reference.substitution_kind {
-        SubstitutionFunctionKind::Var => {
-            let registration = stylist.get_custom_property_registration(&reference.name);
+    let substitution: Option<_> = match &reference.function {
+        SubstitutionFunction::Var(name) => {
+            let registration = stylist.get_custom_property_registration(name);
             custom_properties
-                .get(registration, &reference.name)
+                .get(registration, name)
                 .map(|v| Substitution::from_value(v.to_variable_value()))
         },
-        SubstitutionFunctionKind::Env => {
+        SubstitutionFunction::Env(name) => {
             match environment_resolution {
                 EnvironmentResolutionMode::ResolveLiveEnvironment => {
                     let device = stylist.device();
                     device
                         .environment()
-                        .get(&reference.name, device, url_data)
+                        .get(name, device, url_data)
                         .map(Substitution::from_value)
                 },
                 EnvironmentResolutionMode::TreatAsMissing => None,
@@ -2344,11 +2425,11 @@ fn substitute_one_reference<'a>(
                     // env() (notably safe-area-inset-*) falls through
                     // to its authored fallback, matching the previous
                     // `TreatAsMissing` behaviour for those names.
-                    if is_paged_media_env_name(&reference.name) {
+                    if is_paged_media_env_name(name) {
                         let device = stylist.device();
                         device
                             .environment()
-                            .get(&reference.name, device, url_data)
+                            .get(name, device, url_data)
                             .map(Substitution::from_value)
                     } else {
                         None
@@ -2357,18 +2438,16 @@ fn substitute_one_reference<'a>(
             }
         },
         // https://drafts.csswg.org/css-values-5/#attr-substitution
-        SubstitutionFunctionKind::Attr => {
-            #[cfg(feature = "gecko")]
-            let local_name = LocalName::cast(&reference.name);
-            #[cfg(feature = "servo")]
-            let local_name = LocalName::from(reference.name.as_ref());
-            attribute_tracker.query(&local_name).map_or_else(
+        SubstitutionFunction::Attr { name, syntax } => {
+            let attribute = match name {
+                ParsedAttributeName::Resolved(name) => attribute_tracker.query(name),
+                ParsedAttributeName::UnresolvedNamespace => None,
+            };
+            attribute.map_or_else(
                 || {
                     // Special case when fallback and <attr-type> are omitted.
                     // See FAILURE: https://drafts.csswg.org/css-values-5/#attr-substitution
-                    if reference.fallback.is_none()
-                        && reference.attribute_syntax == AttributeType::None
-                    {
+                    if reference.fallback.is_none() && *syntax == AttributeType::None {
                         simple_subst("")
                     } else {
                         None
@@ -2377,7 +2456,7 @@ fn substitute_one_reference<'a>(
                 |attr| {
                     let mut input = ParserInput::new(&attr);
                     let mut parser = Parser::new(&mut input);
-                    match &reference.attribute_syntax {
+                    match syntax {
                         AttributeType::Unit(unit) => {
                             let css = {
                                 // Verify that attribute data is a <number-token>.
@@ -2504,4 +2583,89 @@ pub fn substitute_with_environment_resolution<'a>(
         attribute_tracker,
     )?;
     Ok(v.css)
+}
+
+#[cfg(all(test, feature = "servo"))]
+mod tests {
+    use super::*;
+    use crate::stylesheets::UrlExtraData;
+    use crate::test_support::{pref_lock, BoolPrefGuard};
+    use ::url::Url;
+    use cssparser::{Parser, ParserInput};
+
+    fn parse_value(css: &str, namespaces: &Namespaces) -> VariableValue {
+        let _guard = pref_lock().lock().unwrap();
+        let _attr_pref = BoolPrefGuard::set("layout.css.attr.enabled", true);
+        let url_data = UrlExtraData::from(Url::parse("https://example.invalid/").unwrap());
+        let mut input = ParserInput::new(css);
+        let mut parser = Parser::new(&mut input);
+        parser
+            .parse_entirely(|input| VariableValue::parse(input, &url_data, namespaces))
+            .unwrap()
+    }
+
+    fn parsed_attr(value: &VariableValue) -> (&ParsedAttributeName, &AttributeType) {
+        match &value.references.refs[0].function {
+            SubstitutionFunction::Attr { name, syntax } => (name, syntax),
+            _ => panic!("expected an attr() reference"),
+        }
+    }
+
+    #[test]
+    fn attr_references_store_expanded_names() {
+        let mut namespaces = Namespaces::default();
+        namespaces.prefixes.insert(
+            Prefix::from("value"),
+            Namespace::from("https://example.invalid/value"),
+        );
+
+        let value = parse_value("attr(value|colour type(*), red)", &namespaces);
+        let (name, syntax) = parsed_attr(&value);
+        assert_eq!(*syntax, AttributeType::Type(Descriptor::universal()));
+        assert_eq!(
+            *name,
+            ParsedAttributeName::Resolved(ExpandedAttributeName {
+                namespace: Namespace::from("https://example.invalid/value"),
+                local_name: LocalName::from("colour"),
+            })
+        );
+    }
+
+    #[test]
+    fn attr_namespace_prefixes_are_case_sensitive() {
+        let mut namespaces = Namespaces::default();
+        namespaces.prefixes.insert(
+            Prefix::from("low"),
+            Namespace::from("https://example.invalid/lower"),
+        );
+        namespaces.prefixes.insert(
+            Prefix::from("LOW"),
+            Namespace::from("https://example.invalid/upper"),
+        );
+
+        let lower = parse_value("attr(low|value)", &namespaces);
+        let upper = parse_value("attr(LOW|value)", &namespaces);
+        assert_ne!(parsed_attr(&lower).0, parsed_attr(&upper).0);
+    }
+
+    #[test]
+    fn unbound_attr_namespace_is_a_typed_missing_attribute() {
+        let value = parse_value(
+            "attr(unbound|colour type(*), green)",
+            &Namespaces::default(),
+        );
+        assert_eq!(
+            parsed_attr(&value).0,
+            &ParsedAttributeName::UnresolvedNamespace
+        );
+        assert!(value.references.refs[0].fallback.is_some());
+    }
+
+    #[test]
+    fn untyped_attr_fallback_remains_distinct_from_the_attribute_name() {
+        let value = parse_value("attr(missing, \"fallback\")", &Namespaces::default());
+        let (_, syntax) = parsed_attr(&value);
+        assert_eq!(*syntax, AttributeType::None);
+        assert!(value.references.refs[0].fallback.is_some());
+    }
 }
