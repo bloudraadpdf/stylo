@@ -831,7 +831,7 @@ impl ToComputedValue for Opacity {
 /// at computed-value time.
 ///
 /// <https://drafts.csswg.org/css-values/#integers>
-#[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, PartialOrd, ToShmem, ToTyped)]
+#[derive(Clone, Copy, Debug, MallocSizeOf, ToShmem, ToTyped)]
 pub struct Integer(IntegerValue);
 
 #[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, PartialOrd, ToShmem, ToTyped)]
@@ -869,6 +869,18 @@ impl One for Integer {
 impl PartialEq<i32> for Integer {
     fn eq(&self, value: &i32) -> bool {
         self.value() == *value
+    }
+}
+
+impl PartialEq for Integer {
+    fn eq(&self, other: &Self) -> bool {
+        self.value() == other.value()
+    }
+}
+
+impl PartialOrd for Integer {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.value().partial_cmp(&other.value())
     }
 }
 
@@ -1494,6 +1506,7 @@ mod tests {
         let calculated = parse_non_negative_integer("calc(-1)").unwrap();
         assert_eq!(calculated.value(), 0);
         assert_eq!(calculated.to_css_string(), "calc(-1)");
+        assert!(Integer::new(1) > calculated);
     }
 
     #[test]
