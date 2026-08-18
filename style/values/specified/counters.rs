@@ -713,7 +713,7 @@ mod tests {
                 generics::CounterName::Ident(name),
                 style,
             ) => {
-                assert_eq!(attr.attribute.as_ref(), "href");
+                assert_eq!(attr.name.local_name().as_ref(), "href");
                 assert_eq!(attr.syntax, AttrSyntax::Keyword(String::from("url").into()));
                 assert_eq!(name.0.as_ref(), "page");
                 assert_eq!(style.to_css_string(), "decimal");
@@ -722,7 +722,7 @@ mod tests {
         }
         match &items.items[2] {
             generics::ContentItem::TargetText(generics::TargetReference::Attr(attr), keyword) => {
-                assert_eq!(attr.attribute.as_ref(), "href");
+                assert_eq!(attr.name.local_name().as_ref(), "href");
                 assert_eq!(attr.syntax, AttrSyntax::None);
                 assert_eq!(*keyword, generics::TargetTextKeyword::Before);
             },
@@ -746,8 +746,8 @@ mod tests {
                 generics::CounterName::Attr(name),
                 style,
             ) => {
-                assert_eq!(target.attribute.as_ref(), "href");
-                assert_eq!(name.attribute.as_ref(), "data-counter");
+                assert_eq!(target.name.local_name().as_ref(), "href");
+                assert_eq!(name.name.local_name().as_ref(), "data-counter");
                 assert_eq!(
                     name.syntax,
                     AttrSyntax::Keyword(String::from("-bd-ident").into()),
@@ -791,7 +791,7 @@ mod tests {
         };
         match &items.items[1] {
             generics::ContentItem::Attr(attr) => {
-                assert_eq!(attr.attribute.as_ref(), "data-status");
+                assert_eq!(attr.name.local_name().as_ref(), "data-status");
                 assert_eq!(
                     attr.syntax,
                     AttrSyntax::Keyword(String::from("string").into())
@@ -813,7 +813,7 @@ mod tests {
         };
         match &items.items[0] {
             generics::ContentItem::Attr(attr) => {
-                assert_eq!(attr.attribute.as_ref(), "data-label");
+                assert_eq!(attr.name.local_name().as_ref(), "data-label");
                 assert_eq!(attr.syntax, AttrSyntax::None);
                 assert_eq!(&*attr.fallback, "");
             },

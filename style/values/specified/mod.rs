@@ -21,7 +21,7 @@ use crate::properties_and_values::syntax::Descriptor;
 use crate::values::generics::calc::SortKey as AttrUnit;
 use crate::values::specified::calc::CalcNode;
 use crate::values::{serialize_atom_identifier, serialize_number};
-use crate::{Atom, Namespace, One, Prefix, Zero};
+use crate::{Atom, LocalName, Namespace, One, Prefix, Zero};
 use cssparser::{match_ignore_ascii_case, Parser, Token};
 use std::fmt::{self, Write};
 use std::ops::Add;
@@ -1146,6 +1146,131 @@ pub enum AttrSyntax {
     Type(crate::OwnedStr),
 }
 
+/// The namespace-aware name selected by an `attr()` function.
+#[derive(
+    Clone,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+)]
+#[repr(u8)]
+pub enum AttrName {
+    /// A name whose namespace prefix was absent, empty, or bound.
+    Resolved {
+        /// The authored namespace prefix, retained for serialization.
+        prefix: Prefix,
+        /// The expanded namespace URL.
+        namespace: Namespace,
+        /// The case-sensitive local name.
+        local_name: Atom,
+    },
+    /// A syntactically valid name whose namespace prefix is not bound.
+    UnresolvedNamespace {
+        /// The unbound authored prefix.
+        prefix: Prefix,
+        /// The case-sensitive local name.
+        local_name: Atom,
+    },
+}
+
+impl AttrName {
+    pub(crate) fn parse_with_namespaces<'i, 't>(
+        input: &mut Parser<'i, 't>,
+        namespaces: &crate::stylesheets::Namespaces,
+    ) -> Result<Self, ParseError<'i>> {
+        let location = input.current_source_location();
+        let first = match input.next()? {
+            Token::Ident(name) => Some(name.clone()),
+            Token::Delim('|') => None,
+            token => return Err(location.new_unexpected_token_error(token.clone())),
+        };
+
+        let Some(prefix) = first else {
+            let local_name = match input.next_including_whitespace()? {
+                Token::Ident(name) => Atom::from(name.as_ref()),
+                token => return Err(location.new_unexpected_token_error(token.clone())),
+            };
+            return Ok(Self::Resolved {
+                prefix: Prefix::default(),
+                namespace: Namespace::default(),
+                local_name,
+            });
+        };
+
+        let after_name = input.state();
+        if !matches!(input.next_including_whitespace(), Ok(Token::Delim('|'))) {
+            input.reset(&after_name);
+            return Ok(Self::Resolved {
+                prefix: Prefix::default(),
+                namespace: Namespace::default(),
+                local_name: Atom::from(prefix.as_ref()),
+            });
+        }
+
+        let local_name = match input.next_including_whitespace()? {
+            Token::Ident(name) => Atom::from(name.as_ref()),
+            token => return Err(location.new_unexpected_token_error(token.clone())),
+        };
+        let prefix = Prefix::from(prefix.as_ref());
+        Ok(match namespaces.prefixes.get(&prefix) {
+            Some(namespace) => Self::Resolved {
+                prefix,
+                namespace: namespace.clone(),
+                local_name,
+            },
+            None => Self::UnresolvedNamespace { prefix, local_name },
+        })
+    }
+
+    /// Return the local name independently of namespace resolution.
+    pub fn local_name(&self) -> &Atom {
+        match self {
+            Self::Resolved { local_name, .. } | Self::UnresolvedNamespace { local_name, .. } => {
+                local_name
+            },
+        }
+    }
+
+    /// Return the expanded name, or `None` when the prefix is unbound.
+    pub fn expanded_name(&self) -> Option<crate::dom::ExpandedAttributeName> {
+        match self {
+            Self::Resolved {
+                namespace,
+                local_name,
+                ..
+            } => Some(crate::dom::ExpandedAttributeName {
+                namespace: namespace.clone(),
+                local_name: LocalName::from(local_name.as_ref()),
+            }),
+            Self::UnresolvedNamespace { .. } => None,
+        }
+    }
+
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        let (prefix, local_name) = match self {
+            Self::Resolved {
+                prefix, local_name, ..
+            }
+            | Self::UnresolvedNamespace {
+                prefix, local_name, ..
+            } => (prefix, local_name),
+        };
+        if !prefix.is_empty() {
+            serialize_atom_identifier(prefix, dest)?;
+            dest.write_char('|')?;
+        }
+        serialize_atom_identifier(local_name, dest)
+    }
+}
+
 impl ToCss for AttrSyntax {
     fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
     where
@@ -1219,12 +1344,8 @@ pub enum AttrScope {
 #[css(function)]
 #[repr(C)]
 pub struct Attr {
-    /// Optional namespace prefix.
-    pub namespace_prefix: Prefix,
-    /// Optional namespace URL.
-    pub namespace_url: Namespace,
-    /// Attribute name
-    pub attribute: Atom,
+    /// Namespace-aware attribute name.
+    pub name: AttrName,
     /// Parsed attr type / unit syntax.
     pub syntax: AttrSyntax,
     /// Fallback value
@@ -1258,37 +1379,6 @@ impl Parse for Attr {
     }
 }
 
-/// Get the Namespace for a given prefix from the namespace map.
-fn get_namespace_for_prefix(prefix: &Prefix, context: &ParserContext) -> Option<Namespace> {
-    context.namespaces.prefixes.get(prefix).cloned()
-}
-
-/// Try to parse a namespace and return it if parsed, or none if there was not one present
-fn parse_namespace<'i, 't>(
-    context: &ParserContext,
-    input: &mut Parser<'i, 't>,
-) -> Result<(Prefix, Namespace), ParseError<'i>> {
-    let ns_prefix = match input.next()? {
-        Token::Ident(ref prefix) => Some(Prefix::from(prefix.as_ref())),
-        Token::Delim('|') => None,
-        _ => return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError)),
-    };
-
-    if ns_prefix.is_some() && !matches!(*input.next_including_whitespace()?, Token::Delim('|')) {
-        return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
-    }
-
-    if let Some(prefix) = ns_prefix {
-        let ns = match get_namespace_for_prefix(&prefix, context) {
-            Some(ns) => ns,
-            None => return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError)),
-        };
-        Ok((prefix, ns))
-    } else {
-        Ok((Prefix::default(), Namespace::default()))
-    }
-}
-
 impl Attr {
     /// Parse contents of attr() assuming we have already parsed `attr` and are
     /// within a parse_nested_block().
@@ -1317,22 +1407,7 @@ impl Attr {
         input: &mut Parser<'i, 't>,
         mut scope: AttrScope,
     ) -> Result<Attr, ParseError<'i>> {
-        let namespace = input
-            .try_parse(|input| parse_namespace(context, input))
-            .ok();
-        let namespace_is_some = namespace.is_some();
-        let (namespace_prefix, namespace_url) = namespace.unwrap_or_default();
-
-        // If there is a namespace, ensure no whitespace following '|'
-        let attribute = Atom::from(if namespace_is_some {
-            let location = input.current_source_location();
-            match *input.next_including_whitespace()? {
-                Token::Ident(ref ident) => ident.as_ref(),
-                ref t => return Err(location.new_unexpected_token_error(t.clone())),
-            }
-        } else {
-            input.expect_ident()?.as_ref()
-        });
+        let name = AttrName::parse_with_namespaces(input, &context.namespaces)?;
 
         // moegoe Family 14: optional `, ancestor` keyword on
         // `attr()` / `-bd-attr()`. Forces ancestor lookup.
@@ -1357,9 +1432,7 @@ impl Attr {
         input.expect_exhausted()?;
 
         Ok(Attr {
-            namespace_prefix,
-            namespace_url,
-            attribute,
+            name,
             syntax,
             fallback,
             scope,
@@ -1432,11 +1505,7 @@ impl ToCss for Attr {
             AttrScope::SelfElement => dest.write_str("attr(")?,
             AttrScope::Ancestor => dest.write_str("-bd-attr-ancestor(")?,
         }
-        if !self.namespace_prefix.is_empty() {
-            serialize_atom_identifier(&self.namespace_prefix, dest)?;
-            dest.write_char('|')?;
-        }
-        serialize_atom_identifier(&self.attribute, dest)?;
+        self.name.to_css(dest)?;
 
         if self.syntax != AttrSyntax::None {
             dest.write_char(' ')?;
@@ -1512,7 +1581,7 @@ mod tests {
     #[test]
     fn attr_parses_legacy_type_and_string_fallback() {
         let attr = parse_attr(r#"attr(data-status string, "unknown")"#);
-        assert_eq!(attr.attribute.as_ref(), "data-status");
+        assert_eq!(attr.name.local_name().as_ref(), "data-status");
         assert_eq!(
             attr.syntax,
             AttrSyntax::Keyword(String::from("string").into())
@@ -1527,7 +1596,7 @@ mod tests {
     #[test]
     fn attr_parses_type_function_and_raw_fallback() {
         let attr = parse_attr(r#"attr(data-width type(<length-percentage>), 100%)"#);
-        assert_eq!(attr.attribute.as_ref(), "data-width");
+        assert_eq!(attr.name.local_name().as_ref(), "data-width");
         assert_eq!(
             attr.syntax,
             AttrSyntax::Type(String::from("<length-percentage>").into())
@@ -1542,7 +1611,7 @@ mod tests {
     #[test]
     fn attr_bd_ancestor_function_parses_and_round_trips() {
         let attr = parse_attr(r#"-bd-attr-ancestor(data-section)"#);
-        assert_eq!(attr.attribute.as_ref(), "data-section");
+        assert_eq!(attr.name.local_name().as_ref(), "data-section");
         assert_eq!(attr.scope, AttrScope::Ancestor);
         assert_eq!(attr.to_css_string(), r#"-bd-attr-ancestor(data-section)"#);
     }

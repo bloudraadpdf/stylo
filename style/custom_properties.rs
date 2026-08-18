@@ -9,7 +9,7 @@
 use crate::applicable_declarations::CascadePriority;
 use crate::custom_properties_map::CustomPropertiesMap;
 use crate::derives::*;
-use crate::dom::{AttributeTracker, ExpandedAttributeName};
+use crate::dom::AttributeTracker;
 use crate::media_queries::Device;
 use crate::properties::{
     CSSWideKeyword, CustomDeclaration, CustomDeclarationValue, LonghandId, LonghandIdSet,
@@ -28,8 +28,8 @@ use crate::stylesheets::{Namespaces, UrlExtraData};
 use crate::stylist::Stylist;
 use crate::values::computed::{self, ToComputedValue};
 use crate::values::generics::calc::SortKey as AttrUnit;
-use crate::values::specified::FontRelativeLength;
-use crate::{Atom, LocalName, Namespace, Prefix};
+use crate::values::specified::{AttrName, FontRelativeLength};
+use crate::Atom;
 use cssparser::{
     CowRcStr, Delimiter, Parser, ParserInput, SourcePosition, Token, TokenSerializationType,
 };
@@ -618,17 +618,11 @@ enum AttributeType {
 }
 
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
-enum ParsedAttributeName {
-    Resolved(ExpandedAttributeName),
-    UnresolvedNamespace,
-}
-
-#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
 enum SubstitutionFunction {
     Var(Name),
     Env(Name),
     Attr {
-        name: ParsedAttributeName,
+        name: AttrName,
         syntax: AttributeType,
     },
 }
@@ -1022,7 +1016,7 @@ fn parse_declaration_value_block<'i, 't>(
                                 input.expect_ident()?.as_ref(),
                             )),
                             SubstitutionFunctionKind::Attr => SubstitutionFunction::Attr {
-                                name: parse_attribute_name(input, namespaces)?,
+                                name: AttrName::parse_with_namespaces(input, namespaces)?,
                                 syntax: parse_attr_type(input),
                             },
                         };
@@ -1143,51 +1137,6 @@ fn parse_declaration_value_block<'i, 't>(
         };
     }
     Ok((first_token_type, last_token_type))
-}
-
-fn parse_attribute_name<'i, 't>(
-    input: &mut Parser<'i, 't>,
-    namespaces: &Namespaces,
-) -> Result<ParsedAttributeName, ParseError<'i>> {
-    let location = input.current_source_location();
-    let first = match input.next()? {
-        Token::Ident(name) => Some(name.clone()),
-        Token::Delim('|') => None,
-        token => return Err(location.new_unexpected_token_error(token.clone())),
-    };
-
-    let Some(prefix) = first else {
-        let local_name = match input.next_including_whitespace()? {
-            Token::Ident(name) => LocalName::from(name.as_ref()),
-            token => return Err(location.new_unexpected_token_error(token.clone())),
-        };
-        return Ok(ParsedAttributeName::Resolved(ExpandedAttributeName {
-            namespace: Namespace::default(),
-            local_name,
-        }));
-    };
-
-    let after_name = input.state();
-    if !matches!(input.next_including_whitespace(), Ok(Token::Delim('|'))) {
-        input.reset(&after_name);
-        return Ok(ParsedAttributeName::Resolved(ExpandedAttributeName {
-            namespace: Namespace::default(),
-            local_name: LocalName::from(prefix.as_ref()),
-        }));
-    }
-
-    let local_name = match input.next_including_whitespace()? {
-        Token::Ident(name) => LocalName::from(name.as_ref()),
-        token => return Err(location.new_unexpected_token_error(token.clone())),
-    };
-    let prefix = Prefix::from(prefix.as_ref());
-    Ok(match namespaces.prefixes.get(&prefix) {
-        Some(namespace) => ParsedAttributeName::Resolved(ExpandedAttributeName {
-            namespace: namespace.clone(),
-            local_name,
-        }),
-        None => ParsedAttributeName::UnresolvedNamespace,
-    })
 }
 
 /// Parse <attr-type> = type( <syntax> ) | raw-string | number | <attr-unit>.
@@ -2439,10 +2388,10 @@ fn substitute_one_reference<'a>(
         },
         // https://drafts.csswg.org/css-values-5/#attr-substitution
         SubstitutionFunction::Attr { name, syntax } => {
-            let attribute = match name {
-                ParsedAttributeName::Resolved(name) => attribute_tracker.query(name),
-                ParsedAttributeName::UnresolvedNamespace => None,
-            };
+            let attribute = name
+                .expanded_name()
+                .as_ref()
+                .and_then(|name| attribute_tracker.query(name));
             attribute.map_or_else(
                 || {
                     // Special case when fallback and <attr-type> are omitted.
@@ -2590,6 +2539,7 @@ mod tests {
     use super::*;
     use crate::stylesheets::UrlExtraData;
     use crate::test_support::{pref_lock, BoolPrefGuard};
+    use crate::{Namespace, Prefix};
     use ::url::Url;
     use cssparser::{Parser, ParserInput};
 
@@ -2604,7 +2554,7 @@ mod tests {
             .unwrap()
     }
 
-    fn parsed_attr(value: &VariableValue) -> (&ParsedAttributeName, &AttributeType) {
+    fn parsed_attr(value: &VariableValue) -> (&AttrName, &AttributeType) {
         match &value.references.refs[0].function {
             SubstitutionFunction::Attr { name, syntax } => (name, syntax),
             _ => panic!("expected an attr() reference"),
@@ -2624,10 +2574,11 @@ mod tests {
         assert_eq!(*syntax, AttributeType::Type(Descriptor::universal()));
         assert_eq!(
             *name,
-            ParsedAttributeName::Resolved(ExpandedAttributeName {
+            AttrName::Resolved {
+                prefix: Prefix::from("value"),
                 namespace: Namespace::from("https://example.invalid/value"),
-                local_name: LocalName::from("colour"),
-            })
+                local_name: Atom::from("colour"),
+            }
         );
     }
 
@@ -2656,7 +2607,10 @@ mod tests {
         );
         assert_eq!(
             parsed_attr(&value).0,
-            &ParsedAttributeName::UnresolvedNamespace
+            &AttrName::UnresolvedNamespace {
+                prefix: Prefix::from("unbound"),
+                local_name: Atom::from("colour"),
+            }
         );
         assert!(value.references.refs[0].fallback.is_some());
     }
