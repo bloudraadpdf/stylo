@@ -2600,6 +2600,12 @@ mod tests {
     }
 
     #[test]
+    fn attr_local_names_preserve_authored_case() {
+        let value = parse_value("attr(myAttr type(*), red)", &Namespaces::default());
+        assert_eq!(parsed_attr(&value).0.local_name().as_ref(), "myAttr");
+    }
+
+    #[test]
     fn unbound_attr_namespace_is_a_typed_missing_attribute() {
         let value = parse_value(
             "attr(unbound|colour type(*), green)",
