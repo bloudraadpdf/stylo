@@ -15,7 +15,6 @@ use crate::data::ElementData;
 use crate::derives::*;
 use crate::media_queries::Device;
 use crate::properties::{AnimationDeclarations, ComputedValues, PropertyDeclarationBlock};
-use crate::selector_map::PrecomputedHashSet;
 use crate::selector_parser::{AttrValue, Lang, PseudoElement, RestyleDamage, SelectorImpl};
 use crate::shared_lock::{Locked, SharedRwLock};
 use crate::stylesheets::scope_rule::ImplicitScopeRoot;
@@ -29,6 +28,7 @@ use selectors::matching::{ElementSelectorFlags, QuirksMode, VisitedHandlingMode}
 use selectors::sink::Push;
 use selectors::{Element as SelectorsElement, OpaqueElement};
 use servo_arc::{Arc, ArcBorrow};
+use std::collections::HashSet;
 use std::fmt;
 use std::fmt::Debug;
 use std::hash::Hash;
@@ -999,14 +999,14 @@ pub trait AttributeProvider {
 }
 
 /// A set of the attributes used to compute a style that uses `attr()`
-pub type AttributeReferences = Option<Box<PrecomputedHashSet<ExpandedAttributeName>>>;
+pub type AttributeReferences = Option<Box<HashSet<ExpandedAttributeName>>>;
 
 /// A data structure to keep track of the names queried from a provider.
 pub struct AttributeTracker<'a> {
     /// The element that queries for attributes.
     pub provider: &'a dyn AttributeProvider,
     /// The set of attributes we have queried.
-    pub references: Box<PrecomputedHashSet<ExpandedAttributeName>>,
+    pub references: Box<HashSet<ExpandedAttributeName>>,
 }
 
 impl<'a> AttributeTracker<'a> {
@@ -1027,7 +1027,7 @@ impl<'a> AttributeTracker<'a> {
     }
 
     /// Extract the queried references and consume self
-    pub fn finalize(self) -> Box<PrecomputedHashSet<ExpandedAttributeName>> {
+    pub fn finalize(self) -> Box<HashSet<ExpandedAttributeName>> {
         self.references
     }
 
