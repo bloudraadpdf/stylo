@@ -136,6 +136,13 @@ impl ToCss for PseudoElement {
 
 impl ::selectors::parser::PseudoElement for PseudoElement {
     type Impl = SelectorImpl;
+
+    fn valid_after_slotted(&self) -> bool {
+        matches!(
+            self,
+            Self::Before | Self::After | Self::Marker | Self::Placeholder | Self::DetailsContent
+        )
+    }
 }
 
 /// The number of eager pseudo-elements. Keep this in sync with cascade_type.
