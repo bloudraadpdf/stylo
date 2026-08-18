@@ -832,11 +832,14 @@ impl ToComputedValue for Opacity {
 ///
 /// <https://drafts.csswg.org/css-values/#integers>
 #[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, PartialOrd, ToShmem, ToTyped)]
-pub enum Integer {
-    /// A literal integer value.
+pub struct Integer(IntegerValue);
+
+#[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, PartialOrd, ToShmem, ToTyped)]
+enum IntegerValue {
     Literal(CSSInteger),
-    /// A calc expression, whose value will be rounded later if necessary.
     Calc(CSSFloat),
+    NonNegativeCalc(CSSFloat),
+    PositiveCalc(CSSFloat),
 }
 
 impl Zero for Integer {
@@ -872,20 +875,48 @@ impl PartialEq<i32> for Integer {
 impl Integer {
     /// Trivially constructs a new `Integer` value.
     pub fn new(val: CSSInteger) -> Self {
-        Self::Literal(val)
+        Self(IntegerValue::Literal(val))
     }
 
     /// Returns the (rounded) integer value associated with this value.
     pub fn value(&self) -> CSSInteger {
-        match *self {
-            Self::Literal(i) => i,
-            Self::Calc(n) => (n + 0.5).floor() as CSSInteger,
-        }
+        let value = match self.0 {
+            IntegerValue::Literal(value) => return value,
+            IntegerValue::Calc(value) => value,
+            IntegerValue::NonNegativeCalc(value) => value.max(0.0),
+            IntegerValue::PositiveCalc(value) => value.max(1.0),
+        };
+        (value + 0.5).floor() as CSSInteger
     }
 
     /// Trivially constructs a new integer value from a `calc()` expression.
-    fn from_calc(val: CSSFloat) -> Self {
-        Self::Calc(val)
+    fn from_calc(value: CSSFloat, clamping_mode: AllowedNumericType) -> Self {
+        let value = match clamping_mode {
+            AllowedNumericType::All => IntegerValue::Calc(value),
+            AllowedNumericType::NonNegative => IntegerValue::NonNegativeCalc(value),
+            AllowedNumericType::AtLeastOne => IntegerValue::PositiveCalc(value),
+            AllowedNumericType::ZeroToOne => unreachable!(),
+        };
+        Self(value)
+    }
+
+    fn parse_with_clamping_mode<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+        clamping_mode: AllowedNumericType,
+    ) -> Result<Self, ParseError<'i>> {
+        let location = input.current_source_location();
+        match *input.next()? {
+            Token::Number {
+                int_value: Some(v), ..
+            } if clamping_mode.is_ok(context.parsing_mode, v as CSSFloat) => Ok(Integer::new(v)),
+            Token::Function(ref name) => {
+                let function = CalcNode::math_function(context, name, location)?;
+                let result = CalcNode::parse_number(context, input, function)?;
+                Ok(Integer::from_calc(result, clamping_mode))
+            },
+            ref t => Err(location.new_unexpected_token_error(t.clone())),
+        }
     }
 }
 
@@ -894,46 +925,17 @@ impl Parse for Integer {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        let location = input.current_source_location();
-        match *input.next()? {
-            Token::Number {
-                int_value: Some(v), ..
-            } => Ok(Integer::new(v)),
-            Token::Function(ref name) => {
-                let function = CalcNode::math_function(context, name, location)?;
-                let result = CalcNode::parse_number(context, input, function)?;
-                Ok(Integer::from_calc(result))
-            },
-            ref t => Err(location.new_unexpected_token_error(t.clone())),
-        }
+        Self::parse_with_clamping_mode(context, input, AllowedNumericType::All)
     }
 }
 
 impl Integer {
-    /// Parse an integer value which is at least `min`.
-    pub fn parse_with_minimum<'i, 't>(
-        context: &ParserContext,
-        input: &mut Parser<'i, 't>,
-        min: i32,
-    ) -> Result<Integer, ParseError<'i>> {
-        let value = Integer::parse(context, input)?;
-        // FIXME(emilio): The spec asks us to avoid rejecting it at parse
-        // time except until computed value time.
-        //
-        // It's not totally clear it's worth it though, and no other browser
-        // does this.
-        if value.value() < min {
-            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
-        }
-        Ok(value)
-    }
-
     /// Parse a non-negative integer.
     pub fn parse_non_negative<'i, 't>(
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Integer, ParseError<'i>> {
-        Integer::parse_with_minimum(context, input, 0)
+        Integer::parse_with_clamping_mode(context, input, AllowedNumericType::NonNegative)
     }
 
     /// Parse a positive integer (>= 1).
@@ -941,7 +943,7 @@ impl Integer {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Integer, ParseError<'i>> {
-        Integer::parse_with_minimum(context, input, 1)
+        Integer::parse_with_clamping_mode(context, input, AllowedNumericType::AtLeastOne)
     }
 }
 
@@ -964,13 +966,11 @@ impl ToCss for Integer {
     where
         W: Write,
     {
-        match *self {
-            Integer::Literal(i) => i.to_css(dest),
-            Integer::Calc(n) => {
-                dest.write_str("calc(")?;
-                n.to_css(dest)?;
-                dest.write_char(')')
-            },
+        match self.0 {
+            IntegerValue::Literal(value) => value.to_css(dest),
+            IntegerValue::Calc(value)
+            | IntegerValue::NonNegativeCalc(value)
+            | IntegerValue::PositiveCalc(value) => serialize_number(value, true, dest),
         }
     }
 }
@@ -1466,6 +1466,34 @@ mod tests {
         parser
             .parse_entirely(|input| Attr::parse(&context, input))
             .expect("attr() should parse")
+    }
+
+    fn parse_non_negative_integer(css: &str) -> Option<Integer> {
+        let url_data = UrlExtraData::from(Url::parse("https://example.invalid/").unwrap());
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input = ParserInput::new(css);
+        let mut parser = Parser::new(&mut input);
+        parser
+            .parse_entirely(|input| Integer::parse_non_negative(&context, input))
+            .ok()
+    }
+
+    #[test]
+    fn calculated_integer_clamps_to_its_context_range() {
+        assert!(parse_non_negative_integer("-1").is_none());
+
+        let calculated = parse_non_negative_integer("calc(-1)").unwrap();
+        assert_eq!(calculated.value(), 0);
+        assert_eq!(calculated.to_css_string(), "calc(-1)");
     }
 
     #[test]
