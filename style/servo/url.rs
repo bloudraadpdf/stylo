@@ -254,6 +254,11 @@ impl CssUrl {
         }
     }
 
+    /// Return the canonical request modifiers authored on this URL.
+    pub fn request_modifiers(&self) -> &UrlRequestModifiers {
+        &self.modifiers
+    }
+
     /// Creates an already specified url value from an already resolved URL
     /// for insertion in the cascade.
     pub fn for_cascade(url: Arc<::url::Url>) -> Self {
