@@ -8,11 +8,11 @@ use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
 use crate::stylesheets::CorsMode;
 use crate::values::computed::{Context, ToComputedValue};
-use cssparser::Parser;
+use cssparser::{match_ignore_ascii_case, Parser};
 use servo_arc::Arc;
 use std::fmt::{self, Write};
 use std::ops::Deref;
-use style_traits::{CssWriter, ParseError, ToCss};
+use style_traits::{CssWriter, ParseError, StyleParseErrorKind, ToCss};
 use to_shmem::{SharedMemoryBuilder, ToShmem};
 use url::Url;
 
@@ -46,6 +46,152 @@ pub struct CssUrlData {
     /// The resolved value for the url, if valid.
     #[ignore_malloc_size_of = "Arc"]
     resolved: Option<Arc<Url>>,
+
+    /// Request modifiers authored as part of the quoted `url()` value.
+    #[css(skip)]
+    modifiers: UrlRequestModifiers,
+}
+
+/// The CORS credentials mode selected by a CSS Values 5 `cross-origin()` URL
+/// request modifier.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, MallocSizeOf, PartialEq, Serialize)]
+pub enum UrlCorsMode {
+    /// `cross-origin(anonymous)`.
+    Anonymous,
+    /// `cross-origin(use-credentials)`.
+    UseCredentials,
+}
+
+/// A CSS Values 5 referrer policy URL request modifier.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, MallocSizeOf, PartialEq, Serialize)]
+pub enum UrlReferrerPolicy {
+    /// Send no referrer.
+    NoReferrer,
+    /// Send no referrer on a downgrade.
+    NoReferrerWhenDowngrade,
+    /// Send a referrer only for same-origin requests.
+    SameOrigin,
+    /// Send only the origin.
+    Origin,
+    /// Send only the origin, except on a downgrade.
+    StrictOrigin,
+    /// Send the full URL for same-origin requests and the origin otherwise.
+    OriginWhenCrossOrigin,
+    /// Apply strict-origin behavior to cross-origin requests.
+    StrictOriginWhenCrossOrigin,
+    /// Always send the full URL as the referrer.
+    UnsafeUrl,
+}
+
+/// Canonical, typed URL request modifiers.
+///
+/// CSS Values 5 permits each modifier at most once and serializes them in
+/// cross-origin, integrity, referrer-policy order. Keeping separate fields
+/// makes duplicate modifiers unrepresentable after parsing and prevents one
+/// request setting from being confused with another.
+#[derive(Clone, Debug, Default, Deserialize, MallocSizeOf, PartialEq, Serialize)]
+pub struct UrlRequestModifiers {
+    cors: Option<UrlCorsMode>,
+    integrity: Option<String>,
+    referrer_policy: Option<UrlReferrerPolicy>,
+}
+
+impl UrlRequestModifiers {
+    /// Return the explicitly authored CORS modifier.
+    pub fn cors(&self) -> Option<UrlCorsMode> {
+        self.cors
+    }
+
+    /// Return the explicitly authored integrity metadata.
+    pub fn integrity(&self) -> Option<&str> {
+        self.integrity.as_deref()
+    }
+
+    /// Return the explicitly authored referrer policy modifier.
+    pub fn referrer_policy(&self) -> Option<UrlReferrerPolicy> {
+        self.referrer_policy
+    }
+
+    fn parse<'i, 't>(input: &mut Parser<'i, 't>) -> Result<Self, ParseError<'i>> {
+        let mut modifiers = Self::default();
+        while !input.is_exhausted() {
+            let name = input.expect_function()?.clone();
+            match_ignore_ascii_case! { &name,
+                "cross-origin" if modifiers.cors.is_none() => {
+                    modifiers.cors = Some(input.parse_nested_block(|input| {
+                        let mode = if input.try_parse(|input| input.expect_ident_matching("anonymous")).is_ok() {
+                            UrlCorsMode::Anonymous
+                        } else {
+                            input.expect_ident_matching("use-credentials")?;
+                            UrlCorsMode::UseCredentials
+                        };
+                        input.expect_exhausted()?;
+                        Ok(mode)
+                    })?);
+                },
+                "integrity" if modifiers.integrity.is_none() => {
+                    modifiers.integrity = Some(input.parse_nested_block(|input| {
+                        let value = input.expect_string()?.as_ref().to_owned();
+                        input.expect_exhausted()?;
+                        Ok(value)
+                    })?);
+                },
+                "referrer-policy" if modifiers.referrer_policy.is_none() => {
+                    modifiers.referrer_policy = Some(input.parse_nested_block(|input| {
+                        let ident = input.expect_ident_cloned()?;
+                        input.expect_exhausted()?;
+                        match_ignore_ascii_case! { ident.as_ref(),
+                            "no-referrer" => Ok(UrlReferrerPolicy::NoReferrer),
+                            "no-referrer-when-downgrade" => Ok(UrlReferrerPolicy::NoReferrerWhenDowngrade),
+                            "same-origin" => Ok(UrlReferrerPolicy::SameOrigin),
+                            "origin" => Ok(UrlReferrerPolicy::Origin),
+                            "strict-origin" => Ok(UrlReferrerPolicy::StrictOrigin),
+                            "origin-when-cross-origin" => Ok(UrlReferrerPolicy::OriginWhenCrossOrigin),
+                            "strict-origin-when-cross-origin" => Ok(UrlReferrerPolicy::StrictOriginWhenCrossOrigin),
+                            "unsafe-url" => Ok(UrlReferrerPolicy::UnsafeUrl),
+                            _ => Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError)),
+                        }
+                    })?);
+                },
+                _ => return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError)),
+            }
+        }
+        Ok(modifiers)
+    }
+
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        if let Some(cors) = self.cors {
+            dest.write_str(" cross-origin(")?;
+            dest.write_str(match cors {
+                UrlCorsMode::Anonymous => "anonymous",
+                UrlCorsMode::UseCredentials => "use-credentials",
+            })?;
+            dest.write_char(')')?;
+        }
+        if let Some(ref integrity) = self.integrity {
+            dest.write_str(" integrity(")?;
+            integrity.to_css(dest)?;
+            dest.write_char(')')?;
+        }
+        if let Some(policy) = self.referrer_policy {
+            dest.write_str(" referrer-policy(")?;
+            dest.write_str(match policy {
+                UrlReferrerPolicy::NoReferrer => "no-referrer",
+                UrlReferrerPolicy::NoReferrerWhenDowngrade => "no-referrer-when-downgrade",
+                UrlReferrerPolicy::SameOrigin => "same-origin",
+                UrlReferrerPolicy::Origin => "origin",
+                UrlReferrerPolicy::StrictOrigin => "strict-origin",
+                UrlReferrerPolicy::OriginWhenCrossOrigin => "origin-when-cross-origin",
+                UrlReferrerPolicy::StrictOriginWhenCrossOrigin => "strict-origin-when-cross-origin",
+                UrlReferrerPolicy::UnsafeUrl => "unsafe-url",
+            })?;
+            dest.write_char(')')?;
+        }
+        Ok(())
+    }
 }
 
 impl ToShmem for CssUrl {
@@ -72,6 +218,7 @@ impl CssUrl {
         CssUrl(Arc::new(CssUrlData {
             original: Some(serialization),
             resolved: resolved,
+            modifiers: UrlRequestModifiers::default(),
         }))
     }
 
@@ -113,6 +260,7 @@ impl CssUrl {
         CssUrl(Arc::new(CssUrlData {
             original: None,
             resolved: Some(url),
+            modifiers: UrlRequestModifiers::default(),
         }))
     }
 
@@ -121,6 +269,7 @@ impl CssUrl {
         CssUrl(Arc::new(CssUrlData {
             original: Some(Arc::new(url.into())),
             resolved: ::url::Url::parse(url).ok().map(Arc::new),
+            modifiers: UrlRequestModifiers::default(),
         }))
     }
 
@@ -134,12 +283,26 @@ impl CssUrl {
         input: &mut Parser<'i, 't>,
         cors_mode: CorsMode,
     ) -> Result<Self, ParseError<'i>> {
-        let url = input.expect_url()?;
-        Ok(Self::parse_from_string(
-            url.as_ref().to_owned(),
-            context,
-            cors_mode,
-        ))
+        let before = input.state();
+        if let Ok(url) = input.try_parse(|input| input.expect_url()) {
+            return Ok(Self::parse_from_string(
+                url.as_ref().to_owned(),
+                context,
+                cors_mode,
+            ));
+        }
+        input.reset(&before);
+        input.expect_function_matching("url")?;
+        let (url, modifiers) = input.parse_nested_block(|input| {
+            let url = input.expect_string()?.as_ref().to_owned();
+            let modifiers = UrlRequestModifiers::parse(input)?;
+            Ok((url, modifiers))
+        })?;
+        let mut parsed = Self::parse_from_string(url, context, cors_mode);
+        Arc::get_mut(&mut parsed.0)
+            .expect("a freshly parsed CSS URL has a unique data allocation")
+            .modifiers = modifiers;
+        Ok(parsed)
     }
 }
 
@@ -180,6 +343,7 @@ impl ToCss for CssUrl {
 
         dest.write_str("url(")?;
         string.to_css(dest)?;
+        self.modifiers.to_css(dest)?;
         dest.write_char(')')
     }
 }
@@ -194,9 +358,15 @@ impl ToComputedValue for SpecifiedUrl {
     // but still return it as a ComputedUrl::Invalid
     fn to_computed_value(&self, _: &Context) -> Self::ComputedValue {
         match self.resolved {
-            Some(ref url) => ComputedUrl::Valid(url.clone()),
+            Some(ref url) => ComputedUrl::Valid(Arc::new(ValidComputedUrl {
+                url: url.clone(),
+                modifiers: self.modifiers.clone(),
+            })),
             None => match self.original {
-                Some(ref url) => ComputedUrl::Invalid(url.clone()),
+                Some(ref url) => ComputedUrl::Invalid(Arc::new(InvalidComputedUrl {
+                    serialization: url.clone(),
+                    modifiers: self.modifiers.clone(),
+                })),
                 None => {
                     unreachable!("Found specified url with neither resolved or original URI!");
                 },
@@ -205,14 +375,16 @@ impl ToComputedValue for SpecifiedUrl {
     }
 
     fn from_computed_value(computed: &ComputedUrl) -> Self {
-        let data = match *computed {
-            ComputedUrl::Valid(ref url) => CssUrlData {
+        let data = match computed {
+            ComputedUrl::Valid(computed) => CssUrlData {
                 original: None,
-                resolved: Some(url.clone()),
+                resolved: Some(computed.url.clone()),
+                modifiers: computed.modifiers.clone(),
             },
-            ComputedUrl::Invalid(ref url) => CssUrlData {
-                original: Some(url.clone()),
+            ComputedUrl::Invalid(computed) => CssUrlData {
+                original: Some(computed.serialization.clone()),
                 resolved: None,
+                modifiers: computed.modifiers.clone(),
             },
         };
         CssUrl(Arc::new(data))
@@ -222,18 +394,50 @@ impl ToComputedValue for SpecifiedUrl {
 /// The computed value of a CSS `url()`, resolved relative to the stylesheet URL.
 #[derive(Clone, Debug, Deserialize, MallocSizeOf, PartialEq, Serialize)]
 pub enum ComputedUrl {
-    /// The `url()` was invalid or it wasn't specified by the user.
-    Invalid(#[ignore_malloc_size_of = "Arc"] Arc<String>),
-    /// The resolved `url()` relative to the stylesheet URL.
-    Valid(#[ignore_malloc_size_of = "Arc"] Arc<Url>),
+    /// A URL that could not be resolved, with its request modifiers retained.
+    Invalid(#[ignore_malloc_size_of = "Arc"] Arc<InvalidComputedUrl>),
+    /// A resolved URL with its request modifiers retained.
+    Valid(#[ignore_malloc_size_of = "Arc"] Arc<ValidComputedUrl>),
+}
+
+/// Private payload of an invalid computed URL.
+#[derive(Debug, Deserialize, MallocSizeOf, PartialEq, Serialize)]
+pub struct InvalidComputedUrl {
+    #[ignore_malloc_size_of = "Arc"]
+    serialization: Arc<String>,
+    modifiers: UrlRequestModifiers,
+}
+
+/// Private payload of a valid computed URL.
+#[derive(Debug, Deserialize, MallocSizeOf, PartialEq, Serialize)]
+pub struct ValidComputedUrl {
+    #[ignore_malloc_size_of = "Arc"]
+    url: Arc<Url>,
+    modifiers: UrlRequestModifiers,
 }
 
 impl ComputedUrl {
     /// Returns the resolved url if it was valid.
     pub fn url(&self) -> Option<&Arc<Url>> {
-        match *self {
-            ComputedUrl::Valid(ref url) => Some(url),
-            _ => None,
+        match self {
+            ComputedUrl::Valid(computed) => Some(&computed.url),
+            ComputedUrl::Invalid(_) => None,
+        }
+    }
+
+    /// Return the canonical request modifiers attached to this URL.
+    pub fn request_modifiers(&self) -> &UrlRequestModifiers {
+        match self {
+            ComputedUrl::Valid(computed) => &computed.modifiers,
+            ComputedUrl::Invalid(computed) => &computed.modifiers,
+        }
+    }
+
+    /// Return the original serialization when this URL could not be resolved.
+    pub fn invalid_serialization(&self) -> Option<&str> {
+        match self {
+            ComputedUrl::Invalid(computed) => Some(&computed.serialization),
+            ComputedUrl::Valid(_) => None,
         }
     }
 }
@@ -243,13 +447,14 @@ impl ToCss for ComputedUrl {
     where
         W: Write,
     {
-        let string = match *self {
-            ComputedUrl::Valid(ref url) => url.as_str(),
-            ComputedUrl::Invalid(ref invalid_string) => invalid_string,
+        let string = match self {
+            ComputedUrl::Valid(computed) => computed.url.as_str(),
+            ComputedUrl::Invalid(computed) => computed.serialization.as_str(),
         };
 
         dest.write_str("url(")?;
         string.to_css(dest)?;
+        self.request_modifiers().to_css(dest)?;
         dest.write_char(')')
     }
 }

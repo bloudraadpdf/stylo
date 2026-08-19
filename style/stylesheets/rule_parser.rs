@@ -373,8 +373,16 @@ impl<'a, 'i> AtRuleParser<'i> for TopLevelRuleParser<'a, 'i> {
                     return Err(input.new_custom_error(StyleParseErrorKind::UnexpectedImportRule))
                 }
 
-                let url_string = input.expect_url_or_string()?.as_ref().to_owned();
-                let url = CssUrl::parse_from_string(url_string, &self.context, CorsMode::None);
+                let url = input
+                    .try_parse(|input| CssUrl::parse(&self.context, input))
+                    .or_else(|_| {
+                        let url_string = input.expect_string()?.as_ref().to_owned();
+                        Ok::<_, ParseError<'i>>(CssUrl::parse_from_string(
+                            url_string,
+                            &self.context,
+                            CorsMode::None,
+                        ))
+                    })?;
 
                 let (layer, supports) = ImportRule::parse_layer_and_supports(input, &mut self.context);
 
