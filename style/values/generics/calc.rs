@@ -29,7 +29,9 @@ use thin_vec::ThinVec;
     MallocSizeOf,
     PartialEq,
     Serialize,
+    ToAnimatedValue,
     ToAnimatedZero,
+    ToComputedValue,
     ToResolvedValue,
     ToShmem,
 )]
@@ -50,7 +52,9 @@ pub enum MinMaxOp {
     MallocSizeOf,
     PartialEq,
     Serialize,
+    ToAnimatedValue,
     ToAnimatedZero,
+    ToComputedValue,
     ToResolvedValue,
     ToShmem,
 )]
@@ -95,7 +99,9 @@ impl ModRemOp {
     MallocSizeOf,
     PartialEq,
     Serialize,
+    ToAnimatedValue,
     ToAnimatedZero,
+    ToComputedValue,
     ToResolvedValue,
     ToShmem,
 )]

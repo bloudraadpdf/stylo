@@ -16,8 +16,9 @@ use crate::parser::{Parse, ParserContext};
 use crate::values::computed::{self, CSSPixelLength, Context, FontSize};
 use crate::values::generics::length as generics;
 use crate::values::generics::length::{
-    GenericAnchorSizeFunction, GenericLengthOrNumber, GenericLengthPercentageOrNormal,
-    GenericMargin, GenericMaxSize, GenericSize,
+    GenericAnchorSizeFunction, GenericCalcSize, GenericCalcSizeBasis, GenericCalcSizeExpression,
+    GenericLengthOrNumber, GenericLengthPercentageOrNormal, GenericMargin, GenericMaxSize,
+    GenericSize,
 };
 use crate::values::generics::NonNegative;
 use crate::values::specified::calc::{self, AllowAnchorPositioningFunctions, CalcNode};
@@ -2394,7 +2395,7 @@ pub type NonNegativeLengthOrAuto = generics::LengthPercentageOrAuto<NonNegativeL
 pub type LengthOrNumber = GenericLengthOrNumber<Length, Number>;
 
 /// A specified value for `min-width`, `min-height`, `width` or `height` property.
-pub type Size = GenericSize<NonNegativeLengthPercentage>;
+pub type Size = GenericSize<NonNegativeLengthPercentage, NoCalcLength>;
 
 impl Parse for Size {
     fn parse<'i, 't>(
@@ -2461,6 +2462,112 @@ macro_rules! parse_fit_content_function {
     };
 }
 
+fn calc_size_expression(node: CalcNode) -> Result<GenericCalcSizeExpression<NoCalcLength>, ()> {
+    use crate::values::generics::calc::{GenericCalcNode, MinMaxOp};
+    use crate::values::specified::calc::Leaf;
+
+    fn children(
+        values: crate::OwnedSlice<CalcNode>,
+    ) -> Result<crate::OwnedSlice<GenericCalcSizeExpression<NoCalcLength>>, ()> {
+        values
+            .into_vec()
+            .into_iter()
+            .map(calc_size_expression)
+            .collect::<Result<Vec<_>, _>>()
+            .map(|values| values.into_boxed_slice().into())
+    }
+
+    Ok(match node {
+        GenericCalcNode::Leaf(Leaf::Size) => GenericCalcSizeExpression::Size,
+        GenericCalcNode::Leaf(Leaf::Length(value)) => GenericCalcSizeExpression::Length(value),
+        GenericCalcNode::Leaf(Leaf::Percentage(value)) => {
+            GenericCalcSizeExpression::Percentage(value)
+        },
+        GenericCalcNode::Leaf(Leaf::Number(value)) => GenericCalcSizeExpression::Number(value),
+        GenericCalcNode::Leaf(
+            Leaf::Angle(_) | Leaf::Time(_) | Leaf::Resolution(_) | Leaf::ColorComponent(_),
+        )
+        | GenericCalcNode::Anchor(_)
+        | GenericCalcNode::AnchorSize(_) => return Err(()),
+        GenericCalcNode::Negate(value) => {
+            GenericCalcSizeExpression::Negate(Box::new(calc_size_expression(*value)?))
+        },
+        GenericCalcNode::Invert(value) => {
+            GenericCalcSizeExpression::Invert(Box::new(calc_size_expression(*value)?))
+        },
+        GenericCalcNode::Sum(values) => GenericCalcSizeExpression::Sum(children(values)?),
+        GenericCalcNode::Product(values) => GenericCalcSizeExpression::Product(children(values)?),
+        GenericCalcNode::MinMax(values, MinMaxOp::Min) => {
+            GenericCalcSizeExpression::Min(children(values)?)
+        },
+        GenericCalcNode::MinMax(values, MinMaxOp::Max) => {
+            GenericCalcSizeExpression::Max(children(values)?)
+        },
+        GenericCalcNode::Clamp { min, center, max } => GenericCalcSizeExpression::Clamp {
+            min: Box::new(calc_size_expression(*min)?),
+            center: Box::new(calc_size_expression(*center)?),
+            max: Box::new(calc_size_expression(*max)?),
+        },
+        GenericCalcNode::Round {
+            strategy,
+            value,
+            step,
+        } => GenericCalcSizeExpression::Round {
+            strategy,
+            value: Box::new(calc_size_expression(*value)?),
+            step: Box::new(calc_size_expression(*step)?),
+        },
+        GenericCalcNode::ModRem {
+            dividend,
+            divisor,
+            op,
+        } => GenericCalcSizeExpression::ModRem {
+            dividend: Box::new(calc_size_expression(*dividend)?),
+            divisor: Box::new(calc_size_expression(*divisor)?),
+            op,
+        },
+        GenericCalcNode::Hypot(values) => GenericCalcSizeExpression::Hypot(children(values)?),
+        GenericCalcNode::Abs(value) => {
+            GenericCalcSizeExpression::Abs(Box::new(calc_size_expression(*value)?))
+        },
+        GenericCalcNode::Sign(value) => {
+            GenericCalcSizeExpression::Sign(Box::new(calc_size_expression(*value)?))
+        },
+    })
+}
+
+fn parse_calc_size<'i, 't>(
+    context: &ParserContext,
+    input: &mut Parser<'i, 't>,
+) -> Result<GenericCalcSize<NonNegativeLengthPercentage, NoCalcLength>, ParseError<'i>> {
+    input.expect_function_matching("calc-size")?;
+    input.parse_nested_block(|input| {
+        let basis = input
+            .try_parse(|input| {
+                Ok::<GenericCalcSizeBasis<NonNegativeLengthPercentage>, ParseError<'i>>(
+                    try_match_ident_ignore_ascii_case! { input,
+                    "auto" => GenericCalcSizeBasis::Auto,
+                    "min-content" => GenericCalcSizeBasis::MinContent,
+                    "max-content" => GenericCalcSizeBasis::MaxContent,
+                    "fit-content" => GenericCalcSizeBasis::FitContent,
+                    "stretch" => GenericCalcSizeBasis::Stretch,
+                    },
+                )
+            })
+            .or_else(|_| {
+                NonNegativeLengthPercentage::parse(context, input)
+                    .map(GenericCalcSizeBasis::LengthPercentage)
+            })?;
+        input.expect_comma()?;
+        let calculation = CalcNode::parse_calc_size(context, input)?;
+        Ok(GenericCalcSize {
+            basis,
+            calculation: calc_size_expression(calculation)
+                .map_err(|()| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))?,
+        })
+    })
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ParseAnchorFunctions {
     Yes,
@@ -2512,6 +2619,9 @@ impl Size {
         parse_size_non_length!(Size, input, allow_webkit_fill_available,
                                "auto" => Auto);
         parse_fit_content_function!(Size, input, context, allow_quirks);
+        if let Ok(value) = input.try_parse(|input| parse_calc_size(context, input)) {
+            return Ok(GenericSize::CalcSize(Box::new(value)));
+        }
 
         let allow_anchor = allow_anchor_functions == ParseAnchorFunctions::Yes
             && static_prefs::pref!("layout.css.anchor-positioning.enabled");
@@ -2583,7 +2693,7 @@ impl Size {
 }
 
 /// A specified value for `max-width` or `max-height` property.
-pub type MaxSize = GenericMaxSize<NonNegativeLengthPercentage>;
+pub type MaxSize = GenericMaxSize<NonNegativeLengthPercentage, NoCalcLength>;
 
 impl Parse for MaxSize {
     fn parse<'i, 't>(
@@ -2605,6 +2715,9 @@ impl MaxSize {
         parse_size_non_length!(MaxSize, input, allow_webkit_fill_available,
                                "none" => None);
         parse_fit_content_function!(MaxSize, input, context, allow_quirks);
+        if let Ok(value) = input.try_parse(|input| parse_calc_size(context, input)) {
+            return Ok(GenericMaxSize::CalcSize(Box::new(value)));
+        }
 
         match input
             .try_parse(|i| NonNegativeLengthPercentage::parse_quirky(context, i, allow_quirks))
@@ -2672,5 +2785,59 @@ impl Parse for Margin {
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
         Self::parse_quirky(context, input, AllowQuirks::No)
+    }
+}
+
+#[cfg(test)]
+mod calc_size_tests {
+    use super::*;
+    use crate::context::QuirksMode;
+    use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
+    use cssparser::{Parser, ParserInput};
+    use style_traits::ParsingMode;
+
+    fn context() -> ParserContext<'static> {
+        let url_data = Box::leak(Box::new(UrlExtraData::from(
+            url::Url::parse("https://example.invalid/").unwrap(),
+        )));
+        ParserContext::new(
+            Origin::Author,
+            url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        )
+    }
+
+    fn parse_size(css: &str) -> Size {
+        let mut input = ParserInput::new(css);
+        let mut parser = Parser::new(&mut input);
+        parser
+            .parse_entirely(|input| Size::parse(&context(), input))
+            .expect("size value should parse")
+    }
+
+    #[test]
+    fn calc_size_retains_the_basis_and_size_math_leaf() {
+        let GenericSize::CalcSize(value) = parse_size("calc-size(auto, min(size, 100px))") else {
+            panic!("calc-size() must have a distinct specified representation");
+        };
+        assert!(matches!(value.basis, GenericCalcSizeBasis::Auto));
+        let GenericCalcSizeExpression::Min(values) = value.calculation else {
+            panic!("the math tree must retain min()");
+        };
+        assert!(matches!(values[0], GenericCalcSizeExpression::Size));
+    }
+
+    #[test]
+    fn size_keyword_is_rejected_outside_calc_size() {
+        let mut input = ParserInput::new("calc(size + 1px)");
+        let mut parser = Parser::new(&mut input);
+        assert!(parser
+            .parse_entirely(|input| NonNegativeLengthPercentage::parse(&context(), input))
+            .is_err());
     }
 }

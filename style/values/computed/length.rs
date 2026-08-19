@@ -743,10 +743,10 @@ pub type NonNegativeLengthPercentageOrNormal =
 pub type NonNegativeLengthOrNumber = GenericLengthOrNumber<NonNegativeLength, NonNegativeNumber>;
 
 /// A computed value for `min-width`, `min-height`, `width` or `height` property.
-pub type Size = GenericSize<NonNegativeLengthPercentage>;
+pub type Size = GenericSize<NonNegativeLengthPercentage, Length>;
 
 /// A computed value for `max-width` or `max-height` property.
-pub type MaxSize = GenericMaxSize<NonNegativeLengthPercentage>;
+pub type MaxSize = GenericMaxSize<NonNegativeLengthPercentage, Length>;
 
 #[cfg(feature = "gecko")]
 use crate::{
@@ -801,6 +801,7 @@ impl TryTacticAdjustment for MaxSize {
                 lp.try_tactic_adjustment(old_side, new_side);
             },
             Self::AnchorSizeFunction(s) => s.try_tactic_adjustment(old_side, new_side),
+            Self::CalcSize(_) => {},
             Self::None
             | Self::MaxContent
             | Self::MinContent
@@ -826,6 +827,7 @@ impl TryTacticAdjustment for Size {
                 lp.try_tactic_adjustment(old_side, new_side);
             },
             Self::AnchorSizeFunction(s) => s.try_tactic_adjustment(old_side, new_side),
+            Self::CalcSize(_) => {},
             Self::Auto
             | Self::MaxContent
             | Self::MinContent

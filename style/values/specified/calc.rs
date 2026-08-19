@@ -84,6 +84,8 @@ pub enum MathFunction {
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
 #[repr(u8)]
 pub enum Leaf {
+    /// The `calc-size()` basis placeholder.
+    Size,
     /// `<length>`
     Length(NoCalcLength),
     /// `<angle>`
@@ -115,6 +117,7 @@ impl ToCss for Leaf {
         W: Write,
     {
         match *self {
+            Self::Size => dest.write_str("size"),
             Self::Length(ref l) => l.to_css(dest),
             Self::Number(n) => serialize_number(n, /* was_calc = */ false, dest),
             Self::Resolution(ref r) => r.to_css(dest),
@@ -201,6 +204,7 @@ pub struct AllowParse {
     units: CalcUnits,
     /// Additional functions allowed to be parsed in this context.
     additional_functions: AdditionalFunctions,
+    allow_size_keyword: bool,
 }
 
 impl AllowParse {
@@ -209,6 +213,7 @@ impl AllowParse {
         Self {
             units,
             additional_functions: AdditionalFunctions::empty(),
+            allow_size_keyword: false,
         }
     }
 
@@ -227,6 +232,7 @@ impl AllowParse {
 impl generic::CalcNodeLeaf for Leaf {
     fn unit(&self) -> CalcUnits {
         match self {
+            Leaf::Size => CalcUnits::LENGTH,
             Leaf::Length(_) => CalcUnits::LENGTH,
             Leaf::Angle(_) => CalcUnits::ANGLE,
             Leaf::Time(_) => CalcUnits::TIME,
@@ -239,6 +245,7 @@ impl generic::CalcNodeLeaf for Leaf {
 
     fn unitless_value(&self) -> Option<f32> {
         Some(match *self {
+            Self::Size => return None,
             Self::Length(ref l) => l.unitless_value(),
             Self::Percentage(n) | Self::Number(n) => n,
             Self::Resolution(ref r) => r.dppx(),
@@ -273,6 +280,7 @@ impl generic::CalcNodeLeaf for Leaf {
         }
 
         match (self, other) {
+            (&Size, &Size) => Some(cmp::Ordering::Equal),
             (&Percentage(ref one), &Percentage(ref other)) => one.partial_cmp(other),
             (&Length(ref one), &Length(ref other)) => one.partial_cmp(other),
             (&Angle(ref one), &Angle(ref other)) => one.degrees().partial_cmp(&other.degrees()),
@@ -283,7 +291,7 @@ impl generic::CalcNodeLeaf for Leaf {
             _ => {
                 match *self {
                     Length(..) | Percentage(..) | Angle(..) | Time(..) | Number(..)
-                    | Resolution(..) | ColorComponent(..) => {},
+                    | Resolution(..) | ColorComponent(..) | Size => {},
                 }
                 unsafe {
                     debug_unreachable!("Forgot a branch?");
@@ -294,7 +302,8 @@ impl generic::CalcNodeLeaf for Leaf {
 
     fn as_number(&self) -> Option<f32> {
         match *self {
-            Leaf::Length(_)
+            Leaf::Size
+            | Leaf::Length(_)
             | Leaf::Angle(_)
             | Leaf::Time(_)
             | Leaf::Resolution(_)
@@ -306,6 +315,7 @@ impl generic::CalcNodeLeaf for Leaf {
 
     fn sort_key(&self) -> SortKey {
         match *self {
+            Self::Size => SortKey::Px,
             Self::Number(..) => SortKey::Number,
             Self::Percentage(..) => SortKey::Percentage,
             Self::Time(..) => SortKey::S,
@@ -422,7 +432,7 @@ impl generic::CalcNodeLeaf for Leaf {
             _ => {
                 match *other {
                     Number(..) | Percentage(..) | Angle(..) | Time(..) | Resolution(..)
-                    | Length(..) | ColorComponent(..) => {},
+                    | Length(..) | ColorComponent(..) | Size => {},
                 }
                 unsafe {
                     debug_unreachable!();
@@ -500,7 +510,7 @@ impl generic::CalcNodeLeaf for Leaf {
             _ => {
                 match *other {
                     Number(..) | Percentage(..) | Angle(..) | Time(..) | Length(..)
-                    | Resolution(..) | ColorComponent(..) => {},
+                    | Resolution(..) | ColorComponent(..) | Size => {},
                 }
                 unsafe {
                     debug_unreachable!();
@@ -511,6 +521,7 @@ impl generic::CalcNodeLeaf for Leaf {
 
     fn map(&mut self, mut op: impl FnMut(f32) -> f32) -> Result<(), ()> {
         Ok(match self {
+            Leaf::Size => return Err(()),
             Leaf::Length(one) => *one = one.map(op),
             Leaf::Angle(one) => *one = specified::Angle::from_calc(op(one.degrees())),
             Leaf::Time(one) => *one = specified::Time::from_seconds(op(one.seconds())),
@@ -565,6 +576,7 @@ impl GenericAnchorFunction<Box<CalcNode>, Box<CalcNode>> {
                             AllowParse {
                                 units: CalcUnits::LENGTH_PERCENTAGE,
                                 additional_functions,
+                                allow_size_keyword: false,
                             },
                         )?
                         .into_length_or_percentage(AllowedNumericType::All)
@@ -688,6 +700,7 @@ impl CalcNode {
             },
             &Token::Ident(ref ident) => {
                 let leaf = match_ignore_ascii_case! { &**ident,
+                    "size" if allowed.allow_size_keyword => Leaf::Size,
                     "e" => Leaf::Number(std::f32::consts::E),
                     "pi" => Leaf::Number(std::f32::consts::PI),
                     "infinity" => Leaf::Number(f32::INFINITY),
@@ -1243,6 +1256,7 @@ impl CalcNode {
                         AdditionalFunctions::ANCHOR | AdditionalFunctions::ANCHOR_SIZE
                     },
                 },
+                allow_size_keyword: false,
             }
         };
         Self::parse(context, input, function, allowed)?
@@ -1277,6 +1291,24 @@ impl CalcNode {
         Self::parse(context, input, function, AllowParse::new(CalcUnits::LENGTH))?
             .into_length_or_percentage(clamping_mode)
             .map_err(|()| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
+    }
+
+    /// Parse the calculation argument of `calc-size()`, where `size` is a
+    /// length-valued placeholder for the separately parsed basis.
+    pub fn parse_calc_size<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        let mut allowed = AllowParse::new(CalcUnits::LENGTH_PERCENTAGE);
+        allowed.allow_size_keyword = true;
+        let node = Self::parse_argument(context, input, allowed)?;
+        let unit = node
+            .unit()
+            .map_err(|()| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))?;
+        if !CalcUnits::LENGTH_PERCENTAGE.intersects(unit) {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+        Ok(node)
     }
 
     /// Convenience parsing function for `<number>`.

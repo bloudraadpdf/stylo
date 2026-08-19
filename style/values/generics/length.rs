@@ -160,7 +160,7 @@ impl<LengthPercentage: Parse> Parse for LengthPercentageOrAuto<LengthPercentage>
     ToTyped,
 )]
 #[repr(C, u8)]
-pub enum GenericSize<LengthPercent> {
+pub enum GenericSize<LengthPercent, CalcSizeLength> {
     LengthPercentage(LengthPercent),
     Auto,
     #[animation(error)]
@@ -181,9 +181,12 @@ pub enum GenericSize<LengthPercent> {
     FitContentFunction(LengthPercent),
     AnchorSizeFunction(Box<GenericAnchorSizeFunction<Self>>),
     AnchorContainingCalcFunction(LengthPercent),
+    #[animation(error)]
+    CalcSize(Box<GenericCalcSize<LengthPercent, CalcSizeLength>>),
 }
 
-impl<LengthPercent> SpecifiedValueInfo for GenericSize<LengthPercent>
+impl<LengthPercent, CalcSizeLength> SpecifiedValueInfo
+    for GenericSize<LengthPercent, CalcSizeLength>
 where
     LengthPercent: SpecifiedValueInfo,
 {
@@ -207,7 +210,7 @@ where
 
 pub use self::GenericSize as Size;
 
-impl<LengthPercentage> Size<LengthPercentage> {
+impl<LengthPercentage, CalcSizeLength> Size<LengthPercentage, CalcSizeLength> {
     /// `auto` value.
     #[inline]
     pub fn auto() -> Self {
@@ -239,7 +242,7 @@ impl<LengthPercentage> Size<LengthPercentage> {
     ToTyped,
 )]
 #[repr(C, u8)]
-pub enum GenericMaxSize<LengthPercent> {
+pub enum GenericMaxSize<LengthPercent, CalcSizeLength> {
     LengthPercentage(LengthPercent),
     None,
     #[animation(error)]
@@ -260,9 +263,11 @@ pub enum GenericMaxSize<LengthPercent> {
     FitContentFunction(LengthPercent),
     AnchorSizeFunction(Box<GenericAnchorSizeFunction<Self>>),
     AnchorContainingCalcFunction(LengthPercent),
+    #[animation(error)]
+    CalcSize(Box<GenericCalcSize<LengthPercent, CalcSizeLength>>),
 }
 
-impl<LP> SpecifiedValueInfo for GenericMaxSize<LP>
+impl<LP, CalcSizeLength> SpecifiedValueInfo for GenericMaxSize<LP, CalcSizeLength>
 where
     LP: SpecifiedValueInfo,
 {
@@ -284,9 +289,228 @@ where
     }
 }
 
+/// The intrinsic or extrinsic basis substituted for `size` in `calc-size()`.
+#[allow(missing_docs)]
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    ToAnimatedValue,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+)]
+#[repr(C, u8)]
+pub enum GenericCalcSizeBasis<LengthPercent> {
+    Auto,
+    MinContent,
+    MaxContent,
+    FitContent,
+    Stretch,
+    LengthPercentage(LengthPercent),
+}
+
+/// A standards math expression used by `calc-size()`.
+#[allow(missing_docs)]
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    ToAnimatedValue,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+)]
+#[repr(C, u8)]
+pub enum GenericCalcSizeExpression<Length> {
+    Size,
+    Length(Length),
+    Percentage(f32),
+    Number(f32),
+    Negate(Box<Self>),
+    Invert(Box<Self>),
+    Sum(crate::OwnedSlice<Self>),
+    Product(crate::OwnedSlice<Self>),
+    Min(crate::OwnedSlice<Self>),
+    Max(crate::OwnedSlice<Self>),
+    Clamp {
+        min: Box<Self>,
+        center: Box<Self>,
+        max: Box<Self>,
+    },
+    Round {
+        strategy: crate::values::generics::calc::RoundingStrategy,
+        value: Box<Self>,
+        step: Box<Self>,
+    },
+    ModRem {
+        dividend: Box<Self>,
+        divisor: Box<Self>,
+        op: crate::values::generics::calc::ModRemOp,
+    },
+    Hypot(crate::OwnedSlice<Self>),
+    Abs(Box<Self>),
+    Sign(Box<Self>),
+}
+
+/// A `calc-size()` value whose basis and calculation stay distinct through
+/// computed-value conversion.
+#[allow(missing_docs)]
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    ToAnimatedValue,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+)]
+pub struct GenericCalcSize<LengthPercent, Length> {
+    pub basis: GenericCalcSizeBasis<LengthPercent>,
+    pub calculation: GenericCalcSizeExpression<Length>,
+}
+
+impl<LengthPercent: ToCss> ToCss for GenericCalcSizeBasis<LengthPercent> {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> std::fmt::Result
+    where
+        W: Write,
+    {
+        match self {
+            Self::Auto => dest.write_str("auto"),
+            Self::MinContent => dest.write_str("min-content"),
+            Self::MaxContent => dest.write_str("max-content"),
+            Self::FitContent => dest.write_str("fit-content"),
+            Self::Stretch => dest.write_str("stretch"),
+            Self::LengthPercentage(value) => value.to_css(dest),
+        }
+    }
+}
+
+impl<Length: ToCss> ToCss for GenericCalcSizeExpression<Length> {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> std::fmt::Result
+    where
+        W: Write,
+    {
+        fn list<W: Write, L: ToCss>(
+            name: &str,
+            values: &[GenericCalcSizeExpression<L>],
+            separator: &str,
+            dest: &mut CssWriter<W>,
+        ) -> std::fmt::Result {
+            dest.write_str(name)?;
+            for (index, value) in values.iter().enumerate() {
+                if index != 0 {
+                    dest.write_str(separator)?;
+                }
+                value.to_css(dest)?;
+            }
+            dest.write_char(')')
+        }
+
+        match self {
+            Self::Size => dest.write_str("size"),
+            Self::Length(value) => value.to_css(dest),
+            Self::Percentage(value) => crate::values::serialize_percentage(*value, dest),
+            Self::Number(value) => crate::values::serialize_number(*value, false, dest),
+            Self::Negate(value) => {
+                dest.write_str("-(")?;
+                value.to_css(dest)?;
+                dest.write_char(')')
+            },
+            Self::Invert(value) => {
+                dest.write_str("1 / (")?;
+                value.to_css(dest)?;
+                dest.write_char(')')
+            },
+            Self::Sum(values) => list("(", values, " + ", dest),
+            Self::Product(values) => list("(", values, " * ", dest),
+            Self::Min(values) => list("min(", values, ", ", dest),
+            Self::Max(values) => list("max(", values, ", ", dest),
+            Self::Clamp { min, center, max } => {
+                dest.write_str("clamp(")?;
+                min.to_css(dest)?;
+                dest.write_str(", ")?;
+                center.to_css(dest)?;
+                dest.write_str(", ")?;
+                max.to_css(dest)?;
+                dest.write_char(')')
+            },
+            Self::Round {
+                strategy,
+                value,
+                step,
+            } => {
+                let strategy = match strategy {
+                    crate::values::generics::calc::RoundingStrategy::Nearest => "nearest",
+                    crate::values::generics::calc::RoundingStrategy::Up => "up",
+                    crate::values::generics::calc::RoundingStrategy::Down => "down",
+                    crate::values::generics::calc::RoundingStrategy::ToZero => "to-zero",
+                };
+                write!(dest, "round({strategy}, ")?;
+                value.to_css(dest)?;
+                dest.write_str(", ")?;
+                step.to_css(dest)?;
+                dest.write_char(')')
+            },
+            Self::ModRem {
+                dividend,
+                divisor,
+                op,
+            } => {
+                dest.write_str(match op {
+                    crate::values::generics::calc::ModRemOp::Mod => "mod(",
+                    crate::values::generics::calc::ModRemOp::Rem => "rem(",
+                })?;
+                dividend.to_css(dest)?;
+                dest.write_str(", ")?;
+                divisor.to_css(dest)?;
+                dest.write_char(')')
+            },
+            Self::Hypot(values) => list("hypot(", values, ", ", dest),
+            Self::Abs(value) | Self::Sign(value) => {
+                dest.write_str(if matches!(self, Self::Abs(_)) {
+                    "abs("
+                } else {
+                    "sign("
+                })?;
+                value.to_css(dest)?;
+                dest.write_char(')')
+            },
+        }
+    }
+}
+
+impl<LengthPercent: ToCss, Length: ToCss> ToCss for GenericCalcSize<LengthPercent, Length> {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> std::fmt::Result
+    where
+        W: Write,
+    {
+        dest.write_str("calc-size(")?;
+        self.basis.to_css(dest)?;
+        dest.write_str(", ")?;
+        self.calculation.to_css(dest)?;
+        dest.write_char(')')
+    }
+}
+
+impl<L> style_traits::ToTyped for GenericCalcSizeExpression<L> {
+    fn to_typed(&self) -> Option<style_traits::TypedValue> {
+        None
+    }
+}
+
+impl<LP, L> style_traits::ToTyped for GenericCalcSize<LP, L> {
+    fn to_typed(&self) -> Option<style_traits::TypedValue> {
+        None
+    }
+}
+
 pub use self::GenericMaxSize as MaxSize;
 
-impl<LengthPercentage> MaxSize<LengthPercentage> {
+impl<LengthPercentage, CalcSizeLength> MaxSize<LengthPercentage, CalcSizeLength> {
     /// `none` value.
     #[inline]
     pub fn none() -> Self {
