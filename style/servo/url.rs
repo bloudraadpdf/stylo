@@ -254,6 +254,11 @@ impl CssUrl {
         }
     }
 
+    /// Return the authored URL text before base-URL resolution, when present.
+    pub fn original(&self) -> Option<&str> {
+        self.original.as_deref().map(|value| value.as_str())
+    }
+
     /// Return the canonical request modifiers authored on this URL.
     pub fn request_modifiers(&self) -> &UrlRequestModifiers {
         &self.modifiers
