@@ -485,6 +485,21 @@ rule_types_allowed = ["style", "keyframe", "page", "scope"]
 sub_properties = ["corner-top-left-shape", "corner-top-right-shape", "corner-bottom-right-shape", "corner-bottom-left-shape"]
 spec = "https://drafts.csswg.org/css-backgrounds-4/#corner-shape"
 
+# CSS Borders 4 §3.4 — `corner` pairs each physical corner's radius and
+# shape. Slash separators select the TL, TR, BR, BL corners in order.
+[corner]
+sub_properties = [
+  "border-top-left-radius",
+  "border-top-right-radius",
+  "border-bottom-right-radius",
+  "border-bottom-left-radius",
+  "corner-top-left-shape",
+  "corner-top-right-shape",
+  "corner-bottom-right-shape",
+  "corner-bottom-left-shape",
+]
+spec = "https://drafts.csswg.org/css-borders-4/#corner-shorthand"
+
 [outline]
 sub_properties = ["outline-color", "outline-style", "outline-width"]
 rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]

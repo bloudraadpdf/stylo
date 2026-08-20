@@ -266,6 +266,128 @@ pub mod corner_shape {
     }
 }
 
+/// CSS Borders and Box Decorations Module Level 4 §3.4 — `corner`.
+///
+/// Each slash-separated component is one complete radius/shape pair. One to
+/// four components map to TL, TR, BR and BL using the standard four-corner
+/// tiling rule.
+pub mod corner {
+    pub use crate::properties::shorthands_generated::corner::*;
+
+    use super::*;
+    use crate::values::specified::border::BorderCornerRadius;
+    use crate::values::specified::corner_shape::CornerShape;
+    use crate::Zero;
+
+    #[derive(Clone)]
+    struct SpecifiedCorner {
+        radius: BorderCornerRadius,
+        shape: CornerShape,
+    }
+
+    impl SpecifiedCorner {
+        fn parse<'i, 't>(
+            context: &ParserContext,
+            input: &mut Parser<'i, 't>,
+        ) -> Result<Self, ParseError<'i>> {
+            if input
+                .try_parse(|i| i.expect_ident_matching("normal"))
+                .is_ok()
+            {
+                return Ok(Self {
+                    radius: BorderCornerRadius::zero(),
+                    shape: CornerShape::Round,
+                });
+            }
+
+            let radius = input
+                .try_parse(|i| BorderCornerRadius::parse(context, i))
+                .ok();
+            let shape = input.try_parse(|i| CornerShape::parse(context, i)).ok();
+            match (radius, shape) {
+                (Some(radius), Some(shape)) => Ok(Self { radius, shape }),
+                (Some(radius), None) => Ok(Self {
+                    radius,
+                    shape: CornerShape::parse(context, input)?,
+                }),
+                (None, Some(shape)) => Ok(Self {
+                    radius: BorderCornerRadius::parse(context, input)?,
+                    shape,
+                }),
+                (None, None) => Err(input.new_custom_error::<_, StyleParseErrorKind>(
+                    StyleParseErrorKind::UnspecifiedError,
+                )),
+            }
+        }
+    }
+
+    pub fn parse_value<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Longhands, ParseError<'i>> {
+        let top_left = SpecifiedCorner::parse(context, input)?;
+        let top_right = if input.try_parse(|i| i.expect_delim('/')).is_ok() {
+            SpecifiedCorner::parse(context, input)?
+        } else {
+            top_left.clone()
+        };
+        let bottom_right = if input.try_parse(|i| i.expect_delim('/')).is_ok() {
+            SpecifiedCorner::parse(context, input)?
+        } else {
+            top_left.clone()
+        };
+        let bottom_left = if input.try_parse(|i| i.expect_delim('/')).is_ok() {
+            SpecifiedCorner::parse(context, input)?
+        } else {
+            top_right.clone()
+        };
+
+        Ok(expanded! {
+            border_top_left_radius: top_left.radius,
+            border_top_right_radius: top_right.radius,
+            border_bottom_right_radius: bottom_right.radius,
+            border_bottom_left_radius: bottom_left.radius,
+            corner_top_left_shape: top_left.shape,
+            corner_top_right_shape: top_right.shape,
+            corner_bottom_right_shape: bottom_right.shape,
+            corner_bottom_left_shape: bottom_left.shape,
+        })
+    }
+
+    impl<'a> ToCss for LonghandsToSerialize<'a> {
+        fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+        where
+            W: fmt::Write,
+        {
+            let LonghandsToSerialize {
+                border_top_left_radius,
+                border_top_right_radius,
+                border_bottom_right_radius,
+                border_bottom_left_radius,
+                corner_top_left_shape,
+                corner_top_right_shape,
+                corner_bottom_right_shape,
+                corner_bottom_left_shape,
+            } = self;
+            let corners = [
+                (border_top_left_radius, corner_top_left_shape),
+                (border_top_right_radius, corner_top_right_shape),
+                (border_bottom_right_radius, corner_bottom_right_shape),
+                (border_bottom_left_radius, corner_bottom_left_shape),
+            ];
+            for (index, (radius, shape)) in corners.into_iter().enumerate() {
+                if index != 0 {
+                    dest.write_str(" / ")?;
+                }
+                radius.to_css(dest)?;
+                dest.write_char(' ')?;
+                shape.to_css(dest)?;
+            }
+            Ok(())
+        }
+    }
+}
+
 pub mod border_image {
     pub use crate::properties::shorthands_generated::border_image::*;
 
