@@ -476,6 +476,15 @@ impl PartialEq<Number> for Number {
 }
 
 impl Number {
+    /// Returns the parsed numeric value before top-level range clamping.
+    ///
+    /// Callers must immediately classify non-finite values into a closed
+    /// semantic type rather than retaining the unrestricted float.
+    #[inline]
+    pub(crate) fn raw_value(&self) -> CSSFloat {
+        self.value
+    }
+
     /// Returns a new number with the value `val`.
     #[inline]
     fn new_with_clamping_mode(

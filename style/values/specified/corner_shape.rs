@@ -20,15 +20,13 @@
 //! | `scoop`           | Quarter-ellipse curving *into* the box.           |
 //! | `notch`           | Two right-angle segments meeting at the corner.   |
 //! | `square`          | No corner shaping — square corner.                |
-//! | `superellipse(k)` | Lamé curve with exponent `k` (k = 2 ⇒ `round`).   |
+//! | `superellipse(k)` | CSS superellipse with curvature `k` (`k = 1` ⇒ `round`). |
 //!
-//! `superellipse(<number>)` carries the exponent k of the Lamé curve
-//! `|x/a|^k + |y/b|^k = 1`. CSS Backgrounds 4 §5.5 specifies
-//! `k = 2` ⇒ `round` (a quarter-ellipse), `k = 1` ⇒ `bevel`
-//! (a straight diagonal), `k → ∞` ⇒ `square` (no rounding), and
-//! `0 < k < 1` produces a concave `scoop`-family curve. Negative,
-//! zero, and non-finite exponents are clamped at parse time so the
-//! computed value always carries a finite positive number.
+//! `superellipse(<number>)` carries the CSS superellipse curvature K.
+//! CSS Borders 4 defines `K = 1` as `round`, `K = 0` as `bevel`,
+//! `K = -1` as `scoop`, and the two signed infinities as `square` and
+//! `notch`, respectively. Every finite value, including zero and negative
+//! values, remains distinct.
 
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
@@ -40,13 +38,9 @@ use style_traits::{CssWriter, ParseError, StyleParseErrorKind, ToCss};
 
 /// CSS Backgrounds 4 §5.5 `corner-shape` per-corner value.
 ///
-/// Stored in computed form (the exponent inside `Superellipse` is
-/// already a finite, positive `CSSFloat`). The bare keywords lower
-/// to canonical Lamé exponents at paint time:
-/// `round` ⇒ k = 2, `bevel` ⇒ k = 1, `scoop` ⇒ k = 0.5,
-/// `square` ⇒ k = +∞, `notch` ⇒ the special two-right-angle profile
-/// that has no superellipse equivalent and is rendered as a literal
-/// V-shape inside the radius extents.
+/// Stored in computed form. The closed [`SuperellipseCurvature`] type keeps
+/// NaN out of geometry while preserving every finite value and both signed
+/// infinities.
 ///
 /// The `Default` impl returns `Round`, matching the CSS Backgrounds 3
 /// behaviour of the existing `border-radius` longhands.
@@ -79,11 +73,72 @@ pub enum CornerShape {
     /// reserved by the paint surface so that adjacent corners and
     /// border ring geometry stay aligned).
     Square,
-    /// `superellipse(<number>)` — Lamé curve with finite positive
-    /// exponent k. `k = 2` is the canonical `round`; `k = 1` is
-    /// `bevel`; large k approaches `square`; `0 < k < 1` curves
-    /// concavely toward `scoop`.
-    Superellipse(CSSFloat),
+    /// `superellipse(<number>)` with its complete curvature domain.
+    Superellipse(SuperellipseCurvature),
+}
+
+/// A valid CSS `superellipse()` curvature.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(C, u8)]
+pub enum SuperellipseCurvature {
+    /// A finite curvature, including zero and negative values.
+    Finite(FiniteSuperellipseCurvature),
+    /// Positive infinity, equivalent to `square`.
+    PositiveInfinity,
+    /// Negative infinity, equivalent to `notch`.
+    NegativeInfinity,
+}
+
+/// A finite CSS `superellipse()` curvature.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(transparent)]
+pub struct FiniteSuperellipseCurvature(CSSFloat);
+
+impl SuperellipseCurvature {
+    fn from_css_number(value: CSSFloat) -> Self {
+        if value.is_nan() {
+            // CSS Values 4 censors a top-level NaN numeric value to zero.
+            return Self::Finite(FiniteSuperellipseCurvature(0.0));
+        }
+        if value == CSSFloat::INFINITY {
+            return Self::PositiveInfinity;
+        }
+        if value == CSSFloat::NEG_INFINITY {
+            return Self::NegativeInfinity;
+        }
+        debug_assert!(value.is_finite());
+        Self::Finite(FiniteSuperellipseCurvature(value))
+    }
+}
+
+impl FiniteSuperellipseCurvature {
+    /// Returns the finite CSS curvature parameter.
+    #[inline]
+    pub fn value(self) -> CSSFloat {
+        self.0
+    }
 }
 
 impl Default for CornerShape {
@@ -108,7 +163,9 @@ impl CornerShape {
     pub fn is_round(&self) -> bool {
         match self {
             Self::Round => true,
-            Self::Superellipse(k) => (*k - 2.0).abs() <= CSSFloat::EPSILON,
+            Self::Superellipse(SuperellipseCurvature::Finite(k)) => {
+                (k.value() - 1.0).abs() <= CSSFloat::EPSILON
+            },
             _ => false,
         }
     }
@@ -134,23 +191,36 @@ impl ToCss for CornerShape {
     }
 }
 
-/// Parse-time clamp for `superellipse(<number>)` arguments.
-///
-/// CSS Backgrounds 4 §5.5 specifies the curve `|x/a|^k + |y/b|^k = 1`,
-/// which is only well defined for finite, strictly positive `k`.
-/// Authors writing `superellipse(0)`, `superellipse(-2)`, or
-/// `superellipse(NaN)` get a fail-safe clamp to `MIN_SUPERELLIPSE_K`
-/// rather than a parse error; the rendered geometry approaches `scoop`
-/// but stays well-formed so downstream paint never has to handle the
-/// singular case.
-const MIN_SUPERELLIPSE_K: CSSFloat = 0.000_1;
-
-fn clamp_superellipse(k: CSSFloat) -> CSSFloat {
-    if !k.is_finite() || k <= 0.0 {
-        MIN_SUPERELLIPSE_K
-    } else {
-        k
+impl ToCss for SuperellipseCurvature {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        match self {
+            Self::Finite(value) => value.value().to_css(dest),
+            Self::PositiveInfinity => dest.write_str("infinity"),
+            Self::NegativeInfinity => dest.write_str("-infinity"),
+        }
     }
+}
+
+fn parse_superellipse_curvature<'i, 't>(
+    context: &ParserContext,
+    input: &mut Parser<'i, 't>,
+) -> Result<SuperellipseCurvature, ParseError<'i>> {
+    if let Ok(ident) = input.try_parse(|i| i.expect_ident_cloned()) {
+        return match_ignore_ascii_case! { &ident,
+            "infinity" => Ok(SuperellipseCurvature::PositiveInfinity),
+            "-infinity" => Ok(SuperellipseCurvature::NegativeInfinity),
+            "nan" => Ok(SuperellipseCurvature::from_css_number(CSSFloat::NAN)),
+            _ => Err(input.new_custom_error::<_, StyleParseErrorKind>(
+                StyleParseErrorKind::UnspecifiedError,
+            )),
+        };
+    }
+
+    let number = Number::parse(context, input)?;
+    Ok(SuperellipseCurvature::from_css_number(number.raw_value()))
 }
 
 impl Parse for CornerShape {
@@ -169,8 +239,7 @@ impl Parse for CornerShape {
                 ));
             }
             i.parse_nested_block(|i| {
-                let n = Number::parse(context, i)?;
-                Ok(Self::Superellipse(clamp_superellipse(n.get())))
+                parse_superellipse_curvature(context, i).map(Self::Superellipse)
             })
         }) {
             return Ok(value);
@@ -303,5 +372,71 @@ impl ToCss for CornerShapeRect {
         }
         dest.write_char(' ')?;
         bl.to_css(dest)
+    }
+}
+
+#[cfg(all(test, feature = "servo"))]
+mod tests {
+    use super::*;
+    use crate::context::QuirksMode;
+    use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
+    use cssparser::ParserInput;
+    use style_traits::{ParsingMode, ToCss};
+
+    fn parse_corner_shape(css: &str) -> CornerShape {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input = ParserInput::new(css);
+        let mut parser = Parser::new(&mut input);
+        parser
+            .parse_entirely(|input| CornerShape::parse(&context, input))
+            .expect("corner shape should parse")
+    }
+
+    #[test]
+    fn superellipse_retains_finite_negative_curvature() {
+        let CornerShape::Superellipse(SuperellipseCurvature::Finite(curvature)) =
+            parse_corner_shape("superellipse(-100)")
+        else {
+            panic!("finite negative curvature must retain its closed state");
+        };
+        assert_eq!(curvature.value(), -100.0);
+    }
+
+    #[test]
+    fn superellipse_retains_both_signed_infinities() {
+        assert_eq!(
+            parse_corner_shape("superellipse(infinity)"),
+            CornerShape::Superellipse(SuperellipseCurvature::PositiveInfinity)
+        );
+        assert_eq!(
+            parse_corner_shape("superellipse(-infinity)"),
+            CornerShape::Superellipse(SuperellipseCurvature::NegativeInfinity)
+        );
+        assert_eq!(
+            parse_corner_shape("superellipse(calc(-infinity))"),
+            CornerShape::Superellipse(SuperellipseCurvature::NegativeInfinity)
+        );
+    }
+
+    #[test]
+    fn superellipse_censors_nan_to_finite_zero() {
+        let shape = parse_corner_shape("superellipse(calc(NaN))");
+        assert_eq!(shape.to_css_string(), "superellipse(0)");
+    }
+
+    #[test]
+    fn css_curvature_one_is_round() {
+        assert!(parse_corner_shape("superellipse(1)").is_round());
+        assert!(!parse_corner_shape("superellipse(2)").is_round());
     }
 }
