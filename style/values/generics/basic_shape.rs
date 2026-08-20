@@ -149,6 +149,136 @@ pub enum GenericClipPath<BasicShape, U> {
 
 pub use self::GenericClipPath as ClipPath;
 
+/// The reference box accepted by `border-shape`.
+///
+/// Unlike other `<geometry-box>` consumers, `border-shape` admits the path
+/// halfway between the border-box and padding-box edges.
+#[allow(missing_docs)]
+#[derive(
+    Animate,
+    Clone,
+    ComputeSquaredDistance,
+    Copy,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToAnimatedValue,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(u8)]
+pub enum BorderShapeReferenceBox {
+    MarginBox,
+    BorderBox,
+    PaddingBox,
+    ContentBox,
+    FillBox,
+    StrokeBox,
+    ViewBox,
+    HalfBorderBox,
+}
+
+/// One completely specified path in a `border-shape` computed value.
+#[derive(
+    Animate,
+    Clone,
+    ComputeSquaredDistance,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToAnimatedValue,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(C)]
+pub struct GenericBorderShapePath<BasicShape> {
+    /// The authored path.
+    #[animation(field_bound)]
+    #[compute(field_bound)]
+    #[shmem(field_bound)]
+    pub shape: Box<BasicShape>,
+    /// The reference box, with the mode-dependent default already resolved.
+    pub reference_box: BorderShapeReferenceBox,
+}
+
+impl<BasicShape: ToCss> ToCss for GenericBorderShapePath<BasicShape> {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        self.shape.to_css(dest)?;
+        dest.write_char(' ')?;
+        self.reference_box.to_css(dest)
+    }
+}
+
+/// The closed semantic modes of `border-shape`.
+///
+/// Representing stroke and fill separately prevents an invalid zero-, three-,
+/// or partially-specified path list from crossing the style boundary.
+#[derive(
+    Animate,
+    Clone,
+    ComputeSquaredDistance,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToAnimatedValue,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(C, u8)]
+pub enum GenericBorderShape<BasicShape> {
+    /// Preserve the ordinary box-derived border shape.
+    #[animation(error)]
+    None,
+    /// Stroke one path with the relevant border side.
+    Stroke(GenericBorderShapePath<BasicShape>),
+    /// Fill the area between an outer and inner path.
+    Fill(
+        GenericBorderShapePath<BasicShape>,
+        GenericBorderShapePath<BasicShape>,
+    ),
+}
+
+impl<BasicShape: ToCss> ToCss for GenericBorderShape<BasicShape> {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        match self {
+            Self::None => dest.write_str("none"),
+            Self::Stroke(path) => path.to_css(dest),
+            Self::Fill(outer, inner) => {
+                outer.to_css(dest)?;
+                dest.write_char(' ')?;
+                inner.to_css(dest)
+            },
+        }
+    }
+}
+
+pub use self::GenericBorderShape as BorderShape;
+pub use self::GenericBorderShapePath as BorderShapePath;
+
+impl<BasicShape> ToAnimatedZero for BorderShape<BasicShape> {
+    fn to_animated_zero(&self) -> Result<Self, ()> {
+        Err(())
+    }
+}
+
 /// A value for the `shape-outside` property.
 #[allow(missing_docs)]
 #[derive(
