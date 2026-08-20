@@ -37,6 +37,12 @@ pub use crate::values::generics::basic_shape::FillRule;
 /// A specified `clip-path` value.
 pub type ClipPath = generic::GenericClipPath<BasicShape, SpecifiedUrl>;
 
+/// A specified `border-shape` value.
+pub type BorderShape = generic::BorderShape<BasicShape>;
+
+/// A specified path in `border-shape`.
+pub type BorderShapePath = generic::BorderShapePath<BasicShape>;
+
 /// A specified `shape-outside` value.
 pub type ShapeOutside = generic::GenericShapeOutside<BasicShape, Image>;
 
@@ -263,6 +269,59 @@ impl Parse for ClipPath {
             ClipPath::Box,
             AllowedBasicShapes::ALL,
         )
+    }
+}
+
+fn parse_border_shape_path<'i, 't>(
+    context: &ParserContext,
+    input: &mut Parser<'i, 't>,
+) -> Result<(Box<BasicShape>, Option<generic::BorderShapeReferenceBox>), ParseError<'i>> {
+    let shape = BasicShape::parse(context, input, AllowedBasicShapes::ALL, ShapeType::Outline)?;
+    let reference_box = input
+        .try_parse(generic::BorderShapeReferenceBox::parse)
+        .ok();
+    Ok((Box::new(shape), reference_box))
+}
+
+impl Parse for BorderShape {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if input
+            .try_parse(|input| input.expect_ident_matching("none"))
+            .is_ok()
+        {
+            return Ok(Self::None);
+        }
+
+        let first = parse_border_shape_path(context, input)?;
+        let second = input
+            .try_parse(|input| parse_border_shape_path(context, input))
+            .ok();
+
+        match second {
+            Some((inner_shape, inner_box)) => {
+                let outer = BorderShapePath {
+                    shape: first.0,
+                    reference_box: first
+                        .1
+                        .unwrap_or(generic::BorderShapeReferenceBox::BorderBox),
+                };
+                let inner = BorderShapePath {
+                    shape: inner_shape,
+                    reference_box: inner_box
+                        .unwrap_or(generic::BorderShapeReferenceBox::PaddingBox),
+                };
+                Ok(Self::Fill(outer, inner))
+            },
+            None => Ok(Self::Stroke(BorderShapePath {
+                shape: first.0,
+                reference_box: first
+                    .1
+                    .unwrap_or(generic::BorderShapeReferenceBox::HalfBorderBox),
+            })),
+        }
     }
 }
 
