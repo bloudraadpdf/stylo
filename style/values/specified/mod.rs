@@ -220,10 +220,7 @@ pub use self::list::ListStyleType;
 pub use self::list::Quotes;
 pub use self::motion::{OffsetPath, OffsetPosition, OffsetRotate};
 pub use self::outline::OutlineStyle;
-pub use self::overflow_4::{
-    BlockEllipsis, Continue, LeadingTrim, MaxLines, PositiveLineCount, TextBoxEdge,
-    TextBoxEdgeOver, TextBoxEdgeUnder,
-};
+pub use self::overflow_4::{BlockEllipsis, Continue, LeadingTrim, MaxLines, PositiveLineCount};
 pub use self::page::{
     Bleed, PageMarks, PageName, PageOrientation, PageSize, PageSizeOrientation, PaperSize,
     PrinceBleed, PrinceBleedSides,

@@ -465,24 +465,14 @@ affects = "layout"
 # and margin boxes.
 rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 
-# CSS Inline 3 §6.2 — first/last formatted-line metric trimming.
-[text-box-trim]
+# CSS Inline 3 §6 — first/last line half-leading trim. Inherits so
+# nested block containers observe the trimming policy consistently.
+[leading-trim]
 type = "LeadingTrim"
 initial = "computed::LeadingTrim::Normal"
-struct = "box"
-initial_specified_value = "specified::LeadingTrim::Normal"
-spec = "https://drafts.csswg.org/css-inline-3/#text-box-trim"
-animation_type = "discrete"
-affects = "layout"
-aliases = ["leading-trim"]
-
-# CSS Inline 3 §6.3 — font metric edges used by text-box trimming.
-[text-box-edge]
-type = "TextBoxEdge"
-initial = "computed::TextBoxEdge::Auto"
 struct = "inherited_text"
-initial_specified_value = "specified::TextBoxEdge::Auto"
-spec = "https://drafts.csswg.org/css-inline-3/#text-box-edge"
+initial_specified_value = "specified::LeadingTrim::Normal"
+spec = "https://drafts.csswg.org/css-inline-3/#leading-trim"
 animation_type = "discrete"
 affects = "layout"
 
