@@ -4,7 +4,7 @@
 
 //! Computed values for the CSS Overflow 4 `line-clamp` longhands
 //! (`block-ellipsis`, `max-lines`, `continue`) and CSS Inline 3
-//! (`leading-trim`).
+//! (`text-box-trim`).
 //!
 //! Most types pass through via `pub use` of the specified-side
 //! re-exports. [`MaxLines`] needs a bespoke computed counterpart because its
@@ -19,7 +19,9 @@ use crate::values::computed::{Context, ToComputedValue};
 use crate::values::specified::overflow_4 as specified;
 use std::num::NonZeroU32;
 
-pub use specified::{BlockEllipsis, Continue, LeadingTrim};
+pub use specified::{
+    BlockEllipsis, Continue, LeadingTrim, TextBoxEdge, TextBoxEdgeOver, TextBoxEdgeUnder,
+};
 
 /// A computed line count whose private representation is always positive.
 #[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, ToCss, ToResolvedValue, ToTyped)]

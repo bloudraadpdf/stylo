@@ -878,6 +878,40 @@ mod tests {
     }
 
     #[test]
+    fn servo_preserves_current_text_box_trim_keywords() {
+        let stylesheet =
+            parse_stylesheet("div { text-box-trim: trim-both; text-box-edge: cap alphabetic; }");
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let style = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Style(rule) => Some(rule.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected style rule");
+        let block = style.block.read_with(&guard);
+        let trim = block
+            .declaration_importance_iter()
+            .find_map(|(declaration, _)| match declaration {
+                PropertyDeclaration::TextBoxTrim(value) => Some(value.to_css_string()),
+                _ => None,
+            })
+            .expect("expected typed text-box-trim declaration");
+        let edge = block
+            .declaration_importance_iter()
+            .find_map(|(declaration, _)| match declaration {
+                PropertyDeclaration::TextBoxEdge(value) => Some(value.to_css_string()),
+                _ => None,
+            })
+            .expect("expected typed text-box-edge declaration");
+
+        assert_eq!(trim, "trim-both");
+        assert_eq!(edge, "cap alphabetic");
+    }
+
+    #[test]
     fn servo_preserves_word_space_transform_declaration() {
         let stylesheet = parse_stylesheet("p { word-space-transform: ideographic-space; }");
         let guard = stylesheet.shared_lock.read();

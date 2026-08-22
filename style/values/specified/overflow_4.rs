@@ -6,18 +6,18 @@
 //!
 //! Implements the `block-ellipsis`, `max-lines`, and `continue`
 //! longhands of the `line-clamp` shorthand (Overflow 4 §5), plus
-//! `leading-trim` (Inline 3 §6):
+//! `text-box-trim` (Inline 3 §6.2):
 //!
 //! - <https://drafts.csswg.org/css-overflow-4/#line-clamp>
 //! - <https://drafts.csswg.org/css-overflow-4/#block-ellipsis>
 //! - <https://drafts.csswg.org/css-overflow-4/#max-lines>
 //! - <https://drafts.csswg.org/css-overflow-4/#continue>
-//! - <https://drafts.csswg.org/css-inline-3/#leading-trim>
+//! - <https://drafts.csswg.org/css-inline-3/#text-box-trim>
 //!
 //! These cap block-container line content (`line-clamp` shorthand triplet —
 //! `block-ellipsis`, `max-lines`, `continue`) and trim the first/last line
-//! leading respectively. Only `block-ellipsis` is inherited; `max-lines` and
-//! `continue` are reset properties, as required by their definitions.
+//! leading respectively. Only `block-ellipsis` is inherited; `max-lines`,
+//! `continue`, and `text-box-trim` are reset properties.
 //!
 //! The shorthand parser lives in `crate::properties::shorthands::line_clamp`.
 //! There is deliberately no specified or computed `line-clamp` value:
@@ -34,8 +34,9 @@ use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
 use crate::values::specified::{Integer, PositiveInteger};
 use crate::OwnedStr;
-use cssparser::Parser;
-use style_traits::ParseError;
+use cssparser::{match_ignore_ascii_case, Parser};
+use std::fmt::{self, Write};
+use style_traits::{CssWriter, ParseError, StyleParseErrorKind, ToCss};
 
 /// Specified value of the `block-ellipsis` property
 /// (<https://drafts.csswg.org/css-overflow-4/#block-ellipsis>).
@@ -213,12 +214,10 @@ pub enum Continue {
     Discard,
 }
 
-/// Specified value of the `leading-trim` property
-/// (<https://drafts.csswg.org/css-inline-3/#leading-trim>).
+/// Specified value of the `text-box-trim` property
+/// (<https://drafts.csswg.org/css-inline-3/#text-box-trim>).
 ///
-/// Grammar: `normal | start | end | both`. Controls whether the
-/// half-leading on the first / last line of a block container is
-/// trimmed against the cap-height / x-height baseline.
+/// Grammar: `none | trim-start | trim-end | trim-both`.
 #[repr(u8)]
 #[derive(
     Clone,
@@ -238,13 +237,174 @@ pub enum Continue {
 )]
 #[allow(missing_docs)]
 pub enum LeadingTrim {
-    /// `normal` — preserve leading on both edges (default).
+    /// `none` — preserve leading on both edges (default).
     #[default]
+    #[css(keyword = "none")]
+    #[parse(aliases = "normal")]
     Normal,
-    /// `start` — trim leading from the block-start edge.
+    /// `trim-start` — trim leading from the block-start edge.
+    #[css(keyword = "trim-start")]
+    #[parse(aliases = "start")]
     Start,
-    /// `end` — trim leading from the block-end edge.
+    /// `trim-end` — trim leading from the block-end edge.
+    #[css(keyword = "trim-end")]
+    #[parse(aliases = "end")]
     End,
-    /// `both` — trim leading from both edges.
+    /// `trim-both` — trim leading from both edges.
+    #[css(keyword = "trim-both")]
+    #[parse(aliases = "both")]
     Both,
+}
+
+/// Font metric edges used by `text-box-trim`.
+#[repr(C, u8)]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    Eq,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+pub enum TextBoxEdge {
+    /// Resolve through `line-fit-edge`, interpreting `leading` as `text`.
+    #[default]
+    Auto,
+    /// Explicit over and under font metric edges.
+    Metrics {
+        /// Metric at the line-over edge.
+        over: TextBoxEdgeOver,
+        /// Metric at the line-under edge.
+        under: TextBoxEdgeUnder,
+    },
+}
+
+/// Font metric accepted at the line-over edge.
+#[repr(u8)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+pub enum TextBoxEdgeOver {
+    /// Font ascent.
+    Text,
+    /// Cap height.
+    Cap,
+    /// X height.
+    Ex,
+    /// Ideographic over baseline.
+    Ideographic,
+    /// Ideographic ink over edge.
+    IdeographicInk,
+}
+
+/// Font metric accepted at the line-under edge.
+#[repr(u8)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+pub enum TextBoxEdgeUnder {
+    /// Font descent.
+    Text,
+    /// Alphabetic baseline.
+    Alphabetic,
+    /// Ideographic under baseline.
+    Ideographic,
+    /// Ideographic ink under edge.
+    IdeographicInk,
+}
+
+impl Parse for TextBoxEdge {
+    fn parse<'i, 't>(
+        _context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
+            return Ok(Self::Auto);
+        }
+
+        let over = match_ignore_ascii_case! { input.expect_ident()?.as_ref(),
+            "text" => TextBoxEdgeOver::Text,
+            "cap" => TextBoxEdgeOver::Cap,
+            "ex" => TextBoxEdgeOver::Ex,
+            "ideographic" => TextBoxEdgeOver::Ideographic,
+            "ideographic-ink" => TextBoxEdgeOver::IdeographicInk,
+            _ => return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError)),
+        };
+        let default_under = match over {
+            TextBoxEdgeOver::Text => TextBoxEdgeUnder::Text,
+            TextBoxEdgeOver::Ideographic => TextBoxEdgeUnder::Ideographic,
+            TextBoxEdgeOver::IdeographicInk => TextBoxEdgeUnder::IdeographicInk,
+            TextBoxEdgeOver::Cap | TextBoxEdgeOver::Ex => TextBoxEdgeUnder::Text,
+        };
+        let under = input
+            .try_parse(|i| -> Result<TextBoxEdgeUnder, ParseError<'i>> {
+                Ok(match_ignore_ascii_case! { i.expect_ident()?.as_ref(),
+                    "text" => TextBoxEdgeUnder::Text,
+                    "alphabetic" => TextBoxEdgeUnder::Alphabetic,
+                    "ideographic" => TextBoxEdgeUnder::Ideographic,
+                    "ideographic-ink" => TextBoxEdgeUnder::IdeographicInk,
+                    _ => return Err(i.new_custom_error(StyleParseErrorKind::UnspecifiedError)),
+                })
+            })
+            .unwrap_or(default_under);
+        Ok(Self::Metrics { over, under })
+    }
+}
+
+impl ToCss for TextBoxEdge {
+    fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        let Self::Metrics { over, under } = self else {
+            return dest.write_str("auto");
+        };
+        dest.write_str(match over {
+            TextBoxEdgeOver::Text => "text",
+            TextBoxEdgeOver::Cap => "cap",
+            TextBoxEdgeOver::Ex => "ex",
+            TextBoxEdgeOver::Ideographic => "ideographic",
+            TextBoxEdgeOver::IdeographicInk => "ideographic-ink",
+        })?;
+        let implicit_under = match over {
+            TextBoxEdgeOver::Text => TextBoxEdgeUnder::Text,
+            TextBoxEdgeOver::Ideographic => TextBoxEdgeUnder::Ideographic,
+            TextBoxEdgeOver::IdeographicInk => TextBoxEdgeUnder::IdeographicInk,
+            TextBoxEdgeOver::Cap | TextBoxEdgeOver::Ex => TextBoxEdgeUnder::Text,
+        };
+        if *under != implicit_under {
+            dest.write_char(' ')?;
+            dest.write_str(match under {
+                TextBoxEdgeUnder::Text => "text",
+                TextBoxEdgeUnder::Alphabetic => "alphabetic",
+                TextBoxEdgeUnder::Ideographic => "ideographic",
+                TextBoxEdgeUnder::IdeographicInk => "ideographic-ink",
+            })?;
+        }
+        Ok(())
+    }
 }
