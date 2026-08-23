@@ -150,6 +150,29 @@ impl Parse for HyphenateLimitChars {
     }
 }
 
+#[derive(Clone, Copy)]
+enum InitialLetterSinkKeyword {
+    Drop,
+    Raise,
+}
+
+fn parse_initial_letter_sink_keyword<'i, 't>(
+    input: &mut Parser<'i, 't>,
+) -> Result<InitialLetterSinkKeyword, ParseError<'i>> {
+    let location = input.current_source_location();
+    let ident = input.expect_ident_cloned()?;
+    Ok(match_ignore_ascii_case! { &ident,
+        "drop" => InitialLetterSinkKeyword::Drop,
+        "raise" => InitialLetterSinkKeyword::Raise,
+        _ => return Err(location.new_custom_error(StyleParseErrorKind::UnspecifiedError)),
+    })
+}
+
+#[allow(clippy::cast_possible_truncation)]
+fn initial_letter_drop_sink(size: Number) -> Integer {
+    Integer::new(size.get().floor() as i32)
+}
+
 impl Parse for InitialLetter {
     fn parse<'i, 't>(
         context: &ParserContext,
@@ -161,11 +184,64 @@ impl Parse for InitialLetter {
         {
             return Ok(Self::normal());
         }
+        let leading_keyword = input.try_parse(parse_initial_letter_sink_keyword).ok();
         let size = Number::parse_at_least_one(context, input)?;
-        let sink = input
-            .try_parse(|i| Integer::parse_positive(context, i))
-            .unwrap_or_else(|_| crate::Zero::zero());
+        let keyword =
+            leading_keyword.or_else(|| input.try_parse(parse_initial_letter_sink_keyword).ok());
+        let sink = match keyword {
+            Some(InitialLetterSinkKeyword::Drop) => initial_letter_drop_sink(size),
+            Some(InitialLetterSinkKeyword::Raise) => Integer::new(1),
+            None => input
+                .try_parse(|i| Integer::parse_positive(context, i))
+                .unwrap_or_else(|_| crate::Zero::zero()),
+        };
         Ok(Self { size, sink })
+    }
+}
+
+#[cfg(test)]
+mod initial_letter_tests {
+    use super::*;
+    use crate::context::QuirksMode;
+    use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
+    use cssparser::{Parser, ParserInput};
+    use style_traits::ParsingMode;
+
+    fn parse_initial_letter(css: &str) -> InitialLetter {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input = ParserInput::new(css);
+        let mut parser = Parser::new(&mut input);
+        parser
+            .parse_entirely(|input| InitialLetter::parse(&context, input))
+            .expect("initial-letter value should parse")
+    }
+
+    #[test]
+    fn drop_and_raise_keywords_compute_the_sink_in_either_order() {
+        for (css, expected_size, expected_sink) in [
+            ("3 drop", 3.0, 3),
+            ("drop 3", 3.0, 3),
+            ("2.51 drop", 2.51, 2),
+            ("3 raise", 3.0, 1),
+            ("raise 3", 3.0, 1),
+            ("3 2", 3.0, 2),
+        ] {
+            let value = parse_initial_letter(css);
+            assert_eq!(
+                (value.size.get(), value.sink.value()),
+                (expected_size, expected_sink)
+            );
+        }
     }
 }
 
