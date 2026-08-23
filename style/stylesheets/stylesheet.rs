@@ -1787,8 +1787,9 @@ mod tests {
     }
 
     #[test]
-    fn text_box_trim_is_not_inherited() {
+    fn text_box_trim_and_edge_have_their_specified_inheritance() {
         assert!(!LonghandId::LeadingTrim.inherited());
+        assert!(LonghandId::TextBoxEdge.inherited());
     }
 
     #[test]

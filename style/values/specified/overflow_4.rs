@@ -35,7 +35,8 @@ use crate::parser::{Parse, ParserContext};
 use crate::values::specified::{Integer, PositiveInteger};
 use crate::OwnedStr;
 use cssparser::Parser;
-use style_traits::ParseError;
+use std::fmt::{self, Write};
+use style_traits::{CssWriter, ParseError, ToCss};
 
 /// Specified value of the `block-ellipsis` property
 /// (<https://drafts.csswg.org/css-overflow-4/#block-ellipsis>).
@@ -252,10 +253,132 @@ pub enum LeadingTrim {
     Both,
 }
 
+macro_rules! text_edge_metric {
+    ($name:ident { $($variant:ident),+ $(,)? }) => {
+        #[repr(u8)]
+        #[derive(
+            Clone, Copy, Debug, Eq, MallocSizeOf, Parse, PartialEq, SpecifiedValueInfo,
+            ToComputedValue, ToCss, ToResolvedValue, ToShmem, ToTyped,
+        )]
+        #[allow(missing_docs)]
+        pub enum $name {
+            $($variant),+
+        }
+    };
+}
+
+text_edge_metric!(TextEdgeOver {
+    Text,
+    Ideographic,
+    IdeographicInk,
+    Cap,
+    Ex
+});
+text_edge_metric!(TextEdgeUnder {
+    Text,
+    Ideographic,
+    IdeographicInk,
+    Alphabetic
+});
+
+const fn implicit_under(over: TextEdgeOver) -> TextEdgeUnder {
+    match over {
+        TextEdgeOver::Text => TextEdgeUnder::Text,
+        TextEdgeOver::Ideographic => TextEdgeUnder::Ideographic,
+        TextEdgeOver::IdeographicInk => TextEdgeUnder::IdeographicInk,
+        TextEdgeOver::Cap | TextEdgeOver::Ex => TextEdgeUnder::Text,
+    }
+}
+
+#[repr(C, u8)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Eq,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[allow(missing_docs)]
+pub enum TextBoxEdge {
+    #[default]
+    Auto,
+    Edges(TextEdgeOver, TextEdgeUnder),
+}
+
+impl TextBoxEdge {
+    /// Creates an explicit over and under metric pair.
+    #[inline]
+    pub const fn edges(over: TextEdgeOver, under: TextEdgeUnder) -> Self {
+        Self::Edges(over, under)
+    }
+}
+
+impl Parse for TextBoxEdge {
+    fn parse<'i, 't>(
+        _: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if input
+            .try_parse(|input| input.expect_ident_matching("auto"))
+            .is_ok()
+        {
+            return Ok(Self::Auto);
+        }
+
+        let over = TextEdgeOver::parse(input)?;
+        let under = input
+            .try_parse(TextEdgeUnder::parse)
+            .unwrap_or_else(|_| implicit_under(over));
+        Ok(Self::Edges(over, under))
+    }
+}
+
+impl ToCss for TextBoxEdge {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        match self {
+            Self::Auto => dest.write_str("auto"),
+            Self::Edges(over, under) => {
+                over.to_css(dest)?;
+                if *under != implicit_under(*over) {
+                    dest.write_char(' ')?;
+                    under.to_css(dest)?;
+                }
+                Ok(())
+            },
+        }
+    }
+}
+
 #[cfg(test)]
 mod leading_trim_tests {
     use super::*;
+    use crate::context::QuirksMode;
+    use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
     use cssparser::{Parser, ParserInput};
+    use style_traits::ParsingMode;
+
+    fn parser_context(url_data: &UrlExtraData) -> ParserContext<'_> {
+        ParserContext::new(
+            Origin::Author,
+            url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        )
+    }
 
     fn parse_leading_trim(css: &str) -> LeadingTrim {
         let mut input = ParserInput::new(css);
@@ -273,6 +396,55 @@ mod leading_trim_tests {
             ("trim-both", LeadingTrim::Both),
         ] {
             assert_eq!(parse_leading_trim(css), expected);
+        }
+    }
+
+    #[test]
+    fn text_box_edge_preserves_typed_over_and_under_metrics() {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let context = parser_context(&url_data);
+        for (css, expected) in [
+            ("auto", TextBoxEdge::Auto),
+            (
+                "text",
+                TextBoxEdge::edges(TextEdgeOver::Text, TextEdgeUnder::Text),
+            ),
+            (
+                "cap",
+                TextBoxEdge::edges(TextEdgeOver::Cap, TextEdgeUnder::Text),
+            ),
+            (
+                "ex text",
+                TextBoxEdge::edges(TextEdgeOver::Ex, TextEdgeUnder::Text),
+            ),
+            (
+                "text alphabetic",
+                TextBoxEdge::edges(TextEdgeOver::Text, TextEdgeUnder::Alphabetic),
+            ),
+            (
+                "cap alphabetic",
+                TextBoxEdge::edges(TextEdgeOver::Cap, TextEdgeUnder::Alphabetic),
+            ),
+            (
+                "ideographic-ink",
+                TextBoxEdge::edges(TextEdgeOver::IdeographicInk, TextEdgeUnder::IdeographicInk),
+            ),
+        ] {
+            let mut input = ParserInput::new(css);
+            let actual = Parser::new(&mut input)
+                .parse_entirely(|input| TextBoxEdge::parse(&context, input))
+                .expect("text-box-edge value should parse");
+            assert_eq!(actual, expected);
+        }
+
+        for invalid in ["alphabetic", "text cap", "auto text"] {
+            let mut input = ParserInput::new(invalid);
+            assert!(
+                Parser::new(&mut input)
+                    .parse_entirely(|input| TextBoxEdge::parse(&context, input))
+                    .is_err(),
+                "{invalid} must be rejected"
+            );
         }
     }
 }

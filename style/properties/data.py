@@ -677,6 +677,7 @@ class Longhand(Property):
                 "SelfAlignment",
                 "JustifyItems",
                 "LeadingTrim",
+                "TextBoxEdge",
                 "LineBreak",
                 "LineClamp",
                 "MasonryAutoFlow",

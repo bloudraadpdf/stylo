@@ -19,7 +19,9 @@ use crate::values::computed::{Context, ToComputedValue};
 use crate::values::specified::overflow_4 as specified;
 use std::num::NonZeroU32;
 
-pub use specified::{BlockEllipsis, Continue, LeadingTrim};
+pub use specified::{
+    BlockEllipsis, Continue, LeadingTrim, TextBoxEdge, TextEdgeOver, TextEdgeUnder,
+};
 
 /// A computed line count whose private representation is always positive.
 #[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, ToCss, ToResolvedValue, ToTyped)]

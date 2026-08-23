@@ -476,6 +476,15 @@ aliases = ["text-box-trim"]
 animation_type = "discrete"
 affects = "layout"
 
+[text-box-edge]
+type = "TextBoxEdge"
+initial = "computed::TextBoxEdge::Auto"
+struct = "inherited_text"
+initial_specified_value = "specified::TextBoxEdge::Auto"
+spec = "https://drafts.csswg.org/css-inline-3/#text-box-edge"
+animation_type = "discrete"
+affects = "layout"
+
 [block-size]
 type = "Size"
 initial = "computed::Size::auto()"
