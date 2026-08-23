@@ -3419,7 +3419,7 @@ mod tests {
 
     #[test]
     fn servo_parses_scrollbar_properties() {
-        for property in ["scrollbar-width", "scrollbar-color"] {
+        for property in ["scrollbar-width", "scrollbar-color", "scrollbar-gutter"] {
             assert!(
                 crate::properties::PropertyId::parse_enabled_for_all_content(property).is_ok(),
                 "standard property must enter the Servo parser: {property}",
