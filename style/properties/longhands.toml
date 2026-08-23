@@ -7632,6 +7632,9 @@ keyword = { values = ["scroll", "fixed", "local"], gecko_enum_prefix = "StyleIma
 rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [background-clip]
+type = "BackgroundClip"
+initial = "computed::BackgroundClip::BorderBox"
+initial_specified_value = "specified::BackgroundClip::BorderBox"
 struct = "background"
 spec = "https://drafts.csswg.org/css-backgrounds/#the-background-clip"
 animation_type = "discrete"

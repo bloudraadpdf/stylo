@@ -15,6 +15,73 @@ use selectors::parser::SelectorParseErrorKind;
 use std::fmt::{self, Write};
 use style_traits::{CssWriter, ParseError, ToCss};
 
+/// A specified `background-clip` layer.
+#[cfg_attr(feature = "servo", derive(serde::Deserialize, Hash, serde::Serialize))]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    FromPrimitive,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToAnimatedValue,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[allow(missing_docs)]
+pub enum BackgroundClip {
+    BorderBox,
+    PaddingBox,
+    ContentBox,
+    Text,
+    #[cfg(feature = "servo")]
+    BorderArea,
+    #[cfg(feature = "servo")]
+    #[css(keyword = "border-area text")]
+    BorderAreaText,
+}
+
+impl Parse for BackgroundClip {
+    fn parse<'i, 't>(
+        _context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        Self::parse_value(input)
+    }
+}
+
+impl BackgroundClip {
+    fn parse_value<'i, 't>(input: &mut Parser<'i, 't>) -> Result<Self, ParseError<'i>> {
+        let ident = input.expect_ident_cloned()?;
+        #[cfg(feature = "servo")]
+        match_ignore_ascii_case! { &ident,
+            "text" if input.try_parse(|input| input.expect_ident_matching("border-area")).is_ok() => {
+                return Ok(Self::BorderAreaText);
+            },
+            "border-area" => {
+                return Ok(if input.try_parse(|input| input.expect_ident_matching("text")).is_ok() {
+                    Self::BorderAreaText
+                } else {
+                    Self::BorderArea
+                });
+            },
+            _ => {},
+        }
+        Ok(match_ignore_ascii_case! { &ident,
+            "border-box" => Self::BorderBox,
+            "padding-box" => Self::PaddingBox,
+            "content-box" => Self::ContentBox,
+            "text" => Self::Text,
+            _ => return Err(input.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(ident))),
+        })
+    }
+}
+
 /// A specified value for the `background-size` property.
 pub type BackgroundSize = GenericBackgroundSize<NonNegativeLengthPercentage>;
 
@@ -140,5 +207,68 @@ impl Parse for BackgroundRepeat {
 
         let vertical = input.try_parse(BackgroundRepeatKeyword::parse).ok();
         Ok(BackgroundRepeat(horizontal, vertical.unwrap_or(horizontal)))
+    }
+}
+
+#[cfg(all(test, feature = "servo"))]
+mod tests {
+    use super::*;
+    use cssparser::ParserInput;
+
+    fn parse_background_clip(css: &str) -> Result<BackgroundClip, ()> {
+        let mut input = ParserInput::new(css);
+        Parser::new(&mut input)
+            .parse_entirely(BackgroundClip::parse_value)
+            .map_err(|_| ())
+    }
+
+    #[test]
+    fn background_clip_parses_every_level_four_value() {
+        assert_eq!(
+            parse_background_clip("border-box"),
+            Ok(BackgroundClip::BorderBox)
+        );
+        assert_eq!(
+            parse_background_clip("padding-box"),
+            Ok(BackgroundClip::PaddingBox)
+        );
+        assert_eq!(
+            parse_background_clip("content-box"),
+            Ok(BackgroundClip::ContentBox)
+        );
+        assert_eq!(parse_background_clip("text"), Ok(BackgroundClip::Text));
+        assert_eq!(
+            parse_background_clip("border-area"),
+            Ok(BackgroundClip::BorderArea)
+        );
+        assert_eq!(
+            parse_background_clip("border-area text"),
+            Ok(BackgroundClip::BorderAreaText),
+        );
+        assert_eq!(
+            parse_background_clip("text border-area"),
+            Ok(BackgroundClip::BorderAreaText),
+        );
+    }
+
+    #[test]
+    fn background_clip_rejects_duplicate_and_foreign_components() {
+        for css in [
+            "text text",
+            "border-area border-area",
+            "border-area text text",
+            "border-box text",
+            "fill-box",
+        ] {
+            assert_eq!(parse_background_clip(css), Err(()), "{css}");
+        }
+    }
+
+    #[test]
+    fn background_clip_union_has_canonical_serialisation() {
+        assert_eq!(
+            BackgroundClip::BorderAreaText.to_css_string(),
+            "border-area text"
+        );
     }
 }

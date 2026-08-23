@@ -634,6 +634,7 @@ class Longhand(Property):
                 "BreakWithin",
                 "MarginBreak",
                 "MarginTrim",
+                "BackgroundClip",
                 "BackgroundRepeat",
                 "BorderImageRepeat",
                 "BorderStyle",
@@ -938,7 +939,18 @@ class PropertiesData(object):
                     raise TypeError(f"{name}: keyword should have 'values'")
                 values = keyword_dict.pop('values')
                 keyword = Keyword(name, values, **keyword_dict)
-                self.declare_longhand(style_struct, name, keyword=keyword, **args)
+                predefined_type = args.pop('type', None)
+                initial_value = args.pop('initial', None)
+                if predefined_type and initial_value is None and not args.get('vector'):
+                    raise TypeError(f"{name} should have an initial value (only vector properties should lack one)")
+                self.declare_longhand(
+                    style_struct,
+                    name,
+                    keyword=keyword,
+                    predefined_type=predefined_type,
+                    initial_value=initial_value,
+                    **args,
+                )
             else:
                 # Handle predefined_type properties
                 if 'type' not in args:
