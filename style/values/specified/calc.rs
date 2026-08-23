@@ -9,6 +9,7 @@
 use crate::color::parsing::ChannelKeyword;
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
+use crate::values::computed::{Context, ToComputedValue};
 use crate::values::generics::calc::{
     self as generic, CalcNodeLeaf, CalcUnits, MinMaxOp, ModRemOp, PositivePercentageBasis,
     RoundingStrategy, SortKey,
@@ -1312,19 +1313,53 @@ impl CalcNode {
     }
 
     /// Convenience parsing function for `<number>`.
+    pub fn parse_number_node<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+        function: MathFunction,
+    ) -> Result<Self, ParseError<'i>> {
+        let node = Self::parse(
+            context,
+            input,
+            function,
+            AllowParse::new(CalcUnits::empty()),
+        )?;
+        if !node
+            .unit()
+            .map_err(|()| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))?
+            .is_empty()
+        {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+        Ok(node)
+    }
+
+    /// Resolve a `<number>` calculation after converting context-dependent
+    /// lengths to their canonical pixel value.
+    pub fn resolve_number(&self, context: &Context) -> Result<CSSFloat, ()> {
+        let computed = self.map_leaves(|leaf| match *leaf {
+            Leaf::Length(length) => Leaf::Length(NoCalcLength::from_px(
+                length.to_computed_value(context).px(),
+            )),
+            _ => leaf.clone(),
+        });
+        computed.to_number()
+    }
+
+    /// Resolve a `<number>` calculation which has no contextual units.
+    pub fn resolve_number_without_context(&self) -> Result<CSSFloat, ()> {
+        self.to_number()
+    }
+
+    /// Convenience parsing function for `<number>`.
     pub fn parse_number<'i, 't>(
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
         function: MathFunction,
     ) -> Result<CSSFloat, ParseError<'i>> {
-        Self::parse(
-            context,
-            input,
-            function,
-            AllowParse::new(CalcUnits::empty()),
-        )?
-        .to_number()
-        .map_err(|()| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
+        Self::parse_number_node(context, input, function)?
+            .to_number()
+            .map_err(|()| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
     }
 
     /// Convenience parsing function for `<angle>`.

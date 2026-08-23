@@ -8,8 +8,11 @@
 
 use crate::derives::*;
 use crate::error_reporting::ContextualParseError;
+use crate::media_queries::Device;
 use crate::parser::{Parse, ParserContext};
 use crate::shared_lock::{SharedRwLockReadGuard, ToCssWithGuard};
+use crate::values::computed::Context as ComputedContext;
+use crate::values::specified::calc::CalcNode;
 use crate::values::specified::Integer;
 use crate::values::{AtomString, CustomIdent};
 use crate::Atom;
@@ -525,6 +528,116 @@ impl CounterStyleRuleData {
     }
 }
 
+/// An integer-valued counter-style descriptor.
+///
+/// Unlike properties, descriptors are not attached to an element. CSS Values
+/// therefore resolves their font-relative units against the initial font and
+/// line-height metrics. Keep calculations specified until a device can supply
+/// that context.
+#[derive(Clone, Debug, ToShmem)]
+pub enum DescriptorInteger {
+    /// A literal integer.
+    Literal(Integer),
+    /// A mathematical expression and whether its result is non-negative.
+    Calculated {
+        /// The retained calculation tree.
+        expression: Box<CalcNode>,
+        /// Clamp the computed result to zero.
+        non_negative: bool,
+    },
+}
+
+impl DescriptorInteger {
+    fn parse_with_range<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+        non_negative: bool,
+    ) -> Result<Self, ParseError<'i>> {
+        let location = input.current_source_location();
+        match *input.next()? {
+            Token::Number {
+                int_value: Some(value),
+                ..
+            } if !non_negative || value >= 0 => Ok(Self::Literal(Integer::new(value))),
+            Token::Function(ref name) => {
+                let function = CalcNode::math_function(context, name, location)?;
+                let expression = CalcNode::parse_number_node(context, input, function)?;
+                Ok(Self::Calculated {
+                    expression: Box::new(expression),
+                    non_negative,
+                })
+            },
+            ref token => Err(location.new_unexpected_token_error(token.clone())),
+        }
+    }
+
+    fn parse_non_negative<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        Self::parse_with_range(context, input, true)
+    }
+
+    fn rounded_value(value: f32, non_negative: bool) -> i32 {
+        let value = if non_negative { value.max(0.0) } else { value };
+        (value + 0.5).floor() as i32
+    }
+
+    fn context_free_value(&self) -> Option<i32> {
+        match self {
+            Self::Literal(value) => Some(value.value()),
+            Self::Calculated {
+                expression,
+                non_negative,
+            } => expression
+                .resolve_number_without_context()
+                .ok()
+                .map(|value| Self::rounded_value(value, *non_negative)),
+        }
+    }
+
+    /// Resolve the descriptor outside the context of an element.
+    pub fn resolve(&self, device: &Device) -> Option<i32> {
+        match self {
+            Self::Literal(value) => Some(value.value()),
+            Self::Calculated {
+                expression,
+                non_negative,
+            } => ComputedContext::for_media_query_evaluation(
+                device,
+                device.quirks_mode(),
+                |context| {
+                    expression
+                        .resolve_number(context)
+                        .ok()
+                        .map(|value| Self::rounded_value(value, *non_negative))
+                },
+            ),
+        }
+    }
+}
+
+impl Parse for DescriptorInteger {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        Self::parse_with_range(context, input, false)
+    }
+}
+
+impl ToCss for DescriptorInteger {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        match self {
+            Self::Literal(value) => value.to_css(dest),
+            Self::Calculated { expression, .. } => expression.to_css(dest),
+        }
+    }
+}
+
 /// <https://drafts.csswg.org/css-counter-styles/#counter-style-system>
 #[derive(Clone, Debug, ToShmem)]
 pub enum System {
@@ -541,7 +654,7 @@ pub enum System {
     /// 'fixed <integer>?'
     Fixed {
         /// '<integer>?'
-        first_symbol_value: Option<Integer>,
+        first_symbol_value: Option<DescriptorInteger>,
     },
     /// 'extends <counter-style-name>'
     Extends(CustomIdent),
@@ -559,7 +672,7 @@ impl Parse for System {
             "symbolic" => Ok(System::Symbolic),
             "additive" => Ok(System::Additive),
             "fixed" => {
-                let first_symbol_value = input.try_parse(|i| Integer::parse(context, i)).ok();
+                let first_symbol_value = input.try_parse(|i| DescriptorInteger::parse(context, i)).ok();
                 Ok(System::Fixed { first_symbol_value })
             },
             "extends" => {
@@ -575,7 +688,7 @@ impl ToCss for System {
     where
         W: Write,
     {
-        match *self {
+        match self {
             System::Cyclic => dest.write_str("cyclic"),
             System::Numeric => dest.write_str("numeric"),
             System::Alphabetic => dest.write_str("alphabetic"),
@@ -589,7 +702,7 @@ impl ToCss for System {
                     dest.write_str("fixed")
                 }
             },
-            System::Extends(ref other) => {
+            System::Extends(other) => {
                 dest.write_str("extends ")?;
                 other.to_css(dest)
             },
@@ -670,10 +783,10 @@ pub struct CounterRange {
 pub struct CounterRanges(#[css(iterable, if_empty = "auto")] pub crate::OwnedSlice<CounterRange>);
 
 /// A bound found in `CounterRanges`.
-#[derive(Clone, Copy, Debug, ToCss, ToShmem)]
+#[derive(Clone, Debug, ToCss, ToShmem)]
 pub enum CounterBound {
     /// An integer bound.
-    Integer(Integer),
+    Integer(DescriptorInteger),
     /// The infinite bound.
     Infinite,
 }
@@ -693,8 +806,12 @@ impl Parse for CounterRanges {
         let ranges = input.parse_comma_separated(|input| {
             let start = parse_bound(context, input)?;
             let end = parse_bound(context, input)?;
-            if let (CounterBound::Integer(start), CounterBound::Integer(end)) = (start, end) {
-                if start > end {
+            if let (CounterBound::Integer(start), CounterBound::Integer(end)) = (&start, &end) {
+                if start
+                    .context_free_value()
+                    .zip(end.context_free_value())
+                    .is_some_and(|(start, end)| start > end)
+                {
                     return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
                 }
             }
@@ -709,7 +826,7 @@ fn parse_bound<'i, 't>(
     context: &ParserContext,
     input: &mut Parser<'i, 't>,
 ) -> Result<CounterBound, ParseError<'i>> {
-    if let Ok(integer) = input.try_parse(|input| Integer::parse(context, input)) {
+    if let Ok(integer) = input.try_parse(|input| DescriptorInteger::parse(context, input)) {
         return Ok(CounterBound::Integer(integer));
     }
     input.expect_ident_matching("infinite")?;
@@ -718,7 +835,7 @@ fn parse_bound<'i, 't>(
 
 /// <https://drafts.csswg.org/css-counter-styles/#counter-style-pad>
 #[derive(Clone, Debug, ToCss, ToShmem)]
-pub struct Pad(pub Integer, pub Symbol);
+pub struct Pad(pub DescriptorInteger, pub Symbol);
 
 impl Parse for Pad {
     fn parse<'i, 't>(
@@ -726,7 +843,7 @@ impl Parse for Pad {
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
         let pad_with = input.try_parse(|input| Symbol::parse(context, input));
-        let min_length = Integer::parse_non_negative(context, input)?;
+        let min_length = DescriptorInteger::parse_non_negative(context, input)?;
         let pad_with = pad_with.or_else(|_| Symbol::parse(context, input))?;
         Ok(Pad(min_length, pad_with))
     }
@@ -784,10 +901,13 @@ impl Parse for AdditiveSymbols {
     ) -> Result<Self, ParseError<'i>> {
         let tuples = Vec::<AdditiveTuple>::parse(context, input)?;
         // FIXME maybe? https://github.com/w3c/csswg-drafts/issues/1220
-        if tuples
-            .windows(2)
-            .any(|window| window[0].weight <= window[1].weight)
-        {
+        if tuples.windows(2).any(|window| {
+            window[0]
+                .weight
+                .context_free_value()
+                .zip(window[1].weight.context_free_value())
+                .is_some_and(|(first, second)| first <= second)
+        }) {
             return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
         }
         Ok(AdditiveSymbols(tuples.into()))
@@ -798,7 +918,7 @@ impl Parse for AdditiveSymbols {
 #[derive(Clone, Debug, ToCss, ToShmem)]
 pub struct AdditiveTuple {
     /// <integer>
-    pub weight: Integer,
+    pub weight: DescriptorInteger,
     /// <symbol>
     pub symbol: Symbol,
 }
@@ -813,7 +933,7 @@ impl Parse for AdditiveTuple {
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
         let symbol = input.try_parse(|input| Symbol::parse(context, input));
-        let weight = Integer::parse_non_negative(context, input)?;
+        let weight = DescriptorInteger::parse_non_negative(context, input)?;
         let symbol = symbol.or_else(|_| Symbol::parse(context, input))?;
         Ok(Self { weight, symbol })
     }
@@ -862,5 +982,46 @@ impl Parse for SpeakAs {
             return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
         }
         result.or_else(|_| Ok(SpeakAs::Other(parse_counter_style_name(input)?)))
+    }
+}
+
+#[cfg(all(test, feature = "servo"))]
+mod tests {
+    use super::*;
+    use crate::context::QuirksMode;
+    use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
+    use cssparser::ParserInput;
+    use style_traits::{ParsingMode, ToCss};
+    use url::Url;
+
+    fn parse_descriptor_integer(css: &str) -> DescriptorInteger {
+        let url_data = UrlExtraData::from(Url::parse("https://example.invalid/").unwrap());
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::CounterStyle),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input = ParserInput::new(css);
+        let mut parser = Parser::new(&mut input);
+        parser
+            .parse_entirely(|input| DescriptorInteger::parse(&context, input))
+            .expect("descriptor integer should parse")
+    }
+
+    #[test]
+    fn descriptor_integer_retains_context_dependent_calculation() {
+        let integer = parse_descriptor_integer("calc(1 + sign(100em - 1px))");
+
+        assert_eq!(integer.to_css_string(), "calc(1 + sign(100em - 1px))");
+        assert_eq!(integer.context_free_value(), None);
+        assert_eq!(
+            parse_descriptor_integer("calc(2 + 1)").context_free_value(),
+            Some(3)
+        );
     }
 }
