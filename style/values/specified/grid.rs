@@ -173,8 +173,9 @@ impl TrackRepeat<LengthPercentage, Integer> {
                         current_names = input.try_parse(parse_line_names).unwrap_or_default();
                         if let Ok(track_size) = input.try_parse(|i| TrackSize::parse(context, i)) {
                             if !track_size.is_fixed() {
-                                if is_auto {
-                                    // should be <fixed-size> for <auto-repeat>
+                                if is_auto && !allow_grid_template_masonry() {
+                                    // CSS Grid 2 requires <fixed-size> for <auto-repeat>.
+                                    // CSS Grid 3 relaxes this to <track-size> for grid lanes.
                                     return Err(input
                                         .new_custom_error(StyleParseErrorKind::UnspecifiedError));
                                 }
@@ -493,5 +494,20 @@ mod tests {
 
         let parsed = parse_grid_template_component("masonry");
         assert!(matches!(parsed, GridTemplateComponent::Masonry));
+    }
+
+    #[test]
+    fn servo_parses_intrinsic_auto_repeat_when_masonry_pref_is_enabled() {
+        let _lock = pref_lock().lock().unwrap();
+        let _grid_pref = BoolPrefGuard::set("layout.grid.enabled", true);
+        let _masonry_pref =
+            BoolPrefGuard::set("layout.css.grid-template-masonry-value.enabled", true);
+
+        let parsed =
+            parse_grid_template_component("repeat(auto-fill, auto minmax(min-content, 1fr))");
+        let GridTemplateComponent::TrackList(track_list) = parsed else {
+            panic!("intrinsic auto-repeat should produce a track list");
+        };
+        assert!(track_list.has_auto_repeat());
     }
 }
