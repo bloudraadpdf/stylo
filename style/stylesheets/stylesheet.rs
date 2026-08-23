@@ -3417,6 +3417,16 @@ mod tests {
         );
     }
 
+    #[test]
+    fn servo_parses_scrollbar_properties() {
+        for property in ["scrollbar-width", "scrollbar-color"] {
+            assert!(
+                crate::properties::PropertyId::parse_enabled_for_all_content(property).is_ok(),
+                "standard property must enter the Servo parser: {property}",
+            );
+        }
+    }
+
     /// Fragmentation containers pass their leading-margin policy to nested
     /// fragmentation content through the normal inherited cascade.
     #[test]
