@@ -8,7 +8,9 @@
 use crate::computed_values::list_style_type::T as ListStyleType;
 #[cfg(feature = "gecko")]
 use crate::counter_style::CounterStyle;
+use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
+use crate::values::computed::{Context, ToComputedValue};
 use crate::values::generics::counters as generics;
 use crate::values::generics::counters::CounterPair;
 use crate::values::specified::image::Image;
@@ -17,7 +19,82 @@ use crate::values::specified::Integer;
 use crate::values::CustomIdent;
 use cssparser::{match_ignore_ascii_case, Parser, Token};
 use selectors::parser::SelectorParseErrorKind;
-use style_traits::{ParseError, StyleParseErrorKind};
+use std::fmt::{self, Write};
+use style_traits::{CssWriter, ParseError, SpecifiedValueInfo, StyleParseErrorKind, ToCss};
+
+/// A counter property's integer value.
+///
+/// Counters use a wider implementation range than general CSS `<integer>`
+/// values so predefined counter styles can implement the optional East Asian
+/// range through 10^16 without losing the authored integer.
+#[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, ToShmem, ToTyped)]
+pub struct CounterInteger(i64);
+
+impl CounterInteger {
+    fn new(value: i64) -> Self {
+        Self(value)
+    }
+
+    /// Returns the counter integer.
+    pub fn value(self) -> i64 {
+        self.0
+    }
+}
+
+impl PartialEq<i64> for CounterInteger {
+    fn eq(&self, value: &i64) -> bool {
+        self.0 == *value
+    }
+}
+
+impl Parse for CounterInteger {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if let Ok(value) = input.try_parse(|input| -> Result<Self, ParseError<'i>> {
+            let start = input.position();
+            let location = input.current_source_location();
+            let token = input.next()?.clone();
+            if !matches!(token, Token::Number { .. }) {
+                return Err(location.new_unexpected_token_error(token));
+            }
+            let end = input.position();
+            input
+                .slice(start..end)
+                .trim()
+                .parse::<i64>()
+                .map(Self::new)
+                .map_err(|_| location.new_unexpected_token_error(token))
+        }) {
+            return Ok(value);
+        }
+        Integer::parse(context, input).map(|value| Self::new(i64::from(value.value())))
+    }
+}
+
+impl ToComputedValue for CounterInteger {
+    type ComputedValue = crate::values::computed::counters::CounterInteger;
+
+    fn to_computed_value(&self, _: &Context) -> Self::ComputedValue {
+        Self::ComputedValue::new(self.0)
+    }
+
+    fn from_computed_value(computed: &Self::ComputedValue) -> Self {
+        Self::new(computed.value())
+    }
+}
+
+impl ToCss for CounterInteger {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        write!(dest, "{}", self.0)
+    }
+}
+
+impl SpecifiedValueInfo for CounterInteger {}
 
 #[derive(PartialEq)]
 enum CounterType {
@@ -27,7 +104,7 @@ enum CounterType {
 }
 
 impl CounterType {
-    fn default_value(&self) -> i32 {
+    fn default_value(&self) -> i64 {
         match *self {
             Self::Increment => 1,
             Self::Reset | Self::Set => 0,
@@ -36,7 +113,7 @@ impl CounterType {
 }
 
 /// A specified value for the `counter-increment` property.
-pub type CounterIncrement = generics::GenericCounterIncrement<Integer>;
+pub type CounterIncrement = generics::GenericCounterIncrement<CounterInteger>;
 
 impl Parse for CounterIncrement {
     fn parse<'i, 't>(
@@ -52,7 +129,7 @@ impl Parse for CounterIncrement {
 }
 
 /// A specified value for the `counter-set` property.
-pub type CounterSet = generics::GenericCounterSet<Integer>;
+pub type CounterSet = generics::GenericCounterSet<CounterInteger>;
 
 impl Parse for CounterSet {
     fn parse<'i, 't>(
@@ -64,7 +141,7 @@ impl Parse for CounterSet {
 }
 
 /// A specified value for the `counter-reset` property.
-pub type CounterReset = generics::GenericCounterReset<Integer>;
+pub type CounterReset = generics::GenericCounterReset<CounterInteger>;
 
 impl Parse for CounterReset {
     fn parse<'i, 't>(
@@ -83,7 +160,7 @@ fn parse_counters<'i, 't>(
     context: &ParserContext,
     input: &mut Parser<'i, 't>,
     counter_type: CounterType,
-) -> Result<Vec<CounterPair<Integer>>, ParseError<'i>> {
+) -> Result<Vec<CounterPair<CounterInteger>>, ParseError<'i>> {
     if input
         .try_parse(|input| input.expect_ident_matching("none"))
         .is_ok()
@@ -111,19 +188,19 @@ fn parse_counters<'i, 't>(
             Err(_) => break,
         };
 
-        let value = match input.try_parse(|input| Integer::parse(context, input)) {
+        let value = match input.try_parse(|input| CounterInteger::parse(context, input)) {
             Ok(start) => {
-                if start.value() == i32::min_value() {
+                if start.value() == i64::MIN {
                     // The spec says that values must be clamped to the valid range,
-                    // and we reserve i32::min_value() as an internal magic value.
+                    // and we reserve i64::MIN as an internal magic value.
                     // https://drafts.csswg.org/css-lists/#auto-numbering
-                    Integer::new(i32::min_value() + 1)
+                    CounterInteger::new(i64::MIN + 1)
                 } else {
                     start
                 }
             },
-            _ => Integer::new(if is_reversed {
-                i32::min_value()
+            _ => CounterInteger::new(if is_reversed {
+                i64::MIN
             } else {
                 counter_type.default_value()
             }),
@@ -642,6 +719,29 @@ mod tests {
         parser
             .parse_entirely(|input| Content::parse(&context, input))
             .expect("content value should parse")
+    }
+
+    #[test]
+    fn counter_properties_preserve_wide_integer_literals() {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input = ParserInput::new("n -9999999999999999 m 10000000000000000");
+        let mut parser = Parser::new(&mut input);
+        let reset = parser
+            .parse_entirely(|input| CounterReset::parse(&context, input))
+            .expect("wide counter integers should parse");
+
+        assert_eq!(reset[0].value.value(), -9_999_999_999_999_999);
+        assert_eq!(reset[1].value.value(), 10_000_000_000_000_000);
     }
 
     #[test]

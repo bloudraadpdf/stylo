@@ -40,7 +40,7 @@ pub use self::GenericCounterPair as CounterPair;
 
 impl<Integer> ToCss for CounterPair<Integer>
 where
-    Integer: ToCss + PartialEq<i32>,
+    Integer: ToCss + PartialEq<i64>,
 {
     fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
     where
@@ -52,7 +52,7 @@ where
         self.name.to_css(dest)?;
         if self.is_reversed {
             dest.write_char(')')?;
-            if self.value == i32::min_value() {
+            if self.value == i64::MIN {
                 return Ok(());
             }
         }
