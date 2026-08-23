@@ -1787,6 +1787,11 @@ mod tests {
     }
 
     #[test]
+    fn text_box_trim_is_not_inherited() {
+        assert!(!LonghandId::LeadingTrim.inherited());
+    }
+
+    #[test]
     fn servo_preserves_dominant_baseline_declaration() {
         let stylesheet = parse_stylesheet(
             r#"

@@ -465,12 +465,11 @@ affects = "layout"
 # and margin boxes.
 rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 
-# CSS Inline 3 §6 — first/last line half-leading trim. Inherits so
-# nested block containers observe the trimming policy consistently.
+# CSS Inline 3 §6 — first/last line half-leading trim.
 [leading-trim]
 type = "LeadingTrim"
 initial = "computed::LeadingTrim::Normal"
-struct = "inherited_text"
+struct = "text"
 initial_specified_value = "specified::LeadingTrim::Normal"
 spec = "https://drafts.csswg.org/css-inline-3/#text-box-trim"
 aliases = ["text-box-trim"]
