@@ -300,6 +300,11 @@ sub_properties = ["text-align-all", "text-align-last"]
 spec = "https://drafts.csswg.org/css-text-4/#text-align-property"
 rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 
+[text-box]
+sub_properties = ["leading-trim", "text-box-edge"]
+spec = "https://drafts.csswg.org/css-inline-3/#text-box-shorthand"
+rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+
 [offset]
 engine = "gecko"
 sub_properties = ["offset-path", "offset-distance", "offset-rotate", "offset-anchor", "offset-position"]

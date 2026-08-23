@@ -1793,6 +1793,43 @@ mod tests {
     }
 
     #[test]
+    fn text_box_shorthand_expands_trim_and_edge_longhands() {
+        let stylesheet = parse_stylesheet(".test { text-box: trim-both cap alphabetic; }");
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+        let style = rules
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::Style(rule) => Some(rule.read_with(&guard)),
+                _ => None,
+            })
+            .expect("expected style rule");
+        let block = style.block.read_with(&guard);
+        let mut expanded = block
+            .declaration_importance_iter()
+            .filter_map(|(declaration, _)| match declaration {
+                PropertyDeclaration::LeadingTrim(value) => {
+                    Some(("leading-trim", value.to_css_string()))
+                },
+                PropertyDeclaration::TextBoxEdge(value) => {
+                    Some(("text-box-edge", value.to_css_string()))
+                },
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        expanded.sort_unstable();
+
+        assert_eq!(
+            expanded,
+            [
+                ("leading-trim", "both".to_owned()),
+                ("text-box-edge", "cap alphabetic".to_owned())
+            ],
+        );
+    }
+
+    #[test]
     fn servo_preserves_dominant_baseline_declaration() {
         let stylesheet = parse_stylesheet(
             r#"

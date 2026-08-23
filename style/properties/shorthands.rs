@@ -887,6 +887,77 @@ pub mod text_align {
     }
 }
 
+/// CSS Inline 3 — `text-box` shorthand.
+///
+///   Value: normal | <text-box-trim> || <text-box-edge>
+pub mod text_box {
+    use super::*;
+    use crate::properties::longhands::{leading_trim, text_box_edge};
+    pub use crate::properties::shorthands_generated::text_box::*;
+    use crate::values::specified::{LeadingTrim, TextBoxEdge};
+
+    pub fn parse_value<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Longhands, ParseError<'i>> {
+        if input
+            .try_parse(|input| input.expect_ident_matching("normal"))
+            .is_ok()
+        {
+            return Ok(expanded! {
+                leading_trim: LeadingTrim::Normal,
+                text_box_edge: TextBoxEdge::Auto,
+            });
+        }
+
+        let mut trim = None;
+        let mut edge = None;
+        loop {
+            if trim.is_none() {
+                if let Ok(value) = input.try_parse(|input| leading_trim::parse(context, input)) {
+                    if value == LeadingTrim::Normal {
+                        return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+                    }
+                    trim = Some(value);
+                    continue;
+                }
+            }
+            if edge.is_none() {
+                if let Ok(value) = input.try_parse(|input| text_box_edge::parse(context, input)) {
+                    edge = Some(value);
+                    continue;
+                }
+            }
+            break;
+        }
+
+        if trim.is_none() && edge.is_none() {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+
+        Ok(expanded! {
+            leading_trim: trim.unwrap_or(LeadingTrim::Both),
+            text_box_edge: edge.unwrap_or(TextBoxEdge::Auto),
+        })
+    }
+
+    impl<'a> ToCss for LonghandsToSerialize<'a> {
+        fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+        where
+            W: fmt::Write,
+        {
+            if *self.leading_trim == LeadingTrim::Normal && *self.text_box_edge == TextBoxEdge::Auto
+            {
+                return dest.write_str("normal");
+            }
+
+            self.leading_trim.to_css(dest)?;
+            dest.write_char(' ')?;
+            self.text_box_edge.to_css(dest)
+        }
+    }
+}
+
 #[cfg(feature = "gecko")]
 pub mod offset {
     use super::*;
