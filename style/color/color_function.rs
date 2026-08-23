@@ -198,8 +198,13 @@ impl ColorFunction<AbsoluteColor> {
         Ok(match self {
             ColorFunction::Rgb(origin_color, r, g, b, alpha) => {
                 // Use `color(srgb ...)` to serialize `rgb(...)` if an origin color is available;
-                // this is the only reason for now.
-                let use_color_syntax = origin_color.is_some();
+                // missing components also require the modern syntax because
+                // legacy rgb() cannot represent `none`.
+                let use_color_syntax = origin_color.is_some()
+                    || r.is_none()
+                    || g.is_none()
+                    || b.is_none()
+                    || alpha.is_none();
 
                 if use_color_syntax {
                     let origin_color = origin_color.as_ref().map(|origin| {
@@ -262,7 +267,11 @@ impl ColorFunction<AbsoluteColor> {
                 //   value to rgb(..).
                 // - was specified, we don't use the rgb(..) syntax, because we should allow the
                 //   color to be out of gamut and not clamp.
-                let use_rgb_sytax = origin_color.is_none();
+                let use_rgb_sytax = origin_color.is_none()
+                    && !h.is_none()
+                    && !s.is_none()
+                    && !l.is_none()
+                    && !alpha.is_none();
 
                 let origin_color = origin_color
                     .as_ref()
@@ -301,7 +310,11 @@ impl ColorFunction<AbsoluteColor> {
                 //   value to rgb(..).
                 // - was specified, we don't use the rgb(..) syntax, because we should allow the
                 //   color to be out of gamut and not clamp.
-                let use_rgb_sytax = origin_color.is_none();
+                let use_rgb_sytax = origin_color.is_none()
+                    && !h.is_none()
+                    && !w.is_none()
+                    && !b.is_none()
+                    && !alpha.is_none();
 
                 // Percent reference range for W and B: 0% = 0.0, 100% = 100.0
                 const WHITENESS_RANGE: f32 = 100.0;
@@ -850,5 +863,51 @@ impl<C: style_traits::ToCss> style_traits::ToCss for ColorFunction<C> {
         }
 
         dest.write_str(")")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn number(value: f32) -> ColorComponent<NumberOrPercentageComponent> {
+        ColorComponent::Value(NumberOrPercentageComponent::Number(value))
+    }
+
+    #[test]
+    fn rgb_missing_components_survive_absolute_resolution() {
+        let function = ColorFunction::<AbsoluteColor>::Rgb(
+            Optional::None,
+            ColorComponent::None,
+            number(255.0),
+            ColorComponent::None,
+            ColorComponent::AlphaOmitted,
+        );
+        let color = function
+            .resolve_to_absolute()
+            .expect("modern rgb() must resolve");
+
+        assert_eq!(color.c0(), None);
+        assert_eq!(color.c1(), Some(1.0));
+        assert_eq!(color.c2(), None);
+        assert!(!color.is_legacy_syntax());
+    }
+
+    #[test]
+    fn hsl_missing_components_survive_absolute_resolution() {
+        let function = ColorFunction::<AbsoluteColor>::Hsl(
+            Optional::None,
+            ColorComponent::Value(NumberOrAngleComponent::Angle(60.0)),
+            ColorComponent::None,
+            number(50.0),
+            ColorComponent::AlphaOmitted,
+        );
+        let color = function
+            .resolve_to_absolute()
+            .expect("modern hsl() must resolve");
+
+        assert_eq!(color.c0(), Some(60.0));
+        assert_eq!(color.c1(), None);
+        assert_eq!(color.c2(), Some(50.0));
     }
 }

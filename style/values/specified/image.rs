@@ -93,6 +93,9 @@ impl Color {
                     mix.items.iter().any(|item| item.color.has_modern_syntax())
                 }
             },
+            // Color functions that survive parsing need computed context or
+            // retain missing components. Both forms use modern colour syntax.
+            Self::ColorFunction(_) => true,
             Self::LightDark(ld) => ld.light.has_modern_syntax() || ld.dark.has_modern_syntax(),
 
             // The default is that this color doesn't have any modern syntax.
