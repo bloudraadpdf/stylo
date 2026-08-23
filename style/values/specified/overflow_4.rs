@@ -6,13 +6,13 @@
 //!
 //! Implements the `block-ellipsis`, `max-lines`, and `continue`
 //! longhands of the `line-clamp` shorthand (Overflow 4 §5), plus
-//! `leading-trim` (Inline 3 §6):
+//! `text-box-trim` (Inline 3 §6, with the earlier `leading-trim` spelling):
 //!
 //! - <https://drafts.csswg.org/css-overflow-4/#line-clamp>
 //! - <https://drafts.csswg.org/css-overflow-4/#block-ellipsis>
 //! - <https://drafts.csswg.org/css-overflow-4/#max-lines>
 //! - <https://drafts.csswg.org/css-overflow-4/#continue>
-//! - <https://drafts.csswg.org/css-inline-3/#leading-trim>
+//! - <https://drafts.csswg.org/css-inline-3/#text-box-trim>
 //!
 //! These cap block-container line content (`line-clamp` shorthand triplet —
 //! `block-ellipsis`, `max-lines`, `continue`) and trim the first/last line
@@ -213,12 +213,11 @@ pub enum Continue {
     Discard,
 }
 
-/// Specified value of the `leading-trim` property
-/// (<https://drafts.csswg.org/css-inline-3/#leading-trim>).
+/// Specified value of the `text-box-trim` property
+/// (<https://drafts.csswg.org/css-inline-3/#text-box-trim>).
 ///
-/// Grammar: `normal | start | end | both`. Controls whether the
-/// half-leading on the first / last line of a block container is
-/// trimmed against the cap-height / x-height baseline.
+/// Current grammar: `none | trim-start | trim-end | trim-both`. The earlier
+/// `normal | start | end | both` keywords remain accepted for compatibility.
 #[repr(u8)]
 #[derive(
     Clone,
@@ -238,13 +237,42 @@ pub enum Continue {
 )]
 #[allow(missing_docs)]
 pub enum LeadingTrim {
-    /// `normal` — preserve leading on both edges (default).
+    /// `none` — preserve leading on both edges (default).
     #[default]
+    #[parse(aliases = "none")]
     Normal,
-    /// `start` — trim leading from the block-start edge.
+    /// `trim-start` — trim leading from the block-start edge.
+    #[parse(aliases = "trim-start")]
     Start,
-    /// `end` — trim leading from the block-end edge.
+    /// `trim-end` — trim leading from the block-end edge.
+    #[parse(aliases = "trim-end")]
     End,
-    /// `both` — trim leading from both edges.
+    /// `trim-both` — trim leading from both edges.
+    #[parse(aliases = "trim-both")]
     Both,
+}
+
+#[cfg(test)]
+mod leading_trim_tests {
+    use super::*;
+    use cssparser::{Parser, ParserInput};
+
+    fn parse_leading_trim(css: &str) -> LeadingTrim {
+        let mut input = ParserInput::new(css);
+        Parser::new(&mut input)
+            .parse_entirely(LeadingTrim::parse)
+            .expect("text-box-trim value should parse")
+    }
+
+    #[test]
+    fn current_text_box_trim_keywords_map_to_the_existing_typed_states() {
+        for (css, expected) in [
+            ("none", LeadingTrim::Normal),
+            ("trim-start", LeadingTrim::Start),
+            ("trim-end", LeadingTrim::End),
+            ("trim-both", LeadingTrim::Both),
+        ] {
+            assert_eq!(parse_leading_trim(css), expected);
+        }
+    }
 }

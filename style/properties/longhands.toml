@@ -472,7 +472,8 @@ type = "LeadingTrim"
 initial = "computed::LeadingTrim::Normal"
 struct = "inherited_text"
 initial_specified_value = "specified::LeadingTrim::Normal"
-spec = "https://drafts.csswg.org/css-inline-3/#leading-trim"
+spec = "https://drafts.csswg.org/css-inline-3/#text-box-trim"
+aliases = ["text-box-trim"]
 animation_type = "discrete"
 affects = "layout"
 
