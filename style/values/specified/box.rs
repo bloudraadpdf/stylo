@@ -95,6 +95,7 @@ pub enum DisplayInside {
     FlowRoot,
     Flex,
     Grid,
+    GridLanes,
     Table,
     TableRowGroup,
     TableColumn,
@@ -187,6 +188,12 @@ impl Display {
         Self(((DisplayOutside::Block as u16) << Self::OUTSIDE_SHIFT) | DisplayInside::Grid as u16);
     pub const InlineGrid: Self =
         Self(((DisplayOutside::Inline as u16) << Self::OUTSIDE_SHIFT) | DisplayInside::Grid as u16);
+    pub const GridLanes: Self = Self(
+        ((DisplayOutside::Block as u16) << Self::OUTSIDE_SHIFT) | DisplayInside::GridLanes as u16,
+    );
+    pub const InlineGridLanes: Self = Self(
+        ((DisplayOutside::Inline as u16) << Self::OUTSIDE_SHIFT) | DisplayInside::GridLanes as u16,
+    );
     pub const Table: Self =
         Self(((DisplayOutside::Block as u16) << Self::OUTSIDE_SHIFT) | DisplayInside::Table as u16);
     pub const InlineTable: Self = Self(
@@ -339,7 +346,7 @@ impl Display {
     pub fn is_item_container(&self) -> bool {
         match self.inside() {
             DisplayInside::Flex => true,
-            DisplayInside::Grid => true,
+            DisplayInside::Grid | DisplayInside::GridLanes => true,
             _ => false,
         }
     }
@@ -439,6 +446,7 @@ impl DisplayKeyword {
             "-webkit-flex" => Full(Display::Flex),
             "inline-flex" | "-webkit-inline-flex" => Full(Display::InlineFlex),
             "inline-grid" if grid_enabled() => Full(Display::InlineGrid),
+            "inline-grid-lanes" if grid_enabled() => Full(Display::InlineGridLanes),
             "table-caption" => Full(Display::TableCaption),
             "table-row-group" => Full(Display::TableRowGroup),
             "table-header-group" => Full(Display::TableHeaderGroup),
@@ -471,6 +479,7 @@ impl DisplayKeyword {
             "flow-root" => Inside(DisplayInside::FlowRoot),
             "table" => Inside(DisplayInside::Table),
             "grid" if grid_enabled() => Inside(DisplayInside::Grid),
+            "grid-lanes" if grid_enabled() => Inside(DisplayInside::GridLanes),
             "ruby" => Inside(DisplayInside::Ruby),
         })
     }
@@ -492,6 +501,9 @@ impl ToCss for Display {
             Display::TableCaption => dest.write_str("table-caption"),
             _ => match (outside, inside) {
                 (DisplayOutside::Inline, DisplayInside::Grid) => dest.write_str("inline-grid"),
+                (DisplayOutside::Inline, DisplayInside::GridLanes) => {
+                    dest.write_str("inline-grid-lanes")
+                },
                 (DisplayOutside::Inline, DisplayInside::Flex) => dest.write_str("inline-flex"),
                 (DisplayOutside::Inline, DisplayInside::Table) => dest.write_str("inline-table"),
                 (DisplayOutside::Block, DisplayInside::Ruby) => dest.write_str("block ruby"),
@@ -625,6 +637,29 @@ mod display_tests {
     }
 
     #[test]
+    fn grid_lanes_parses_as_a_distinct_inner_display_type() {
+        let _lock = pref_lock().lock().unwrap();
+        let _grid_pref = BoolPrefGuard::set("layout.grid.enabled", true);
+
+        for (css, expected) in [
+            ("grid-lanes", Display::GridLanes),
+            ("block grid-lanes", Display::GridLanes),
+            ("inline-grid-lanes", Display::InlineGridLanes),
+            ("inline grid-lanes", Display::InlineGridLanes),
+        ] {
+            let display = parse_display(css);
+            assert_eq!(display, expected, "{css}");
+            assert_eq!(display.inside(), DisplayInside::GridLanes, "{css}");
+        }
+
+        assert_eq!(Display::GridLanes.to_css_string(), "grid-lanes");
+        assert_eq!(
+            Display::InlineGridLanes.to_css_string(),
+            "inline-grid-lanes"
+        );
+    }
+
+    #[test]
     fn blockifying_run_in_preserves_its_inner_display_type() {
         let _lock = pref_lock().lock().unwrap();
         let _grid_pref = BoolPrefGuard::set("layout.grid.enabled", true);
@@ -676,10 +711,12 @@ impl SpecifiedValueInfo for Display {
             "flow-root",
             "flow-root list-item",
             "grid",
+            "grid-lanes",
             "inline",
             "inline-block",
             "inline-flex",
             "inline-grid",
+            "inline-grid-lanes",
             "inline-table",
             "inline list-item",
             "inline flow-root list-item",
