@@ -131,7 +131,7 @@ fn cross_fade_enabled() -> bool {
 
 #[cfg(feature = "servo")]
 fn cross_fade_enabled() -> bool {
-    false
+    true
 }
 
 impl SpecifiedValueInfo for Gradient {
@@ -1414,4 +1414,33 @@ pub enum ImageRendering {
     Optimizespeed,
     #[cfg(feature = "gecko")]
     Optimizequality,
+}
+
+#[cfg(all(test, feature = "servo"))]
+mod cross_fade_tests {
+    use super::{Image, Parse, ParserContext};
+    use crate::context::QuirksMode;
+    use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
+    use cssparser::{Parser, ParserInput};
+    use style_traits::ParsingMode;
+
+    #[test]
+    fn servo_accepts_standard_cross_fade_images() {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input = ParserInput::new("cross-fade(25% red, url('green.png'), blue)");
+
+        assert!(Parser::new(&mut input)
+            .parse_entirely(|input| Image::parse(&context, input))
+            .is_ok());
+    }
 }
