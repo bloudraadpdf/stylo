@@ -908,10 +908,10 @@ impl Color {
                 ComputedColor::Absolute(color)
             },
             Color::ColorFunction(ref color_function) => {
-                debug_assert!(
-                    color_function.should_preserve_as_function(),
-                    "specified ColorFunction values should only survive parsing for relative or explicitly preserved colour functions"
-                );
+                let color_function = match context {
+                    Some(context) => color_function.to_computed_value(context),
+                    None => (**color_function).clone(),
+                };
 
                 // F2 — keep `device-cmyk(c m y k / a)` with no fallback as a
                 // typed `ColorFunction::DeviceCmyk` at compute time so
@@ -924,7 +924,7 @@ impl Color {
                 // the eager resolution path because the author explicitly
                 // asked for the fallback's colour space whenever CMYK is
                 // unavailable.
-                if let ColorFunction::DeviceCmyk(_, _, _, _, _, fallback) = &**color_function {
+                if let ColorFunction::DeviceCmyk(_, _, _, _, _, fallback) = &color_function {
                     if fallback.is_none() {
                         let color_function = color_function.map_origin_color(|origin_color| {
                             origin_color.to_computed_color(context)
@@ -941,7 +941,7 @@ impl Color {
                 // `TRANSPARENT_BLACK` (see `resolve_to_absolute` for
                 // the fail-closed contract) and the colorant name
                 // would be unrecoverable.
-                if matches!(&**color_function, ColorFunction::BdSpot(..)) {
+                if matches!(&color_function, ColorFunction::BdSpot(..)) {
                     let color_function = color_function
                         .map_origin_color(|origin_color| origin_color.to_computed_color(context));
                     return Some(ComputedColor::ColorFunction(Box::new(color_function)));
@@ -955,7 +955,7 @@ impl Color {
                 // resolution here would collapse to the fallback sRGB
                 // colour and the colorant references would be
                 // unrecoverable.
-                if matches!(&**color_function, ColorFunction::BdDeviceN(..)) {
+                if matches!(&color_function, ColorFunction::BdDeviceN(..)) {
                     let color_function = color_function
                         .map_origin_color(|origin_color| origin_color.to_computed_color(context));
                     return Some(ComputedColor::ColorFunction(Box::new(color_function)));

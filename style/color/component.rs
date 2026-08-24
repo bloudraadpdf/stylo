@@ -15,6 +15,7 @@ use crate::{
     parser::ParserContext,
     values::{
         animated::ToAnimatedValue,
+        computed,
         generics::calc::{CalcUnits, GenericCalcNode},
         specified::calc::{AllowParse, Leaf},
     },
@@ -151,6 +152,25 @@ impl<ValueType: ColorComponentType> ColorComponent<ValueType> {
                 }
             },
         })
+    }
+
+    /// Resolve element-dependent calculation leaves at computed-value time.
+    pub fn to_computed_value(&self, context: &computed::Context) -> Self {
+        let Self::Calc(node) = self else {
+            return self.clone();
+        };
+
+        let computed = node.map_leaves(|leaf| match leaf {
+            Leaf::SiblingIndex => Leaf::Number(context.sibling_index()),
+            Leaf::SiblingCount => Leaf::Number(context.sibling_count()),
+            _ => leaf.clone(),
+        });
+        match computed.resolve() {
+            Ok(leaf) => ValueType::try_from_leaf(&leaf)
+                .map(Self::Value)
+                .unwrap_or_else(|_| Self::Calc(Box::new(computed))),
+            Err(()) => Self::Calc(Box::new(computed)),
+        }
     }
 }
 

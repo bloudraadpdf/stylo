@@ -533,6 +533,76 @@ impl ColorFunction<SpecifiedColor> {
         }
     }
 
+    /// Resolve element-dependent colour components at computed-value time.
+    pub fn to_computed_value(&self, context: &crate::values::computed::Context) -> Self {
+        macro_rules! compute {
+            ($variant:ident, $origin:expr, $c0:expr, $c1:expr, $c2:expr, $alpha:expr) => {
+                Self::$variant(
+                    $origin.clone(),
+                    $c0.to_computed_value(context),
+                    $c1.to_computed_value(context),
+                    $c2.to_computed_value(context),
+                    $alpha.to_computed_value(context),
+                )
+            };
+        }
+
+        match self {
+            Self::Rgb(origin, c0, c1, c2, alpha) => {
+                compute!(Rgb, origin, c0, c1, c2, alpha)
+            },
+            Self::Hsl(origin, c0, c1, c2, alpha) => {
+                compute!(Hsl, origin, c0, c1, c2, alpha)
+            },
+            Self::Hwb(origin, c0, c1, c2, alpha) => {
+                compute!(Hwb, origin, c0, c1, c2, alpha)
+            },
+            Self::Lab(origin, c0, c1, c2, alpha) => {
+                compute!(Lab, origin, c0, c1, c2, alpha)
+            },
+            Self::Lch(origin, c0, c1, c2, alpha) => {
+                compute!(Lch, origin, c0, c1, c2, alpha)
+            },
+            Self::Oklab(origin, c0, c1, c2, alpha) => {
+                compute!(Oklab, origin, c0, c1, c2, alpha)
+            },
+            Self::Oklch(origin, c0, c1, c2, alpha) => {
+                compute!(Oklch, origin, c0, c1, c2, alpha)
+            },
+            Self::Color(origin, c0, c1, c2, alpha, color_space) => Self::Color(
+                origin.clone(),
+                c0.to_computed_value(context),
+                c1.to_computed_value(context),
+                c2.to_computed_value(context),
+                alpha.to_computed_value(context),
+                *color_space,
+            ),
+            Self::DeviceCmyk(c, m, y, k, alpha, fallback) => Self::DeviceCmyk(
+                c.to_computed_value(context),
+                m.to_computed_value(context),
+                y.to_computed_value(context),
+                k.to_computed_value(context),
+                alpha.to_computed_value(context),
+                fallback.clone(),
+            ),
+            Self::BdSpot(name, tint, is_separation) => Self::BdSpot(
+                name.clone(),
+                tint.to_computed_value(context),
+                *is_separation,
+            ),
+            Self::BdDeviceN(pairs, fallback) => Self::BdDeviceN(
+                pairs
+                    .iter()
+                    .map(|pair| BdDeviceNComponent {
+                        colorant: pair.colorant.clone(),
+                        tint: pair.tint.to_computed_value(context),
+                    })
+                    .collect(),
+                fallback.clone(),
+            ),
+        }
+    }
+
     /// Whether this function should remain a typed function at specified-value
     /// time rather than eagerly collapsing to an absolute colour.
     pub fn should_preserve_as_function(&self) -> bool {

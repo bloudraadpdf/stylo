@@ -127,7 +127,12 @@ impl ToCss for Leaf {
             Self::Number(n) => serialize_number(n, /* was_calc = */ false, dest),
             Self::Resolution(ref r) => r.to_css(dest),
             Self::Percentage(p) => serialize_percentage(p, dest),
-            Self::Angle(ref a) => a.to_css(dest),
+            Self::Angle(ref a) => crate::values::serialize_specified_dimension(
+                a.degrees(),
+                "deg",
+                /* was_calc = */ false,
+                dest,
+            ),
             Self::Time(ref t) => t.to_css(dest),
             Self::ColorComponent(ref s) => s.to_css(dest),
             Self::SiblingIndex => dest.write_str("sibling-index()"),
@@ -1476,5 +1481,16 @@ mod tree_counting_tests {
         }
 
         assert!(parse_length_percentage("calc(10px * sibling-index(1))").is_err());
+    }
+
+    #[test]
+    fn color_retains_tree_counting_calculation() {
+        let css = "hsl(calc(50deg * sibling-index()) 50% 50%)";
+        let mut input = ParserInput::new(css);
+        let value = Parser::new(&mut input)
+            .parse_entirely(|input| specified::Color::parse(&context(), input))
+            .expect("tree-counting colour components must survive until computed-value time");
+
+        assert_eq!(value.to_css_string(), css);
     }
 }

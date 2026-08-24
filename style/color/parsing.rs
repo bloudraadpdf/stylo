@@ -104,14 +104,13 @@ pub fn parse_color_with<'i, 't>(
                 if color_function.should_preserve_as_function() {
                     // Preserve the color as it was parsed.
                     Ok(SpecifiedColor::ColorFunction(Box::new(color_function)))
-                } else if let Ok(resolved) = color_function.resolve_to_absolute() {
-                    Ok(SpecifiedColor::from_absolute_color(resolved))
                 } else {
-                    // This will only happen when the parsed color contains errors like calc units
-                    // that cannot be resolved at parse time, but will fail when trying to resolve
-                    // them, etc. This should be rare, but for now just failing the color value
-                    // makes sense.
-                    Err(location.new_custom_error(StyleParseErrorKind::UnspecifiedError))
+                    match color_function.resolve_to_absolute() {
+                        Ok(resolved) => Ok(SpecifiedColor::from_absolute_color(resolved)),
+                        // Valid element-dependent calculations cannot resolve until computed-value
+                        // time, so retain the typed function for the cascade.
+                        Err(()) => Ok(SpecifiedColor::ColorFunction(Box::new(color_function))),
+                    }
                 }
             });
         },
