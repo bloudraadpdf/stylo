@@ -2485,7 +2485,12 @@ fn calc_size_expression(node: CalcNode) -> Result<GenericCalcSizeExpression<NoCa
         },
         GenericCalcNode::Leaf(Leaf::Number(value)) => GenericCalcSizeExpression::Number(value),
         GenericCalcNode::Leaf(
-            Leaf::Angle(_) | Leaf::Time(_) | Leaf::Resolution(_) | Leaf::ColorComponent(_),
+            Leaf::Angle(_)
+            | Leaf::Time(_)
+            | Leaf::Resolution(_)
+            | Leaf::ColorComponent(_)
+            | Leaf::SiblingIndex
+            | Leaf::SiblingCount,
         )
         | GenericCalcNode::Anchor(_)
         | GenericCalcNode::AnchorSize(_) => return Err(()),

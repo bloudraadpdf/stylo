@@ -380,6 +380,12 @@ pub mod transform;
 pub mod ui;
 pub mod url;
 
+#[derive(Default)]
+struct TreeCounting {
+    index: CSSFloat,
+    count: CSSFloat,
+}
+
 /// A `Context` is all the data a specified value could ever need to compute
 /// itself and be transformed to a computed value.
 pub struct Context<'a> {
@@ -432,6 +438,8 @@ pub struct Context<'a> {
     /// The cascade level in the shadow tree hierarchy.
     pub scope: CascadeLevel,
 
+    tree_counting: TreeCounting,
+
     /// Container size query for this context.
     container_size_query: RefCell<ContainerSizeQuery<'a>>,
 }
@@ -462,6 +470,7 @@ impl<'a> Context<'a> {
             for_non_inherited_property: false,
             rule_cache_conditions: RefCell::new(&mut conditions),
             scope: CascadeLevel::same_tree_author_normal(),
+            tree_counting: TreeCounting::default(),
             container_size_query: RefCell::new(ContainerSizeQuery::none()),
         };
         f(&context)
@@ -499,6 +508,7 @@ impl<'a> Context<'a> {
             for_non_inherited_property: false,
             rule_cache_conditions: RefCell::new(&mut conditions),
             scope: CascadeLevel::same_tree_author_normal(),
+            tree_counting: TreeCounting::default(),
             container_size_query: RefCell::new(container_size_query),
         };
 
@@ -523,6 +533,7 @@ impl<'a> Context<'a> {
             for_non_inherited_property: false,
             rule_cache_conditions: RefCell::new(rule_cache_conditions),
             scope: CascadeLevel::same_tree_author_normal(),
+            tree_counting: TreeCounting::default(),
             container_size_query: RefCell::new(container_size_query),
         }
     }
@@ -546,6 +557,7 @@ impl<'a> Context<'a> {
             for_non_inherited_property: false,
             rule_cache_conditions: RefCell::new(rule_cache_conditions),
             scope: CascadeLevel::same_tree_author_normal(),
+            tree_counting: TreeCounting::default(),
             container_size_query: RefCell::new(container_size_query),
         }
     }
@@ -569,8 +581,32 @@ impl<'a> Context<'a> {
             for_non_inherited_property: false,
             rule_cache_conditions: RefCell::new(rule_cache_conditions),
             scope: CascadeLevel::same_tree_author_normal(),
+            tree_counting: TreeCounting::default(),
             container_size_query: RefCell::new(ContainerSizeQuery::none()),
         }
+    }
+
+    pub(crate) fn set_tree_counting(&mut self, sibling_index: usize, sibling_count: usize) {
+        self.tree_counting = TreeCounting {
+            index: sibling_index as CSSFloat,
+            count: sibling_count as CSSFloat,
+        };
+    }
+
+    pub(crate) fn sibling_index(&self) -> CSSFloat {
+        self.note_tree_counting_dependency();
+        self.tree_counting.index
+    }
+
+    pub(crate) fn sibling_count(&self) -> CSSFloat {
+        self.note_tree_counting_dependency();
+        self.tree_counting.count
+    }
+
+    fn note_tree_counting_dependency(&self) {
+        self.builder
+            .add_flags(ComputedValueFlags::DEPENDS_ON_TREE_COUNTING);
+        self.rule_cache_conditions.borrow_mut().set_uncacheable();
     }
 
     /// The current device.

@@ -672,6 +672,15 @@ impl<E: TElement> StyleSharingCache<E> {
             return;
         }
 
+        if style
+            .style()
+            .flags
+            .intersects(ComputedValueFlags::DEPENDS_ON_TREE_COUNTING)
+        {
+            debug!("Failing to insert into the cache: tree-counting function");
+            return;
+        }
+
         debug!(
             "Inserting into cache: {:?} with parent {:?}",
             element, parent
@@ -923,6 +932,12 @@ impl<E: TElement> StyleSharingCache<E> {
                 return None;
             }
             if style.visited_rules() != visited_rules {
+                return None;
+            }
+            if style
+                .flags
+                .intersects(ComputedValueFlags::DEPENDS_ON_TREE_COUNTING)
+            {
                 return None;
             }
             // NOTE(emilio): We only need to check name / namespace because we

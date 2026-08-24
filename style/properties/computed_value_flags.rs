@@ -145,6 +145,9 @@ bitflags! {
         /// Whether the winning cascade declaration for
         /// `-bd-float-displace` comes from the author origin.
         const HAS_AUTHOR_SPECIFIED_BD_FLOAT_DISPLACE = 1 << 29;
+
+        /// Whether a computed value depends on the element's DOM sibling position.
+        const DEPENDS_ON_TREE_COUNTING = 1 << 30;
     }
 }
 

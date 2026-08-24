@@ -1293,6 +1293,8 @@ impl specified::CalcLengthPercentage {
                 CalcLengthPercentageLeaf::Length(computed)
             },
             Leaf::Number(value) => CalcLengthPercentageLeaf::Number(value),
+            Leaf::SiblingIndex => CalcLengthPercentageLeaf::Number(context.sibling_index()),
+            Leaf::SiblingCount => CalcLengthPercentageLeaf::Number(context.sibling_count()),
             Leaf::Angle(..) | Leaf::Time(..) | Leaf::Resolution(..) | Leaf::ColorComponent(..) => {
                 unreachable!("float-offset grammar accepts only length-percentage calculations")
             },
@@ -1330,6 +1332,8 @@ impl specified::CalcLengthPercentage {
                 }
             }),
             Leaf::Number(n) => CalcLengthPercentageLeaf::Number(n),
+            Leaf::SiblingIndex => CalcLengthPercentageLeaf::Number(context.sibling_index()),
+            Leaf::SiblingCount => CalcLengthPercentageLeaf::Number(context.sibling_count()),
             Leaf::Angle(..) | Leaf::Time(..) | Leaf::Resolution(..) | Leaf::ColorComponent(..) => {
                 unreachable!("Shouldn't have parsed")
             },

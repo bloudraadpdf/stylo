@@ -101,6 +101,10 @@ pub enum Leaf {
     Percentage(CSSFloat),
     /// `<number>`
     Number(CSSFloat),
+    /// `sibling-index()`
+    SiblingIndex,
+    /// `sibling-count()`
+    SiblingCount,
 }
 
 impl Leaf {
@@ -126,6 +130,8 @@ impl ToCss for Leaf {
             Self::Angle(ref a) => a.to_css(dest),
             Self::Time(ref t) => t.to_css(dest),
             Self::ColorComponent(ref s) => s.to_css(dest),
+            Self::SiblingIndex => dest.write_str("sibling-index()"),
+            Self::SiblingCount => dest.write_str("sibling-count()"),
         }
     }
 }
@@ -241,6 +247,7 @@ impl generic::CalcNodeLeaf for Leaf {
             Leaf::ColorComponent(_) => CalcUnits::COLOR_COMPONENT,
             Leaf::Percentage(_) => CalcUnits::PERCENTAGE,
             Leaf::Number(_) => CalcUnits::empty(),
+            Leaf::SiblingIndex | Leaf::SiblingCount => CalcUnits::empty(),
         }
     }
 
@@ -253,6 +260,7 @@ impl generic::CalcNodeLeaf for Leaf {
             Self::Angle(ref a) => a.degrees(),
             Self::Time(ref t) => t.seconds(),
             Self::ColorComponent(_) => return None,
+            Self::SiblingIndex | Self::SiblingCount => return None,
         })
     }
 
@@ -289,10 +297,12 @@ impl generic::CalcNodeLeaf for Leaf {
             (&Resolution(ref one), &Resolution(ref other)) => one.dppx().partial_cmp(&other.dppx()),
             (&Number(ref one), &Number(ref other)) => one.partial_cmp(other),
             (&ColorComponent(ref one), &ColorComponent(ref other)) => one.partial_cmp(other),
+            (&SiblingIndex, &SiblingIndex) | (&SiblingCount, &SiblingCount) => None,
             _ => {
                 match *self {
                     Length(..) | Percentage(..) | Angle(..) | Time(..) | Number(..)
                     | Resolution(..) | ColorComponent(..) | Size => {},
+                    SiblingIndex | SiblingCount => {},
                 }
                 unsafe {
                     debug_unreachable!("Forgot a branch?");
@@ -310,6 +320,7 @@ impl generic::CalcNodeLeaf for Leaf {
             | Leaf::Resolution(_)
             | Leaf::Percentage(_)
             | Leaf::ColorComponent(_) => None,
+            Leaf::SiblingIndex | Leaf::SiblingCount => None,
             Leaf::Number(value) => Some(value),
         }
     }
@@ -389,6 +400,7 @@ impl generic::CalcNodeLeaf for Leaf {
                 NoCalcLength::ServoCharacterWidth(..) => unreachable!(),
             },
             Self::ColorComponent(..) => SortKey::ColorComponent,
+            Self::SiblingIndex | Self::SiblingCount => SortKey::Other,
         }
     }
 
@@ -430,10 +442,14 @@ impl generic::CalcNodeLeaf for Leaf {
                 // Can not get the sum of color components, because they haven't been resolved yet.
                 return Err(());
             },
+            (&mut SiblingIndex, &SiblingIndex) | (&mut SiblingCount, &SiblingCount) => {
+                return Err(());
+            },
             _ => {
                 match *other {
                     Number(..) | Percentage(..) | Angle(..) | Time(..) | Resolution(..)
                     | Length(..) | ColorComponent(..) | Size => {},
+                    SiblingIndex | SiblingCount => {},
                 }
                 unsafe {
                     debug_unreachable!();
@@ -512,6 +528,7 @@ impl generic::CalcNodeLeaf for Leaf {
                 match *other {
                     Number(..) | Percentage(..) | Angle(..) | Time(..) | Length(..)
                     | Resolution(..) | ColorComponent(..) | Size => {},
+                    SiblingIndex | SiblingCount => {},
                 }
                 unsafe {
                     debug_unreachable!();
@@ -530,6 +547,7 @@ impl generic::CalcNodeLeaf for Leaf {
             Leaf::Percentage(one) => *one = op(*one),
             Leaf::Number(one) => *one = op(*one),
             Leaf::ColorComponent(..) => return Err(()),
+            Leaf::SiblingIndex | Leaf::SiblingCount => return Err(()),
         })
     }
 }
@@ -694,6 +712,21 @@ impl CalcNode {
                 let anchor_size_function =
                     GenericAnchorSizeFunction::parse_in_calc(context, input)?;
                 Ok(CalcNode::AnchorSize(Box::new(anchor_size_function)))
+            },
+            &Token::Function(ref name)
+                if name.eq_ignore_ascii_case("sibling-index")
+                    || name.eq_ignore_ascii_case("sibling-count") =>
+            {
+                let leaf = if name.eq_ignore_ascii_case("sibling-index") {
+                    Leaf::SiblingIndex
+                } else {
+                    Leaf::SiblingCount
+                };
+                input.parse_nested_block(|input| {
+                    input.expect_exhausted()?;
+                    Ok(())
+                })?;
+                Ok(CalcNode::Leaf(leaf))
             },
             &Token::Function(ref name) => {
                 let function = CalcNode::math_function(context, name, location)?;
@@ -1341,6 +1374,8 @@ impl CalcNode {
             Leaf::Length(length) => Leaf::Length(NoCalcLength::from_px(
                 length.to_computed_value(context).px(),
             )),
+            Leaf::SiblingIndex => Leaf::Number(context.sibling_index()),
+            Leaf::SiblingCount => Leaf::Number(context.sibling_count()),
             _ => leaf.clone(),
         });
         computed.to_number()
@@ -1399,5 +1434,47 @@ impl CalcNode {
         )?
         .to_resolution()
         .map_err(|()| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
+    }
+}
+
+#[cfg(test)]
+mod tree_counting_tests {
+    use super::*;
+    use crate::context::QuirksMode;
+    use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
+    use cssparser::{Parser, ParserInput};
+    use style_traits::ParsingMode;
+
+    fn context() -> ParserContext<'static> {
+        let url_data = Box::leak(Box::new(UrlExtraData::from(
+            url::Url::parse("https://example.invalid/").unwrap(),
+        )));
+        ParserContext::new(
+            Origin::Author,
+            url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        )
+    }
+
+    fn parse_length_percentage(css: &str) -> Result<specified::LengthPercentage, ParseError<'_>> {
+        let mut input = ParserInput::new(css);
+        Parser::new(&mut input)
+            .parse_entirely(|input| specified::LengthPercentage::parse(&context(), input))
+    }
+
+    #[test]
+    fn length_calculations_retain_tree_counting_functions() {
+        for css in ["calc(10px * sibling-index())", "calc(5% * sibling-count())"] {
+            let value = parse_length_percentage(css)
+                .expect("tree-counting functions must parse in calculations");
+            assert_eq!(value.to_css_string(), css);
+        }
+
+        assert!(parse_length_percentage("calc(10px * sibling-index(1))").is_err());
     }
 }
