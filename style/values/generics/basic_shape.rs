@@ -335,28 +335,28 @@ pub use self::GenericShapeOutside as ShapeOutside;
 )]
 #[repr(u8)]
 #[typed_value(derive_fields)]
-pub enum GenericObjectViewBox<BasicShape> {
+pub enum GenericObjectViewBox<BasicShapeRect> {
     #[animation(error)]
     None,
     #[typed_value(skip)]
-    Shape(#[animation(field_bound)] Box<BasicShape>),
+    Rect(#[animation(field_bound)] Box<BasicShapeRect>),
 }
 
-impl<BasicShape: ToCss> ToCss for GenericObjectViewBox<BasicShape> {
+impl<BasicShapeRect: ToCss> ToCss for GenericObjectViewBox<BasicShapeRect> {
     fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
     where
         W: Write,
     {
         match self {
             Self::None => dest.write_str("none"),
-            Self::Shape(shape) => shape.to_css(dest),
+            Self::Rect(rect) => rect.to_css(dest),
         }
     }
 }
 
 pub use self::GenericObjectViewBox as ObjectViewBox;
 
-impl<BasicShape> ToAnimatedZero for ObjectViewBox<BasicShape> {
+impl<BasicShapeRect> ToAnimatedZero for ObjectViewBox<BasicShapeRect> {
     fn to_animated_zero(&self) -> Result<Self, ()> {
         Err(())
     }

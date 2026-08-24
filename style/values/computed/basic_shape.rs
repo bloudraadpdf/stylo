@@ -32,7 +32,7 @@ pub type BorderShapePath = generic::BorderShapePath<BasicShape>;
 pub type ShapeOutside = generic::GenericShapeOutside<BasicShape, Image>;
 
 /// A computed `object-view-box` value.
-pub type ObjectViewBox = generic::GenericObjectViewBox<BasicShape>;
+pub type ObjectViewBox = generic::GenericObjectViewBox<InsetRect>;
 
 /// A computed basic shape.
 pub type BasicShape = generic::GenericBasicShape<Angle, Position, LengthPercentage, InsetRect>;

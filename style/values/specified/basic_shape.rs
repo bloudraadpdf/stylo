@@ -47,7 +47,7 @@ pub type BorderShapePath = generic::BorderShapePath<BasicShape>;
 pub type ShapeOutside = generic::GenericShapeOutside<BasicShape, Image>;
 
 /// A specified `object-view-box` value.
-pub type ObjectViewBox = generic::GenericObjectViewBox<BasicShape>;
+pub type ObjectViewBox = generic::GenericObjectViewBox<BasicShapeRect>;
 
 /// A specified value for `at <position>` in circle() and ellipse().
 // Note: its computed value is the same as computed::position::Position. We just want to always use
@@ -287,9 +287,12 @@ impl Parse for ObjectViewBox {
 
         let rectangular_shapes =
             AllowedBasicShapes::INSET | AllowedBasicShapes::XYWH | AllowedBasicShapes::RECT;
-        BasicShape::parse(context, input, rectangular_shapes, ShapeType::Outline)
-            .map(Box::new)
-            .map(Self::Shape)
+        let BasicShape::Rect(rect) =
+            BasicShape::parse(context, input, rectangular_shapes, ShapeType::Outline)?
+        else {
+            unreachable!("rectangular basic-shape flags produced a non-rectangular shape")
+        };
+        Ok(Self::Rect(Box::new(rect)))
     }
 }
 
