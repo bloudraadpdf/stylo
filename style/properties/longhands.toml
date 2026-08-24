@@ -6394,6 +6394,14 @@ has_effect_on_gecko_scrollbars = false
 spec = "https://drafts.csswg.org/css-text-4/#text-autospace-property"
 affects = "layout"
 
+[text-spacing-trim]
+struct = "inherited_text"
+spec = "https://drafts.csswg.org/css-text-4/#text-spacing-trim-property"
+animation_type = "discrete"
+servo_restyle_damage = "rebuild_box"
+affects = "layout"
+keyword = { values = ["normal", "space-all", "space-first", "trim-start", "trim-both", "trim-all", "auto"] }
+
 [text-decoration-skip-ink]
 type = "TextDecorationSkipInk"
 initial = "computed::TextDecorationSkipInk::Auto"
