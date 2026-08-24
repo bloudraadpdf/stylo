@@ -6386,9 +6386,8 @@ affects = "layout"
 
 [text-autospace]
 type = "TextAutospace"
-initial = "computed::text::TextAutospace::NO_AUTOSPACE"
+initial = "computed::text::TextAutospace::NORMAL"
 struct = "inherited_text"
-engine = "gecko"
 animation_type = "discrete"
 gecko_pref = "layout.css.text-autospace.enabled"
 has_effect_on_gecko_scrollbars = false
