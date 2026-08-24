@@ -15,10 +15,10 @@ use crate::values::{normalize, serialize_percentage, CSSFloat};
 use cssparser::{Parser, Token};
 use std::fmt::{self, Write};
 use style_traits::values::specified::AllowedNumericType;
-use style_traits::{CssWriter, ParseError, SpecifiedValueInfo, ToCss};
+use style_traits::{CssWriter, ParseError, SpecifiedValueInfo, ToCss, ToTyped, TypedValue};
 
 /// A percentage value.
-#[derive(Clone, Copy, Debug, Default, MallocSizeOf, PartialEq, ToShmem, ToTyped)]
+#[derive(Clone, Debug, Default, MallocSizeOf, ToShmem)]
 pub struct Percentage {
     /// The percentage value as a float.
     ///
@@ -27,6 +27,16 @@ pub struct Percentage {
     /// If this percentage came from a calc() expression, this tells how
     /// clamping should be done on the value.
     calc_clamping_mode: Option<AllowedNumericType>,
+    /// An expression which requires computed-value context.
+    calc: Option<Box<CalcNode>>,
+}
+
+impl PartialEq for Percentage {
+    fn eq(&self, other: &Self) -> bool {
+        self.calc_clamping_mode == other.calc_clamping_mode
+            && self.calc == other.calc
+            && (self.value == other.value || (self.value.is_nan() && other.value.is_nan()))
+    }
 }
 
 impl ToCss for Percentage {
@@ -34,16 +44,19 @@ impl ToCss for Percentage {
     where
         W: Write,
     {
-        if self.calc_clamping_mode.is_some() {
-            dest.write_str("calc(")?;
+        match self.calc {
+            Some(ref calc) => calc.to_css(dest),
+            None => {
+                if self.calc_clamping_mode.is_some() {
+                    dest.write_str("calc(")?;
+                }
+                serialize_percentage(self.value, dest)?;
+                if self.calc_clamping_mode.is_some() {
+                    dest.write_char(')')?;
+                }
+                Ok(())
+            },
         }
-
-        serialize_percentage(self.value, dest)?;
-
-        if self.calc_clamping_mode.is_some() {
-            dest.write_char(')')?;
-        }
-        Ok(())
     }
 }
 
@@ -56,6 +69,18 @@ impl Percentage {
         Self {
             value,
             calc_clamping_mode,
+            calc: None,
+        }
+    }
+
+    pub(super) fn from_calc_node(
+        node: CalcNode,
+        clamping_mode: Option<AllowedNumericType>,
+    ) -> Self {
+        Self {
+            value: CSSFloat::NAN,
+            calc_clamping_mode: clamping_mode,
+            calc: Some(Box::new(node)),
         }
     }
 
@@ -70,6 +95,7 @@ impl Percentage {
         Percentage {
             value: 0.,
             calc_clamping_mode: None,
+            calc: None,
         }
     }
 
@@ -79,18 +105,44 @@ impl Percentage {
         Percentage {
             value: 1.,
             calc_clamping_mode: None,
+            calc: None,
         }
     }
 
     /// Gets the underlying value for this float.
     pub fn get(&self) -> CSSFloat {
+        self.clamp(self.resolve_without_context())
+    }
+
+    /// Returns the value when it can be resolved without element context.
+    pub fn resolve(&self) -> Option<CSSFloat> {
+        let value = match self.calc {
+            Some(ref calc) => calc.resolve_percentage_without_context().ok()?,
+            None => self.value,
+        };
+        Some(self.clamp(value))
+    }
+
+    fn resolve_without_context(&self) -> CSSFloat {
+        self.calc
+            .as_ref()
+            .and_then(|calc| calc.resolve_percentage_without_context().ok())
+            .unwrap_or(self.value)
+    }
+
+    fn clamp(&self, value: CSSFloat) -> CSSFloat {
         self.calc_clamping_mode
-            .map_or(self.value, |mode| mode.clamp(self.value))
+            .map_or(value, |mode| mode.clamp(value))
     }
 
     /// Returns this percentage as a number.
     pub fn to_number(&self) -> Number {
-        Number::new_with_clamping_mode(self.value, self.calc_clamping_mode)
+        match self.calc {
+            Some(ref calc) => {
+                Number::from_calc_node(calc.percentage_as_number(), self.calc_clamping_mode)
+            },
+            None => Number::new_with_clamping_mode(self.value, self.calc_clamping_mode),
+        }
     }
 
     /// Returns the calc() clamping mode for this percentage.
@@ -98,12 +150,19 @@ impl Percentage {
         self.calc_clamping_mode
     }
 
+    /// Returns the retained calculation tree, if this value is contextual.
+    pub(super) fn calc_node(&self) -> Option<&CalcNode> {
+        self.calc.as_deref()
+    }
+
     /// Reverses this percentage, preserving calc-ness.
     ///
     /// For example: If it was 20%, convert it into 80%.
     pub fn reverse(&mut self) {
-        let new_value = 1. - self.value;
-        self.value = new_value;
+        match self.calc {
+            Some(ref mut calc) => **calc = calc.reversed_percentage(),
+            None => self.value = 1. - self.value,
+        }
     }
 
     /// Parses a specific kind of percentage.
@@ -121,11 +180,11 @@ impl Percentage {
             },
             Token::Function(ref name) => {
                 let function = CalcNode::math_function(context, name, location)?;
-                let value = CalcNode::parse_percentage(context, input, function)?;
-                Ok(Percentage {
-                    value,
-                    calc_clamping_mode: Some(num_context),
-                })
+                let node = CalcNode::parse_percentage_node(context, input, function)?;
+                match node.resolve_percentage_without_context() {
+                    Ok(value) => Ok(Percentage::new_with_clamping_mode(value, Some(num_context))),
+                    Err(()) => Ok(Percentage::from_calc_node(node, Some(num_context))),
+                }
             },
             ref t => Err(location.new_unexpected_token_error(t.clone())),
         }
@@ -154,6 +213,7 @@ impl Percentage {
         Percentage {
             value: self.value.min(1.),
             calc_clamping_mode: self.calc_clamping_mode,
+            calc: self.calc,
         }
     }
 }
@@ -172,8 +232,11 @@ impl ToComputedValue for Percentage {
     type ComputedValue = ComputedPercentage;
 
     #[inline]
-    fn to_computed_value(&self, _: &Context) -> Self::ComputedValue {
-        ComputedPercentage(normalize(self.get()))
+    fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
+        let value = self.calc.as_ref().map_or(self.value, |calc| {
+            calc.resolve_percentage(context).unwrap_or(CSSFloat::NAN)
+        });
+        ComputedPercentage(normalize(self.clamp(value)))
     }
 
     #[inline]
@@ -183,6 +246,15 @@ impl ToComputedValue for Percentage {
 }
 
 impl SpecifiedValueInfo for Percentage {}
+
+impl ToTyped for Percentage {
+    fn to_typed(&self) -> Option<TypedValue> {
+        match self.calc {
+            Some(ref calc) => calc.to_typed(),
+            None => None,
+        }
+    }
+}
 
 /// Turns the percentage into a plain float.
 pub trait ToPercentage {
@@ -221,6 +293,10 @@ impl NonNegativePercentage {
     /// Convert to ComputedPercentage, for FontFaceRule size-adjust getter.
     #[inline]
     pub fn compute(&self) -> ComputedPercentage {
-        ComputedPercentage(self.0.get())
+        ComputedPercentage(
+            self.0
+                .resolve()
+                .expect("font-face percentages cannot depend on an element"),
+        )
     }
 }

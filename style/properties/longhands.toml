@@ -4532,6 +4532,7 @@ affects = ""
 
 [-bd-pdf-form-field-mk-icon-fit]
 type = "BdPdfFormFieldMkIconFit"
+boxed = true
 initial = "computed::BdPdfFormFieldMkIconFit::None"
 struct = "counters"
 initial_specified_value = "specified::BdPdfFormFieldMkIconFit::None"

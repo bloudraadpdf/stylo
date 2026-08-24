@@ -9,6 +9,7 @@
 use crate::color::parsing::ChannelKeyword;
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
+use crate::stylesheets::CssRuleType;
 use crate::values::computed::{Context, ToComputedValue};
 use crate::values::generics::calc::{
     self as generic, CalcNodeLeaf, CalcUnits, MinMaxOp, ModRemOp, PositivePercentageBasis,
@@ -722,6 +723,21 @@ impl CalcNode {
                 if name.eq_ignore_ascii_case("sibling-index")
                     || name.eq_ignore_ascii_case("sibling-count") =>
             {
+                let rule_types = context.rule_types();
+                if [
+                    CssRuleType::FontFace,
+                    CssRuleType::FontFeatureValues,
+                    CssRuleType::FontPaletteValues,
+                    CssRuleType::CounterStyle,
+                    CssRuleType::Page,
+                    CssRuleType::BdColour,
+                    CssRuleType::ColorProfile,
+                ]
+                .into_iter()
+                .any(|rule_type| rule_types.contains(rule_type))
+                {
+                    return Err(location.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+                }
                 let leaf = if name.eq_ignore_ascii_case("sibling-index") {
                     Leaf::SiblingIndex
                 } else {
@@ -1309,15 +1325,25 @@ impl CalcNode {
         input: &mut Parser<'i, 't>,
         function: MathFunction,
     ) -> Result<CSSFloat, ParseError<'i>> {
+        Self::parse_percentage_node(context, input, function)?
+            .to_percentage()
+            .map(crate::values::normalize)
+            .map_err(|()| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
+    }
+
+    /// Parses a percentage calculation while retaining its expression tree.
+    pub fn parse_percentage_node<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+        function: MathFunction,
+    ) -> Result<Self, ParseError<'i>> {
         Self::parse(
             context,
             input,
             function,
             AllowParse::new(CalcUnits::PERCENTAGE),
         )?
-        .to_percentage()
-        .map(crate::values::normalize)
-        .map_err(|()| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
+        .require_unit(input, CalcUnits::PERCENTAGE)
     }
 
     /// Convenience parsing function for `<length>`.
@@ -1340,14 +1366,22 @@ impl CalcNode {
     ) -> Result<Self, ParseError<'i>> {
         let mut allowed = AllowParse::new(CalcUnits::LENGTH_PERCENTAGE);
         allowed.allow_size_keyword = true;
-        let node = Self::parse_argument(context, input, allowed)?;
-        let unit = node
+        Self::parse_argument(context, input, allowed)?
+            .require_unit(input, CalcUnits::LENGTH_PERCENTAGE)
+    }
+
+    fn require_unit<'i, 't>(
+        self,
+        input: &Parser<'i, 't>,
+        required: CalcUnits,
+    ) -> Result<Self, ParseError<'i>> {
+        let unit = self
             .unit()
             .map_err(|()| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))?;
-        if !CalcUnits::LENGTH_PERCENTAGE.intersects(unit) {
+        if !required.intersects(unit) {
             return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
         }
-        Ok(node)
+        Ok(self)
     }
 
     /// Convenience parsing function for `<number>`.
@@ -1389,6 +1423,47 @@ impl CalcNode {
     /// Resolve a `<number>` calculation which has no contextual units.
     pub fn resolve_number_without_context(&self) -> Result<CSSFloat, ()> {
         self.to_number()
+    }
+
+    /// Resolves a percentage calculation with element-dependent leaves.
+    pub fn resolve_percentage(&self, context: &Context) -> Result<CSSFloat, ()> {
+        let computed = self.map_leaves(|leaf| match *leaf {
+            Leaf::SiblingIndex => Leaf::Number(context.sibling_index()),
+            Leaf::SiblingCount => Leaf::Number(context.sibling_count()),
+            _ => leaf.clone(),
+        });
+        computed.to_percentage()
+    }
+
+    /// Resolves a percentage calculation which has no contextual leaves.
+    pub fn resolve_percentage_without_context(&self) -> Result<CSSFloat, ()> {
+        self.to_percentage()
+    }
+
+    /// Converts a percentage-valued expression into its equivalent number.
+    pub fn percentage_as_number(&self) -> Self {
+        self.map_leaves(|leaf| match *leaf {
+            Leaf::Percentage(value) => Leaf::Number(value),
+            _ => leaf.clone(),
+        })
+    }
+
+    /// Converts a number-valued expression into its equivalent percentage.
+    pub fn number_as_percentage(&self) -> Self {
+        let children = vec![self.clone(), Self::Leaf(Leaf::Percentage(1.0))];
+        let mut node = Self::Product(children.into_boxed_slice().into());
+        node.simplify_and_sort();
+        node
+    }
+
+    /// Returns `100% - self` while retaining contextual leaves.
+    pub fn reversed_percentage(&self) -> Self {
+        let mut value = self.clone();
+        value.negate();
+        let children = vec![Self::Leaf(Leaf::Percentage(1.0)), value];
+        let mut node = Self::Sum(children.into_boxed_slice().into());
+        node.simplify_and_sort();
+        node
     }
 
     /// Convenience parsing function for `<number>`.
@@ -1451,13 +1526,17 @@ mod tree_counting_tests {
     use style_traits::ParsingMode;
 
     fn context() -> ParserContext<'static> {
+        context_for(CssRuleType::Style)
+    }
+
+    fn context_for(rule_type: CssRuleType) -> ParserContext<'static> {
         let url_data = Box::leak(Box::new(UrlExtraData::from(
             url::Url::parse("https://example.invalid/").unwrap(),
         )));
         ParserContext::new(
             Origin::Author,
             url_data,
-            Some(CssRuleType::Style),
+            Some(rule_type),
             ParsingMode::DEFAULT,
             QuirksMode::NoQuirks,
             Default::default(),
@@ -1510,6 +1589,43 @@ mod tree_counting_tests {
                 .expect("integer calculations must survive until computed-value time");
             assert_eq!(integer.to_css_string(), css);
             assert!(integer.resolve().is_none());
+        }
+    }
+
+    #[test]
+    fn percentage_values_retain_tree_counting_calculations() {
+        for css in ["calc(10% * sibling-index())", "calc(25% * sibling-count())"] {
+            let mut input = ParserInput::new(css);
+            let percentage = Parser::new(&mut input)
+                .parse_entirely(|input| specified::Percentage::parse(&context(), input))
+                .expect("percentage calculations must survive until computed-value time");
+
+            assert_eq!(percentage.to_css_string(), css);
+            assert!(percentage.resolve().is_none());
+            assert_eq!(
+                specified::LengthPercentage::from(percentage.clone()).to_css_string(),
+                css
+            );
+            assert!(percentage.to_number().resolve().is_none());
+        }
+    }
+
+    #[test]
+    fn descriptor_values_reject_tree_counting_calculations() {
+        for rule_type in [
+            CssRuleType::FontFace,
+            CssRuleType::FontFeatureValues,
+            CssRuleType::FontPaletteValues,
+            CssRuleType::CounterStyle,
+            CssRuleType::Page,
+        ] {
+            let mut input = ParserInput::new("calc(10% * sibling-index())");
+            assert!(Parser::new(&mut input)
+                .parse_entirely(|input| specified::Percentage::parse(
+                    &context_for(rule_type),
+                    input
+                ))
+                .is_err());
         }
     }
 }

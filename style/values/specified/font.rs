@@ -415,7 +415,7 @@ impl ToComputedValue for FontStyle {
 /// https://drafts.csswg.org/css-fonts-4/#font-stretch-prop
 #[allow(missing_docs)]
 #[derive(
-    Clone, Copy, Debug, MallocSizeOf, Parse, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped,
+    Clone, Debug, MallocSizeOf, Parse, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped,
 )]
 pub enum FontStretch {
     Stretch(NonNegativePercentage),
@@ -1729,14 +1729,31 @@ impl Parse for VariationValue<Number> {
 /// A metrics override value for a @font-face descriptor
 ///
 /// https://drafts.csswg.org/css-fonts/#font-metrics-override-desc
-#[derive(
-    Clone, Copy, Debug, MallocSizeOf, Parse, PartialEq, SpecifiedValueInfo, ToCss, ToShmem,
-)]
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem)]
 pub enum MetricsOverride {
     /// A non-negative `<percentage>` of the computed font size
     Override(NonNegativePercentage),
     /// Normal metrics from the font.
     Normal,
+}
+
+impl Parse for MetricsOverride {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if input
+            .try_parse(|input| input.expect_ident_matching("normal"))
+            .is_ok()
+        {
+            return Ok(Self::Normal);
+        }
+        let percentage = NonNegativePercentage::parse(context, input)?;
+        if percentage.0.resolve().is_none() {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+        Ok(Self::Override(percentage))
+    }
 }
 
 impl MetricsOverride {
@@ -1752,9 +1769,9 @@ impl MetricsOverride {
     /// the absence of an override (i.e. 'normal').
     #[inline]
     pub fn compute(&self) -> ComputedPercentage {
-        match *self {
+        match self {
             MetricsOverride::Normal => ComputedPercentage(-1.0),
-            MetricsOverride::Override(percent) => ComputedPercentage(percent.0.get()),
+            MetricsOverride::Override(percent) => ComputedPercentage(percent.0.resolve().unwrap()),
         }
     }
 }

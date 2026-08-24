@@ -15,7 +15,6 @@ use crate::values::generics::color::{
     ColorMixFlags, GenericCaretColor, GenericColorMix, GenericColorMixItem, GenericColorOrAuto,
     GenericLightDark,
 };
-use crate::values::specified::percentage::ToPercentage;
 use crate::values::specified::Percentage;
 use crate::values::{normalize, CustomIdent};
 use cssparser::{match_ignore_ascii_case, BasicParseErrorKind, ParseErrorKind, Parser, Token};
@@ -65,6 +64,13 @@ impl ColorMix {
                     percentage = try_parse_percentage(input);
                 }
 
+                if percentage
+                    .as_ref()
+                    .is_some_and(|value| value.resolve().is_none())
+                {
+                    return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+                }
+
                 items.push((color, percentage));
 
                 if input.try_parse(|i| i.expect_comma()).is_err() {
@@ -87,7 +93,7 @@ impl ColorMix {
             let (mut sum_specified, mut missing) = (0.0, 0);
             for (_, percentage) in items.iter() {
                 if let Some(p) = percentage {
-                    sum_specified += p.to_percentage();
+                    sum_specified += p.resolve().unwrap();
                 } else {
                     missing += 1;
                 }
@@ -102,7 +108,7 @@ impl ColorMix {
             if let Some(default) = default_for_missing_items {
                 for (_, percentage) in items.iter_mut() {
                     if percentage.is_none() {
-                        *percentage = Some(default);
+                        *percentage = Some(default.clone());
                     }
                 }
             }
@@ -112,7 +118,7 @@ impl ColorMix {
                 .into_iter()
                 .map(|(color, percentage)| {
                     let percentage = percentage.expect("percentage filled above");
-                    total += percentage.to_percentage();
+                    total += percentage.resolve().unwrap();
                     GenericColorMixItem { color, percentage }
                 })
                 .collect::<ColorMixItemList<_>>();
@@ -759,8 +765,6 @@ impl Color {
     ///   https://drafts.csswg.org/css-color-5/#absolute-color
     /// Returns None if the specified color is not valid as an absolute color.
     pub fn resolve_to_absolute(&self) -> Option<AbsoluteColor> {
-        use crate::values::specified::percentage::ToPercentage;
-
         match self {
             Self::Absolute(c) => Some(c.color),
             Self::ColorFunction(ref color_function) => color_function.resolve_to_absolute().ok(),
@@ -771,7 +775,7 @@ impl Color {
                 for item in mix.items.iter() {
                     items.push(mix::ColorMixItem::new(
                         item.color.resolve_to_absolute()?,
-                        item.percentage.to_percentage(),
+                        item.percentage.resolve()?,
                     ))
                 }
 
@@ -976,9 +980,13 @@ impl Color {
 
                 let mut items = ColorMixItemList::with_capacity(mix.items.len());
                 for item in mix.items.iter() {
+                    let percentage = match context {
+                        Some(context) => item.percentage.to_computed_value(context),
+                        None => Percentage(item.percentage.resolve()?),
+                    };
                     items.push(GenericColorMixItem {
                         color: item.color.to_computed_color(context)?,
-                        percentage: Percentage(item.percentage.get()),
+                        percentage,
                     });
                 }
 

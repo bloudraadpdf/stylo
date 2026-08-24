@@ -124,14 +124,29 @@ impl TimingFunction {
                 let output = output
                     .resolve()
                     .ok_or_else(|| i.new_custom_error(StyleParseErrorKind::UnspecifiedError))?;
-                builder.push(output, input_start.map(|v| v.get()).into());
+                if input_start
+                    .as_ref()
+                    .is_some_and(|value| value.resolve().is_none())
+                    || input_end
+                        .as_ref()
+                        .is_some_and(|value| value.resolve().is_none())
+                {
+                    return Err(i.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+                }
+                builder.push(
+                    output,
+                    input_start.as_ref().and_then(Percentage::resolve).into(),
+                );
                 num_specified_stops += 1;
                 if input_end.is_some() {
                     debug_assert!(
                         input_start.is_some(),
                         "Input end valid but not input start?"
                     );
-                    builder.push(output, input_end.map(|v| v.get()).into());
+                    builder.push(
+                        output,
+                        input_end.as_ref().and_then(Percentage::resolve).into(),
+                    );
                 }
 
                 Ok(())

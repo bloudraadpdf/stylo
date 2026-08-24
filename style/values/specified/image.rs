@@ -666,6 +666,8 @@ impl Gradient {
 
                     if matches!(&x, Component::Number(NumberOrPercentage::Number(number)) if number.resolve().is_none())
                         || matches!(&y, Component::Number(NumberOrPercentage::Number(number)) if number.resolve().is_none())
+                        || matches!(&x, Component::Number(NumberOrPercentage::Percentage(percentage)) if percentage.resolve().is_none())
+                        || matches!(&y, Component::Number(NumberOrPercentage::Percentage(percentage)) if percentage.resolve().is_none())
                     {
                         return Err(i.new_custom_error(StyleParseErrorKind::UnspecifiedError));
                     }
@@ -711,7 +713,7 @@ impl Gradient {
             fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
                 match (self.clone().into(), other.clone().into()) {
                     (NumberOrPercentage::Percentage(a), NumberOrPercentage::Percentage(b)) => {
-                        a.get().partial_cmp(&b.get())
+                        a.resolve()?.partial_cmp(&b.resolve()?)
                     },
                     (NumberOrPercentage::Number(a), NumberOrPercentage::Number(b)) => {
                         a.resolve()?.partial_cmp(&b.resolve()?)
@@ -799,7 +801,9 @@ impl Gradient {
                         let p = match_ignore_ascii_case! { &function,
                             "color-stop" => {
                                 let value = NumberOrPercentage::parse(context, i)?;
-                                if matches!(&value, NumberOrPercentage::Number(number) if number.resolve().is_none()) {
+                                if matches!(&value, NumberOrPercentage::Number(number) if number.resolve().is_none())
+                                    || matches!(&value, NumberOrPercentage::Percentage(percentage) if percentage.resolve().is_none())
+                                {
                                     return Err(i.new_custom_error(StyleParseErrorKind::UnspecifiedError));
                                 }
                                 let p = value.to_percentage();

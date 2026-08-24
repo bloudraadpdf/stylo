@@ -281,36 +281,6 @@ pub enum FontDisplay {
     Optional,
 }
 
-macro_rules! impl_range {
-    ($range:ident, $component:ident) => {
-        impl Parse for $range {
-            fn parse<'i, 't>(
-                context: &ParserContext,
-                input: &mut Parser<'i, 't>,
-            ) -> Result<Self, ParseError<'i>> {
-                let first = $component::parse(context, input)?;
-                let second = input
-                    .try_parse(|input| $component::parse(context, input))
-                    .unwrap_or_else(|_| first.clone());
-                Ok($range(first, second))
-            }
-        }
-        impl ToCss for $range {
-            fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
-            where
-                W: fmt::Write,
-            {
-                self.0.to_css(dest)?;
-                if self.0 != self.1 {
-                    dest.write_char(' ')?;
-                    self.1.to_css(dest)?;
-                }
-                Ok(())
-            }
-        }
-    };
-}
-
 /// The font-weight descriptor:
 ///
 /// https://drafts.csswg.org/css-fonts-4/#descdef-font-face-font-weight
@@ -384,7 +354,44 @@ impl FontWeightRange {
 /// https://drafts.csswg.org/css-fonts-4/#descdef-font-face-font-stretch
 #[derive(Clone, Debug, PartialEq, ToShmem)]
 pub struct FontStretchRange(pub SpecifiedFontStretch, pub SpecifiedFontStretch);
-impl_range!(FontStretchRange, SpecifiedFontStretch);
+
+impl Parse for FontStretchRange {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        fn is_resolvable(value: &SpecifiedFontStretch) -> bool {
+            match value {
+                SpecifiedFontStretch::Stretch(percentage) => percentage.0.resolve().is_some(),
+                SpecifiedFontStretch::Keyword(_) => true,
+                SpecifiedFontStretch::System(_) => false,
+            }
+        }
+
+        let first = SpecifiedFontStretch::parse(context, input)?;
+        let second = input
+            .try_parse(|input| SpecifiedFontStretch::parse(context, input))
+            .unwrap_or_else(|_| first.clone());
+        if !is_resolvable(&first) || !is_resolvable(&second) {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+        Ok(Self(first, second))
+    }
+}
+
+impl ToCss for FontStretchRange {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: fmt::Write,
+    {
+        self.0.to_css(dest)?;
+        if self.0 != self.1 {
+            dest.write_char(' ')?;
+            self.1.to_css(dest)?;
+        }
+        Ok(())
+    }
+}
 
 /// The computed representation of the above, so that Gecko can read them
 /// easily.
@@ -398,7 +405,10 @@ impl FontStretchRange {
         fn compute_stretch(s: &SpecifiedFontStretch) -> FontStretch {
             match *s {
                 SpecifiedFontStretch::Keyword(ref kw) => kw.compute(),
-                SpecifiedFontStretch::Stretch(ref p) => FontStretch::from_percentage(p.0.get()),
+                SpecifiedFontStretch::Stretch(ref p) => FontStretch::from_percentage(
+                    p.0.resolve()
+                        .expect("font-face percentages cannot depend on an element"),
+                ),
                 SpecifiedFontStretch::System(..) => unreachable!(),
             }
         }

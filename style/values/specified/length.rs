@@ -2025,7 +2025,12 @@ impl From<NoCalcLength> for LengthPercentage {
 impl From<Percentage> for LengthPercentage {
     #[inline]
     fn from(pc: Percentage) -> Self {
-        if let Some(clamping_mode) = pc.calc_clamping_mode() {
+        if let Some(node) = pc.calc_node() {
+            LengthPercentage::Calc(Box::new(CalcLengthPercentage {
+                clamping_mode: pc.calc_clamping_mode().unwrap(),
+                node: node.clone(),
+            }))
+        } else if let Some(clamping_mode) = pc.calc_clamping_mode() {
             LengthPercentage::Calc(Box::new(CalcLengthPercentage {
                 clamping_mode,
                 node: CalcNode::Leaf(calc::Leaf::Percentage(pc.get())),

@@ -383,7 +383,7 @@ pub mod url;
 /// <angle> | <percentage>
 /// https://drafts.csswg.org/css-values/#typedef-angle-percentage
 #[allow(missing_docs)]
-#[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem)]
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem)]
 pub enum AngleOrPercentage {
     Percentage(Percentage),
     Angle(Angle),
@@ -525,9 +525,25 @@ impl Number {
         }
     }
 
+    pub(super) fn from_calc_node(
+        node: CalcNode,
+        calc_clamping_mode: Option<AllowedNumericType>,
+    ) -> Self {
+        Self {
+            value: CSSFloat::NAN,
+            calc_clamping_mode,
+            calc: Some(Box::new(node)),
+        }
+    }
+
     /// Returns this percentage as a number.
     pub fn to_percentage(&self) -> Percentage {
-        Percentage::new_with_clamping_mode(self.resolve_without_context(), self.calc_clamping_mode)
+        match self.calc {
+            Some(ref calc) => {
+                Percentage::from_calc_node(calc.number_as_percentage(), self.calc_clamping_mode)
+            },
+            None => Percentage::new_with_clamping_mode(self.value, self.calc_clamping_mode),
+        }
     }
 
     /// Returns a new number with the value `val`.
@@ -803,7 +819,7 @@ impl NumberOrPercentage {
     /// Convert the number or the percentage to a number.
     pub fn to_percentage(&self) -> Percentage {
         match self {
-            Self::Percentage(p) => *p,
+            Self::Percentage(p) => p.clone(),
             Self::Number(n) => n.to_percentage(),
         }
     }
