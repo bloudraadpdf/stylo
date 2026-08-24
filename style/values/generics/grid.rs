@@ -12,7 +12,7 @@ use crate::values::{CSSFloat, CustomIdent};
 use crate::{One, Zero};
 use cssparser::Parser;
 use std::fmt::{self, Write};
-use std::{cmp, usize};
+use std::usize;
 use style_traits::{CssWriter, ParseError, StyleParseErrorKind, ToCss};
 
 /// These are the limits that we choose to clamp grid line numbers to.
@@ -173,16 +173,19 @@ impl Parse for GridLine<specified::Integer> {
 
                 grid_line.is_span = true;
             } else if let Ok(i) = input.try_parse(|i| specified::Integer::parse(context, i)) {
-                // FIXME(emilio): Probably shouldn't reject if it's calc()...
-                let value = i.value();
-                if value == 0 || val_before_span || !grid_line.line_num.is_zero() {
+                if matches!(i.resolve(), Some(0))
+                    || val_before_span
+                    || !grid_line.line_num.is_zero()
+                {
                     return Err(location.new_custom_error(StyleParseErrorKind::UnspecifiedError));
                 }
 
-                grid_line.line_num = specified::Integer::new(cmp::max(
-                    MIN_GRID_LINE,
-                    cmp::min(value, MAX_GRID_LINE),
-                ));
+                grid_line.line_num = match i.resolve() {
+                    Some(value) => {
+                        specified::Integer::new(value.clamp(MIN_GRID_LINE, MAX_GRID_LINE))
+                    },
+                    None => i,
+                };
             } else if let Ok(name) = input.try_parse(|i| CustomIdent::parse(i, &["auto"])) {
                 if val_before_span || grid_line.ident.0 != atom!("") {
                     return Err(location.new_custom_error(StyleParseErrorKind::UnspecifiedError));
@@ -201,7 +204,7 @@ impl Parse for GridLine<specified::Integer> {
 
         if grid_line.is_span {
             if !grid_line.line_num.is_zero() {
-                if grid_line.line_num.value() <= 0 {
+                if matches!(grid_line.line_num.resolve(), Some(value) if value <= 0) {
                     // disallow negative integers for grid spans
                     return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
                 }
@@ -464,7 +467,7 @@ impl Parse for RepeatCount<specified::Integer> {
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
         if let Ok(mut i) = input.try_parse(|i| specified::Integer::parse_positive(context, i)) {
-            if i.value() > MAX_GRID_LINE {
+            if matches!(i.resolve(), Some(value) if value > MAX_GRID_LINE) {
                 i = specified::Integer::new(MAX_GRID_LINE);
             }
             return Ok(RepeatCount::Number(i));

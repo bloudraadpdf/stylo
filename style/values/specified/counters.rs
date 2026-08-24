@@ -20,30 +20,40 @@ use crate::values::CustomIdent;
 use cssparser::{match_ignore_ascii_case, Parser, Token};
 use selectors::parser::SelectorParseErrorKind;
 use std::fmt::{self, Write};
-use style_traits::{CssWriter, ParseError, SpecifiedValueInfo, StyleParseErrorKind, ToCss};
+use style_traits::{
+    CssWriter, ParseError, SpecifiedValueInfo, StyleParseErrorKind, ToCss, ToTyped, TypedValue,
+};
 
 /// A counter property's integer value.
 ///
 /// Counters use a wider implementation range than general CSS `<integer>`
 /// values so predefined counter styles can implement the optional East Asian
 /// range through 10^16 without losing the authored integer.
-#[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, ToShmem, ToTyped)]
-pub struct CounterInteger(i64);
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
+pub enum CounterInteger {
+    /// An integer literal in the extended counter range.
+    Literal(i64),
+    /// A calculation in the standard CSS integer range.
+    Calculation(Integer),
+}
 
 impl CounterInteger {
     fn new(value: i64) -> Self {
-        Self(value)
+        Self::Literal(value)
     }
 
-    /// Returns the counter integer.
-    pub fn value(self) -> i64 {
-        self.0
+    /// Returns the counter integer when it does not require element context.
+    pub fn resolve(&self) -> Option<i64> {
+        match self {
+            Self::Literal(value) => Some(*value),
+            Self::Calculation(value) => value.resolve().map(i64::from),
+        }
     }
 }
 
 impl PartialEq<i64> for CounterInteger {
     fn eq(&self, value: &i64) -> bool {
-        self.0 == *value
+        self.resolve().is_some_and(|resolved| resolved == *value)
     }
 }
 
@@ -69,15 +79,19 @@ impl Parse for CounterInteger {
         }) {
             return Ok(value);
         }
-        Integer::parse(context, input).map(|value| Self::new(i64::from(value.value())))
+        Integer::parse(context, input).map(Self::Calculation)
     }
 }
 
 impl ToComputedValue for CounterInteger {
     type ComputedValue = crate::values::computed::counters::CounterInteger;
 
-    fn to_computed_value(&self, _: &Context) -> Self::ComputedValue {
-        Self::ComputedValue::new(self.0)
+    fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
+        let value = match self {
+            Self::Literal(value) => *value,
+            Self::Calculation(value) => i64::from(value.to_computed_value(context)),
+        };
+        Self::ComputedValue::new(value)
     }
 
     fn from_computed_value(computed: &Self::ComputedValue) -> Self {
@@ -90,7 +104,19 @@ impl ToCss for CounterInteger {
     where
         W: Write,
     {
-        write!(dest, "{}", self.0)
+        match self {
+            Self::Literal(value) => write!(dest, "{}", value),
+            Self::Calculation(value) => value.to_css(dest),
+        }
+    }
+}
+
+impl ToTyped for CounterInteger {
+    fn to_typed(&self) -> Option<TypedValue> {
+        match self {
+            Self::Literal(_) => None,
+            Self::Calculation(value) => value.to_typed(),
+        }
     }
 }
 
@@ -190,7 +216,7 @@ fn parse_counters<'i, 't>(
 
         let value = match input.try_parse(|input| CounterInteger::parse(context, input)) {
             Ok(start) => {
-                if start.value() == i64::MIN {
+                if start.resolve() == Some(i64::MIN) {
                     // The spec says that values must be clamped to the valid range,
                     // and we reserve i64::MIN as an internal magic value.
                     // https://drafts.csswg.org/css-lists/#auto-numbering
@@ -740,8 +766,30 @@ mod tests {
             .parse_entirely(|input| CounterReset::parse(&context, input))
             .expect("wide counter integers should parse");
 
-        assert_eq!(reset[0].value.value(), -9_999_999_999_999_999);
-        assert_eq!(reset[1].value.value(), 10_000_000_000_000_000);
+        assert_eq!(reset[0].value.resolve(), Some(-9_999_999_999_999_999));
+        assert_eq!(reset[1].value.resolve(), Some(10_000_000_000_000_000));
+    }
+
+    #[test]
+    fn counter_properties_retain_tree_counting_calculations() {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input = ParserInput::new("chapter calc(2 * sibling-index())");
+        let reset = Parser::new(&mut input)
+            .parse_entirely(|input| CounterReset::parse(&context, input))
+            .expect("tree-dependent counter values should parse");
+
+        assert_eq!(reset[0].value.to_css_string(), "calc(2 * sibling-index())");
+        assert!(reset[0].value.resolve().is_none());
     }
 
     #[test]

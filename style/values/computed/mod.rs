@@ -1056,7 +1056,7 @@ impl ToComputedValue for specified::AngleOrPercentage {
 
     #[inline]
     fn to_computed_value(&self, context: &Context) -> AngleOrPercentage {
-        match *self {
+        match self {
             specified::AngleOrPercentage::Percentage(percentage) => {
                 AngleOrPercentage::Percentage(percentage.to_computed_value(context))
             },
@@ -1214,7 +1214,7 @@ impl ToComputedValue for specified::NumberOrPercentage {
 
     #[inline]
     fn to_computed_value(&self, context: &Context) -> NumberOrPercentage {
-        match *self {
+        match self {
             specified::NumberOrPercentage::Percentage(percentage) => {
                 NumberOrPercentage::Percentage(percentage.to_computed_value(context))
             },

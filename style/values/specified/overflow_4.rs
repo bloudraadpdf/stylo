@@ -97,9 +97,7 @@ impl Parse for BlockEllipsis {
 }
 
 /// A parser-validated positive specified line count.
-#[derive(
-    Clone, Copy, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped,
-)]
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
 #[repr(transparent)]
 pub struct PositiveLineCount(Integer);
 
@@ -141,9 +139,7 @@ impl Parse for PositiveLineCount {
 /// Grammar: `none | <integer>`. The integer is the maximum number of
 /// lines a fragmentation root may produce before triggering the
 /// `continue` policy.
-#[derive(
-    Clone, Copy, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped,
-)]
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
 #[repr(C, u8)]
 pub enum MaxLines {
     /// `none` — no cap.

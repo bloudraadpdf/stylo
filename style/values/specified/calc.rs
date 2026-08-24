@@ -1493,4 +1493,23 @@ mod tree_counting_tests {
 
         assert_eq!(value.to_css_string(), css);
     }
+
+    #[test]
+    fn numeric_values_retain_tree_counting_calculations() {
+        for css in ["calc(0.5 * sibling-index())", "calc(2 * sibling-count())"] {
+            let mut number_input = ParserInput::new(css);
+            let number = Parser::new(&mut number_input)
+                .parse_entirely(|input| specified::Number::parse(&context(), input))
+                .expect("number calculations must survive until computed-value time");
+            assert_eq!(number.to_css_string(), css);
+            assert!(number.resolve().is_none());
+
+            let mut integer_input = ParserInput::new(css);
+            let integer = Parser::new(&mut integer_input)
+                .parse_entirely(|input| specified::Integer::parse(&context(), input))
+                .expect("integer calculations must survive until computed-value time");
+            assert_eq!(integer.to_css_string(), css);
+            assert!(integer.resolve().is_none());
+        }
+    }
 }

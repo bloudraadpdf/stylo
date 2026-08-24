@@ -103,7 +103,7 @@ impl Parse for BdSource {
 /// "computed type matches specified type" round-trip the property
 /// generator emits for identity-computed wrappers. Identity-compute
 /// instead.
-#[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToShmem, ToTyped)]
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToShmem, ToTyped)]
 #[repr(C)]
 pub struct BdSourcePage(pub PositiveInteger);
 
@@ -112,12 +112,12 @@ impl crate::values::computed::ToComputedValue for BdSourcePage {
 
     #[inline]
     fn to_computed_value(&self, _ctx: &crate::values::computed::Context) -> Self {
-        *self
+        self.clone()
     }
 
     #[inline]
     fn from_computed_value(computed: &Self) -> Self {
-        *computed
+        computed.clone()
     }
 }
 

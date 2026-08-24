@@ -335,11 +335,11 @@ impl ToComputedValue for specified::Zoom {
     type ComputedValue = Zoom;
 
     #[inline]
-    fn to_computed_value(&self, _: &Context) -> Self::ComputedValue {
+    fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
         let n = match *self {
             Self::Normal => return Zoom::ONE,
             Self::Document => return Zoom::DOCUMENT,
-            Self::Value(ref n) => n.0.to_number().get(),
+            Self::Value(ref n) => n.0.to_number().to_computed_value(context),
         };
         if n == 0.0 {
             // For legacy reasons, zoom: 0 (and 0%) computes to 1. ¯\_(ツ)_/¯

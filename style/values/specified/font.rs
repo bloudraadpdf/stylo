@@ -140,7 +140,7 @@ pub const MAX_FONT_WEIGHT: f32 = 1000.;
 ///
 /// https://drafts.csswg.org/css-fonts-4/#propdef-font-weight
 #[derive(
-    Clone, Copy, Debug, MallocSizeOf, Parse, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped,
+    Clone, Debug, MallocSizeOf, Parse, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped,
 )]
 pub enum FontWeight {
     /// `<font-weight-absolute>`
@@ -177,7 +177,7 @@ impl ToComputedValue for FontWeight {
     #[inline]
     fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
         match *self {
-            FontWeight::Absolute(ref abs) => abs.compute(),
+            FontWeight::Absolute(ref abs) => abs.compute_with_context(context),
             FontWeight::Bolder => context
                 .builder
                 .get_parent_font()
@@ -203,7 +203,7 @@ impl ToComputedValue for FontWeight {
 /// An absolute font-weight value for a @font-face rule.
 ///
 /// https://drafts.csswg.org/css-fonts-4/#font-weight-absolute-values
-#[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem)]
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem)]
 pub enum AbsoluteFontWeight {
     /// A `<number>`, with the additional constraints specified in:
     ///
@@ -218,8 +218,19 @@ pub enum AbsoluteFontWeight {
 impl AbsoluteFontWeight {
     /// Returns the computed value for this absolute font weight.
     pub fn compute(&self) -> computed::FontWeight {
-        match *self {
+        match self {
             AbsoluteFontWeight::Weight(weight) => computed::FontWeight::from_float(weight.get()),
+            AbsoluteFontWeight::Normal => computed::FontWeight::NORMAL,
+            AbsoluteFontWeight::Bold => computed::FontWeight::BOLD,
+        }
+    }
+
+    /// Returns the computed value with access to element-dependent calculations.
+    pub fn compute_with_context(&self, context: &Context) -> computed::FontWeight {
+        match self {
+            AbsoluteFontWeight::Weight(weight) => {
+                computed::FontWeight::from_float(weight.to_computed_value(context))
+            },
             AbsoluteFontWeight::Normal => computed::FontWeight::NORMAL,
             AbsoluteFontWeight::Bold => computed::FontWeight::BOLD,
         }
@@ -235,8 +246,7 @@ impl Parse for AbsoluteFontWeight {
             // We could add another AllowedNumericType value, but it doesn't
             // seem worth it just for a single property with such a weird range,
             // so we do the clamping here manually.
-            if !number.was_calc()
-                && (number.get() < MIN_FONT_WEIGHT || number.get() > MAX_FONT_WEIGHT)
+            if matches!(number.resolve(), Some(value) if value < MIN_FONT_WEIGHT || value > MAX_FONT_WEIGHT)
             {
                 return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
             }
@@ -259,7 +269,7 @@ impl ToCss for SpecifiedFontStyle {
     where
         W: Write,
     {
-        match *self {
+        match self {
             generics::FontStyle::Italic => dest.write_str("italic"),
             generics::FontStyle::Oblique(ref angle) => {
                 // Not angle.is_zero() because we don't want to serialize
@@ -301,7 +311,7 @@ impl ToComputedValue for SpecifiedFontStyle {
     type ComputedValue = computed::FontStyle;
 
     fn to_computed_value(&self, _: &Context) -> Self::ComputedValue {
-        match *self {
+        match self {
             Self::Italic => computed::FontStyle::ITALIC,
             Self::Oblique(ref angle) => computed::FontStyle::oblique(angle.degrees()),
         }
@@ -733,9 +743,7 @@ impl Parse for FamilyName {
 
 /// A factor for one of the font-size-adjust metrics, which may be either a number
 /// or the `from-font` keyword.
-#[derive(
-    Clone, Copy, Debug, MallocSizeOf, Parse, PartialEq, SpecifiedValueInfo, ToCss, ToShmem,
-)]
+#[derive(Clone, Debug, MallocSizeOf, Parse, PartialEq, SpecifiedValueInfo, ToCss, ToShmem)]
 pub enum FontSizeAdjustFactor {
     /// An explicitly-specified number.
     Number(NonNegativeNumber),
@@ -1851,7 +1859,7 @@ impl Parse for MozScriptMinSize {
 /// A value for the `math-depth` property.
 /// https://mathml-refresh.github.io/mathml-core/#the-math-script-level-property
 #[cfg_attr(feature = "gecko", derive(MallocSizeOf))]
-#[derive(Clone, Copy, Debug, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
+#[derive(Clone, Debug, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
 pub enum MathDepth {
     /// Increment math-depth if math-style is compact.
     AutoAdd,
@@ -1944,7 +1952,7 @@ impl ToComputedValue for LineHeight {
 
     #[inline]
     fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
-        match *self {
+        match self {
             GenericLineHeight::Normal => GenericLineHeight::Normal,
             #[cfg(feature = "gecko")]
             GenericLineHeight::MozBlockHeight => GenericLineHeight::MozBlockHeight,

@@ -887,7 +887,7 @@ impl ToComputedValue for specified::FontSizeAdjust {
             }};
         }
 
-        match *self {
+        match self {
             Self::None => FontSizeAdjust::None,
             Self::ExHeight(val) => resolve!(ExHeight, val),
             Self::ExplicitExHeight(val) => resolve!(ExplicitExHeight, val),

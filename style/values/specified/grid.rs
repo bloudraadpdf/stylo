@@ -355,6 +355,9 @@ impl Parse for NameRepeat<Integer> {
         input.expect_function_matching("repeat")?;
         input.parse_nested_block(|i| {
             let count = RepeatCount::parse(context, i)?;
+            if matches!(count, RepeatCount::Number(ref value) if value.resolve().is_none()) {
+                return Err(i.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+            }
             // NameRepeat doesn't accept `auto-fit`
             // https://drafts.csswg.org/css-grid/#typedef-name-repeat
             if matches!(count, RepeatCount::AutoFit) {
@@ -397,9 +400,9 @@ impl LineNameListValue<Integer> {
         match *self {
             Self::LineNames(..) => 1,
             Self::Repeat(ref r) => {
-                match r.count {
+                match &r.count {
                     // Note: RepeatCount is always >= 1.
-                    RepeatCount::Number(v) => r.line_names.len() * v.value() as usize,
+                    RepeatCount::Number(v) => r.line_names.len() * v.resolve().unwrap() as usize,
                     _ => 0,
                 }
             },

@@ -627,7 +627,7 @@ impl Gradient {
         };
         type Point = GenericPosition<Component<X>, Component<Y>>;
 
-        #[derive(Clone, Copy, Parse)]
+        #[derive(Clone, Parse)]
         enum Component<S> {
             Center,
             Number(NumberOrPercentage),
@@ -664,6 +664,12 @@ impl Gradient {
                     let x = Component::parse(context, i)?;
                     let y = Component::parse(context, i)?;
 
+                    if matches!(&x, Component::Number(NumberOrPercentage::Number(number)) if number.resolve().is_none())
+                        || matches!(&y, Component::Number(NumberOrPercentage::Number(number)) if number.resolve().is_none())
+                    {
+                        return Err(i.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+                    }
+
                     Ok(Self::new(x, y))
                 })
             }
@@ -691,7 +697,7 @@ impl Gradient {
                 match self {
                     Component::Center => PositionComponent::Center,
                     Component::Number(NumberOrPercentage::Number(number)) => {
-                        PositionComponent::Length(Length::from_px(number.value).into())
+                        PositionComponent::Length(Length::from_px(number.resolve().unwrap()).into())
                     },
                     Component::Number(NumberOrPercentage::Percentage(p)) => {
                         PositionComponent::Length(p.into())
@@ -703,12 +709,12 @@ impl Gradient {
 
         impl<S: Copy + Side> Component<S> {
             fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-                match ((*self).into(), (*other).into()) {
+                match (self.clone().into(), other.clone().into()) {
                     (NumberOrPercentage::Percentage(a), NumberOrPercentage::Percentage(b)) => {
                         a.get().partial_cmp(&b.get())
                     },
                     (NumberOrPercentage::Number(a), NumberOrPercentage::Number(b)) => {
-                        a.value.partial_cmp(&b.value)
+                        a.resolve()?.partial_cmp(&b.resolve()?)
                     },
                     (_, _) => None,
                 }
@@ -745,13 +751,19 @@ impl Gradient {
                 input.expect_comma()?;
                 let second_radius = Number::parse_non_negative(context, input)?;
 
-                let (reverse_stops, point, radius) = if second_radius.value >= first_radius.value {
-                    (false, second_point, second_radius)
-                } else {
-                    (true, first_point, first_radius)
+                let (Some(first_radius_value), Some(second_radius_value)) =
+                    (first_radius.resolve(), second_radius.resolve())
+                else {
+                    return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
                 };
 
-                let rad = Circle::Radius(NonNegative(Length::from_px(radius.value)));
+                let (reverse_stops, point, radius) = if second_radius_value >= first_radius_value {
+                    (false, second_point, second_radius_value)
+                } else {
+                    (true, first_point, first_radius_value)
+                };
+
+                let rad = Circle::Radius(NonNegative(Length::from_px(radius)));
                 let shape = generic::EndingShape::Circle(rad);
                 let position = Position::new(point.horizontal.into(), point.vertical.into());
                 let items = Gradient::parse_webkit_gradient_stops(context, input, reverse_stops)?;
@@ -786,7 +798,11 @@ impl Gradient {
                     let (color, mut p) = i.parse_nested_block(|i| {
                         let p = match_ignore_ascii_case! { &function,
                             "color-stop" => {
-                                let p = NumberOrPercentage::parse(context, i)?.to_percentage();
+                                let value = NumberOrPercentage::parse(context, i)?;
+                                if matches!(&value, NumberOrPercentage::Number(number) if number.resolve().is_none()) {
+                                    return Err(i.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+                                }
+                                let p = value.to_percentage();
                                 i.expect_comma()?;
                                 p
                             },

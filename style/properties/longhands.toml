@@ -356,6 +356,7 @@ affects = "paint"
 type = "AspectRatio"
 initial = "computed::AspectRatio::auto()"
 struct = "position"
+boxed = true
 spec = "https://drafts.csswg.org/css-sizing-4/#aspect-ratio"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
@@ -1348,6 +1349,7 @@ servo_pref = "layout.grid.enabled"
 animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-grid/#propdef-grid-column-end"
 affects = "layout"
+boxed = true
 
 [grid-column-start]
 type = "GridLine"
@@ -1357,6 +1359,7 @@ servo_pref = "layout.grid.enabled"
 animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-grid/#propdef-grid-column-start"
 affects = "layout"
+boxed = true
 
 [grid-row-end]
 type = "GridLine"
@@ -1366,6 +1369,7 @@ servo_pref = "layout.grid.enabled"
 animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-grid/#propdef-grid-row-end"
 affects = "layout"
+boxed = true
 
 [grid-row-start]
 type = "GridLine"
@@ -1375,6 +1379,7 @@ servo_pref = "layout.grid.enabled"
 animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-grid/#propdef-grid-row-start"
 affects = "layout"
+boxed = true
 
 [grid-template-areas]
 type = "GridTemplateAreas"
@@ -6651,6 +6656,7 @@ affects = "overflow"
 type = "InitialLetter"
 initial = "computed::InitialLetter::normal()"
 struct = "text"
+boxed = true
 initial_specified_value = "specified::InitialLetter::normal()"
 animation_type = "discrete"
 gecko_pref = "layout.css.initial-letter.enabled"

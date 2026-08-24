@@ -63,7 +63,12 @@ impl TimingFunction {
         input.expect_comma()?;
         let y2 = Number::parse(context, input)?;
 
-        if x1.get() < 0.0 || x1.get() > 1.0 || x2.get() < 0.0 || x2.get() > 1.0 {
+        let (Some(x1_value), Some(_), Some(x2_value), Some(_)) =
+            (x1.resolve(), y1.resolve(), x2.resolve(), y2.resolve())
+        else {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        };
+        if x1_value < 0.0 || x1_value > 1.0 || x2_value < 0.0 || x2_value > 1.0 {
             return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
         }
 
@@ -88,7 +93,10 @@ impl TimingFunction {
         //
         // It's not totally clear it's worth it though, and no other browser
         // does this.
-        if position == StepPosition::JumpNone && steps.value() <= 1 {
+        let steps_value = steps
+            .resolve()
+            .ok_or_else(|| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))?;
+        if position == StepPosition::JumpNone && steps_value <= 1 {
             return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
         }
         Ok(GenericTimingFunction::Steps(steps, position))
@@ -113,14 +121,17 @@ impl TimingFunction {
                     input_start = i.try_parse(|i| Percentage::parse(context, i)).ok();
                     input_end = i.try_parse(|i| Percentage::parse(context, i)).ok();
                 }
-                builder.push(output.into(), input_start.map(|v| v.get()).into());
+                let output = output
+                    .resolve()
+                    .ok_or_else(|| i.new_custom_error(StyleParseErrorKind::UnspecifiedError))?;
+                builder.push(output, input_start.map(|v| v.get()).into());
                 num_specified_stops += 1;
                 if input_end.is_some() {
                     debug_assert!(
                         input_start.is_some(),
                         "Input end valid but not input start?"
                     );
-                    builder.push(output.into(), input_end.map(|v| v.get()).into());
+                    builder.push(output, input_end.map(|v| v.get()).into());
                 }
 
                 Ok(())
@@ -162,14 +173,14 @@ impl TimingFunction {
     pub fn to_computed_value_without_context(&self) -> ComputedTimingFunction {
         match &self {
             GenericTimingFunction::Steps(steps, pos) => {
-                GenericTimingFunction::Steps(steps.value(), *pos)
+                GenericTimingFunction::Steps(steps.resolve().unwrap(), *pos)
             },
             GenericTimingFunction::CubicBezier { x1, y1, x2, y2 } => {
                 GenericTimingFunction::CubicBezier {
-                    x1: x1.get(),
-                    y1: y1.get(),
-                    x2: x2.get(),
-                    y2: y2.get(),
+                    x1: x1.resolve().unwrap(),
+                    y1: y1.resolve().unwrap(),
+                    x2: x2.resolve().unwrap(),
+                    y2: y2.resolve().unwrap(),
                 }
             },
             GenericTimingFunction::Keyword(keyword) => GenericTimingFunction::Keyword(*keyword),

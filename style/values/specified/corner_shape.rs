@@ -220,7 +220,10 @@ fn parse_superellipse_curvature<'i, 't>(
     }
 
     let number = Number::parse(context, input)?;
-    Ok(SuperellipseCurvature::from_css_number(number.raw_value()))
+    let value = number
+        .resolve_unclamped()
+        .ok_or_else(|| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))?;
+    Ok(SuperellipseCurvature::from_css_number(value))
 }
 
 impl Parse for CornerShape {

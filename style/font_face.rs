@@ -316,7 +316,43 @@ macro_rules! impl_range {
 /// https://drafts.csswg.org/css-fonts-4/#descdef-font-face-font-weight
 #[derive(Clone, Debug, PartialEq, ToShmem)]
 pub struct FontWeightRange(pub AbsoluteFontWeight, pub AbsoluteFontWeight);
-impl_range!(FontWeightRange, AbsoluteFontWeight);
+
+impl Parse for FontWeightRange {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        fn is_resolvable(value: &AbsoluteFontWeight) -> bool {
+            match value {
+                AbsoluteFontWeight::Weight(number) => number.resolve().is_some(),
+                AbsoluteFontWeight::Normal | AbsoluteFontWeight::Bold => true,
+            }
+        }
+
+        let first = AbsoluteFontWeight::parse(context, input)?;
+        let second = input
+            .try_parse(|input| AbsoluteFontWeight::parse(context, input))
+            .unwrap_or_else(|_| first.clone());
+        if !is_resolvable(&first) || !is_resolvable(&second) {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+        Ok(Self(first, second))
+    }
+}
+
+impl ToCss for FontWeightRange {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: fmt::Write,
+    {
+        self.0.to_css(dest)?;
+        if self.0 != self.1 {
+            dest.write_char(' ')?;
+            self.1.to_css(dest)?;
+        }
+        Ok(())
+    }
+}
 
 /// The computed representation of the above so Gecko can read them easily.
 ///

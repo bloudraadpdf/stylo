@@ -11,7 +11,7 @@ use crate::values::specified::angle::Angle as SpecifiedAngle;
 use crate::values::specified::length::Length as SpecifiedLength;
 use crate::values::specified::length::LengthPercentage as SpecifiedLengthPercentage;
 use crate::values::{computed, CSSFloat};
-use crate::{Zero, ZeroNoPercent};
+use crate::{One, Zero, ZeroNoPercent};
 use euclid::default::{Rect, Transform3D};
 use std::fmt::{self, Write};
 use std::ops::Neg;
@@ -710,7 +710,7 @@ pub trait IsParallelTo {
 
 impl<Number, Angle> ToCss for Rotate<Number, Angle>
 where
-    Number: Copy + PartialOrd + ToCss + Zero,
+    Number: Clone + PartialOrd + ToCss + Zero,
     Angle: Copy + Neg<Output = Angle> + ToCss + Zero,
     (Number, Number, Number): IsParallelTo,
 {
@@ -722,7 +722,7 @@ where
         match *self {
             Rotate::None => dest.write_str("none"),
             Rotate::Rotate(ref angle) => angle.to_css(dest),
-            Rotate::Rotate3D(x, y, z, angle) => {
+            Rotate::Rotate3D(ref x, ref y, ref z, angle) => {
                 // If the axis is parallel with the x or y axes, it must serialize as the
                 // appropriate keyword. If a rotation about the z axis (that is, in 2D) is
                 // specified, the property must serialize as just an <angle>.
@@ -731,8 +731,8 @@ where
                 // direction, we need to negate the angle to maintain the correct meaning.
                 //
                 // https://drafts.csswg.org/css-transforms-2/#individual-transform-serialization
-                let v = (x, y, z);
-                let (axis, angle) = if x.is_zero() && y.is_zero() && z.is_zero() {
+                let v = (x.clone(), y.clone(), z.clone());
+                let (axis, angle) = if v.0.is_zero() && v.1.is_zero() && v.2.is_zero() {
                     // The zero length vector is parallel to every other vector, so
                     // is_parallel_to() returns true for it. However, it is definitely different
                     // from x axis, y axis, or z axis, and it's meaningless to perform a rotation
@@ -805,20 +805,18 @@ pub use self::GenericScale as Scale;
 
 impl<Number> ToCss for Scale<Number>
 where
-    Number: ToCss + PartialEq + Copy,
-    f32: From<Number>,
+    Number: ToCss + PartialEq + One,
 {
     fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
     where
         W: fmt::Write,
-        f32: From<Number>,
     {
         match *self {
             Scale::None => dest.write_str("none"),
             Scale::Scale(ref x, ref y, ref z) => {
                 x.to_css(dest)?;
 
-                let is_3d = f32::from(*z) != 1.0;
+                let is_3d = !z.is_one();
                 if is_3d || x != y {
                     dest.write_char(' ')?;
                     y.to_css(dest)?;
