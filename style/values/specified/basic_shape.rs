@@ -46,6 +46,9 @@ pub type BorderShapePath = generic::BorderShapePath<BasicShape>;
 /// A specified `shape-outside` value.
 pub type ShapeOutside = generic::GenericShapeOutside<BasicShape, Image>;
 
+/// A specified `object-view-box` value.
+pub type ObjectViewBox = generic::GenericObjectViewBox<BasicShape>;
+
 /// A specified value for `at <position>` in circle() and ellipse().
 // Note: its computed value is the same as computed::position::Position. We just want to always use
 // LengthPercentage as the type of its components, for basic shapes.
@@ -270,6 +273,23 @@ impl Parse for ClipPath {
             ClipPath::Box,
             AllowedBasicShapes::ALL,
         )
+    }
+}
+
+impl Parse for ObjectViewBox {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
+            return Ok(Self::None);
+        }
+
+        let rectangular_shapes =
+            AllowedBasicShapes::INSET | AllowedBasicShapes::XYWH | AllowedBasicShapes::RECT;
+        BasicShape::parse(context, input, rectangular_shapes, ShapeType::Outline)
+            .map(Box::new)
+            .map(Self::Shape)
     }
 }
 
@@ -1126,6 +1146,49 @@ enum ByTo {
     By,
     /// Command is relative to the top-left corner of the reference box.
     To,
+}
+
+#[cfg(test)]
+mod object_view_box_tests {
+    use super::{ObjectViewBox, Parse, ParserContext};
+    use crate::context::QuirksMode;
+    use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
+    use cssparser::{Parser, ParserInput};
+    use style_traits::ParsingMode;
+
+    fn parses(css: &str) -> bool {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input = ParserInput::new(css);
+        Parser::new(&mut input)
+            .parse_entirely(|input| ObjectViewBox::parse(&context, input))
+            .is_ok()
+    }
+
+    #[test]
+    fn object_view_box_accepts_only_basic_shape_rectangles() {
+        for valid in [
+            "none",
+            "inset(10%)",
+            "rect(10px 90px 80px 20px)",
+            "xywh(10px 20px 30px 40px)",
+        ] {
+            assert!(parses(valid), "{valid} must parse");
+        }
+
+        for invalid in ["circle(10px)", "ellipse(10px 20px)", "polygon(0 0)"] {
+            assert!(!parses(invalid), "{invalid} must be rejected");
+        }
+    }
 }
 
 impl ByTo {

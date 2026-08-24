@@ -317,6 +317,51 @@ pub enum GenericShapeOutside<BasicShape, I> {
 
 pub use self::GenericShapeOutside as ShapeOutside;
 
+/// A value for the `object-view-box` property.
+#[allow(missing_docs)]
+#[derive(
+    Animate,
+    Clone,
+    ComputeSquaredDistance,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToAnimatedValue,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(u8)]
+#[typed_value(derive_fields)]
+pub enum GenericObjectViewBox<BasicShape> {
+    #[animation(error)]
+    None,
+    #[typed_value(skip)]
+    Shape(#[animation(field_bound)] Box<BasicShape>),
+}
+
+impl<BasicShape: ToCss> ToCss for GenericObjectViewBox<BasicShape> {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        match self {
+            Self::None => dest.write_str("none"),
+            Self::Shape(shape) => shape.to_css(dest),
+        }
+    }
+}
+
+pub use self::GenericObjectViewBox as ObjectViewBox;
+
+impl<BasicShape> ToAnimatedZero for ObjectViewBox<BasicShape> {
+    fn to_animated_zero(&self) -> Result<Self, ()> {
+        Err(())
+    }
+}
+
 /// The <basic-shape>.
 ///
 /// https://drafts.csswg.org/css-shapes-1/#supported-basic-shapes

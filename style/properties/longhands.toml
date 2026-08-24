@@ -1729,6 +1729,13 @@ boxed = true
 spec = "https://drafts.csswg.org/css-images-3/#the-object-position"
 affects = "layout"
 
+[object-view-box]
+type = "basic_shape::ObjectViewBox"
+initial = "generics::basic_shape::ObjectViewBox::None"
+struct = "position"
+spec = "https://drafts.csswg.org/css-images-5/#propdef-object-view-box"
+affects = "layout"
+
 [offset-anchor]
 type = "PositionOrAuto"
 initial = "computed::PositionOrAuto::auto()"
