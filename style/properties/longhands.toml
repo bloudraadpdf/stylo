@@ -6386,7 +6386,7 @@ affects = "layout"
 
 [text-autospace]
 type = "TextAutospace"
-initial = "computed::text::TextAutospace::NORMAL"
+initial = "computed::text::TextAutospace::NO_AUTOSPACE"
 struct = "inherited_text"
 animation_type = "discrete"
 gecko_pref = "layout.css.text-autospace.enabled"
