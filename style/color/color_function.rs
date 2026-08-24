@@ -533,6 +533,41 @@ impl ColorFunction<SpecifiedColor> {
         }
     }
 
+    /// Whether this function uses a modern colour syntax for interpolation.
+    pub fn has_modern_syntax(&self) -> bool {
+        match self {
+            Self::Rgb(origin, red, green, blue, alpha) => {
+                origin.is_some()
+                    || red.is_none()
+                    || green.is_none()
+                    || blue.is_none()
+                    || alpha.is_none()
+            },
+            Self::Hsl(origin, hue, saturation, lightness, alpha) => {
+                origin.is_some()
+                    || hue.is_none()
+                    || saturation.is_none()
+                    || lightness.is_none()
+                    || alpha.is_none()
+            },
+            Self::Hwb(origin, hue, whiteness, blackness, alpha) => {
+                origin.is_some()
+                    || hue.is_none()
+                    || whiteness.is_none()
+                    || blackness.is_none()
+                    || alpha.is_none()
+            },
+            Self::Lab(..)
+            | Self::Lch(..)
+            | Self::Oklab(..)
+            | Self::Oklch(..)
+            | Self::Color(..)
+            | Self::DeviceCmyk(..)
+            | Self::BdSpot(..)
+            | Self::BdDeviceN(..) => true,
+        }
+    }
+
     /// Resolve element-dependent colour components at computed-value time.
     pub fn to_computed_value(&self, context: &crate::values::computed::Context) -> Self {
         macro_rules! compute {

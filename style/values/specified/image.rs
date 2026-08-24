@@ -93,9 +93,7 @@ impl Color {
                     mix.items.iter().any(|item| item.color.has_modern_syntax())
                 }
             },
-            // Color functions that survive parsing need computed context or
-            // retain missing components. Both forms use modern colour syntax.
-            Self::ColorFunction(_) => true,
+            Self::ColorFunction(function) => function.has_modern_syntax(),
             Self::LightDark(ld) => ld.light.has_modern_syntax() || ld.dark.has_modern_syntax(),
 
             // The default is that this color doesn't have any modern syntax.
@@ -1417,15 +1415,14 @@ pub enum ImageRendering {
 }
 
 #[cfg(all(test, feature = "servo"))]
-mod cross_fade_tests {
-    use super::{Image, Parse, ParserContext};
+mod image_tests {
+    use super::{generic, ColorInterpolationMethod, Image, Parse, ParserContext};
     use crate::context::QuirksMode;
     use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
     use cssparser::{Parser, ParserInput};
     use style_traits::ParsingMode;
 
-    #[test]
-    fn servo_accepts_standard_cross_fade_images() {
+    fn parse_image(css: &str) -> Image {
         let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
         let context = ParserContext::new(
             Origin::Author,
@@ -1437,10 +1434,33 @@ mod cross_fade_tests {
             None,
             None,
         );
-        let mut input = ParserInput::new("cross-fade(25% red, url('green.png'), blue)");
+        let mut input = ParserInput::new(css);
 
-        assert!(Parser::new(&mut input)
+        Parser::new(&mut input)
             .parse_entirely(|input| Image::parse(&context, input))
-            .is_ok());
+            .expect("image must parse")
+    }
+
+    #[test]
+    fn servo_accepts_standard_cross_fade_images() {
+        parse_image("cross-fade(25% red, url('green.png'), blue)");
+    }
+
+    #[test]
+    fn tree_counting_hsl_keeps_legacy_gradient_interpolation() {
+        let Image::Gradient(gradient) =
+            parse_image("conic-gradient(hsl(calc(50deg * sibling-index()) 100% 50%), green)")
+        else {
+            panic!("conic gradient must remain a typed gradient");
+        };
+        let generic::Gradient::Conic {
+            color_interpolation_method,
+            ..
+        } = *gradient
+        else {
+            panic!("image must remain a conic gradient");
+        };
+
+        assert_eq!(color_interpolation_method, ColorInterpolationMethod::srgb());
     }
 }
