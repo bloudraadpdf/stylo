@@ -3470,6 +3470,30 @@ mod tests {
         }
     }
 
+    #[test]
+    fn servo_parses_mask_geometry_boxes() {
+        let stylesheet = parse_stylesheet(
+            ".a { mask-clip: fill-box } .b { mask-clip: stroke-box } \
+             .c { mask-clip: view-box } .d { mask-clip: no-clip } \
+             .e { mask-origin: fill-box } .f { mask-origin: stroke-box } \
+             .g { mask-origin: view-box }",
+        );
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let declaration_count = contents
+            .rules(&guard)
+            .iter()
+            .filter_map(|rule| match rule {
+                CssRule::Style(style) => {
+                    Some(style.read_with(&guard).block.read_with(&guard).len())
+                },
+                _ => None,
+            })
+            .sum::<usize>();
+
+        assert_eq!(declaration_count, 7);
+    }
+
     /// Fragmentation containers pass their leading-margin policy to nested
     /// fragmentation content through the normal inherited cascade.
     #[test]

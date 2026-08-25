@@ -4038,15 +4038,12 @@ pub mod mask {
                 mask_origin::single_value::SpecifiedValue::BorderBox => {
                     mask_clip::single_value::SpecifiedValue::BorderBox
                 },
-                #[cfg(feature = "gecko")]
                 mask_origin::single_value::SpecifiedValue::FillBox => {
                     mask_clip::single_value::SpecifiedValue::FillBox
                 },
-                #[cfg(feature = "gecko")]
                 mask_origin::single_value::SpecifiedValue::StrokeBox => {
                     mask_clip::single_value::SpecifiedValue::StrokeBox
                 },
-                #[cfg(feature = "gecko")]
                 mask_origin::single_value::SpecifiedValue::ViewBox => {
                     mask_clip::single_value::SpecifiedValue::ViewBox
                 },
@@ -4245,10 +4242,7 @@ pub mod mask {
                     || *position_y != PositionComponent::zero();
                 let has_origin = *origin != Origin::BorderBox;
                 let has_clip = *clip != Clip::BorderBox;
-                #[cfg(feature = "gecko")]
                 let clip_suppresses_origin = *clip == Clip::NoClip;
-                #[cfg(not(feature = "gecko"))]
-                let clip_suppresses_origin = false;
 
                 if !has_other && !has_position && !has_origin && !has_clip {
                     return image.to_css(dest);

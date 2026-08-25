@@ -8137,7 +8137,7 @@ animation_type = "discrete"
 affects = "paint"
 vector = {}
 extra_prefixes = ["webkit"]
-keyword = { values = ["border-box", "content-box", "padding-box"], extra_gecko_values = ["fill-box", "stroke-box", "view-box", "no-clip"], gecko_enum_prefix = "StyleGeometryBox", gecko_inexhaustive = true }
+keyword = { values = ["border-box", "content-box", "padding-box", "fill-box", "stroke-box", "view-box", "no-clip"], gecko_enum_prefix = "StyleGeometryBox", gecko_inexhaustive = true }
 
 [mask-origin]
 struct = "svg"
@@ -8146,7 +8146,7 @@ animation_type = "discrete"
 affects = "paint"
 vector = {}
 extra_prefixes = ["webkit"]
-keyword = { values = ["border-box", "content-box", "padding-box"], extra_gecko_values = ["fill-box", "stroke-box", "view-box"], gecko_enum_prefix = "StyleGeometryBox", gecko_inexhaustive = true }
+keyword = { values = ["border-box", "content-box", "padding-box", "fill-box", "stroke-box", "view-box"], gecko_enum_prefix = "StyleGeometryBox", gecko_inexhaustive = true }
 
 [mask-composite]
 struct = "svg"
