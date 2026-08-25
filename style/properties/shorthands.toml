@@ -306,7 +306,7 @@ spec = "https://drafts.csswg.org/css-inline-3/#text-box-shorthand"
 rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 
 [offset]
-engine = "gecko"
+servo_pref = "layout.unimplemented"
 sub_properties = ["offset-path", "offset-distance", "offset-rotate", "offset-anchor", "offset-position"]
 spec = "https://drafts.fxtf.org/motion-1/#offset-shorthand"
 

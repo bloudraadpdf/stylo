@@ -958,7 +958,7 @@ pub mod text_box {
     }
 }
 
-#[cfg(feature = "gecko")]
+#[cfg(any(feature = "gecko", feature = "servo"))]
 pub mod offset {
     use super::*;
     pub use crate::properties::shorthands_generated::offset::*;
