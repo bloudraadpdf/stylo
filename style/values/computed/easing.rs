@@ -26,7 +26,14 @@ impl ComputedTimingFunction {
     ) -> f64 {
         // User specified values can cause overflow (bug 1706157). Increments/decrements
         // should be gravefully handled.
-        let mut current_step = (progress * (steps as f64)).floor() as i32;
+        let scaled_progress = progress * (steps as f64);
+        let nearest_boundary = scaled_progress.round();
+        let scaled_progress = if scaled_progress.approx_eq(&nearest_boundary) {
+            nearest_boundary
+        } else {
+            scaled_progress
+        };
+        let mut current_step = scaled_progress.floor() as i32;
 
         // Increment current step if it is jump-start or start.
         if pos == StepPosition::Start
@@ -38,9 +45,7 @@ impl ComputedTimingFunction {
 
         // If the "before flag" is set and we are at a transition point,
         // drop back a step
-        if before_flag == BeforeFlag::Set
-            && (progress * steps as f64).rem_euclid(1.0).approx_eq(&0.0)
-        {
+        if before_flag == BeforeFlag::Set && scaled_progress.rem_euclid(1.0).approx_eq(&0.0) {
             current_step = current_step.checked_sub(1).unwrap_or(current_step);
         }
 
@@ -105,5 +110,21 @@ impl ComputedTimingFunction {
         // So we clamp the infinite progress, per the spec issue:
         // https://github.com/w3c/csswg-drafts/issues/8344
         progress.min(f64::MAX).max(f64::MIN)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{BeforeFlag, ComputedTimingFunction, StepPosition};
+
+    #[test]
+    fn step_easing_treats_float_noise_at_a_boundary_as_the_boundary() {
+        let easing = ComputedTimingFunction::Steps(2, StepPosition::JumpEnd);
+
+        assert_eq!(
+            easing.calculate_output(0.499_999_990_463_256_84, BeforeFlag::Unset, 0.0),
+            0.5
+        );
+        assert_eq!(easing.calculate_output(0.499, BeforeFlag::Unset, 0.0), 0.0);
     }
 }
