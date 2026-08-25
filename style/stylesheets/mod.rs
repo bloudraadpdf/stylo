@@ -104,7 +104,7 @@ pub use self::when_rule::{ChainConditions, ElseRule, WhenCondition, WhenRule};
 
 /// The CORS mode used for a CSS load.
 #[repr(u8)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq, ToShmem)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, MallocSizeOf, PartialEq, Serialize, ToShmem)]
 pub enum CorsMode {
     /// No CORS mode, so cross-origin loads can be done.
     None,

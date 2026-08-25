@@ -47,6 +47,10 @@ pub struct CssUrlData {
     #[ignore_malloc_size_of = "Arc"]
     resolved: Option<Arc<Url>>,
 
+    /// The property-selected CORS mode for this URL.
+    #[css(skip)]
+    cors_mode: CorsMode,
+
     /// Request modifiers authored as part of the quoted `url()` value.
     #[css(skip)]
     modifiers: UrlRequestModifiers,
@@ -211,13 +215,13 @@ impl CssUrl {
     /// Try to parse a URL from a string value that is a valid CSS token for a
     /// URL.
     ///
-    /// FIXME(emilio): Should honor CorsMode.
-    pub fn parse_from_string(url: String, context: &ParserContext, _: CorsMode) -> Self {
+    pub fn parse_from_string(url: String, context: &ParserContext, cors_mode: CorsMode) -> Self {
         let serialization = Arc::new(url);
         let resolved = context.url_data.0.join(&serialization).ok().map(Arc::new);
         CssUrl(Arc::new(CssUrlData {
             original: Some(serialization),
             resolved: resolved,
+            cors_mode,
             modifiers: UrlRequestModifiers::default(),
         }))
     }
@@ -264,12 +268,18 @@ impl CssUrl {
         &self.modifiers
     }
 
+    /// Return the CORS mode selected by the property that parsed this URL.
+    pub fn cors_mode(&self) -> CorsMode {
+        self.cors_mode
+    }
+
     /// Creates an already specified url value from an already resolved URL
     /// for insertion in the cascade.
     pub fn for_cascade(url: Arc<::url::Url>) -> Self {
         CssUrl(Arc::new(CssUrlData {
             original: None,
             resolved: Some(url),
+            cors_mode: CorsMode::None,
             modifiers: UrlRequestModifiers::default(),
         }))
     }
@@ -279,6 +289,7 @@ impl CssUrl {
         CssUrl(Arc::new(CssUrlData {
             original: Some(Arc::new(url.into())),
             resolved: ::url::Url::parse(url).ok().map(Arc::new),
+            cors_mode: CorsMode::None,
             modifiers: UrlRequestModifiers::default(),
         }))
     }
@@ -327,9 +338,7 @@ impl Parse for CssUrl {
 
 impl PartialEq for CssUrl {
     fn eq(&self, other: &Self) -> bool {
-        // TODO(emilio): maybe we care about equality of the specified values if
-        // present? Seems not.
-        self.resolved == other.resolved
+        self.resolved == other.resolved && self.cors_mode == other.cors_mode
     }
 }
 
@@ -370,11 +379,13 @@ impl ToComputedValue for SpecifiedUrl {
         match self.resolved {
             Some(ref url) => ComputedUrl::Valid(Arc::new(ValidComputedUrl {
                 url: url.clone(),
+                cors_mode: self.cors_mode,
                 modifiers: self.modifiers.clone(),
             })),
             None => match self.original {
                 Some(ref url) => ComputedUrl::Invalid(Arc::new(InvalidComputedUrl {
                     serialization: url.clone(),
+                    cors_mode: self.cors_mode,
                     modifiers: self.modifiers.clone(),
                 })),
                 None => {
@@ -389,11 +400,13 @@ impl ToComputedValue for SpecifiedUrl {
             ComputedUrl::Valid(computed) => CssUrlData {
                 original: None,
                 resolved: Some(computed.url.clone()),
+                cors_mode: computed.cors_mode,
                 modifiers: computed.modifiers.clone(),
             },
             ComputedUrl::Invalid(computed) => CssUrlData {
                 original: Some(computed.serialization.clone()),
                 resolved: None,
+                cors_mode: computed.cors_mode,
                 modifiers: computed.modifiers.clone(),
             },
         };
@@ -415,6 +428,7 @@ pub enum ComputedUrl {
 pub struct InvalidComputedUrl {
     #[ignore_malloc_size_of = "Arc"]
     serialization: Arc<String>,
+    cors_mode: CorsMode,
     modifiers: UrlRequestModifiers,
 }
 
@@ -423,6 +437,7 @@ pub struct InvalidComputedUrl {
 pub struct ValidComputedUrl {
     #[ignore_malloc_size_of = "Arc"]
     url: Arc<Url>,
+    cors_mode: CorsMode,
     modifiers: UrlRequestModifiers,
 }
 
@@ -440,6 +455,14 @@ impl ComputedUrl {
         match self {
             ComputedUrl::Valid(computed) => &computed.modifiers,
             ComputedUrl::Invalid(computed) => &computed.modifiers,
+        }
+    }
+
+    /// Return the CORS mode selected by the property that parsed this URL.
+    pub fn cors_mode(&self) -> CorsMode {
+        match self {
+            ComputedUrl::Valid(computed) => computed.cors_mode,
+            ComputedUrl::Invalid(computed) => computed.cors_mode,
         }
     }
 
