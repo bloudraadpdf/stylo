@@ -55,6 +55,8 @@ pub enum PseudoElement {
 
     // Non-eager pseudos.
     Backdrop,
+    ViewTransitionOldRoot,
+    ViewTransitionNewRoot,
     DetailsSummary,
     DetailsContent,
     Marker,
@@ -110,6 +112,8 @@ impl ToCss for PseudoElement {
             FirstLetter => "::first-letter",
             FirstLine => "::first-line",
             Backdrop => "::backdrop",
+            ViewTransitionOldRoot => "::view-transition-old(root)",
+            ViewTransitionNewRoot => "::view-transition-new(root)",
             DetailsSummary => "::-servo-details-summary",
             DetailsContent => "::details-content",
             Marker => "::marker",
@@ -277,6 +281,8 @@ impl PseudoElement {
             | PseudoElement::FirstLetter
             | PseudoElement::FirstLine => PseudoElementCascadeType::Eager,
             PseudoElement::Backdrop
+            | PseudoElement::ViewTransitionOldRoot
+            | PseudoElement::ViewTransitionNewRoot
             | PseudoElement::ColorSwatch
             | PseudoElement::DetailsSummary
             | PseudoElement::Marker
@@ -777,6 +783,24 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
         };
 
         Ok(pseudo_element)
+    }
+
+    fn parse_functional_pseudo_element<'t>(
+        &self,
+        name: CowRcStr<'i>,
+        parser: &mut CssParser<'i, 't>,
+    ) -> Result<PseudoElement, ParseError<'i>> {
+        let root = parser.expect_ident()?;
+        if !root.eq_ignore_ascii_case("root") || !parser.is_exhausted() {
+            return Err(parser.new_custom_error(
+                SelectorParseErrorKind::UnsupportedPseudoClassOrElement(name),
+            ));
+        }
+        match_ignore_ascii_case! { &name,
+            "view-transition-old" => Ok(PseudoElement::ViewTransitionOldRoot),
+            "view-transition-new" => Ok(PseudoElement::ViewTransitionNewRoot),
+            _ => Err(parser.new_custom_error(SelectorParseErrorKind::UnsupportedPseudoClassOrElement(name)))
+        }
     }
 
     fn default_namespace(&self) -> Option<Namespace> {
