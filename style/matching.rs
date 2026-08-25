@@ -539,6 +539,10 @@ trait PrivateMatchMethods: TElement {
         use crate::animation::AnimationSetKey;
         use crate::dom::TDocument;
 
+        if context.shared.traversal_flags.for_animation_only() && old_styles.primary.is_some() {
+            return;
+        }
+
         let style_changed = self.process_animations_for_style(
             context,
             &mut old_styles.primary,
