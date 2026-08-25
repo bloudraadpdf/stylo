@@ -424,6 +424,32 @@ pub enum SystemColor {
 }
 
 impl SystemColor {
+    fn modern_equivalent(self) -> Self {
+        match self {
+            Self::Activeborder
+            | Self::Inactiveborder
+            | Self::Threeddarkshadow
+            | Self::Threedhighlight
+            | Self::Threedlightshadow
+            | Self::Threedshadow
+            | Self::Windowframe => Self::Buttonborder,
+            Self::Activecaption
+            | Self::Appworkspace
+            | Self::Background
+            | Self::Inactivecaption
+            | Self::Infobackground
+            | Self::Menu
+            | Self::Scrollbar
+            | Self::Window => Self::Canvas,
+            Self::Buttonhighlight | Self::Buttonshadow | Self::Threedface => Self::Buttonface,
+            Self::Captiontext | Self::Infotext | Self::Menutext | Self::Windowtext => {
+                Self::Canvastext
+            },
+            Self::Inactivecaptiontext => Self::Graytext,
+            modern => modern,
+        }
+    }
+
     #[cfg(feature = "servo")]
     #[inline]
     fn compute(&self, cx: &Context) -> ComputedColor {
@@ -441,7 +467,7 @@ impl SystemColor {
         let info_background = AbsoluteColor::srgb_legacy(255, 255, 225, 1.0);
         let mark = AbsoluteColor::srgb_legacy(255, 255, 0, 1.0);
 
-        let absolute = match self {
+        let absolute = match self.modern_equivalent() {
             Self::Canvas
             | Self::Window
             | Self::Field
@@ -537,7 +563,9 @@ impl SystemColor {
         use crate::gecko::values::convert_nscolor_to_absolute_color;
         use crate::gecko_bindings::bindings;
 
-        let color = cx.device().system_nscolor(*self, cx.builder.color_scheme);
+        let color = cx
+            .device()
+            .system_nscolor(self.modern_equivalent(), cx.builder.color_scheme);
         if cx.for_non_inherited_property {
             cx.rule_cache_conditions
                 .borrow_mut()
@@ -547,6 +575,42 @@ impl SystemColor {
             return ComputedColor::currentcolor();
         }
         ComputedColor::Absolute(convert_nscolor_to_absolute_color(color))
+    }
+}
+
+#[cfg(test)]
+mod system_color_tests {
+    use super::SystemColor;
+
+    #[test]
+    fn deprecated_system_colours_compute_as_their_modern_equivalents() {
+        for (deprecated, modern) in [
+            (SystemColor::Activeborder, SystemColor::Buttonborder),
+            (SystemColor::Activecaption, SystemColor::Canvas),
+            (SystemColor::Appworkspace, SystemColor::Canvas),
+            (SystemColor::Background, SystemColor::Canvas),
+            (SystemColor::Buttonhighlight, SystemColor::Buttonface),
+            (SystemColor::Buttonshadow, SystemColor::Buttonface),
+            (SystemColor::Captiontext, SystemColor::Canvastext),
+            (SystemColor::Inactiveborder, SystemColor::Buttonborder),
+            (SystemColor::Inactivecaption, SystemColor::Canvas),
+            (SystemColor::Inactivecaptiontext, SystemColor::Graytext),
+            (SystemColor::Infobackground, SystemColor::Canvas),
+            (SystemColor::Infotext, SystemColor::Canvastext),
+            (SystemColor::Menu, SystemColor::Canvas),
+            (SystemColor::Menutext, SystemColor::Canvastext),
+            (SystemColor::Scrollbar, SystemColor::Canvas),
+            (SystemColor::Threeddarkshadow, SystemColor::Buttonborder),
+            (SystemColor::Threedface, SystemColor::Buttonface),
+            (SystemColor::Threedhighlight, SystemColor::Buttonborder),
+            (SystemColor::Threedlightshadow, SystemColor::Buttonborder),
+            (SystemColor::Threedshadow, SystemColor::Buttonborder),
+            (SystemColor::Window, SystemColor::Canvas),
+            (SystemColor::Windowframe, SystemColor::Buttonborder),
+            (SystemColor::Windowtext, SystemColor::Canvastext),
+        ] {
+            assert_eq!(deprecated.modern_equivalent(), modern);
+        }
     }
 }
 
