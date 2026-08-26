@@ -617,6 +617,31 @@ mod tests {
         )
     }
 
+    #[test]
+    fn servo_paint_worklet_arguments_with_substitution_are_deferred() {
+        let stylesheet = parse_stylesheet(
+            ".test { background-image: paint(box, var(--colour), var(--length)); }",
+        );
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let CssRule::Style(rule) = &contents.rules(&guard)[0] else {
+            panic!("expected style rule");
+        };
+        let rule = rule.read_with(&guard);
+        let declaration = rule
+            .block
+            .read_with(&guard)
+            .declaration_importance_iter()
+            .next()
+            .expect("expected background-image declaration")
+            .0;
+
+        assert!(matches!(
+            declaration,
+            PropertyDeclaration::WithVariables(..)
+        ));
+    }
+
     #[derive(Debug)]
     struct TestFontMetricsProvider;
 

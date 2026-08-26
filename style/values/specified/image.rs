@@ -1390,6 +1390,9 @@ impl PaintWorklet {
                 })
             })
             .unwrap_or_default();
+        if arguments.iter().any(|argument| argument.has_references()) {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
         Ok(Self { name, arguments })
     }
 }
