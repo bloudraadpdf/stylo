@@ -511,8 +511,8 @@ rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 spec = "https://drafts.csswg.org/css-ui/#propdef-outline"
 
 [columns]
-sub_properties = ["column-width", "column-count"]
-spec = "https://drafts.csswg.org/css-multicol/#propdef-columns"
+sub_properties = ["column-width", "column-count", "column-height", "column-wrap"]
+spec = "https://drafts.csswg.org/css-multicol-2/#propdef-columns"
 servo_pref = "layout.columns.enabled"
 
 [column-rule]

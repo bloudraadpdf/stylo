@@ -829,6 +829,25 @@ spec = "https://drafts.csswg.org/css-multicol/#propdef-column-count"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
+[column-height]
+type = "length::NonNegativeLengthOrAuto"
+initial = "computed::length::NonNegativeLengthOrAuto::auto()"
+struct = "column"
+initial_specified_value = "specified::length::NonNegativeLengthOrAuto::auto()"
+servo_pref = "layout.columns.enabled"
+spec = "https://drafts.csswg.org/css-multicol-2/#propdef-column-height"
+servo_restyle_damage = "rebuild_box"
+affects = "layout"
+
+[column-wrap]
+struct = "column"
+servo_pref = "layout.columns.enabled"
+spec = "https://drafts.csswg.org/css-multicol-2/#propdef-column-wrap"
+animation_type = "discrete"
+servo_restyle_damage = "rebuild_box"
+affects = "layout"
+keyword = { values = ["auto", "nowrap", "wrap"] }
+
 [column-gap]
 type = "length::NonNegativeLengthPercentageOrNormal"
 initial = "computed::length::NonNegativeLengthPercentageOrNormal::normal()"

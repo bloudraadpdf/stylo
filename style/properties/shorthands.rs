@@ -1104,7 +1104,7 @@ pub mod columns {
     pub use crate::properties::shorthands_generated::columns::*;
 
     use super::*;
-    use crate::properties::longhands::{column_count, column_width};
+    use crate::properties::longhands::{column_count, column_height, column_width, column_wrap};
 
     pub fn parse_value<'i, 't>(
         context: &ParserContext,
@@ -1145,9 +1145,16 @@ pub mod columns {
         if values == 0 || values > 2 {
             Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
         } else {
+            let column_height = if input.try_parse(|input| input.expect_delim('/')).is_ok() {
+                column_height::parse(context, input)?
+            } else {
+                column_height::get_initial_specified_value()
+            };
             Ok(expanded! {
                 column_count: unwrap_or_initial!(column_count),
                 column_width: unwrap_or_initial!(column_width),
+                column_height: column_height,
+                column_wrap: column_wrap::get_initial_specified_value(),
             })
         }
     }
@@ -1158,12 +1165,17 @@ pub mod columns {
             W: fmt::Write,
         {
             if self.column_width.is_auto() {
-                return self.column_count.to_css(dest);
-            }
-            self.column_width.to_css(dest)?;
-            if !self.column_count.is_auto() {
-                dest.write_char(' ')?;
                 self.column_count.to_css(dest)?;
+            } else {
+                self.column_width.to_css(dest)?;
+                if !self.column_count.is_auto() {
+                    dest.write_char(' ')?;
+                    self.column_count.to_css(dest)?;
+                }
+            }
+            if !self.column_height.is_auto() {
+                dest.write_str(" / ")?;
+                self.column_height.to_css(dest)?;
             }
             Ok(())
         }

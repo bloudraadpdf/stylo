@@ -1550,7 +1550,7 @@ pub mod style_structs {
             /// Whether this is a multicol style.
             #[cfg(feature = "servo")]
             pub fn is_multicol(&self) -> bool {
-                !self.column_width.is_auto() || !self.column_count.is_auto()
+                !self.column_width.is_auto() || !self.column_count.is_auto() || !self.column_height.is_auto()
             }
         % endif
     }
