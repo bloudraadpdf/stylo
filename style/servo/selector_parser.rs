@@ -142,6 +142,10 @@ impl ToCss for PseudoElement {
 impl ::selectors::parser::PseudoElement for PseudoElement {
     type Impl = SelectorImpl;
 
+    fn accepts_state_pseudo_classes(&self) -> bool {
+        matches!(self, Self::ScrollMarker)
+    }
+
     fn valid_after_slotted(&self) -> bool {
         matches!(
             self,
@@ -407,6 +411,9 @@ pub enum NonTSPseudoClass {
     Required,
     ServoNonZeroBorder,
     Target,
+    TargetAfter,
+    TargetBefore,
+    TargetCurrent,
     UserInvalid,
     UserValid,
     Valid,
@@ -425,7 +432,12 @@ impl ::selectors::parser::NonTSPseudoClass for NonTSPseudoClass {
     fn is_user_action_state(&self) -> bool {
         matches!(
             *self,
-            NonTSPseudoClass::Active | NonTSPseudoClass::Hover | NonTSPseudoClass::Focus
+            NonTSPseudoClass::Active
+                | NonTSPseudoClass::Hover
+                | NonTSPseudoClass::Focus
+                | NonTSPseudoClass::TargetAfter
+                | NonTSPseudoClass::TargetBefore
+                | NonTSPseudoClass::TargetCurrent
         )
     }
 
@@ -498,6 +510,9 @@ impl ToCss for NonTSPseudoClass {
             Self::Required => ":required",
             Self::ServoNonZeroBorder => ":-servo-nonzero-border",
             Self::Target => ":target",
+            Self::TargetAfter => ":target-after",
+            Self::TargetBefore => ":target-before",
+            Self::TargetCurrent => ":target-current",
             Self::UserInvalid => ":user-invalid",
             Self::UserValid => ":user-valid",
             Self::Valid => ":valid",
@@ -547,9 +562,13 @@ impl NonTSPseudoClass {
             Self::Valid => ElementState::VALID,
             Self::Visited => ElementState::VISITED,
             Self::Dir(ref direction) => direction.element_state(),
-            Self::BdNoContent | Self::CustomState(_) | Self::Lang(_) | Self::ServoNonZeroBorder => {
-                ElementState::empty()
-            },
+            Self::BdNoContent
+            | Self::CustomState(_)
+            | Self::Lang(_)
+            | Self::ServoNonZeroBorder
+            | Self::TargetAfter
+            | Self::TargetBefore
+            | Self::TargetCurrent => ElementState::empty(),
         }
     }
 
@@ -666,6 +685,9 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             "read-write" => NonTSPseudoClass::ReadWrite,
             "required" => NonTSPseudoClass::Required,
             "target" => NonTSPseudoClass::Target,
+            "target-after" => NonTSPseudoClass::TargetAfter,
+            "target-before" => NonTSPseudoClass::TargetBefore,
+            "target-current" => NonTSPseudoClass::TargetCurrent,
             "user-invalid" => NonTSPseudoClass::UserInvalid,
             "user-valid" => NonTSPseudoClass::UserValid,
             "valid" => NonTSPseudoClass::Valid,

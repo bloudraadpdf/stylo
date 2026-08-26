@@ -281,7 +281,23 @@ impl ToCss for Direction {
 
 #[cfg(test)]
 mod tests {
+    use cssparser::ToCss;
+
     use super::*;
+
+    #[test]
+    fn scroll_marker_selection_pseudo_classes_round_trip() {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        for selector in [
+            ".item::scroll-marker:target-current",
+            ".item::scroll-marker:target-before",
+            ".item::scroll-marker:target-after",
+        ] {
+            let parsed = SelectorParser::parse_author_origin_no_namespace(selector, &url_data)
+                .expect("scroll marker selection pseudo-class must parse");
+            assert_eq!(parsed.to_css_string(), selector);
+        }
+    }
 
     #[test]
     fn can_build_and_set_arbitrary_index() {
