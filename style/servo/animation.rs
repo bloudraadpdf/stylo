@@ -579,8 +579,10 @@ impl Animation {
         let progress = match self.state {
             AnimationState::Finished => return true,
             AnimationState::Paused(progress) => progress,
-            AnimationState::Running => (time - self.started_at) / self.duration,
-            AnimationState::Pending | AnimationState::Canceled => return false,
+            AnimationState::Running | AnimationState::Pending => {
+                (time - self.started_at) / self.duration
+            },
+            AnimationState::Canceled => return false,
         };
 
         progress >= self.current_iteration_end_progress()
@@ -1649,7 +1651,38 @@ pub fn maybe_start_animations<E>(
 
 #[cfg(test)]
 mod tests {
-    use super::Animation;
+    use super::{
+        Animation, AnimationDirection, AnimationFillMode, AnimationState, KeyframesIterationState,
+    };
+    use crate::properties::style_structs::Font;
+    use crate::properties::ComputedValues;
+    use crate::Atom;
+
+    fn pending_animation() -> Animation {
+        Animation {
+            name: Atom::from("short"),
+            properties_changed: Default::default(),
+            computed_steps: Box::default(),
+            started_at: 0.,
+            duration: 0.001,
+            delay: 0.,
+            fill_mode: AnimationFillMode::None,
+            iteration_state: KeyframesIterationState::Finite(0., 1.),
+            state: AnimationState::Pending,
+            direction: AnimationDirection::Normal,
+            current_direction: AnimationDirection::Normal,
+            cascade_style: ComputedValues::initial_values_with_font_override(Font::initial_values()),
+            is_new: false,
+        }
+    }
+
+    #[test]
+    fn pending_animation_ends_at_its_active_interval_boundary() {
+        let animation = pending_animation();
+
+        assert!(!animation.has_ended(0.));
+        assert!(animation.has_ended(0.05));
+    }
 
     /// The stepping loop that `iterations_skipped_by_delay` replaced, kept as
     /// the oracle. `max` is `None` for an infinite iteration count.
