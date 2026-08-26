@@ -2823,8 +2823,8 @@ where
     }
     loop {
         // Parse a sequence of simple selectors.
-        let empty = parse_compound_selector(parser, &mut state, input, &mut builder)?;
-        if empty {
+        let compound = parse_compound_selector(parser, &mut state, input, &mut builder)?;
+        if !compound.has_selectors {
             return Err(input.new_custom_error(if builder.has_combinators() {
                 SelectorParseErrorKind::DanglingCombinator
             } else {
@@ -2852,6 +2852,13 @@ where
             return Err(input.new_custom_error(SelectorParseErrorKind::InvalidState));
         }
 
+        if state.intersects(SelectorParsingState::SKIP_DEFAULT_NAMESPACE)
+            && !compound.has_type_selector
+        {
+            if let Some(url) = parser.default_namespace() {
+                builder.push_simple_selector(Component::DefaultNamespace(url));
+            }
+        }
         builder.push_combinator(combinator);
     }
     return Ok(Selector(builder.build(parse_relative)));
@@ -3291,24 +3298,25 @@ where
 /// : [ type_selector | universal ] [ HASH | class | attrib | pseudo | negation ]*
 /// | [ HASH | class | attrib | pseudo | negation ]+
 ///
-/// `Err(())` means invalid selector.
-/// `Ok(true)` is an empty selector
+struct ParsedCompoundSelector {
+    has_selectors: bool,
+    has_type_selector: bool,
+}
+
 fn parse_compound_selector<'i, 't, P, Impl>(
     parser: &P,
     state: &mut SelectorParsingState,
     input: &mut CssParser<'i, 't>,
     builder: &mut SelectorBuilder<Impl>,
-) -> Result<bool, ParseError<'i, P::Error>>
+) -> Result<ParsedCompoundSelector, ParseError<'i, P::Error>>
 where
     P: Parser<'i, Impl = Impl>,
     Impl: SelectorImpl,
 {
     input.skip_whitespace();
 
-    let mut empty = true;
-    if parse_type_selector(parser, input, *state, builder)? {
-        empty = false;
-    }
+    let has_type_selector = parse_type_selector(parser, input, *state, builder)?;
+    let mut has_selectors = has_type_selector;
 
     loop {
         let result = match parse_one_simple_selector(parser, input, *state)? {
@@ -3316,7 +3324,7 @@ where
             Some(result) => result,
         };
 
-        if empty {
+        if !has_selectors {
             if let Some(url) = parser.default_namespace() {
                 // If there was no explicit type selector, but there is a
                 // default namespace, there is an implicit "<defaultns>|*" type
@@ -3357,7 +3365,7 @@ where
             }
         }
 
-        empty = false;
+        has_selectors = true;
 
         match result {
             SimpleSelectorParseResult::SimpleSelector(s) => {
@@ -3393,7 +3401,10 @@ where
             },
         }
     }
-    Ok(empty)
+    Ok(ParsedCompoundSelector {
+        has_selectors,
+        has_type_selector,
+    })
 }
 
 fn parse_is_where<'i, 't, P, Impl>(
@@ -4461,6 +4472,35 @@ pub mod tests {
                 SelectorFlags::empty(),
             )]))
         );
+        for (input, component) in [
+            (
+                ":is(.container .a)",
+                Component::Is
+                    as fn(SelectorList<DummySelectorImpl>) -> Component<DummySelectorImpl>,
+            ),
+            (":not(.container .a)", Component::Negation),
+        ] {
+            assert_eq!(
+                parse_ns(input, &parser),
+                Ok(SelectorList::from_vec(vec![Selector::from_vec(
+                    vec![
+                        Component::DefaultNamespace(MATHML.into()),
+                        component(SelectorList::from_vec(vec![Selector::from_vec(
+                            vec![
+                                Component::Class(DummyAtom::from("container")),
+                                Component::DefaultNamespace(MATHML.into()),
+                                Component::Combinator(Combinator::Descendant),
+                                Component::Class(DummyAtom::from("a")),
+                            ],
+                            specificity(0, 2, 0),
+                            SelectorFlags::empty(),
+                        )])),
+                    ],
+                    specificity(0, 2, 0),
+                    SelectorFlags::empty(),
+                )])),
+            );
+        }
         assert_eq!(
             parse("[attr|=\"foo\"]"),
             Ok(SelectorList::from_vec(vec![Selector::from_vec(
