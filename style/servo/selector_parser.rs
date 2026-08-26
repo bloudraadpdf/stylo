@@ -15,7 +15,7 @@ use crate::invalidation::element::element_wrapper::ElementSnapshot;
 use crate::properties::longhands::display::computed_value::T as Display;
 use crate::properties::{ComputedValues, PropertyFlags};
 use crate::selector_parser::AttrValue as SelectorAttrValue;
-use crate::selector_parser::{PseudoElementCascadeType, SelectorParser};
+use crate::selector_parser::{Direction, PseudoElementCascadeType, SelectorParser};
 use crate::values::{AtomIdent, AtomString};
 use crate::{Atom, CaseSensitivityExt, LocalName, Namespace, Prefix};
 use cssparser::{match_ignore_ascii_case, CowRcStr, Parser as CssParser, SourceLocation, ToCss};
@@ -27,7 +27,7 @@ use selectors::visitor::SelectorVisitor;
 use std::fmt;
 use std::mem;
 use std::ops::{Deref, DerefMut};
-use style_traits::{ParseError, StyleParseErrorKind};
+use style_traits::{CssWriter, ParseError, StyleParseErrorKind};
 
 /// A pseudo-element, both public and private.
 ///
@@ -384,6 +384,7 @@ pub enum NonTSPseudoClass {
     InRange,
     Indeterminate,
     Invalid,
+    Dir(Direction),
     Lang(Lang),
     Link,
     Modal,
@@ -436,6 +437,11 @@ impl ToCss for NonTSPseudoClass {
         W: fmt::Write,
     {
         use self::NonTSPseudoClass::*;
+        if let Dir(ref direction) = *self {
+            dest.write_str(":dir(")?;
+            style_traits::ToCss::to_css(direction, &mut CssWriter::new(dest))?;
+            return dest.write_char(')');
+        }
         if let Lang(ref lang) = *self {
             dest.write_str(":lang(")?;
             for (index, range) in lang.0.iter().enumerate() {
@@ -470,6 +476,7 @@ impl ToCss for NonTSPseudoClass {
             Self::InRange => ":in-range",
             Self::Indeterminate => ":indeterminate",
             Self::Invalid => ":invalid",
+            Self::Dir(_) => unreachable!(),
             Self::Link => ":link",
             Self::Modal => ":modal",
             Self::MozMeterOptimum => ":-moz-meter-optimum",
@@ -533,6 +540,7 @@ impl NonTSPseudoClass {
             Self::UserValid => ElementState::USER_VALID,
             Self::Valid => ElementState::VALID,
             Self::Visited => ElementState::VISITED,
+            Self::Dir(ref direction) => direction.element_state(),
             Self::BdNoContent | Self::CustomState(_) | Self::Lang(_) | Self::ServoNonZeroBorder => {
                 ElementState::empty()
             },
@@ -684,6 +692,9 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
         after_part: bool,
     ) -> Result<NonTSPseudoClass, ParseError<'i>> {
         let pseudo_class = match_ignore_ascii_case! { &name,
+            "dir" => {
+                NonTSPseudoClass::Dir(Direction::parse(parser)?)
+            },
             "lang" if !after_part => {
                 NonTSPseudoClass::Lang(Lang(crate::selector_parser::parse_lang_ranges(parser)?.into()))
             },
