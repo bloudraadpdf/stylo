@@ -21,8 +21,9 @@ pub use crate::values::specified::box_::{
     AlignmentBaseline, Appearance, BaselineSource, BookmarkLevel, BookmarkState, BreakBetween,
     BreakWithin, Clear, Contain, ContainerName, ContainerType, ContentVisibility, Display,
     FloatDefer, FloatReference, FootnoteDisplay, FootnotePolicy, MarginBreak, MarginTrim, Overflow,
-    OverflowAnchor, OverscrollBehavior, PositionProperty, ScrollSnapAlign, ScrollSnapAxis,
-    ScrollSnapStop, ScrollSnapStrictness, ScrollSnapType, ScrollbarGutter, TouchAction, WillChange,
+    OverflowAnchor, OverscrollBehavior, PositionProperty, ScrollMarkerGroup, ScrollMarkerGroupMode,
+    ScrollMarkerGroupPosition, ScrollSnapAlign, ScrollSnapAxis, ScrollSnapStop,
+    ScrollSnapStrictness, ScrollSnapType, ScrollbarGutter, TouchAction, WillChange,
     WritingModeProperty,
 };
 

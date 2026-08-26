@@ -5310,6 +5310,15 @@ spec = "https://drafts.csswg.org/css-scroll-snap-1/#scroll-snap-type"
 animation_type = "discrete"
 affects = "paint"
 
+[scroll-marker-group]
+type = "ScrollMarkerGroup"
+initial = "computed::ScrollMarkerGroup::none()"
+struct = "box"
+engine = "servo"
+spec = "https://drafts.csswg.org/css-overflow-5/#scroll-marker-group-property"
+animation_type = "discrete"
+affects = "layout"
+
 [scrollbar-color]
 type = "ScrollbarColor"
 initial = "Default::default()"

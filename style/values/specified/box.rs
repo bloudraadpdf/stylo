@@ -578,30 +578,37 @@ impl Parse for Display {
 }
 
 #[cfg(all(test, feature = "servo"))]
-mod display_tests {
-    use super::*;
+fn parse_box_test_value<T: Parse>(css: &str) -> Result<T, ()> {
     use crate::context::QuirksMode;
     use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
-    use crate::test_support::{pref_lock, BoolPrefGuard};
     use cssparser::{Parser, ParserInput};
-    use style_traits::{ParsingMode, ToCss};
+    use style_traits::ParsingMode;
+
+    let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+    let context = ParserContext::new(
+        Origin::Author,
+        &url_data,
+        Some(CssRuleType::Style),
+        ParsingMode::DEFAULT,
+        QuirksMode::NoQuirks,
+        Default::default(),
+        None,
+        None,
+    );
+    let mut input = ParserInput::new(css);
+    Parser::new(&mut input)
+        .parse_entirely(|input| T::parse(&context, input))
+        .map_err(|_| ())
+}
+
+#[cfg(all(test, feature = "servo"))]
+mod display_tests {
+    use super::*;
+    use crate::test_support::{pref_lock, BoolPrefGuard};
+    use style_traits::ToCss;
 
     fn parse_display(css: &str) -> Display {
-        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
-        let context = ParserContext::new(
-            Origin::Author,
-            &url_data,
-            Some(CssRuleType::Style),
-            ParsingMode::DEFAULT,
-            QuirksMode::NoQuirks,
-            Default::default(),
-            None,
-            None,
-        );
-        let mut input = ParserInput::new(css);
-        Parser::new(&mut input)
-            .parse_entirely(|input| Display::parse(&context, input))
-            .expect("display value should parse")
+        parse_box_test_value(css).expect("display value should parse")
     }
 
     #[test]
@@ -922,6 +929,197 @@ pub enum ScrollSnapStrictness {
 pub struct ScrollSnapType {
     axis: ScrollSnapAxis,
     strictness: ScrollSnapStrictness,
+}
+
+/// The generated scroll-marker-group box position.
+#[allow(missing_docs)]
+#[cfg_attr(feature = "servo", derive(Deserialize, Serialize))]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+)]
+#[repr(u8)]
+pub enum ScrollMarkerGroupPosition {
+    #[css(skip)]
+    None,
+    Before,
+    After,
+}
+
+/// The generated scroll-marker-group interaction mode.
+#[allow(missing_docs)]
+#[cfg_attr(feature = "servo", derive(Deserialize, Serialize))]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+)]
+#[repr(u8)]
+pub enum ScrollMarkerGroupMode {
+    Links,
+    Tabs,
+}
+
+/// The computed position and interaction mode of a scroll marker group.
+#[cfg_attr(feature = "servo", derive(Deserialize, Serialize))]
+#[derive(
+    Clone,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(C)]
+pub struct ScrollMarkerGroup {
+    position: ScrollMarkerGroupPosition,
+    mode: ScrollMarkerGroupMode,
+}
+
+impl ScrollMarkerGroup {
+    /// Returns the initial `none` value.
+    #[inline]
+    pub const fn none() -> Self {
+        Self {
+            position: ScrollMarkerGroupPosition::None,
+            mode: ScrollMarkerGroupMode::Links,
+        }
+    }
+
+    /// Returns the generated group position.
+    #[inline]
+    pub const fn position(&self) -> ScrollMarkerGroupPosition {
+        self.position
+    }
+
+    /// Returns the interaction mode.
+    #[inline]
+    pub const fn mode(&self) -> ScrollMarkerGroupMode {
+        self.mode
+    }
+}
+
+impl Parse for ScrollMarkerGroup {
+    fn parse<'i, 't>(
+        _context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if input
+            .try_parse(|input| input.expect_ident_matching("none"))
+            .is_ok()
+        {
+            return Ok(Self::none());
+        }
+
+        let mut position = None;
+        let mut mode = None;
+        while !input.is_exhausted() {
+            if position.is_none() {
+                if let Ok(value) = input.try_parse(ScrollMarkerGroupPosition::parse) {
+                    position = Some(value);
+                    continue;
+                }
+            }
+            if mode.is_none() {
+                if let Ok(value) = input.try_parse(ScrollMarkerGroupMode::parse) {
+                    mode = Some(value);
+                    continue;
+                }
+            }
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+
+        let Some(position) = position else {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        };
+        Ok(Self {
+            position,
+            mode: mode.unwrap_or(ScrollMarkerGroupMode::Links),
+        })
+    }
+}
+
+impl ToCss for ScrollMarkerGroup {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        if self.position == ScrollMarkerGroupPosition::None {
+            return dest.write_str("none");
+        }
+        self.position.to_css(dest)?;
+        if self.mode == ScrollMarkerGroupMode::Tabs {
+            dest.write_str(" tabs")?;
+        }
+        Ok(())
+    }
+}
+
+#[cfg(all(test, feature = "servo"))]
+mod scroll_marker_group_tests {
+    use super::*;
+    use style_traits::ToCss;
+
+    fn parse(css: &str) -> Result<ScrollMarkerGroup, ()> {
+        parse_box_test_value(css)
+    }
+
+    #[test]
+    fn position_and_mode_parse_in_either_order() {
+        for (css, position, mode, serialized) in [
+            (
+                "before",
+                ScrollMarkerGroupPosition::Before,
+                ScrollMarkerGroupMode::Links,
+                "before",
+            ),
+            (
+                "tabs after",
+                ScrollMarkerGroupPosition::After,
+                ScrollMarkerGroupMode::Tabs,
+                "after tabs",
+            ),
+        ] {
+            let value = parse(css).expect("the standards value must parse");
+            assert_eq!(value.position(), position);
+            assert_eq!(value.mode(), mode);
+            assert_eq!(value.to_css_string(), serialized);
+        }
+    }
+
+    #[test]
+    fn none_and_invalid_keyword_combinations_are_distinct() {
+        assert_eq!(
+            parse("none").expect("the initial value must parse"),
+            ScrollMarkerGroup::none()
+        );
+        for css in ["links", "before after", "before tabs links", "none tabs"] {
+            assert!(parse(css).is_err(), "{css} must be rejected");
+        }
+    }
 }
 
 impl ScrollSnapType {

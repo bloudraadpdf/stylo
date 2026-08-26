@@ -139,7 +139,8 @@ pub use self::box_::{
     BreakBetween, BreakWithin, Clear, Contain, ContainIntrinsicSize, ContainerName, ContainerType,
     ContentVisibility, Display, Float, FloatDefer, FloatOffset, FloatReference, FootnoteDisplay,
     FootnotePolicy, LineClamp, MarginBreak, MarginTrim, Overflow, OverflowAnchor,
-    OverflowClipMargin, OverscrollBehavior, Perspective, PositionProperty, Resize, ScrollSnapAlign,
+    OverflowClipMargin, OverscrollBehavior, Perspective, PositionProperty, Resize,
+    ScrollMarkerGroup, ScrollMarkerGroupMode, ScrollMarkerGroupPosition, ScrollSnapAlign,
     ScrollSnapAxis, ScrollSnapStop, ScrollSnapStrictness, ScrollSnapType, ScrollbarGutter,
     TouchAction, WillChange, WritingModeProperty, Zoom,
 };

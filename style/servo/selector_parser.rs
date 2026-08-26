@@ -57,6 +57,8 @@ pub enum PseudoElement {
     DetailsSummary,
     DetailsContent,
     Marker,
+    ScrollMarkerGroup,
+    ScrollMarker,
     FootnoteCall,
     FootnoteMarker,
     // moegoe Family 13: PDFreactor break + footnote-area pseudos.
@@ -114,6 +116,8 @@ impl ToCss for PseudoElement {
             DetailsSummary => "::-servo-details-summary",
             DetailsContent => "::details-content",
             Marker => "::marker",
+            ScrollMarkerGroup => "::scroll-marker-group",
+            ScrollMarker => "::scroll-marker",
             FootnoteCall => "::footnote-call",
             FootnoteMarker => "::footnote-marker",
             BdBeforeBreak => "::-bd-before-break",
@@ -283,6 +287,8 @@ impl PseudoElement {
             | PseudoElement::ColorSwatch
             | PseudoElement::DetailsSummary
             | PseudoElement::Marker
+            | PseudoElement::ScrollMarkerGroup
+            | PseudoElement::ScrollMarker
             | PseudoElement::FootnoteCall
             | PseudoElement::FootnoteMarker
             | PseudoElement::BdBeforeBreak
@@ -722,6 +728,8 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             "first-letter" => FirstLetter,
             "first-line" => FirstLine,
             "marker" => Marker,
+            "scroll-marker-group" => ScrollMarkerGroup,
+            "scroll-marker" => ScrollMarker,
             "footnote-call" => FootnoteCall,
             "footnote-marker" => FootnoteMarker,
             // moegoe Family 13: PDFreactor break + footnote-area pseudos.
