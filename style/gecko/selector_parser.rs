@@ -516,12 +516,7 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
     ) -> Result<NonTSPseudoClass, ParseError<'i>> {
         let pseudo_class = match_ignore_ascii_case! { &name,
             "lang" => {
-                let result = parser.parse_comma_separated(|input| {
-                    Ok(AtomIdent::from(input.expect_ident_or_string()?.as_ref()))
-                })?;
-                if result.is_empty() {
-                    return Err(parser.new_custom_error(StyleParseErrorKind::UnspecifiedError));
-                }
+                let result = crate::selector_parser::parse_lang_ranges(parser)?;
                 NonTSPseudoClass::Lang(Lang(result.into()))
             },
             "state" => {

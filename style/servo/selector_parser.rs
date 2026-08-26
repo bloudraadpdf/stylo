@@ -18,10 +18,7 @@ use crate::selector_parser::AttrValue as SelectorAttrValue;
 use crate::selector_parser::{PseudoElementCascadeType, SelectorParser};
 use crate::values::{AtomIdent, AtomString};
 use crate::{Atom, CaseSensitivityExt, LocalName, Namespace, Prefix};
-use cssparser::{
-    match_ignore_ascii_case, serialize_identifier, CowRcStr, Parser as CssParser, SourceLocation,
-    ToCss,
-};
+use cssparser::{match_ignore_ascii_case, CowRcStr, Parser as CssParser, SourceLocation, ToCss};
 use dom::{DocumentState, ElementState};
 use rustc_hash::FxHashMap;
 use selectors::attr::{AttrSelectorOperation, CaseSensitivity, NamespaceConstraint};
@@ -342,8 +339,10 @@ impl PseudoElement {
     }
 }
 
-/// The type used for storing `:lang` arguments.
-pub type Lang = Box<str>;
+/// The type used to store the language arguments to the `:lang` pseudo-class.
+#[derive(Clone, Debug, Eq, Hash, MallocSizeOf, PartialEq, ToCss, ToShmem)]
+#[css(comma)]
+pub struct Lang(#[css(iterable)] pub Box<[AtomIdent]>);
 
 /// The type used to store the state argument to the `:state` pseudo-class.
 #[derive(Clone, Debug, Eq, Hash, MallocSizeOf, PartialEq, ToCss, ToShmem)]
@@ -439,7 +438,12 @@ impl ToCss for NonTSPseudoClass {
         use self::NonTSPseudoClass::*;
         if let Lang(ref lang) = *self {
             dest.write_str(":lang(")?;
-            serialize_identifier(lang, dest)?;
+            for (index, range) in lang.0.iter().enumerate() {
+                if index != 0 {
+                    dest.write_str(", ")?;
+                }
+                range.to_css(dest)?;
+            }
             return dest.write_char(')');
         }
 
@@ -681,7 +685,7 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
     ) -> Result<NonTSPseudoClass, ParseError<'i>> {
         let pseudo_class = match_ignore_ascii_case! { &name,
             "lang" if !after_part => {
-                NonTSPseudoClass::Lang(parser.expect_ident_or_string()?.as_ref().into())
+                NonTSPseudoClass::Lang(Lang(crate::selector_parser::parse_lang_ranges(parser)?.into()))
             },
             "state" => {
                 let result = AtomIdent::from(parser.expect_ident()?.as_ref());

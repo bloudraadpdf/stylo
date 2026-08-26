@@ -8,7 +8,7 @@
 
 use crate::derives::*;
 use crate::stylesheets::{Namespaces, Origin, UrlExtraData};
-use crate::values::serialize_atom_identifier;
+use crate::values::{serialize_atom_identifier, AtomIdent};
 use crate::Atom;
 use cssparser::{match_ignore_ascii_case, Parser as CssParser, ParserInput};
 use dom::ElementState;
@@ -82,6 +82,18 @@ impl<'a> SelectorParser<'a> {
     pub fn chrome_rules_enabled(&self) -> bool {
         self.url_data.chrome_rules_enabled() || self.stylesheet_origin == Origin::User
     }
+}
+
+pub(crate) fn parse_lang_ranges<'i, 't>(
+    input: &mut CssParser<'i, 't>,
+) -> Result<Vec<AtomIdent>, ParseError<'i>> {
+    let ranges = input.parse_comma_separated(|input| {
+        Ok(AtomIdent::from(input.expect_ident_or_string()?.as_ref()))
+    })?;
+    if ranges.is_empty() {
+        return Err(input.new_custom_error(style_traits::StyleParseErrorKind::UnspecifiedError));
+    }
+    Ok(ranges)
 }
 
 /// This enumeration determines how a pseudo-element cascades.
