@@ -536,7 +536,7 @@ trait PrivateMatchMethods: TElement {
         new_resolved_styles: &mut ResolvedElementStyles,
         _important_rules_changed: bool,
     ) {
-        use crate::animation::AnimationSetKey;
+        use crate::animation::{AnimationCascadeTarget, AnimationSetKey};
         use crate::dom::TDocument;
 
         if context.shared.traversal_flags.for_animation_only() && old_styles.primary.is_some() {
@@ -547,7 +547,7 @@ trait PrivateMatchMethods: TElement {
             context,
             &mut old_styles.primary,
             new_resolved_styles.primary_style_mut(),
-            /* pseudo_element = */ None,
+            AnimationCascadeTarget::Element,
         );
 
         // If we have modified animation or transitions, we recascade style for this node.
@@ -613,7 +613,7 @@ trait PrivateMatchMethods: TElement {
         new_resolved_styles: &mut ResolvedElementStyles,
         pseudo_element: PseudoElement,
     ) {
-        use crate::animation::AnimationSetKey;
+        use crate::animation::{AnimationCascadeTarget, AnimationSetKey};
         use crate::dom::TDocument;
 
         let key = AnimationSetKey::new_for_pseudo(self.as_node().opaque(), pseudo_element.clone());
@@ -633,7 +633,10 @@ trait PrivateMatchMethods: TElement {
             context,
             &old_style,
             &style,
-            Some(pseudo_element.clone()),
+            AnimationCascadeTarget::Pseudo {
+                pseudo: &pseudo_element,
+                primary_style: &new_resolved_styles.primary,
+            },
         );
 
         let declarations = context.shared.animations.get_all_declarations(
@@ -693,24 +696,25 @@ trait PrivateMatchMethods: TElement {
         context: &mut StyleContext<Self>,
         old_values: &Option<Arc<ComputedValues>>,
         new_values: &Arc<ComputedValues>,
-        pseudo_element: Option<PseudoElement>,
+        cascade_target: crate::animation::AnimationCascadeTarget<'_>,
     ) -> bool {
         use crate::animation::{AnimationSetKey, AnimationState};
 
         // We need to call this before accessing the `ElementAnimationSet` from the
         // map because this call will do a RwLock::read().
+        let pseudo_element = cascade_target.pseudo().cloned();
         let needs_animations_update = self.needs_animations_update(
             context,
             old_values.as_deref(),
             new_values,
-            pseudo_element,
+            pseudo_element.clone(),
         );
 
         let might_need_transitions_update = self.might_need_transitions_update(
             context,
             old_values.as_deref(),
             new_values,
-            pseudo_element,
+            pseudo_element.clone(),
         );
 
         let mut after_change_style = None;
@@ -742,6 +746,7 @@ trait PrivateMatchMethods: TElement {
                 *self,
                 &shared_context,
                 &new_values,
+                cascade_target,
                 &mut resolver,
             );
         }

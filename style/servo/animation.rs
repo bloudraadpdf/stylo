@@ -22,7 +22,7 @@ use crate::properties::{
 use crate::rule_tree::CascadeLevel;
 use crate::selector_parser::PseudoElement;
 use crate::shared_lock::{Locked, SharedRwLock};
-use crate::style_resolver::StyleResolverForElement;
+use crate::style_resolver::{PrimaryStyle, StyleResolverForElement};
 use crate::stylesheets::keyframes_rule::{KeyframesAnimation, KeyframesStep, KeyframesStepValue};
 use crate::stylesheets::layer_rule::LayerOrder;
 use crate::values::animated::{Animate, Procedure};
@@ -34,6 +34,34 @@ use parking_lot::RwLock;
 use rustc_hash::FxHashMap;
 use servo_arc::Arc;
 use std::fmt;
+
+/// The inheritance target used while resolving CSS animation keyframes.
+///
+/// Generated pseudos inherit from their originating element's primary style,
+/// so representing them as an ordinary element cascade loses the correct
+/// parent for relative and inherited keyframe values.
+#[derive(Clone, Copy)]
+pub enum AnimationCascadeTarget<'a> {
+    /// Resolve keyframes for an ordinary element.
+    Element,
+    /// Resolve keyframes for a generated pseudo inheriting from its
+    /// originating element.
+    Pseudo {
+        /// The generated pseudo whose style is being animated.
+        pseudo: &'a PseudoElement,
+        /// The originating element's primary style.
+        primary_style: &'a PrimaryStyle,
+    },
+}
+
+impl<'a> AnimationCascadeTarget<'a> {
+    pub(crate) const fn pseudo(self) -> Option<&'a PseudoElement> {
+        match self {
+            Self::Element => None,
+            Self::Pseudo { pseudo, .. } => Some(pseudo),
+        }
+    }
+}
 
 /// Represents an animation for a given property.
 #[derive(Clone, Debug, MallocSizeOf)]
@@ -217,6 +245,7 @@ impl IntermediateComputedKeyframe {
         element: E,
         context: &SharedStyleContext,
         base_style: &Arc<ComputedValues>,
+        cascade_target: AnimationCascadeTarget,
         resolver: &mut StyleResolverForElement<E>,
     ) -> Arc<ComputedValues>
     where
@@ -248,9 +277,25 @@ impl IntermediateComputedKeyframe {
             visited_rules: base_style.visited_rules().cloned(),
             flags: base_style.flags.for_cascade_inputs(),
         };
-        resolver
-            .cascade_style_and_visited_with_default_parents(inputs)
-            .0
+        match cascade_target {
+            AnimationCascadeTarget::Element => {
+                resolver
+                    .cascade_style_and_visited_with_default_parents(inputs)
+                    .0
+            },
+            AnimationCascadeTarget::Pseudo {
+                pseudo,
+                primary_style,
+            } => {
+                resolver
+                    .cascade_style_and_visited_for_pseudo_with_default_parents(
+                        inputs,
+                        pseudo,
+                        primary_style,
+                    )
+                    .0
+            },
+        }
     }
 }
 
@@ -277,6 +322,7 @@ impl ComputedKeyframe {
         context: &SharedStyleContext,
         base_style: &Arc<ComputedValues>,
         default_timing_function: TimingFunction,
+        cascade_target: AnimationCascadeTarget,
         resolver: &mut StyleResolverForElement<E>,
     ) -> Box<[Self]>
     where
@@ -304,7 +350,8 @@ impl ComputedKeyframe {
             let start_percentage = step.start_percentage;
             let properties_changed_in_step = step.declarations.property_ids().clone();
             let step_timing_function = step.timing_function.clone();
-            let step_style = step.resolve_style(element, context, base_style, resolver);
+            let step_style =
+                step.resolve_style(element, context, base_style, cascade_target, resolver);
             let timing_function =
                 step_timing_function.unwrap_or_else(|| default_timing_function.clone());
 
@@ -1025,6 +1072,7 @@ impl ElementAnimationSet {
         element: E,
         context: &SharedStyleContext,
         new_style: &Arc<ComputedValues>,
+        cascade_target: AnimationCascadeTarget,
         resolver: &mut StyleResolverForElement<E>,
     ) where
         E: TElement,
@@ -1035,7 +1083,14 @@ impl ElementAnimationSet {
             }
         }
 
-        maybe_start_animations(element, &context, &new_style, self, resolver);
+        maybe_start_animations(
+            element,
+            &context,
+            &new_style,
+            cascade_target,
+            self,
+            resolver,
+        );
     }
 
     /// Update our transitions given a new style, canceling or starting new animations
@@ -1537,6 +1592,7 @@ pub fn maybe_start_animations<E>(
     element: E,
     context: &SharedStyleContext,
     new_style: &Arc<ComputedValues>,
+    cascade_target: AnimationCascadeTarget,
     animation_state: &mut ElementAnimationSet,
     resolver: &mut StyleResolverForElement<E>,
 ) where
@@ -1607,6 +1663,7 @@ pub fn maybe_start_animations<E>(
             context,
             new_style,
             style.animation_timing_function_mod(i),
+            cascade_target,
             resolver,
         );
 
