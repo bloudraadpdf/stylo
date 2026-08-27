@@ -668,6 +668,13 @@ mod tests {
         })
     }
 
+    fn parsed_rule_overlap_declarations(css: &str) -> Vec<(&'static str, String, Importance)> {
+        parsed_declarations(css, |declaration| match declaration {
+            PropertyDeclaration::RuleOverlap(value) => ("overlap", value.to_css_string()),
+            _ => panic!("expected rule-overlap declaration"),
+        })
+    }
+
     fn parsed_bidirectional_rule_declarations(
         css: &str,
     ) -> Vec<(&'static str, String, Importance)> {
@@ -978,6 +985,22 @@ mod tests {
             ),
             ""
         );
+    }
+
+    #[test]
+    fn servo_rule_overlap_accepts_only_its_closed_keywords() {
+        for keyword in ["row-over-column", "column-over-row"] {
+            assert_eq!(
+                parsed_rule_overlap_declarations(&format!("p {{ rule-overlap: {keyword}; }}")),
+                vec![("overlap", keyword.to_string(), Importance::Normal)]
+            );
+        }
+        for value in ["normal", "column-over-row row-over-column"] {
+            assert!(
+                parsed_rule_overlap_declarations(&format!("p {{ rule-overlap: {value}; }}"))
+                    .is_empty()
+            );
+        }
     }
 
     #[test]

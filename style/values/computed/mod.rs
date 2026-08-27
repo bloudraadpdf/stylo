@@ -184,7 +184,9 @@ pub use self::overflow_4::{
 };
 // re-export by computed path; bd_pdf_destination now declares its own
 // computed `BdPdfAttachmentUrl` that contains `ComputedUrl`.
-pub use self::bd_gaps::{BorderClip, MaskBorderMode, Overlay, RuleBreak, RuleVisibilityItems};
+pub use self::bd_gaps::{
+    BorderClip, MaskBorderMode, Overlay, RuleBreak, RuleOverlap, RuleVisibilityItems,
+};
 pub use self::bd_misc::{
     BdCaptionPage, BdColumnClip, BdFlow, BdIntegerAuto, BdLang, BdLineBreakOpportunity,
     BdLineBreakRule, BdObjectSlice, BdPositionOrigin, BdReplacedElement, BdScaleContent,

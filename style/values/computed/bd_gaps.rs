@@ -10,7 +10,7 @@ use crate::values::computed::{BorderSideWidth, BorderStyle, Color};
 use crate::values::generics::gap::GapRuleList as GenericGapRuleList;
 
 pub use crate::values::specified::bd_gaps::{
-    BorderClip, MaskBorderMode, Overlay, RuleBreak, RuleVisibilityItems,
+    BorderClip, MaskBorderMode, Overlay, RuleBreak, RuleOverlap, RuleVisibilityItems,
 };
 
 /// A computed gap-decoration list with resolved values and repeater counts.

@@ -135,6 +135,15 @@ gap_keyword! {
     }
 }
 
+gap_keyword! {
+    /// Controls which gap-decoration axis paints above the other.
+    pub enum RuleOverlap {
+        #[default]
+        RowOverColumn,
+        ColumnOverRow,
+    }
+}
+
 /// Specified value of `overlay` (F21.24).
 ///
 /// CSS Position 4 — controls whether an element participates in
