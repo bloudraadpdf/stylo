@@ -1182,26 +1182,69 @@ pub mod columns {
     }
 }
 
-pub mod column_rule {
-    pub use crate::properties::shorthands_generated::column_rule::*;
+macro_rules! axis_gap_rule_shorthand {
+    ($module:ident, $width:ident, $style:ident, $color:ident) => {
+        pub mod $module {
+            pub use crate::properties::shorthands_generated::$module::*;
 
-    use super::*;
+            use super::*;
 
-    pub fn parse_value<'i, 't>(
-        context: &ParserContext,
-        input: &mut Parser<'i, 't>,
-    ) -> Result<Longhands, ParseError<'i>> {
-        let (width, style, color) = super::parse_single_gap_rule(context, input)?;
-        Ok(expanded! {
-            column_rule_width: width,
-            column_rule_style: style,
-            column_rule_color: color,
+            pub fn parse_value<'i, 't>(
+                context: &ParserContext,
+                input: &mut Parser<'i, 't>,
+            ) -> Result<Longhands, ParseError<'i>> {
+                let (width, style, color) = super::parse_gap_rule_shorthand(context, input)?;
+                Ok(expanded! {
+                    $width: width,
+                    $style: style,
+                    $color: color,
+                })
+            }
+
+            impl<'a> ToCss for LonghandsToSerialize<'a> {
+                fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+                where
+                    W: fmt::Write,
+                {
+                    super::serialize_gap_rule_list(dest, self.$width, self.$style, self.$color)
+                }
+            }
+        }
+    };
+}
+
+axis_gap_rule_shorthand!(
+    column_rule,
+    column_rule_width,
+    column_rule_style,
+    column_rule_color
+);
+
+#[cfg(feature = "servo")]
+fn map_gap_rule_list<Value, Converted>(
+    list: &specified::GapRuleList<Value>,
+    mut convert: impl FnMut(&Value) -> Converted,
+) -> specified::GapRuleList<Converted> {
+    use crate::values::generics::gap::GapRuleListItem;
+
+    let items = list
+        .0
+        .iter()
+        .map(|item| match item {
+            GapRuleListItem::Value(value) => GapRuleListItem::Value(convert(value)),
+            GapRuleListItem::Repeat { count, values } => GapRuleListItem::Repeat {
+                count: count.clone(),
+                values: crate::OwnedSlice::from(
+                    values.iter().map(&mut convert).collect::<Vec<_>>(),
+                ),
+            },
         })
-    }
+        .collect::<Vec<_>>();
+    crate::values::generics::gap::GapRuleList(crate::OwnedSlice::from(items))
 }
 
 #[cfg(feature = "servo")]
-fn parse_single_gap_rule<'i, 't>(
+fn parse_gap_rule_shorthand<'i, 't>(
     context: &ParserContext,
     input: &mut Parser<'i, 't>,
 ) -> Result<
@@ -1212,17 +1255,117 @@ fn parse_single_gap_rule<'i, 't>(
     ),
     ParseError<'i>,
 > {
-    let (width, style, color) = parse_border(context, input)?;
+    let rules = specified::parse_gap_rule_list_with(context, input, parse_border)?;
     Ok((
-        specified::GapRuleList::single(width),
-        specified::GapRuleList::single(style),
-        specified::GapRuleList::single(color),
+        map_gap_rule_list(&rules, |(width, _, _)| width.clone()),
+        map_gap_rule_list(&rules, |(_, style, _)| *style),
+        map_gap_rule_list(&rules, |(_, _, color)| color.clone()),
     ))
 }
 
 #[cfg(feature = "servo")]
-pub mod row_rule {
-    pub use crate::properties::shorthands_generated::row_rule::*;
+fn gap_rule_list_shapes_match(
+    widths: &specified::GapRuleWidthList,
+    styles: &specified::GapRuleStyleList,
+    colors: &specified::GapRuleColorList,
+) -> bool {
+    use crate::values::generics::gap::GapRuleListItem;
+
+    widths.0.len() == styles.0.len()
+        && styles.0.len() == colors.0.len()
+        && widths
+            .0
+            .iter()
+            .zip(styles.0.iter())
+            .zip(colors.0.iter())
+            .all(|((width, style), color)| match (width, style, color) {
+                (
+                    GapRuleListItem::Value(_),
+                    GapRuleListItem::Value(_),
+                    GapRuleListItem::Value(_),
+                ) => true,
+                (
+                    GapRuleListItem::Repeat {
+                        count: width_count,
+                        values: width_values,
+                    },
+                    GapRuleListItem::Repeat {
+                        count: style_count,
+                        values: style_values,
+                    },
+                    GapRuleListItem::Repeat {
+                        count: color_count,
+                        values: color_values,
+                    },
+                ) => {
+                    width_count == style_count
+                        && style_count == color_count
+                        && width_values.len() == style_values.len()
+                        && style_values.len() == color_values.len()
+                },
+                _ => false,
+            })
+}
+
+#[cfg(feature = "servo")]
+fn serialize_gap_rule_list<W>(
+    dest: &mut CssWriter<W>,
+    widths: &specified::GapRuleWidthList,
+    styles: &specified::GapRuleStyleList,
+    colors: &specified::GapRuleColorList,
+) -> fmt::Result
+where
+    W: fmt::Write,
+{
+    use crate::values::generics::gap::GapRuleListItem;
+
+    if !gap_rule_list_shapes_match(widths, styles, colors) {
+        return Ok(());
+    }
+    for (index, ((width, style), color)) in widths
+        .0
+        .iter()
+        .zip(styles.0.iter())
+        .zip(colors.0.iter())
+        .enumerate()
+    {
+        if index != 0 {
+            dest.write_str(", ")?;
+        }
+        match (width, style, color) {
+            (
+                GapRuleListItem::Value(width),
+                GapRuleListItem::Value(style),
+                GapRuleListItem::Value(color),
+            ) => serialize_directional_border(dest, width, style, color)?,
+            (
+                GapRuleListItem::Repeat {
+                    count,
+                    values: widths,
+                },
+                GapRuleListItem::Repeat { values: styles, .. },
+                GapRuleListItem::Repeat { values: colors, .. },
+            ) => {
+                dest.write_str("repeat(")?;
+                count.to_css(dest)?;
+                for ((width, style), color) in widths.iter().zip(styles.iter()).zip(colors.iter()) {
+                    dest.write_str(", ")?;
+                    serialize_directional_border(dest, width, style, color)?;
+                }
+                dest.write_char(')')?;
+            },
+            _ => unreachable!(),
+        }
+    }
+    Ok(())
+}
+
+#[cfg(feature = "servo")]
+axis_gap_rule_shorthand!(row_rule, row_rule_width, row_rule_style, row_rule_color);
+
+#[cfg(feature = "servo")]
+pub mod rule {
+    pub use crate::properties::shorthands_generated::rule::*;
 
     use super::*;
 
@@ -1230,12 +1373,35 @@ pub mod row_rule {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Longhands, ParseError<'i>> {
-        let (width, style, color) = super::parse_single_gap_rule(context, input)?;
+        let (width, style, color) = super::parse_gap_rule_shorthand(context, input)?;
         Ok(expanded! {
+            column_rule_width: width.clone(),
             row_rule_width: width,
+            column_rule_style: style.clone(),
             row_rule_style: style,
+            column_rule_color: color.clone(),
             row_rule_color: color,
         })
+    }
+
+    impl<'a> ToCss for LonghandsToSerialize<'a> {
+        fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+        where
+            W: fmt::Write,
+        {
+            if self.column_rule_width != self.row_rule_width
+                || self.column_rule_style != self.row_rule_style
+                || self.column_rule_color != self.row_rule_color
+            {
+                return Ok(());
+            }
+            super::serialize_gap_rule_list(
+                dest,
+                self.column_rule_width,
+                self.column_rule_style,
+                self.column_rule_color,
+            )
+        }
     }
 }
 

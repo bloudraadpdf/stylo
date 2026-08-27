@@ -35,48 +35,59 @@ impl<Value: Parse> Parse for GapRuleList<Value> {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        let mut saw_auto_repeater = false;
-        let items = input.parse_comma_separated(|input| {
-            if input
-                .try_parse(|input| input.expect_function_matching("repeat"))
-                .is_err()
-            {
-                return Value::parse(context, input).map(GapRuleListItem::Value);
-            }
-
-            let item = input.parse_nested_block(|input| {
-                let count = if input
-                    .try_parse(|input| input.expect_ident_matching("auto"))
-                    .is_ok()
-                {
-                    GapRuleRepeatCount::Auto
-                } else {
-                    GapRuleRepeatCount::Number(Integer::parse_positive(context, input)?)
-                };
-                input.expect_comma()?;
-                let values = input.parse_comma_separated(|input| Value::parse(context, input))?;
-                Ok(GapRuleListItem::Repeat {
-                    count,
-                    values: crate::OwnedSlice::from(values),
-                })
-            })?;
-
-            if matches!(
-                item,
-                GapRuleListItem::Repeat {
-                    count: GapRuleRepeatCount::Auto,
-                    ..
-                }
-            ) {
-                if saw_auto_repeater {
-                    return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
-                }
-                saw_auto_repeater = true;
-            }
-            Ok(item)
-        })?;
-        Ok(Self(crate::OwnedSlice::from(items)))
+        parse_gap_rule_list_with(context, input, Value::parse)
     }
+}
+
+pub(crate) fn parse_gap_rule_list_with<'i, 't, Value>(
+    context: &ParserContext,
+    input: &mut Parser<'i, 't>,
+    mut parse_value: impl for<'tt> FnMut(
+        &ParserContext,
+        &mut Parser<'i, 'tt>,
+    ) -> Result<Value, ParseError<'i>>,
+) -> Result<GapRuleList<Value>, ParseError<'i>> {
+    let mut saw_auto_repeater = false;
+    let items = input.parse_comma_separated(|input| {
+        if input
+            .try_parse(|input| input.expect_function_matching("repeat"))
+            .is_err()
+        {
+            return parse_value(context, input).map(GapRuleListItem::Value);
+        }
+
+        let item = input.parse_nested_block(|input| {
+            let count = if input
+                .try_parse(|input| input.expect_ident_matching("auto"))
+                .is_ok()
+            {
+                GapRuleRepeatCount::Auto
+            } else {
+                GapRuleRepeatCount::Number(Integer::parse_positive(context, input)?)
+            };
+            input.expect_comma()?;
+            let values = input.parse_comma_separated(|input| parse_value(context, input))?;
+            Ok(GapRuleListItem::Repeat {
+                count,
+                values: crate::OwnedSlice::from(values),
+            })
+        })?;
+
+        if matches!(
+            item,
+            GapRuleListItem::Repeat {
+                count: GapRuleRepeatCount::Auto,
+                ..
+            }
+        ) {
+            if saw_auto_repeater {
+                return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+            }
+            saw_auto_repeater = true;
+        }
+        Ok(item)
+    })?;
+    Ok(GenericGapRuleList(crate::OwnedSlice::from(items)))
 }
 
 /// Controls how gap decorations break at visible intersections.

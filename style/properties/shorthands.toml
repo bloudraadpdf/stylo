@@ -518,14 +518,25 @@ servo_pref = "layout.columns.enabled"
 [column-rule]
 servo_pref = "layout.columns.enabled"
 sub_properties = ["column-rule-width", "column-rule-style", "column-rule-color"]
-spec = "https://drafts.csswg.org/css-multicol/#propdef-column-rule"
-derive_serialize = true
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-column-rule"
 
 [row-rule]
 servo_pref = "layout.columns.enabled"
 sub_properties = ["row-rule-width", "row-rule-style", "row-rule-color"]
 spec = "https://drafts.csswg.org/css-gaps-1/#propdef-row-rule"
-derive_serialize = true
+engine = "servo"
+
+[rule]
+servo_pref = "layout.columns.enabled"
+sub_properties = [
+  "column-rule-width",
+  "row-rule-width",
+  "column-rule-style",
+  "row-rule-style",
+  "column-rule-color",
+  "row-rule-color",
+]
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-rule"
 engine = "servo"
 
 [rule-color]

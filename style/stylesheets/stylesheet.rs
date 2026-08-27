@@ -807,6 +807,87 @@ mod tests {
     }
 
     #[test]
+    fn servo_rule_shorthand_preserves_full_lists_on_both_axes() {
+        assert_eq!(
+            parsed_bidirectional_rule_declarations(
+                "p { rule: 6px solid red, \
+                           repeat(auto, 2px dotted blue), \
+                           thick green; }",
+            ),
+            vec![
+                (
+                    "column-width",
+                    "6px, repeat(auto, 2px), thick".to_string(),
+                    Importance::Normal,
+                ),
+                (
+                    "row-width",
+                    "6px, repeat(auto, 2px), thick".to_string(),
+                    Importance::Normal,
+                ),
+                (
+                    "column-style",
+                    "solid, repeat(auto, dotted), none".to_string(),
+                    Importance::Normal,
+                ),
+                (
+                    "row-style",
+                    "solid, repeat(auto, dotted), none".to_string(),
+                    Importance::Normal,
+                ),
+                (
+                    "column-color",
+                    "red, repeat(auto, blue), green".to_string(),
+                    Importance::Normal,
+                ),
+                (
+                    "row-color",
+                    "red, repeat(auto, blue), green".to_string(),
+                    Importance::Normal,
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn servo_gap_rule_shorthands_reject_invalid_repeaters() {
+        for declaration in [
+            "p { rule: repeat(auto, red), repeat(auto, blue); }",
+            "p { column-rule: repeat(0, solid); }",
+            "p { row-rule: repeat(-1, thin); }",
+        ] {
+            assert!(parsed_bidirectional_rule_declarations(declaration).is_empty());
+        }
+    }
+
+    #[test]
+    fn servo_gap_rule_shorthands_serialize_complete_rules() {
+        let value = "6px solid red, repeat(auto, 2px dotted blue), thick green";
+        assert_eq!(
+            serialized_shorthand(
+                &format!("p {{ column-rule: {value}; }}"),
+                ShorthandId::ColumnRule
+            ),
+            value
+        );
+        assert_eq!(
+            serialized_shorthand(&format!("p {{ row-rule: {value}; }}"), ShorthandId::RowRule),
+            value
+        );
+        assert_eq!(
+            serialized_shorthand(&format!("p {{ rule: {value}; }}"), ShorthandId::Rule),
+            value
+        );
+        assert_eq!(
+            serialized_shorthand(
+                "p { column-rule: 1px solid red; row-rule: 2px solid red; }",
+                ShorthandId::Rule,
+            ),
+            ""
+        );
+    }
+
+    #[test]
     fn servo_parses_rule_break_longhands_as_typed_declarations() {
         for keyword in ["none", "normal", "intersection"] {
             assert_eq!(

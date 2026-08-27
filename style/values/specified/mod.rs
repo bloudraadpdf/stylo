@@ -67,6 +67,7 @@ pub use self::bd_flow::{BdFlowFrom, BdFlowInto, BdFlowIntoMode, BdRegionFragment
 pub use self::bd_footnote::{
     BdFootnoteFragmentation, BdFootnoteRuleLength, FloatPlacement, FootnoteStylePosition,
 };
+pub(crate) use self::bd_gaps::parse_gap_rule_list_with;
 pub use self::bd_gaps::{
     BorderClip, GapRuleColorList, GapRuleList, GapRuleStyleList, GapRuleWidthList, MaskBorderMode,
     Overlay, RuleBreak,
