@@ -617,7 +617,10 @@ mod tests {
         )
     }
 
-    fn parsed_row_rule_declarations(css: &str) -> Vec<(&'static str, String, Importance)> {
+    fn parsed_declarations(
+        css: &str,
+        name_and_value: impl Fn(&PropertyDeclaration) -> (&'static str, String),
+    ) -> Vec<(&'static str, String, Importance)> {
         let _guard = pref_lock().lock().unwrap();
         let _columns_pref = BoolPrefGuard::set("layout.columns.enabled", true);
         let stylesheet = parse_stylesheet(css);
@@ -631,15 +634,27 @@ mod tests {
             .read_with(&guard)
             .declaration_importance_iter()
             .map(|(declaration, importance)| {
-                let (name, value) = match declaration {
-                    PropertyDeclaration::RowRuleWidth(value) => ("width", value.to_css_string()),
-                    PropertyDeclaration::RowRuleStyle(value) => ("style", value.to_css_string()),
-                    PropertyDeclaration::RowRuleColor(value) => ("color", value.to_css_string()),
-                    _ => panic!("expected row-rule declaration"),
-                };
+                let (name, value) = name_and_value(declaration);
                 (name, value, importance)
             })
             .collect()
+    }
+
+    fn parsed_row_rule_declarations(css: &str) -> Vec<(&'static str, String, Importance)> {
+        parsed_declarations(css, |declaration| match declaration {
+            PropertyDeclaration::RowRuleWidth(value) => ("width", value.to_css_string()),
+            PropertyDeclaration::RowRuleStyle(value) => ("style", value.to_css_string()),
+            PropertyDeclaration::RowRuleColor(value) => ("color", value.to_css_string()),
+            _ => panic!("expected row-rule declaration"),
+        })
+    }
+
+    fn parsed_rule_break_declarations(css: &str) -> Vec<(&'static str, String, Importance)> {
+        parsed_declarations(css, |declaration| match declaration {
+            PropertyDeclaration::ColumnRuleBreak(value) => ("column", value.to_css_string()),
+            PropertyDeclaration::RowRuleBreak(value) => ("row", value.to_css_string()),
+            _ => panic!("expected rule-break declaration"),
+        })
     }
 
     #[test]
@@ -666,6 +681,38 @@ mod tests {
                 ("color", "currentcolor".to_string(), Importance::Important),
             ]
         );
+    }
+
+    #[test]
+    fn servo_parses_rule_break_longhands_as_typed_declarations() {
+        for keyword in ["none", "normal", "intersection"] {
+            assert_eq!(
+                parsed_rule_break_declarations(&format!(
+                    "p {{ column-rule-break: {keyword}; row-rule-break: {keyword}; }}"
+                )),
+                vec![
+                    ("column", keyword.to_string(), Importance::Normal),
+                    ("row", keyword.to_string(), Importance::Normal),
+                ]
+            );
+        }
+    }
+
+    #[test]
+    fn servo_rule_break_shorthand_expands_one_important_value() {
+        assert_eq!(
+            parsed_rule_break_declarations("p { rule-break: intersection !important; }"),
+            vec![
+                ("column", "intersection".to_string(), Importance::Important),
+                ("row", "intersection".to_string(), Importance::Important),
+            ]
+        );
+    }
+
+    #[test]
+    fn servo_rule_break_shorthand_rejects_extra_or_unknown_values() {
+        assert!(parsed_rule_break_declarations("p { rule-break: none normal; }").is_empty());
+        assert!(parsed_rule_break_declarations("p { rule-break: crossing; }").is_empty());
     }
 
     #[test]

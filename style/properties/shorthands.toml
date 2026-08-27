@@ -528,6 +528,12 @@ spec = "https://drafts.csswg.org/css-gaps-1/#propdef-row-rule"
 kind = "single_border"
 engine = "servo"
 
+[rule-break]
+servo_pref = "layout.columns.enabled"
+sub_properties = ["column-rule-break", "row-rule-break"]
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-rule-break"
+engine = "servo"
+
 [text-decoration]
 sub_properties = ["text-decoration-color", "text-decoration-line", "text-decoration-style", "text-decoration-thickness"]
 spec = "https://drafts.csswg.org/css-text-decor/#propdef-text-decoration"

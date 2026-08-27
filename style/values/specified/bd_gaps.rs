@@ -12,6 +12,32 @@
 
 use crate::derives::*;
 
+/// Controls how gap decorations break at visible intersections.
+#[repr(u8)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[allow(missing_docs)]
+pub enum RuleBreak {
+    None,
+    #[default]
+    Normal,
+    Intersection,
+}
+
 /// Specified value of `overlay` (F21.24).
 ///
 /// CSS Position 4 — controls whether an element participates in

@@ -6,4 +6,4 @@
 //!
 //! Round-trip identically from the specified side.
 
-pub use crate::values::specified::bd_gaps::{BorderClip, MaskBorderMode, Overlay};
+pub use crate::values::specified::bd_gaps::{BorderClip, MaskBorderMode, Overlay, RuleBreak};

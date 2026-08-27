@@ -1216,6 +1216,37 @@ pub mod column_rule {
     }
 }
 
+#[cfg(feature = "servo")]
+pub mod rule_break {
+    pub use crate::properties::shorthands_generated::rule_break::*;
+
+    use super::*;
+    use crate::properties::longhands::column_rule_break;
+
+    pub fn parse_value<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Longhands, ParseError<'i>> {
+        let value = column_rule_break::parse(context, input)?;
+        Ok(expanded! {
+            column_rule_break: value,
+            row_rule_break: value,
+        })
+    }
+
+    impl<'a> ToCss for LonghandsToSerialize<'a> {
+        fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+        where
+            W: fmt::Write,
+        {
+            if self.column_rule_break != self.row_rule_break {
+                return Ok(());
+            }
+            self.column_rule_break.to_css(dest)
+        }
+    }
+}
+
 pub mod text_wrap {
     pub use crate::properties::shorthands_generated::text_wrap::*;
 

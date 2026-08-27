@@ -919,6 +919,28 @@ spec = "https://drafts.csswg.org/css-gaps-1/#propdef-row-rule-width"
 affects = "layout"
 engine = "servo"
 
+[column-rule-break]
+type = "RuleBreak"
+initial = "computed::RuleBreak::Normal"
+struct = "column"
+initial_specified_value = "specified::RuleBreak::Normal"
+animation_type = "discrete"
+servo_pref = "layout.columns.enabled"
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-column-rule-break"
+affects = "paint"
+engine = "servo"
+
+[row-rule-break]
+type = "RuleBreak"
+initial = "computed::RuleBreak::Normal"
+struct = "column"
+initial_specified_value = "specified::RuleBreak::Normal"
+animation_type = "discrete"
+servo_pref = "layout.columns.enabled"
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-row-rule-break"
+affects = "paint"
+engine = "servo"
+
 [column-width]
 type = "length::NonNegativeLengthOrAuto"
 initial = "computed::length::NonNegativeLengthOrAuto::auto()"
