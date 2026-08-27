@@ -11,6 +11,7 @@ use crate::context::{CascadeInputs, SharedStyleContext};
 use crate::derives::*;
 use crate::dom::{OpaqueNode, TDocument, TElement, TNode};
 use crate::properties::animated_properties::{AnimationValue, AnimationValueMap};
+use crate::properties::longhands::animation_composition::computed_value::single_value::T as AnimationComposition;
 use crate::properties::longhands::animation_direction::computed_value::single_value::T as AnimationDirection;
 use crate::properties::longhands::animation_fill_mode::computed_value::single_value::T as AnimationFillMode;
 use crate::properties::longhands::animation_play_state::computed_value::single_value::T as AnimationPlayState;
@@ -161,6 +162,7 @@ pub enum KeyframesIterationState {
 struct IntermediateComputedKeyframe {
     declarations: PropertyDeclarationBlock,
     timing_function: Option<TimingFunction>,
+    composition: Option<AnimationComposition>,
     start_percentage: f32,
 }
 
@@ -169,6 +171,7 @@ impl IntermediateComputedKeyframe {
         IntermediateComputedKeyframe {
             declarations: PropertyDeclarationBlock::new(),
             timing_function: None,
+            composition: None,
             start_percentage,
         }
     }
@@ -212,6 +215,9 @@ impl IntermediateComputedKeyframe {
         let guard = &context.guards.author;
         if let Some(timing_function) = step.get_animation_timing_function(&guard) {
             self.timing_function = Some(timing_function.to_computed_value_without_context());
+        }
+        if let Some(composition) = step.get_animation_composition(&guard) {
+            self.composition = Some(composition);
         }
 
         let block = match step.value {
@@ -306,6 +312,8 @@ struct ComputedKeyframe {
     /// and the next one.
     timing_function: TimingFunction,
 
+    composition: AnimationComposition,
+
     /// The starting percentage (a number between 0 and 1) which represents
     /// at what point in an animation iteration this step is.
     start_percentage: f32,
@@ -316,12 +324,28 @@ struct ComputedKeyframe {
 }
 
 impl ComputedKeyframe {
+    fn composite(
+        composition: AnimationComposition,
+        underlying: &AnimationValue,
+        value: &AnimationValue,
+    ) -> AnimationValue {
+        let procedure = match composition {
+            AnimationComposition::Replace => return value.clone(),
+            AnimationComposition::Add => Procedure::Add,
+            AnimationComposition::Accumulate => Procedure::Accumulate { count: 1 },
+        };
+        underlying
+            .animate(value, procedure)
+            .unwrap_or_else(|()| value.clone())
+    }
+
     fn generate_for_keyframes<E>(
         element: E,
         animation: &KeyframesAnimation,
         context: &SharedStyleContext,
         base_style: &Arc<ComputedValues>,
         default_timing_function: TimingFunction,
+        default_composition: AnimationComposition,
         cascade_target: AnimationCascadeTarget,
         resolver: &mut StyleResolverForElement<E>,
     ) -> Box<[Self]>
@@ -350,6 +374,7 @@ impl ComputedKeyframe {
             let start_percentage = step.start_percentage;
             let properties_changed_in_step = step.declarations.property_ids().clone();
             let step_timing_function = step.timing_function.clone();
+            let composition = step.composition.unwrap_or(default_composition);
             let step_style =
                 step.resolve_style(element, context, base_style, cascade_target, resolver);
             let timing_function =
@@ -388,6 +413,7 @@ impl ComputedKeyframe {
 
             computed_steps.push(ComputedKeyframe {
                 timing_function,
+                composition,
                 start_percentage,
                 values,
             });
@@ -444,6 +470,21 @@ pub struct Animation {
 }
 
 impl Animation {
+    fn composited_keyframe_value(
+        &self,
+        keyframe: &ComputedKeyframe,
+        value: &AnimationValue,
+        map: &AnimationValueMap,
+    ) -> AnimationValue {
+        let property = value.id();
+        let underlying = map
+            .get(&property.to_owned())
+            .cloned()
+            .or_else(|| AnimationValue::from_computed_values(property, &self.cascade_style))
+            .expect("an animated property must have an underlying value");
+        ComputedKeyframe::composite(keyframe.composition, &underlying, value)
+    }
+
     /// Whether or not this animation is cancelled by changes from a new style.
     fn is_cancelled_in_new_style(&self, new_style: &Arc<ComputedValues>) -> bool {
         let new_ui = new_style.get_ui();
@@ -768,6 +809,7 @@ impl Animation {
         // in order to avoid doing more work.
         let mut add_declarations_to_map = |keyframe: &ComputedKeyframe| {
             for value in keyframe.values.iter() {
+                let value = self.composited_keyframe_value(keyframe, value, map);
                 map.insert(value.id().to_owned(), value.clone());
             }
         };
@@ -788,9 +830,11 @@ impl Animation {
             / percentage_between_keyframes;
 
         for (from, to) in prev_keyframe.values.iter().zip(next_keyframe.values.iter()) {
+            let from = self.composited_keyframe_value(prev_keyframe, from, map);
+            let to = self.composited_keyframe_value(next_keyframe, to, map);
             let animation = PropertyAnimation {
-                from: from.clone(),
-                to: to.clone(),
+                from,
+                to,
                 timing_function: prev_keyframe.timing_function.clone(),
                 duration: duration_between_keyframes as f64,
             };
@@ -1663,6 +1707,7 @@ pub fn maybe_start_animations<E>(
             context,
             new_style,
             style.animation_timing_function_mod(i),
+            style.animation_composition_mod(i),
             cascade_target,
             resolver,
         );
@@ -1709,8 +1754,10 @@ pub fn maybe_start_animations<E>(
 #[cfg(test)]
 mod tests {
     use super::{
-        Animation, AnimationDirection, AnimationFillMode, AnimationState, KeyframesIterationState,
+        Animation, AnimationComposition, AnimationDirection, AnimationFillMode, AnimationState,
+        ComputedKeyframe, KeyframesIterationState,
     };
+    use crate::properties::animated_properties::AnimationValue;
     use crate::properties::style_structs::Font;
     use crate::properties::ComputedValues;
     use crate::Atom;
@@ -1739,6 +1786,25 @@ mod tests {
 
         assert!(!animation.has_ended(0.));
         assert!(animation.has_ended(0.05));
+    }
+
+    #[test]
+    fn composites_keyframe_values_with_the_underlying_value() {
+        let underlying = AnimationValue::Opacity(0.2);
+        let value = AnimationValue::Opacity(0.3);
+
+        assert_eq!(
+            ComputedKeyframe::composite(AnimationComposition::Replace, &underlying, &value),
+            value,
+        );
+        assert_eq!(
+            ComputedKeyframe::composite(AnimationComposition::Add, &underlying, &value),
+            AnimationValue::Opacity(0.5),
+        );
+        assert_eq!(
+            ComputedKeyframe::composite(AnimationComposition::Accumulate, &underlying, &value),
+            AnimationValue::Opacity(0.5),
+        );
     }
 
     /// The stepping loop that `iterations_skipped_by_delay` replaced, kept as
