@@ -13,7 +13,8 @@ use crate::values::animated::{
 use crate::values::computed::position::TryTacticAdjustment;
 use crate::values::computed::{NonNegativeNumber, Percentage, Zoom};
 use crate::values::generics::length::{
-    GenericLengthOrNumber, GenericLengthPercentageOrNormal, GenericMaxSize, GenericSize,
+    GenericLengthOrNumber, GenericLengthPercentageOrNormal, GenericMaxSize, GenericRuleInset,
+    GenericSize,
 };
 #[cfg(feature = "gecko")]
 use crate::values::generics::position::TreeScoped;
@@ -738,6 +739,9 @@ impl From<NonNegativeLength> for Au {
 /// Either a computed NonNegativeLengthPercentage or the `normal` keyword.
 pub type NonNegativeLengthPercentageOrNormal =
     GenericLengthPercentageOrNormal<NonNegativeLengthPercentage>;
+
+/// A computed gap decoration endpoint inset.
+pub type RuleInset = GenericRuleInset<LengthPercentage>;
 
 /// Either a non-negative `<length>` or a `<number>`.
 pub type NonNegativeLengthOrNumber = GenericLengthOrNumber<NonNegativeLength, NonNegativeNumber>;

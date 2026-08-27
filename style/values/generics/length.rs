@@ -599,6 +599,42 @@ impl<LengthPercent> LengthPercentageOrNormal<LengthPercent> {
     }
 }
 
+/// A `<length-percentage> | overlap-join` value for gap decoration insets.
+#[derive(
+    Animate,
+    Clone,
+    ComputeSquaredDistance,
+    Copy,
+    Debug,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToAnimatedValue,
+    ToAnimatedZero,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(C, u8)]
+#[allow(missing_docs)]
+pub enum GenericRuleInset<LengthPercent> {
+    LengthPercentage(LengthPercent),
+    OverlapJoin,
+}
+
+pub use self::GenericRuleInset as RuleInset;
+
+impl<LengthPercent: Zero> RuleInset<LengthPercent> {
+    /// Returns the initial zero inset.
+    #[inline]
+    pub fn zero() -> Self {
+        Self::LengthPercentage(LengthPercent::zero())
+    }
+}
+
 /// Anchor size function used by sizing, margin and inset properties.
 /// This resolves to the size of the anchor at computed time.
 ///

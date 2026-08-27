@@ -584,7 +584,7 @@ mod tests {
     use crate::parser::Parse;
     use crate::properties::{
         declaration_block::PropertyDeclarationBlock, style_structs::Font, ComputedValues,
-        Importance, LonghandId, PropertyDeclaration, StyleBuilder,
+        Importance, LonghandId, PropertyDeclaration, ShorthandId, StyleBuilder,
     };
     use crate::properties_and_values::value::ComputedValue as ComputedRegisteredValue;
     use crate::queries::values::PrefersColorScheme;
@@ -595,6 +595,7 @@ mod tests {
     use crate::values::computed::font::GenericFontFamily;
     use crate::values::computed::{CSSPixelLength, Length, ToComputedValue};
     use crate::Atom;
+    use app_units::Au;
     use cssparser::TokenSerializationType;
     use euclid::{Scale, Size2D};
     use servo_arc::Arc;
@@ -657,6 +658,52 @@ mod tests {
         })
     }
 
+    fn parsed_rule_inset_declarations(css: &str) -> Vec<(&'static str, String, Importance)> {
+        parsed_declarations(css, |declaration| match declaration {
+            PropertyDeclaration::ColumnRuleInsetCapStart(value) => {
+                ("column-cap-start", value.to_css_string())
+            },
+            PropertyDeclaration::ColumnRuleInsetCapEnd(value) => {
+                ("column-cap-end", value.to_css_string())
+            },
+            PropertyDeclaration::ColumnRuleInsetJunctionStart(value) => {
+                ("column-junction-start", value.to_css_string())
+            },
+            PropertyDeclaration::ColumnRuleInsetJunctionEnd(value) => {
+                ("column-junction-end", value.to_css_string())
+            },
+            PropertyDeclaration::RowRuleInsetCapStart(value) => {
+                ("row-cap-start", value.to_css_string())
+            },
+            PropertyDeclaration::RowRuleInsetCapEnd(value) => {
+                ("row-cap-end", value.to_css_string())
+            },
+            PropertyDeclaration::RowRuleInsetJunctionStart(value) => {
+                ("row-junction-start", value.to_css_string())
+            },
+            PropertyDeclaration::RowRuleInsetJunctionEnd(value) => {
+                ("row-junction-end", value.to_css_string())
+            },
+            _ => panic!("expected rule-inset declaration"),
+        })
+    }
+
+    fn serialized_shorthand(css: &str, shorthand: ShorthandId) -> String {
+        let _guard = pref_lock().lock().unwrap();
+        let _columns_pref = BoolPrefGuard::set("layout.columns.enabled", true);
+        let stylesheet = parse_stylesheet(css);
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let CssRule::Style(rule) = &contents.rules(&guard)[0] else {
+            panic!("expected style rule");
+        };
+        let rule = rule.read_with(&guard);
+        let block = rule.block.read_with(&guard);
+        let mut output = String::new();
+        block.shorthand_to_css(shorthand, &mut output).unwrap();
+        output
+    }
+
     #[test]
     fn servo_parses_row_rule_longhands_as_typed_declarations() {
         assert_eq!(
@@ -713,6 +760,195 @@ mod tests {
     fn servo_rule_break_shorthand_rejects_extra_or_unknown_values() {
         assert!(parsed_rule_break_declarations("p { rule-break: none normal; }").is_empty());
         assert!(parsed_rule_break_declarations("p { rule-break: crossing; }").is_empty());
+    }
+
+    #[test]
+    fn servo_rule_inset_longhands_accept_signed_percentages_and_overlap_join() {
+        assert_eq!(
+            parsed_rule_inset_declarations(
+                "p {
+                    column-rule-inset-cap-start: -50%;
+                    column-rule-inset-cap-end: calc(2px + 25%);
+                    row-rule-inset-junction-start: overlap-join;
+                }",
+            ),
+            vec![
+                ("column-cap-start", "-50%".to_string(), Importance::Normal),
+                (
+                    "column-cap-end",
+                    "calc(25% + 2px)".to_string(),
+                    Importance::Normal,
+                ),
+                (
+                    "row-junction-start",
+                    "overlap-join".to_string(),
+                    Importance::Normal,
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn servo_rule_inset_intermediate_shorthands_expand_by_shape() {
+        assert_eq!(
+            parsed_rule_inset_declarations("p { column-rule-inset-start: -50%; }"),
+            vec![
+                ("column-cap-start", "-50%".to_string(), Importance::Normal),
+                (
+                    "column-junction-start",
+                    "-50%".to_string(),
+                    Importance::Normal,
+                ),
+            ]
+        );
+        assert_eq!(
+            parsed_rule_inset_declarations("p { rule-inset-cap: 1px 2px; }"),
+            vec![
+                ("column-cap-start", "1px".to_string(), Importance::Normal),
+                ("column-cap-end", "2px".to_string(), Importance::Normal),
+                ("row-cap-start", "1px".to_string(), Importance::Normal),
+                ("row-cap-end", "2px".to_string(), Importance::Normal),
+            ]
+        );
+        assert_eq!(
+            parsed_rule_inset_declarations("p { rule-inset-end: overlap-join !important; }"),
+            vec![
+                (
+                    "column-cap-end",
+                    "overlap-join".to_string(),
+                    Importance::Important,
+                ),
+                (
+                    "column-junction-end",
+                    "overlap-join".to_string(),
+                    Importance::Important,
+                ),
+                (
+                    "row-cap-end",
+                    "overlap-join".to_string(),
+                    Importance::Important,
+                ),
+                (
+                    "row-junction-end",
+                    "overlap-join".to_string(),
+                    Importance::Important,
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn servo_exposes_every_rule_inset_shorthand() {
+        for (property, longhand_count) in [
+            ("column-rule-inset-start", 2),
+            ("column-rule-inset-end", 2),
+            ("row-rule-inset-start", 2),
+            ("row-rule-inset-end", 2),
+            ("rule-inset-start", 4),
+            ("rule-inset-end", 4),
+            ("column-rule-inset-cap", 2),
+            ("column-rule-inset-junction", 2),
+            ("row-rule-inset-cap", 2),
+            ("row-rule-inset-junction", 2),
+            ("rule-inset-cap", 4),
+            ("rule-inset-junction", 4),
+            ("column-rule-inset", 4),
+            ("row-rule-inset", 4),
+            ("rule-inset", 8),
+        ] {
+            let declarations = parsed_rule_inset_declarations(&format!("p {{ {property}: 7px; }}"));
+            assert_eq!(declarations.len(), longhand_count, "{property}");
+            assert!(
+                declarations
+                    .iter()
+                    .all(|(_, value, importance)| value == "7px"
+                        && *importance == Importance::Normal),
+                "{property}"
+            );
+        }
+    }
+
+    #[test]
+    fn servo_rule_inset_universal_shorthand_expands_slash_grammar() {
+        assert_eq!(
+            parsed_rule_inset_declarations("p { rule-inset: 1px 2px / 3px 4px !important; }"),
+            vec![
+                ("column-cap-start", "1px".to_string(), Importance::Important),
+                ("column-cap-end", "2px".to_string(), Importance::Important),
+                (
+                    "column-junction-start",
+                    "3px".to_string(),
+                    Importance::Important,
+                ),
+                (
+                    "column-junction-end",
+                    "4px".to_string(),
+                    Importance::Important,
+                ),
+                ("row-cap-start", "1px".to_string(), Importance::Important),
+                ("row-cap-end", "2px".to_string(), Importance::Important),
+                (
+                    "row-junction-start",
+                    "3px".to_string(),
+                    Importance::Important,
+                ),
+                ("row-junction-end", "4px".to_string(), Importance::Important,),
+            ]
+        );
+    }
+
+    #[test]
+    fn servo_rule_inset_shorthands_reject_invalid_arity_and_tokens() {
+        for value in [
+            "auto",
+            "normal",
+            "1",
+            "1px 2px 3px",
+            "1px /",
+            "1px / 2px 3px 4px",
+            "1px / 2px / 3px",
+        ] {
+            assert!(
+                parsed_rule_inset_declarations(&format!("p {{ rule-inset: {value}; }}")).is_empty(),
+                "accepted `{value}`"
+            );
+        }
+    }
+
+    #[test]
+    fn servo_rule_inset_shorthands_serialize_canonically() {
+        assert_eq!(
+            serialized_shorthand(
+                "p { rule-inset: 1px 2px / 3px 4px; }",
+                ShorthandId::RuleInset,
+            ),
+            "1px 2px / 3px 4px"
+        );
+        assert_eq!(
+            serialized_shorthand("p { rule-inset-cap: 1px 2px; }", ShorthandId::RuleInsetCap),
+            "1px 2px"
+        );
+        assert_eq!(
+            serialized_shorthand(
+                "p { column-rule-inset: 1px; row-rule-inset: 2px; }",
+                ShorthandId::RuleInset,
+            ),
+            ""
+        );
+    }
+
+    #[test]
+    fn computed_rule_inset_percentage_uses_the_crossing_gap_width() {
+        use crate::values::computed::length::RuleInset;
+        use crate::values::computed::{LengthPercentage, Percentage};
+
+        let inset = RuleInset::LengthPercentage(LengthPercentage::new_percent(Percentage(-0.5)));
+        let RuleInset::LengthPercentage(value) = inset else {
+            panic!("expected length-percentage inset");
+        };
+        assert!(value.has_percentage());
+        assert_eq!(value.to_used_value(Au::from_px(20)), Au::from_px(-10));
+        assert_eq!(value.to_used_value(Au::new(0)), Au::new(0));
     }
 
     #[test]

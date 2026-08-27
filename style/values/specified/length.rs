@@ -18,7 +18,7 @@ use crate::values::generics::length as generics;
 use crate::values::generics::length::{
     GenericAnchorSizeFunction, GenericCalcSize, GenericCalcSizeBasis, GenericCalcSizeExpression,
     GenericLengthOrNumber, GenericLengthPercentageOrNormal, GenericMargin, GenericMaxSize,
-    GenericSize,
+    GenericRuleInset, GenericSize,
 };
 use crate::values::generics::NonNegative;
 use crate::values::specified::calc::{self, AllowAnchorPositioningFunctions, CalcNode};
@@ -2322,6 +2322,9 @@ pub type NonNegativeLengthPercentage = NonNegative<LengthPercentage>;
 /// Either a NonNegativeLengthPercentage or the `normal` keyword.
 pub type NonNegativeLengthPercentageOrNormal =
     GenericLengthPercentageOrNormal<NonNegativeLengthPercentage>;
+
+/// A gap decoration endpoint inset.
+pub type RuleInset = GenericRuleInset<LengthPercentage>;
 
 impl From<NoCalcLength> for NonNegativeLengthPercentage {
     #[inline]

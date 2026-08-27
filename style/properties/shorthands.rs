@@ -1247,6 +1247,321 @@ pub mod rule_break {
     }
 }
 
+#[cfg(feature = "servo")]
+type SpecifiedRuleInset = crate::values::specified::length::RuleInset;
+
+#[cfg(feature = "servo")]
+struct RuleInsetPair {
+    start: SpecifiedRuleInset,
+    end: SpecifiedRuleInset,
+}
+
+#[cfg(feature = "servo")]
+struct RuleInsetQuad {
+    cap: RuleInsetPair,
+    junction: RuleInsetPair,
+}
+
+#[cfg(feature = "servo")]
+fn parse_rule_inset_pair<'i, 't>(
+    context: &ParserContext,
+    input: &mut Parser<'i, 't>,
+) -> Result<RuleInsetPair, ParseError<'i>> {
+    let start = SpecifiedRuleInset::parse(context, input)?;
+    let end = input
+        .try_parse(|input| SpecifiedRuleInset::parse(context, input))
+        .unwrap_or_else(|_| start.clone());
+    Ok(RuleInsetPair { start, end })
+}
+
+#[cfg(feature = "servo")]
+fn parse_rule_inset_quad<'i, 't>(
+    context: &ParserContext,
+    input: &mut Parser<'i, 't>,
+) -> Result<RuleInsetQuad, ParseError<'i>> {
+    let cap = parse_rule_inset_pair(context, input)?;
+    let junction = if input.try_parse(|input| input.expect_delim('/')).is_ok() {
+        parse_rule_inset_pair(context, input)?
+    } else {
+        RuleInsetPair {
+            start: cap.start.clone(),
+            end: cap.end.clone(),
+        }
+    };
+    Ok(RuleInsetQuad { cap, junction })
+}
+
+#[cfg(feature = "servo")]
+fn serialize_rule_inset_pair<W: fmt::Write>(
+    dest: &mut CssWriter<W>,
+    start: &SpecifiedRuleInset,
+    end: &SpecifiedRuleInset,
+) -> fmt::Result {
+    start.to_css(dest)?;
+    if start != end {
+        dest.write_char(' ')?;
+        end.to_css(dest)?;
+    }
+    Ok(())
+}
+
+#[cfg(feature = "servo")]
+fn serialize_rule_inset_quad<W: fmt::Write>(
+    dest: &mut CssWriter<W>,
+    cap_start: &SpecifiedRuleInset,
+    cap_end: &SpecifiedRuleInset,
+    junction_start: &SpecifiedRuleInset,
+    junction_end: &SpecifiedRuleInset,
+) -> fmt::Result {
+    serialize_rule_inset_pair(dest, cap_start, cap_end)?;
+    if cap_start != junction_start || cap_end != junction_end {
+        dest.write_str(" / ")?;
+        serialize_rule_inset_pair(dest, junction_start, junction_end)?;
+    }
+    Ok(())
+}
+
+#[cfg(feature = "servo")]
+macro_rules! rule_inset_shorthand {
+    (
+        $module:ident,
+        $context:ident,
+        $input:ident,
+        $values:ident = $parser:expr,
+        $this:ident,
+        $dest:ident,
+        {$($field:ident: $value:expr),+ $(,)?},
+        $matches:expr,
+        $serializer:expr
+    ) => {
+        pub mod $module {
+            pub use crate::properties::shorthands_generated::$module::*;
+
+            use super::*;
+
+            pub fn parse_value<'i, 't>(
+                $context: &ParserContext,
+                $input: &mut Parser<'i, 't>,
+            ) -> Result<Longhands, ParseError<'i>> {
+                let $values = $parser;
+                Ok(expanded! {
+                    $($field: $value,)+
+                })
+            }
+
+            impl<'a> ToCss for LonghandsToSerialize<'a> {
+                fn to_css<W: fmt::Write>(&self, $dest: &mut CssWriter<W>) -> fmt::Result {
+                    let $this = self;
+                    if !$matches {
+                        return Ok(());
+                    }
+                    $serializer
+                }
+            }
+        }
+    };
+}
+
+#[cfg(feature = "servo")]
+macro_rules! rule_inset_single_shorthand {
+    ($module:ident, $first:ident $(, $rest:ident)+) => {
+        rule_inset_shorthand!(
+            $module,
+            context,
+            input,
+            value = SpecifiedRuleInset::parse(context, input)?,
+            this,
+            dest,
+            {$first: value.clone(), $($rest: value.clone(),)+},
+            $(this.$first == this.$rest)&&+,
+            this.$first.to_css(dest)
+        );
+    };
+}
+
+#[cfg(feature = "servo")]
+macro_rules! rule_inset_pair_shorthand {
+    ($module:ident, $first_start:ident, $first_end:ident $(, $start:ident, $end:ident)*) => {
+        rule_inset_shorthand!(
+            $module,
+            context,
+            input,
+            values = parse_rule_inset_pair(context, input)?,
+            this,
+            dest,
+            {
+                $first_start: values.start.clone(),
+                $first_end: values.end.clone(),
+                $($start: values.start.clone(), $end: values.end.clone(),)*
+            },
+            true $(&& this.$first_start == this.$start && this.$first_end == this.$end)*,
+            serialize_rule_inset_pair(dest, this.$first_start, this.$first_end)
+        );
+    };
+}
+
+#[cfg(feature = "servo")]
+macro_rules! rule_inset_quad_shorthand {
+    (
+        $module:ident,
+        $first_cap_start:ident,
+        $first_cap_end:ident,
+        $first_junction_start:ident,
+        $first_junction_end:ident
+        $(,
+            $cap_start:ident,
+            $cap_end:ident,
+            $junction_start:ident,
+            $junction_end:ident
+        )*
+    ) => {
+        rule_inset_shorthand!(
+            $module,
+            context,
+            input,
+            values = parse_rule_inset_quad(context, input)?,
+            this,
+            dest,
+            {
+                    $first_cap_start: values.cap.start.clone(),
+                    $first_cap_end: values.cap.end.clone(),
+                    $first_junction_start: values.junction.start.clone(),
+                    $first_junction_end: values.junction.end.clone(),
+                    $(
+                        $cap_start: values.cap.start.clone(),
+                        $cap_end: values.cap.end.clone(),
+                        $junction_start: values.junction.start.clone(),
+                        $junction_end: values.junction.end.clone(),
+                    )*
+            },
+            true $(
+                && this.$first_cap_start == this.$cap_start
+                && this.$first_cap_end == this.$cap_end
+                && this.$first_junction_start == this.$junction_start
+                && this.$first_junction_end == this.$junction_end
+            )*,
+            serialize_rule_inset_quad(
+                dest,
+                this.$first_cap_start,
+                this.$first_cap_end,
+                this.$first_junction_start,
+                this.$first_junction_end,
+            )
+        );
+    };
+}
+
+#[cfg(feature = "servo")]
+rule_inset_single_shorthand!(
+    column_rule_inset_start,
+    column_rule_inset_cap_start,
+    column_rule_inset_junction_start
+);
+#[cfg(feature = "servo")]
+rule_inset_single_shorthand!(
+    column_rule_inset_end,
+    column_rule_inset_cap_end,
+    column_rule_inset_junction_end
+);
+#[cfg(feature = "servo")]
+rule_inset_single_shorthand!(
+    row_rule_inset_start,
+    row_rule_inset_cap_start,
+    row_rule_inset_junction_start
+);
+#[cfg(feature = "servo")]
+rule_inset_single_shorthand!(
+    row_rule_inset_end,
+    row_rule_inset_cap_end,
+    row_rule_inset_junction_end
+);
+#[cfg(feature = "servo")]
+rule_inset_single_shorthand!(
+    rule_inset_start,
+    column_rule_inset_cap_start,
+    column_rule_inset_junction_start,
+    row_rule_inset_cap_start,
+    row_rule_inset_junction_start
+);
+#[cfg(feature = "servo")]
+rule_inset_single_shorthand!(
+    rule_inset_end,
+    column_rule_inset_cap_end,
+    column_rule_inset_junction_end,
+    row_rule_inset_cap_end,
+    row_rule_inset_junction_end
+);
+
+#[cfg(feature = "servo")]
+rule_inset_pair_shorthand!(
+    column_rule_inset_cap,
+    column_rule_inset_cap_start,
+    column_rule_inset_cap_end
+);
+#[cfg(feature = "servo")]
+rule_inset_pair_shorthand!(
+    column_rule_inset_junction,
+    column_rule_inset_junction_start,
+    column_rule_inset_junction_end
+);
+#[cfg(feature = "servo")]
+rule_inset_pair_shorthand!(
+    row_rule_inset_cap,
+    row_rule_inset_cap_start,
+    row_rule_inset_cap_end
+);
+#[cfg(feature = "servo")]
+rule_inset_pair_shorthand!(
+    row_rule_inset_junction,
+    row_rule_inset_junction_start,
+    row_rule_inset_junction_end
+);
+#[cfg(feature = "servo")]
+rule_inset_pair_shorthand!(
+    rule_inset_cap,
+    column_rule_inset_cap_start,
+    column_rule_inset_cap_end,
+    row_rule_inset_cap_start,
+    row_rule_inset_cap_end
+);
+#[cfg(feature = "servo")]
+rule_inset_pair_shorthand!(
+    rule_inset_junction,
+    column_rule_inset_junction_start,
+    column_rule_inset_junction_end,
+    row_rule_inset_junction_start,
+    row_rule_inset_junction_end
+);
+
+#[cfg(feature = "servo")]
+rule_inset_quad_shorthand!(
+    column_rule_inset,
+    column_rule_inset_cap_start,
+    column_rule_inset_cap_end,
+    column_rule_inset_junction_start,
+    column_rule_inset_junction_end
+);
+#[cfg(feature = "servo")]
+rule_inset_quad_shorthand!(
+    row_rule_inset,
+    row_rule_inset_cap_start,
+    row_rule_inset_cap_end,
+    row_rule_inset_junction_start,
+    row_rule_inset_junction_end
+);
+#[cfg(feature = "servo")]
+rule_inset_quad_shorthand!(
+    rule_inset,
+    column_rule_inset_cap_start,
+    column_rule_inset_cap_end,
+    column_rule_inset_junction_start,
+    column_rule_inset_junction_end,
+    row_rule_inset_cap_start,
+    row_rule_inset_cap_end,
+    row_rule_inset_junction_start,
+    row_rule_inset_junction_end
+);
+
 pub mod text_wrap {
     pub use crate::properties::shorthands_generated::text_wrap::*;
 

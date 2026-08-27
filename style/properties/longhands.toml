@@ -941,6 +941,86 @@ spec = "https://drafts.csswg.org/css-gaps-1/#propdef-row-rule-break"
 affects = "paint"
 engine = "servo"
 
+[column-rule-inset-cap-start]
+type = "length::RuleInset"
+initial = "computed::length::RuleInset::zero()"
+struct = "column"
+initial_specified_value = "specified::length::RuleInset::zero()"
+servo_pref = "layout.columns.enabled"
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-column-rule-inset-cap-start"
+affects = "paint"
+engine = "servo"
+
+[column-rule-inset-cap-end]
+type = "length::RuleInset"
+initial = "computed::length::RuleInset::zero()"
+struct = "column"
+initial_specified_value = "specified::length::RuleInset::zero()"
+servo_pref = "layout.columns.enabled"
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-column-rule-inset-cap-end"
+affects = "paint"
+engine = "servo"
+
+[column-rule-inset-junction-start]
+type = "length::RuleInset"
+initial = "computed::length::RuleInset::zero()"
+struct = "column"
+initial_specified_value = "specified::length::RuleInset::zero()"
+servo_pref = "layout.columns.enabled"
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-column-rule-inset-junction-start"
+affects = "paint"
+engine = "servo"
+
+[column-rule-inset-junction-end]
+type = "length::RuleInset"
+initial = "computed::length::RuleInset::zero()"
+struct = "column"
+initial_specified_value = "specified::length::RuleInset::zero()"
+servo_pref = "layout.columns.enabled"
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-column-rule-inset-junction-end"
+affects = "paint"
+engine = "servo"
+
+[row-rule-inset-cap-start]
+type = "length::RuleInset"
+initial = "computed::length::RuleInset::zero()"
+struct = "column"
+initial_specified_value = "specified::length::RuleInset::zero()"
+servo_pref = "layout.columns.enabled"
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-row-rule-inset-cap-start"
+affects = "paint"
+engine = "servo"
+
+[row-rule-inset-cap-end]
+type = "length::RuleInset"
+initial = "computed::length::RuleInset::zero()"
+struct = "column"
+initial_specified_value = "specified::length::RuleInset::zero()"
+servo_pref = "layout.columns.enabled"
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-row-rule-inset-cap-end"
+affects = "paint"
+engine = "servo"
+
+[row-rule-inset-junction-start]
+type = "length::RuleInset"
+initial = "computed::length::RuleInset::zero()"
+struct = "column"
+initial_specified_value = "specified::length::RuleInset::zero()"
+servo_pref = "layout.columns.enabled"
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-row-rule-inset-junction-start"
+affects = "paint"
+engine = "servo"
+
+[row-rule-inset-junction-end]
+type = "length::RuleInset"
+initial = "computed::length::RuleInset::zero()"
+struct = "column"
+initial_specified_value = "specified::length::RuleInset::zero()"
+servo_pref = "layout.columns.enabled"
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-row-rule-inset-junction-end"
+affects = "paint"
+engine = "servo"
+
 [column-width]
 type = "length::NonNegativeLengthOrAuto"
 initial = "computed::length::NonNegativeLengthOrAuto::auto()"
