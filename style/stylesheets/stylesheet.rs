@@ -658,6 +658,16 @@ mod tests {
         })
     }
 
+    fn parsed_rule_visibility_declarations(css: &str) -> Vec<(&'static str, String, Importance)> {
+        parsed_declarations(css, |declaration| match declaration {
+            PropertyDeclaration::ColumnRuleVisibilityItems(value) => {
+                ("column", value.to_css_string())
+            },
+            PropertyDeclaration::RowRuleVisibilityItems(value) => ("row", value.to_css_string()),
+            _ => panic!("expected rule-visibility-items declaration"),
+        })
+    }
+
     fn parsed_bidirectional_rule_declarations(
         css: &str,
     ) -> Vec<(&'static str, String, Importance)> {
@@ -917,6 +927,57 @@ mod tests {
     fn servo_rule_break_shorthand_rejects_extra_or_unknown_values() {
         assert!(parsed_rule_break_declarations("p { rule-break: none normal; }").is_empty());
         assert!(parsed_rule_break_declarations("p { rule-break: crossing; }").is_empty());
+    }
+
+    #[test]
+    fn servo_rule_visibility_items_shorthand_reaches_both_axes() {
+        assert_eq!(
+            parsed_rule_visibility_declarations("p { rule-visibility-items: between !important; }"),
+            vec![
+                ("column", "between".to_string(), Importance::Important),
+                ("row", "between".to_string(), Importance::Important),
+            ]
+        );
+    }
+
+    #[test]
+    fn servo_rule_visibility_items_accepts_only_its_closed_keywords() {
+        for keyword in ["all", "around", "between", "normal"] {
+            assert_eq!(
+                parsed_rule_visibility_declarations(&format!(
+                    "p {{ column-rule-visibility-items: {keyword}; \
+                          row-rule-visibility-items: {keyword}; }}"
+                )),
+                vec![
+                    ("column", keyword.to_string(), Importance::Normal),
+                    ("row", keyword.to_string(), Importance::Normal),
+                ]
+            );
+        }
+        for value in ["none", "all around", "between, all"] {
+            assert!(parsed_rule_visibility_declarations(&format!(
+                "p {{ rule-visibility-items: {value}; }}"
+            ))
+            .is_empty());
+        }
+    }
+
+    #[test]
+    fn servo_rule_visibility_items_shorthand_serializes_equal_axes() {
+        assert_eq!(
+            serialized_shorthand(
+                "p { rule-visibility-items: around; }",
+                ShorthandId::RuleVisibilityItems,
+            ),
+            "around"
+        );
+        assert_eq!(
+            serialized_shorthand(
+                "p { column-rule-visibility-items: all; row-rule-visibility-items: between; }",
+                ShorthandId::RuleVisibilityItems,
+            ),
+            ""
+        );
     }
 
     #[test]

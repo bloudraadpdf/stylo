@@ -1446,6 +1446,12 @@ bidirectional_rule_shorthand!(rule_color, column_rule_color, row_rule_color);
 bidirectional_rule_shorthand!(rule_style, column_rule_style, row_rule_style);
 #[cfg(feature = "servo")]
 bidirectional_rule_shorthand!(rule_width, column_rule_width, row_rule_width);
+#[cfg(feature = "servo")]
+bidirectional_rule_shorthand!(
+    rule_visibility_items,
+    column_rule_visibility_items,
+    row_rule_visibility_items
+);
 
 #[cfg(feature = "servo")]
 pub mod rule_break {

@@ -563,6 +563,12 @@ sub_properties = ["column-rule-break", "row-rule-break"]
 spec = "https://drafts.csswg.org/css-gaps-1/#propdef-rule-break"
 engine = "servo"
 
+[rule-visibility-items]
+servo_pref = "layout.columns.enabled"
+sub_properties = ["column-rule-visibility-items", "row-rule-visibility-items"]
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-rule-visibility-items"
+engine = "servo"
+
 [column-rule-inset-start]
 servo_pref = "layout.columns.enabled"
 sub_properties = ["column-rule-inset-cap-start", "column-rule-inset-junction-start"]

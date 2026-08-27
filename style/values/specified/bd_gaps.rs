@@ -90,30 +90,49 @@ pub(crate) fn parse_gap_rule_list_with<'i, 't, Value>(
     Ok(GenericGapRuleList(crate::OwnedSlice::from(items)))
 }
 
-/// Controls how gap decorations break at visible intersections.
-#[repr(u8)]
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    Default,
-    Eq,
-    MallocSizeOf,
-    Parse,
-    PartialEq,
-    SpecifiedValueInfo,
-    ToCss,
-    ToComputedValue,
-    ToResolvedValue,
-    ToShmem,
-    ToTyped,
-)]
-#[allow(missing_docs)]
-pub enum RuleBreak {
-    None,
-    #[default]
-    Normal,
-    Intersection,
+macro_rules! gap_keyword {
+    ($(#[$meta:meta])* pub enum $name:ident { $($body:tt)* }) => {
+        $(#[$meta])*
+        #[repr(u8)]
+        #[derive(
+            Clone,
+            Copy,
+            Debug,
+            Default,
+            Eq,
+            MallocSizeOf,
+            Parse,
+            PartialEq,
+            SpecifiedValueInfo,
+            ToCss,
+            ToComputedValue,
+            ToResolvedValue,
+            ToShmem,
+            ToTyped,
+        )]
+        #[allow(missing_docs)]
+        pub enum $name { $($body)* }
+    };
+}
+
+gap_keyword! {
+    /// Controls how gap decorations break at visible intersections.
+    pub enum RuleBreak {
+        None,
+        #[default]
+        Normal,
+        Intersection,
+    }
+}
+
+gap_keyword! {
+    pub enum RuleVisibilityItems {
+        All,
+        Around,
+        Between,
+        #[default]
+        Normal,
+    }
 }
 
 /// Specified value of `overlay` (F21.24).

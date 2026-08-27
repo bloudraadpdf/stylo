@@ -70,7 +70,7 @@ pub use self::bd_footnote::{
 pub(crate) use self::bd_gaps::parse_gap_rule_list_with;
 pub use self::bd_gaps::{
     BorderClip, GapRuleColorList, GapRuleList, GapRuleStyleList, GapRuleWidthList, MaskBorderMode,
-    Overlay, RuleBreak,
+    Overlay, RuleBreak, RuleVisibilityItems,
 };
 pub use self::bd_hyphenation::{
     BdHyphenateLimitLines, BdHyphenateLines, BdHyphenatePatterns, BdHyphenateWordLength,

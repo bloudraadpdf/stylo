@@ -941,6 +941,28 @@ spec = "https://drafts.csswg.org/css-gaps-1/#propdef-row-rule-break"
 affects = "paint"
 engine = "servo"
 
+[column-rule-visibility-items]
+type = "RuleVisibilityItems"
+initial = "computed::RuleVisibilityItems::Normal"
+struct = "column"
+initial_specified_value = "specified::RuleVisibilityItems::Normal"
+animation_type = "discrete"
+servo_pref = "layout.columns.enabled"
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-column-rule-visibility-items"
+affects = "paint"
+engine = "servo"
+
+[row-rule-visibility-items]
+type = "RuleVisibilityItems"
+initial = "computed::RuleVisibilityItems::Normal"
+struct = "column"
+initial_specified_value = "specified::RuleVisibilityItems::Normal"
+animation_type = "discrete"
+servo_pref = "layout.columns.enabled"
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-row-rule-visibility-items"
+affects = "paint"
+engine = "servo"
+
 [column-rule-inset-cap-start]
 type = "length::RuleInset"
 initial = "computed::length::RuleInset::zero()"

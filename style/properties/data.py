@@ -697,6 +697,7 @@ class Longhand(Property):
                 "RubyOverhang",
                 "RubyPosition",
                 "RuleBreak",
+                "RuleVisibilityItems",
                 "SVGPaintOrder",
                 "ScrollbarGutter",
                 "ScrollSnapAlign",
