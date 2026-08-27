@@ -1186,32 +1186,55 @@ pub mod column_rule {
     pub use crate::properties::shorthands_generated::column_rule::*;
 
     use super::*;
-    use crate::properties::longhands::column_rule_color;
-    use crate::properties::longhands::{column_rule_style, column_rule_width};
 
     pub fn parse_value<'i, 't>(
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Longhands, ParseError<'i>> {
-        let mut column_rule_width = None;
-        let mut column_rule_style = None;
-        let mut column_rule_color = None;
-        let mut parsed = 0;
-        loop {
-            parsed += 1;
-            try_parse_one!(context, input, column_rule_width, column_rule_width::parse);
-            try_parse_one!(context, input, column_rule_style, column_rule_style::parse);
-            try_parse_one!(context, input, column_rule_color, column_rule_color::parse);
-            parsed -= 1;
-            break;
-        }
-        if parsed == 0 {
-            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
-        }
+        let (width, style, color) = super::parse_single_gap_rule(context, input)?;
         Ok(expanded! {
-            column_rule_width: unwrap_or_initial!(column_rule_width),
-            column_rule_style: unwrap_or_initial!(column_rule_style),
-            column_rule_color: unwrap_or_initial!(column_rule_color),
+            column_rule_width: width,
+            column_rule_style: style,
+            column_rule_color: color,
+        })
+    }
+}
+
+#[cfg(feature = "servo")]
+fn parse_single_gap_rule<'i, 't>(
+    context: &ParserContext,
+    input: &mut Parser<'i, 't>,
+) -> Result<
+    (
+        specified::GapRuleWidthList,
+        specified::GapRuleStyleList,
+        specified::GapRuleColorList,
+    ),
+    ParseError<'i>,
+> {
+    let (width, style, color) = parse_border(context, input)?;
+    Ok((
+        specified::GapRuleList::single(width),
+        specified::GapRuleList::single(style),
+        specified::GapRuleList::single(color),
+    ))
+}
+
+#[cfg(feature = "servo")]
+pub mod row_rule {
+    pub use crate::properties::shorthands_generated::row_rule::*;
+
+    use super::*;
+
+    pub fn parse_value<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Longhands, ParseError<'i>> {
+        let (width, style, color) = super::parse_single_gap_rule(context, input)?;
+        Ok(expanded! {
+            row_rule_width: width,
+            row_rule_style: style,
+            row_rule_color: color,
         })
     }
 }

@@ -23,6 +23,7 @@ pub mod easing;
 pub mod effects;
 pub mod flex;
 pub mod font;
+pub mod gap;
 pub mod grid;
 pub mod image;
 pub mod length;

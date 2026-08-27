@@ -769,6 +769,44 @@ mod tests {
     }
 
     #[test]
+    fn servo_gap_rule_longhands_preserve_list_and_repeater_shape() {
+        assert_eq!(
+            parsed_bidirectional_rule_declarations(
+                "p { \
+                 column-rule-color: red, repeat(2, blue, green), repeat(auto, yellow), black; \
+                 row-rule-style: dotted, repeat(auto, solid, inset), ridge; \
+                 column-rule-width: 2px, repeat(3, thin, 5px), repeat(auto, thick), 8px; \
+                 }",
+            ),
+            vec![
+                (
+                    "column-color",
+                    "red, repeat(2, blue, green), repeat(auto, yellow), black".to_string(),
+                    Importance::Normal,
+                ),
+                (
+                    "row-style",
+                    "dotted, repeat(auto, solid, inset), ridge".to_string(),
+                    Importance::Normal,
+                ),
+                (
+                    "column-width",
+                    "2px, repeat(3, thin, 5px), repeat(auto, thick), 8px".to_string(),
+                    Importance::Normal,
+                ),
+            ]
+        );
+
+        for declaration in [
+            "p { column-rule-color: repeat(auto, red), repeat(auto, blue); }",
+            "p { row-rule-style: repeat(0, solid); }",
+            "p { column-rule-width: repeat(-1, thin); }",
+        ] {
+            assert!(parsed_bidirectional_rule_declarations(declaration).is_empty());
+        }
+    }
+
+    #[test]
     fn servo_parses_rule_break_longhands_as_typed_declarations() {
         for keyword in ["none", "normal", "intersection"] {
             assert_eq!(

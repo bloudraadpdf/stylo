@@ -525,7 +525,7 @@ derive_serialize = true
 servo_pref = "layout.columns.enabled"
 sub_properties = ["row-rule-width", "row-rule-style", "row-rule-color"]
 spec = "https://drafts.csswg.org/css-gaps-1/#propdef-row-rule"
-kind = "single_border"
+derive_serialize = true
 engine = "servo"
 
 [rule-color]

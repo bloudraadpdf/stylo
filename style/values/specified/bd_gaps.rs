@@ -11,6 +11,73 @@
 //! Prince aliases live in the moegoe-css compat translator.
 
 use crate::derives::*;
+use crate::parser::{Parse, ParserContext};
+use crate::values::generics::gap::{
+    GapRuleList as GenericGapRuleList, GapRuleListItem, GapRuleRepeatCount,
+};
+use crate::values::specified::Integer;
+use crate::values::specified::{BorderSideWidth, BorderStyle, Color};
+use cssparser::Parser;
+use style_traits::{ParseError, StyleParseErrorKind};
+
+/// A specified list for a gap-decoration color, style, or width longhand.
+pub type GapRuleList<Value> = GenericGapRuleList<Value, Integer>;
+
+/// The specified value of `column-rule-color` and `row-rule-color`.
+pub type GapRuleColorList = GapRuleList<Color>;
+/// The specified value of `column-rule-style` and `row-rule-style`.
+pub type GapRuleStyleList = GapRuleList<BorderStyle>;
+/// The specified value of `column-rule-width` and `row-rule-width`.
+pub type GapRuleWidthList = GapRuleList<BorderSideWidth>;
+
+impl<Value: Parse> Parse for GapRuleList<Value> {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        let mut saw_auto_repeater = false;
+        let items = input.parse_comma_separated(|input| {
+            if input
+                .try_parse(|input| input.expect_function_matching("repeat"))
+                .is_err()
+            {
+                return Value::parse(context, input).map(GapRuleListItem::Value);
+            }
+
+            let item = input.parse_nested_block(|input| {
+                let count = if input
+                    .try_parse(|input| input.expect_ident_matching("auto"))
+                    .is_ok()
+                {
+                    GapRuleRepeatCount::Auto
+                } else {
+                    GapRuleRepeatCount::Number(Integer::parse_positive(context, input)?)
+                };
+                input.expect_comma()?;
+                let values = input.parse_comma_separated(|input| Value::parse(context, input))?;
+                Ok(GapRuleListItem::Repeat {
+                    count,
+                    values: crate::OwnedSlice::from(values),
+                })
+            })?;
+
+            if matches!(
+                item,
+                GapRuleListItem::Repeat {
+                    count: GapRuleRepeatCount::Auto,
+                    ..
+                }
+            ) {
+                if saw_auto_repeater {
+                    return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+                }
+                saw_auto_repeater = true;
+            }
+            Ok(item)
+        })?;
+        Ok(Self(crate::OwnedSlice::from(items)))
+    }
+}
 
 /// Controls how gap decorations break at visible intersections.
 #[repr(u8)]

@@ -76,6 +76,7 @@ pub use self::bd_flow::{BdFlowFrom, BdFlowInto, BdFlowIntoMode, BdRegionFragment
 pub use self::bd_footnote::{
     BdFootnoteFragmentation, BdFootnoteRuleLength, FloatPlacement, FootnoteStylePosition,
 };
+pub use self::bd_gaps::{GapRuleColorList, GapRuleList, GapRuleStyleList, GapRuleWidthList};
 pub use self::bd_hyphenation::{
     BdHyphenateLimitLines, BdHyphenateLines, BdHyphenatePatterns, BdHyphenateWordLength,
     BdLinebreakMagic,
