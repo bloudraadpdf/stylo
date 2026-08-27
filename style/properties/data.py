@@ -65,6 +65,7 @@ PRIORITARY_PROPERTIES = set(
 VISITED_DEPENDENT_PROPERTIES = set(
     [
         "column-rule-color",
+        "row-rule-color",
         "text-emphasis-color",
         "-webkit-text-fill-color",
         "-webkit-text-stroke-color",

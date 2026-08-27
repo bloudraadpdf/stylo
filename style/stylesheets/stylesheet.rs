@@ -617,6 +617,57 @@ mod tests {
         )
     }
 
+    fn parsed_row_rule_declarations(css: &str) -> Vec<(&'static str, String, Importance)> {
+        let _guard = pref_lock().lock().unwrap();
+        let _columns_pref = BoolPrefGuard::set("layout.columns.enabled", true);
+        let stylesheet = parse_stylesheet(css);
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let CssRule::Style(rule) = &contents.rules(&guard)[0] else {
+            panic!("expected style rule");
+        };
+        rule.read_with(&guard)
+            .block
+            .read_with(&guard)
+            .declaration_importance_iter()
+            .map(|(declaration, importance)| {
+                let (name, value) = match declaration {
+                    PropertyDeclaration::RowRuleWidth(value) => ("width", value.to_css_string()),
+                    PropertyDeclaration::RowRuleStyle(value) => ("style", value.to_css_string()),
+                    PropertyDeclaration::RowRuleColor(value) => ("color", value.to_css_string()),
+                    _ => panic!("expected row-rule declaration"),
+                };
+                (name, value, importance)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn servo_parses_row_rule_longhands_as_typed_declarations() {
+        assert_eq!(
+            parsed_row_rule_declarations(
+                "p { row-rule-width: 5px; row-rule-style: dashed; row-rule-color: currentcolor; }",
+            ),
+            vec![
+                ("width", "5px".to_string(), Importance::Normal),
+                ("style", "dashed".to_string(), Importance::Normal),
+                ("color", "currentcolor".to_string(), Importance::Normal),
+            ]
+        );
+    }
+
+    #[test]
+    fn servo_row_rule_shorthand_expands_defaults_and_importance() {
+        assert_eq!(
+            parsed_row_rule_declarations("p { row-rule: dashed !important; }"),
+            vec![
+                ("width", "medium".to_string(), Importance::Important),
+                ("style", "dashed".to_string(), Importance::Important),
+                ("color", "currentcolor".to_string(), Importance::Important),
+            ]
+        );
+    }
+
     #[test]
     fn servo_paint_worklet_arguments_with_substitution_are_deferred() {
         let stylesheet = parse_stylesheet(

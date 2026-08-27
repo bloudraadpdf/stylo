@@ -1671,3 +1671,13 @@ where
         }
     }
 }
+
+#[cfg(all(test, feature = "servo"))]
+mod tests {
+    use super::{LonghandId, LonghandIdSet};
+
+    #[test]
+    fn row_rule_color_is_visited_dependent() {
+        assert!(LonghandIdSet::visited_dependent().contains(LonghandId::RowRuleColor));
+    }
+}

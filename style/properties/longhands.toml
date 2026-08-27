@@ -887,6 +887,38 @@ servo_pref = "layout.columns.enabled"
 spec = "https://drafts.csswg.org/css-multicol/#propdef-column-rule-width"
 affects = "layout"
 
+[row-rule-color]
+type = "Color"
+initial = "computed_value::T::currentcolor()"
+struct = "column"
+initial_specified_value = "specified::Color::currentcolor()"
+ignored_when_colors_disabled = true
+servo_pref = "layout.columns.enabled"
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-row-rule-color"
+affects = "paint"
+engine = "servo"
+
+[row-rule-style]
+type = "BorderStyle"
+initial = "computed::BorderStyle::None"
+struct = "column"
+initial_specified_value = "specified::BorderStyle::None"
+animation_type = "discrete"
+servo_pref = "layout.columns.enabled"
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-row-rule-style"
+affects = "paint"
+engine = "servo"
+
+[row-rule-width]
+type = "BorderSideWidth"
+initial = "computed::BorderSideWidth::medium()"
+struct = "column"
+initial_specified_value = "specified::BorderSideWidth::medium()"
+servo_pref = "layout.columns.enabled"
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-row-rule-width"
+affects = "layout"
+engine = "servo"
+
 [column-width]
 type = "length::NonNegativeLengthOrAuto"
 initial = "computed::length::NonNegativeLengthOrAuto::auto()"
