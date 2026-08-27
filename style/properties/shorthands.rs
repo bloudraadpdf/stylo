@@ -1217,6 +1217,48 @@ pub mod column_rule {
 }
 
 #[cfg(feature = "servo")]
+macro_rules! bidirectional_rule_shorthand {
+    ($module:ident, $column:ident, $row:ident) => {
+        pub mod $module {
+            pub use crate::properties::shorthands_generated::$module::*;
+
+            use super::*;
+            use crate::properties::longhands::$column;
+
+            pub fn parse_value<'i, 't>(
+                context: &ParserContext,
+                input: &mut Parser<'i, 't>,
+            ) -> Result<Longhands, ParseError<'i>> {
+                let value = $column::parse(context, input)?;
+                Ok(expanded! {
+                    $column: value.clone(),
+                    $row: value,
+                })
+            }
+
+            impl<'a> ToCss for LonghandsToSerialize<'a> {
+                fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+                where
+                    W: fmt::Write,
+                {
+                    if self.$column != self.$row {
+                        return Ok(());
+                    }
+                    self.$column.to_css(dest)
+                }
+            }
+        }
+    };
+}
+
+#[cfg(feature = "servo")]
+bidirectional_rule_shorthand!(rule_color, column_rule_color, row_rule_color);
+#[cfg(feature = "servo")]
+bidirectional_rule_shorthand!(rule_style, column_rule_style, row_rule_style);
+#[cfg(feature = "servo")]
+bidirectional_rule_shorthand!(rule_width, column_rule_width, row_rule_width);
+
+#[cfg(feature = "servo")]
 pub mod rule_break {
     pub use crate::properties::shorthands_generated::rule_break::*;
 

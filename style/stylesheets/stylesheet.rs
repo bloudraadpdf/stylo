@@ -658,6 +658,20 @@ mod tests {
         })
     }
 
+    fn parsed_bidirectional_rule_declarations(
+        css: &str,
+    ) -> Vec<(&'static str, String, Importance)> {
+        parsed_declarations(css, |declaration| match declaration {
+            PropertyDeclaration::ColumnRuleColor(value) => ("column-color", value.to_css_string()),
+            PropertyDeclaration::RowRuleColor(value) => ("row-color", value.to_css_string()),
+            PropertyDeclaration::ColumnRuleStyle(value) => ("column-style", value.to_css_string()),
+            PropertyDeclaration::RowRuleStyle(value) => ("row-style", value.to_css_string()),
+            PropertyDeclaration::ColumnRuleWidth(value) => ("column-width", value.to_css_string()),
+            PropertyDeclaration::RowRuleWidth(value) => ("row-width", value.to_css_string()),
+            _ => panic!("expected bidirectional rule declaration"),
+        })
+    }
+
     fn parsed_rule_inset_declarations(css: &str) -> Vec<(&'static str, String, Importance)> {
         parsed_declarations(css, |declaration| match declaration {
             PropertyDeclaration::ColumnRuleInsetCapStart(value) => {
@@ -728,6 +742,30 @@ mod tests {
                 ("color", "currentcolor".to_string(), Importance::Important),
             ]
         );
+    }
+
+    #[test]
+    fn servo_bidirectional_rule_shorthands_expand_to_both_axes() {
+        assert_eq!(
+            parsed_bidirectional_rule_declarations(
+                "p { rule-color: red; rule-style: solid; rule-width: 10px !important; }",
+            ),
+            vec![
+                ("column-color", "red".to_string(), Importance::Normal),
+                ("row-color", "red".to_string(), Importance::Normal),
+                ("column-style", "solid".to_string(), Importance::Normal),
+                ("row-style", "solid".to_string(), Importance::Normal),
+                ("column-width", "10px".to_string(), Importance::Important),
+                ("row-width", "10px".to_string(), Importance::Important),
+            ]
+        );
+        for declaration in [
+            "p { rule-color: red blue; }",
+            "p { rule-style: solid dashed; }",
+            "p { rule-width: 1px 2px; }",
+        ] {
+            assert!(parsed_bidirectional_rule_declarations(declaration).is_empty());
+        }
     }
 
     #[test]
