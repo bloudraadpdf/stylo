@@ -16,7 +16,9 @@ use style_traits::{CssWriter, ToCss};
 /// Serializes a legacy sRGB channel without letting finite-precision
 /// interpolation move a mathematical half-integer below its rounding tie.
 fn legacy_srgb_channel(value: f32) -> u8 {
-    const HALF_STEP_EPSILON: f32 = 0.0002;
+    // Six-significant-digit CSSOM serialization can move an extrapolated
+    // timing-function result by less than 0.001 of an 8-bit channel.
+    const HALF_STEP_EPSILON: f32 = 0.001;
 
     let scaled = value * 255.0;
     let nearest_half_step = (scaled * 2.0).round() / 2.0;
@@ -178,6 +180,19 @@ impl ToCss for AbsoluteColor {
                 dest.write_char(')')
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::legacy_srgb_channel;
+
+    #[test]
+    fn extrapolated_six_digit_timing_rounds_legacy_half_channel_up() {
+        let extrapolated_progress = 0.125 + 0.75 * 1.83333;
+        let green = (165.0 / 255.0) * extrapolated_progress;
+
+        assert_eq!(legacy_srgb_channel(green), 248);
     }
 }
 
