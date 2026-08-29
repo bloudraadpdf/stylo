@@ -1165,6 +1165,46 @@ impl Animate for ComputedTransformOperation {
                 Ok(TransformOperation::TranslateZ(f.animate(t, procedure)?))
             },
             (
+                &TransformOperation::Translate(ref fx, ref fy),
+                &TransformOperation::TranslateX(ref tx),
+            ) => Ok(TransformOperation::Translate(
+                fx.animate(tx, procedure)?,
+                fy.animate(&LengthPercentage::zero(), procedure)?,
+            )),
+            (
+                &TransformOperation::Translate(ref fx, ref fy),
+                &TransformOperation::TranslateY(ref ty),
+            ) => Ok(TransformOperation::Translate(
+                fx.animate(&LengthPercentage::zero(), procedure)?,
+                fy.animate(ty, procedure)?,
+            )),
+            (
+                &TransformOperation::TranslateX(ref fx),
+                &TransformOperation::Translate(ref tx, ref ty),
+            ) => Ok(TransformOperation::Translate(
+                fx.animate(tx, procedure)?,
+                LengthPercentage::zero().animate(ty, procedure)?,
+            )),
+            (
+                &TransformOperation::TranslateY(ref fy),
+                &TransformOperation::Translate(ref tx, ref ty),
+            ) => Ok(TransformOperation::Translate(
+                LengthPercentage::zero().animate(tx, procedure)?,
+                fy.animate(ty, procedure)?,
+            )),
+            (&TransformOperation::TranslateX(ref fx), &TransformOperation::TranslateY(ref ty)) => {
+                Ok(TransformOperation::Translate(
+                    fx.animate(&LengthPercentage::zero(), procedure)?,
+                    LengthPercentage::zero().animate(ty, procedure)?,
+                ))
+            },
+            (&TransformOperation::TranslateY(ref fy), &TransformOperation::TranslateX(ref tx)) => {
+                Ok(TransformOperation::Translate(
+                    LengthPercentage::zero().animate(tx, procedure)?,
+                    fy.animate(&LengthPercentage::zero(), procedure)?,
+                ))
+            },
+            (
                 &TransformOperation::Scale3D(ref fx, ref fy, ref fz),
                 &TransformOperation::Scale3D(ref tx, ref ty, ref tz),
             ) => Ok(TransformOperation::Scale3D(
@@ -1188,6 +1228,42 @@ impl Animate for ComputedTransformOperation {
                 animate_multiplicative_factor(*fx, *tx, procedure)?,
                 animate_multiplicative_factor(*fy, *ty, procedure)?,
             )),
+            (&TransformOperation::Scale(fx, fy), &TransformOperation::ScaleX(tx)) => {
+                Ok(TransformOperation::Scale(
+                    animate_multiplicative_factor(fx, tx, procedure)?,
+                    animate_multiplicative_factor(fy, 1.0, procedure)?,
+                ))
+            },
+            (&TransformOperation::Scale(fx, fy), &TransformOperation::ScaleY(ty)) => {
+                Ok(TransformOperation::Scale(
+                    animate_multiplicative_factor(fx, 1.0, procedure)?,
+                    animate_multiplicative_factor(fy, ty, procedure)?,
+                ))
+            },
+            (&TransformOperation::ScaleX(fx), &TransformOperation::Scale(tx, ty)) => {
+                Ok(TransformOperation::Scale(
+                    animate_multiplicative_factor(fx, tx, procedure)?,
+                    animate_multiplicative_factor(1.0, ty, procedure)?,
+                ))
+            },
+            (&TransformOperation::ScaleY(fy), &TransformOperation::Scale(tx, ty)) => {
+                Ok(TransformOperation::Scale(
+                    animate_multiplicative_factor(1.0, tx, procedure)?,
+                    animate_multiplicative_factor(fy, ty, procedure)?,
+                ))
+            },
+            (&TransformOperation::ScaleX(fx), &TransformOperation::ScaleY(ty)) => {
+                Ok(TransformOperation::Scale(
+                    animate_multiplicative_factor(fx, 1.0, procedure)?,
+                    animate_multiplicative_factor(1.0, ty, procedure)?,
+                ))
+            },
+            (&TransformOperation::ScaleY(fy), &TransformOperation::ScaleX(tx)) => {
+                Ok(TransformOperation::Scale(
+                    animate_multiplicative_factor(1.0, tx, procedure)?,
+                    animate_multiplicative_factor(fy, 1.0, procedure)?,
+                ))
+            },
             (
                 &TransformOperation::Rotate3D(fx, fy, fz, fa),
                 &TransformOperation::Rotate3D(tx, ty, tz, ta),
@@ -1207,12 +1283,6 @@ impl Animate for ComputedTransformOperation {
                 Ok(TransformOperation::RotateZ(fa.animate(&ta, procedure)?))
             },
             (&TransformOperation::Rotate(fa), &TransformOperation::Rotate(ta)) => {
-                Ok(TransformOperation::Rotate(fa.animate(&ta, procedure)?))
-            },
-            (&TransformOperation::Rotate(fa), &TransformOperation::RotateZ(ta)) => {
-                Ok(TransformOperation::Rotate(fa.animate(&ta, procedure)?))
-            },
-            (&TransformOperation::RotateZ(fa), &TransformOperation::Rotate(ta)) => {
                 Ok(TransformOperation::Rotate(fa.animate(&ta, procedure)?))
             },
             (
@@ -1694,6 +1764,39 @@ impl ComputeSquaredDistance for ComputedScale {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn common_primitive_keeps_2d_translate_functions_2d() {
+        let from = TransformOperation::TranslateX(LengthPercentage::zero());
+        let to = TransformOperation::TranslateY(LengthPercentage::zero());
+        let result = from
+            .animate(&to, Procedure::Interpolate { progress: 0.5 })
+            .expect("2D translate functions have a common primitive");
+
+        assert!(matches!(result, TransformOperation::Translate(..)));
+    }
+
+    #[test]
+    fn common_primitive_keeps_2d_scale_functions_2d() {
+        let from = TransformOperation::ScaleX(2.0);
+        let to = TransformOperation::ScaleY(2.0);
+        let result = from
+            .animate(&to, Procedure::Interpolate { progress: 0.5 })
+            .expect("2D scale functions have a common primitive");
+
+        assert!(matches!(result, TransformOperation::Scale(..)));
+    }
+
+    #[test]
+    fn common_primitive_promotes_rotate_z_to_3d() {
+        let from = TransformOperation::Rotate(Angle::from_degrees(0.0));
+        let to = TransformOperation::RotateZ(Angle::from_degrees(90.0));
+        let result = from
+            .animate(&to, Procedure::Interpolate { progress: 0.5 })
+            .expect("rotate and rotateZ have a common 3D primitive");
+
+        assert!(matches!(result, TransformOperation::Rotate3D(..)));
+    }
 
     #[test]
     fn mismatched_singular_matrices_require_discrete_fallback() {
