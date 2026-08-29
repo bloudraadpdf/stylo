@@ -194,7 +194,59 @@ impl Procedure {
 impl Animate for i32 {
     #[inline]
     fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
-        Ok(((*self as f64).animate(&(*other as f64), procedure)? + 0.5).floor() as i32)
+        let value = (*self as f64).animate(&(*other as f64), procedure)?;
+        let lower = value.floor();
+        let midpoint = lower + 0.5;
+        // Timing functions and computed values use f32 components, so their
+        // evaluation can place a mathematical half-integer just below its tie.
+        // Normalize only that bounded representation error before applying the
+        // CSS Values rule that integer ties round toward positive infinity.
+        const HALF_INTEGER_EPSILON: f64 = 1.0e-5;
+        let value = if (value - midpoint).abs() < HALF_INTEGER_EPSILON {
+            midpoint
+        } else {
+            value
+        };
+        Ok((value + 0.5).floor() as i32)
+    }
+}
+
+#[cfg(test)]
+mod integer_animation_tests {
+    use crate::bezier::Bezier;
+
+    use super::{Animate, Procedure};
+
+    #[test]
+    fn interpolation_rounds_a_float_noisy_half_towards_positive_infinity() {
+        let intended_progress = -0.5;
+        let control_y = ((8.0 * intended_progress - 1.0) / 6.0) as f32;
+        let noisy_progress =
+            Bezier::calculate_bezier_output(0.5, 1.0 / 20_000.0, 0.0, control_y, 1.0, control_y);
+        let result = 10
+            .animate(
+                &1,
+                Procedure::Interpolate {
+                    progress: noisy_progress,
+                },
+            )
+            .expect("integer interpolation must be defined");
+
+        assert_eq!(result, 15);
+    }
+
+    #[test]
+    fn interpolation_does_not_snap_a_value_distinctly_below_a_half() {
+        let result = 10
+            .animate(
+                &1,
+                Procedure::Interpolate {
+                    progress: -0.5 + 1.0e-4,
+                },
+            )
+            .expect("integer interpolation must be defined");
+
+        assert_eq!(result, 14);
     }
 }
 
