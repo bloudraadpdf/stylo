@@ -103,13 +103,6 @@ impl Animate for MatrixDecomposed2D {
         }
 
         // Don't rotate the long way around.
-        if angle == 0.0 {
-            angle = 360.
-        }
-        if other_angle == 0.0 {
-            other_angle = 360.
-        }
-
         if (angle - other_angle).abs() > 180. {
             if angle > other_angle {
                 angle -= 360.
@@ -1796,6 +1789,39 @@ mod tests {
             .expect("rotate and rotateZ have a common 3D primitive");
 
         assert!(matches!(result, TransformOperation::Rotate3D(..)));
+    }
+
+    #[test]
+    fn axis_aligned_2d_matrix_interpolation_preserves_exact_zero_components() {
+        let from = Matrix {
+            a: 2.0,
+            b: 0.0,
+            c: 0.0,
+            d: 2.0,
+            e: 10.0,
+            f: 30.0,
+        };
+        let to = Matrix {
+            a: 4.0,
+            b: 0.0,
+            c: 0.0,
+            d: 6.0,
+            e: 14.0,
+            f: 10.0,
+        };
+
+        assert_eq!(
+            from.animate(&to, Procedure::Interpolate { progress: 0.5 })
+                .expect("invertible 2D matrices interpolate"),
+            Matrix {
+                a: 3.0,
+                b: 0.0,
+                c: 0.0,
+                d: 4.0,
+                e: 12.0,
+                f: 20.0,
+            }
+        );
     }
 
     #[test]
