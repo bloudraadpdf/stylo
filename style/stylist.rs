@@ -2455,6 +2455,10 @@ struct StylistSelectorVisitor<'a> {
 
     /// All the document states selectors in the page reference.
     document_state_dependencies: &'a mut DocumentState,
+
+    /// Whether any selector depends on a shadow-including ancestor through
+    /// `:host-context()`.
+    has_host_context_dependency: &'a mut bool,
 }
 
 fn component_needs_revalidation(
@@ -2567,6 +2571,9 @@ impl<'a> SelectorVisitor for StylistSelectorVisitor<'a> {
             || component_needs_revalidation(s, self.passed_rightmost_selector);
 
         match *s {
+            Component::HostContext(_) => {
+                *self.has_host_context_dependency = true;
+            },
             Component::NonTSPseudoClass(NonTSPseudoClass::CustomState(ref name)) => {
                 // CustomStateSet is special cased as it is a functional pseudo
                 // class with unbounded inner values. This is different to
@@ -3178,6 +3185,10 @@ pub struct CascadeData {
     /// state bit changes.
     document_state_dependencies: DocumentState,
 
+    /// Whether a selector depends on a shadow-including ancestor through
+    /// `:host-context()`.
+    has_host_context_dependency: bool,
+
     /// The ids that appear in the rightmost complex selector of selectors (and
     /// hence in our selector maps).  Used to determine when sharing styles is
     /// safe: we disallow style sharing for elements whose id matches this
@@ -3284,6 +3295,7 @@ impl CascadeData {
             attribute_dependencies: PrecomputedHashSet::default(),
             state_dependencies: ElementState::empty(),
             document_state_dependencies: DocumentState::empty(),
+            has_host_context_dependency: false,
             mapped_ids: PrecomputedHashSet::default(),
             selectors_for_cache_revalidation: SelectorMap::new(),
             animations: Default::default(),
@@ -3380,6 +3392,12 @@ impl CascadeData {
         &self,
     ) -> &AdditionalRelativeSelectorInvalidationMap {
         &self.additional_relative_selector_invalidation_map
+    }
+
+    /// Returns whether a selector depends on a shadow-including ancestor
+    /// through `:host-context()`.
+    pub fn has_host_context_dependency(&self) -> bool {
+        self.has_host_context_dependency
     }
 
     /// Returns whether the given ElementState bit is relied upon by a selector
@@ -3792,6 +3810,7 @@ impl CascadeData {
                     state_dependencies: &mut self.state_dependencies,
                     nth_of_state_dependencies: &mut self.nth_of_state_dependencies,
                     document_state_dependencies: &mut self.document_state_dependencies,
+                    has_host_context_dependency: &mut self.has_host_context_dependency,
                 };
                 rule.selector.visit(&mut visitor);
 
@@ -4310,6 +4329,7 @@ impl CascadeData {
                         state_dependencies: &mut self.state_dependencies,
                         nth_of_state_dependencies: &mut self.nth_of_state_dependencies,
                         document_state_dependencies: &mut self.document_state_dependencies,
+                        has_host_context_dependency: &mut self.has_host_context_dependency,
                     };
 
                     let dependency_vector = build_scope_dependencies(
@@ -4583,6 +4603,7 @@ impl CascadeData {
         self.state_dependencies = ElementState::empty();
         self.nth_of_state_dependencies = ElementState::empty();
         self.document_state_dependencies = DocumentState::empty();
+        self.has_host_context_dependency = false;
         self.mapped_ids.clear();
         self.nth_of_mapped_ids.clear();
         self.selectors_for_cache_revalidation.clear();
@@ -4831,6 +4852,7 @@ pub fn needs_revalidation_for_testing(s: &Selector<SelectorImpl>) -> bool {
     let mut state_dependencies = ElementState::empty();
     let mut nth_of_state_dependencies = ElementState::empty();
     let mut document_state_dependencies = DocumentState::empty();
+    let mut has_host_context_dependency = false;
     let mut visitor = StylistSelectorVisitor {
         passed_rightmost_selector: false,
         needs_revalidation: &mut needs_revalidation,
@@ -4844,6 +4866,7 @@ pub fn needs_revalidation_for_testing(s: &Selector<SelectorImpl>) -> bool {
         state_dependencies: &mut state_dependencies,
         nth_of_state_dependencies: &mut nth_of_state_dependencies,
         document_state_dependencies: &mut document_state_dependencies,
+        has_host_context_dependency: &mut has_host_context_dependency,
     };
     s.visit(&mut visitor);
     needs_revalidation
