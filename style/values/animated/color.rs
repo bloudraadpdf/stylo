@@ -66,9 +66,15 @@ impl Animate for Color {
     #[inline]
     fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
         let (left_weight, right_weight) = procedure.weights();
+        let interpolation = match (self.as_absolute(), other.as_absolute()) {
+            (Some(left), Some(right)) => {
+                ColorInterpolationMethod::best_interpolation_between(left, right)
+            },
+            (Some(_), None) | (None, Some(_)) | (None, None) => ColorInterpolationMethod::srgb(),
+        };
 
         Ok(Self::from_color_mix(ColorMix {
-            interpolation: ColorInterpolationMethod::srgb(),
+            interpolation,
             items: OwnedSlice::from_slice(&[
                 GenericColorMixItem {
                     color: self.clone(),
@@ -98,5 +104,27 @@ impl ToAnimatedZero for Color {
     #[inline]
     fn to_animated_zero(&self) -> Result<Self, ()> {
         Ok(Color::Absolute(AbsoluteColor::TRANSPARENT_BLACK))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::color::ColorSpace;
+
+    #[test]
+    fn computed_modern_colors_interpolate_in_default_oklab_space() {
+        let black = Color::Absolute(AbsoluteColor::BLACK);
+        let modern_white =
+            Color::Absolute(AbsoluteColor::new(ColorSpace::Srgb, 1.0, 1.0, 1.0, 1.0));
+
+        let result = black
+            .animate(&modern_white, Procedure::Interpolate { progress: 0.3 })
+            .expect("absolute colors interpolate");
+        let absolute = result
+            .as_absolute()
+            .expect("absolute endpoints produce an absolute result");
+
+        assert_eq!(absolute.color_space, ColorSpace::Oklab);
     }
 }
