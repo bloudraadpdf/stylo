@@ -316,6 +316,16 @@ mod tests {
     }
 
     #[test]
+    fn range_state_pseudo_classes_round_trip_symmetrically() {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        for selector in [":in-range", ":out-of-range", ".subject:has(input:in-range)"] {
+            let parsed = SelectorParser::parse_author_origin_no_namespace(selector, &url_data)
+                .expect("range-state pseudo-class must parse at author origin");
+            assert_eq!(parsed.to_css_string(), selector);
+        }
+    }
+
+    #[test]
     fn public_part_descendants_validate_and_round_trip() {
         let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
         for selector in [
