@@ -326,6 +326,24 @@ mod tests {
     }
 
     #[test]
+    fn media_state_pseudo_classes_round_trip_symmetrically() {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        for selector in [
+            ":playing",
+            ":paused",
+            ":seeking",
+            ":buffering",
+            ":stalled",
+            ":muted",
+            ".subject:has(video:playing)",
+        ] {
+            let parsed = SelectorParser::parse_author_origin_no_namespace(selector, &url_data)
+                .expect("media-state pseudo-class must parse at author origin");
+            assert_eq!(parsed.to_css_string(), selector);
+        }
+    }
+
+    #[test]
     fn public_part_descendants_validate_and_round_trip() {
         let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
         for selector in [
