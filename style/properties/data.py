@@ -528,6 +528,7 @@ class Longhand(Property):
         # TODO: Get this from SpecifiedValueInfo or so instead; see bug 1887627.
         return self.predefined_type in {
             "BorderSpacing",
+            "Filter",
             "FontSize",
             "Inset",
             "Length",
@@ -554,6 +555,7 @@ class Longhand(Property):
             "TextDecorationLength",
             "TextDecorationInset",
             "TextIndent",
+            "Transform",
             "WordSpacing",
         }
 

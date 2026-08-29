@@ -1680,4 +1680,12 @@ mod tests {
     fn row_rule_color_is_visited_dependent() {
         assert!(LonghandIdSet::visited_dependent().contains(LonghandId::RowRuleColor));
     }
+
+    #[test]
+    fn transform_and_filter_lengths_are_zoom_dependent() {
+        let zoom_dependent = LonghandIdSet::zoom_dependent();
+        assert!(zoom_dependent.contains(LonghandId::Transform));
+        assert!(zoom_dependent.contains(LonghandId::Filter));
+        assert!(zoom_dependent.contains(LonghandId::BackdropFilter));
+    }
 }
