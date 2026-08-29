@@ -9,9 +9,24 @@ use super::{
     AbsoluteColor, ColorFlags, ColorSpace,
 };
 use crate::values::normalize;
-use cssparser::color::{clamp_unit_f32, serialize_color_alpha, OPAQUE};
+use cssparser::color::{clamp_floor_256_f32, serialize_color_alpha, OPAQUE};
 use std::fmt::{self, Write};
 use style_traits::{CssWriter, ToCss};
+
+/// Serializes a legacy sRGB channel without letting finite-precision
+/// interpolation move a mathematical half-integer below its rounding tie.
+fn legacy_srgb_channel(value: f32) -> u8 {
+    const HALF_STEP_EPSILON: f32 = 0.0001;
+
+    let scaled = value * 255.0;
+    let nearest_half_step = (scaled * 2.0).round() / 2.0;
+    let rounding_input = if (scaled - nearest_half_step).abs() <= HALF_STEP_EPSILON {
+        nearest_half_step
+    } else {
+        scaled
+    };
+    clamp_floor_256_f32(rounding_input)
+}
 
 /// A [`ModernComponent`] can serialize to `none`, `nan`, `infinity` and
 /// floating point values.
@@ -82,11 +97,11 @@ impl ToCss for AbsoluteColor {
                 let has_alpha = self.alpha != OPAQUE;
 
                 dest.write_str(if has_alpha { "rgba(" } else { "rgb(" })?;
-                clamp_unit_f32(self.components.0).to_css(dest)?;
+                legacy_srgb_channel(self.components.0).to_css(dest)?;
                 dest.write_str(", ")?;
-                clamp_unit_f32(self.components.1).to_css(dest)?;
+                legacy_srgb_channel(self.components.1).to_css(dest)?;
                 dest.write_str(", ")?;
-                clamp_unit_f32(self.components.2).to_css(dest)?;
+                legacy_srgb_channel(self.components.2).to_css(dest)?;
 
                 // Legacy syntax does not allow none components.
                 serialize_color_alpha(dest, Some(self.alpha), true)?;
