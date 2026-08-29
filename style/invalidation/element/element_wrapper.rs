@@ -306,6 +306,16 @@ where
         Some(Self::new(child, self.snapshot_map))
     }
 
+    fn first_element_child_for_relative_selector(
+        &self,
+        current_host: Option<OpaqueElement>,
+    ) -> Option<Self> {
+        let child = self
+            .element
+            .first_element_child_for_relative_selector(current_host)?;
+        Some(Self::new(child, self.snapshot_map))
+    }
+
     #[inline]
     fn is_html_element_in_html_document(&self) -> bool {
         self.element.is_html_element_in_html_document()

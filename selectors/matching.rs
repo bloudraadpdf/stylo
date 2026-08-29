@@ -514,7 +514,8 @@ fn matches_relative_selector<E: Element>(
                 ElementSelectorFlags::RELATIVE_SELECTOR_SEARCH_DIRECTION_ANCESTOR,
             );
         }
-        let mut next_element = element.first_element_child();
+        let mut next_element =
+            element.first_element_child_for_relative_selector(context.current_host);
         while let Some(el) = next_element {
             if context.needs_selector_flags() {
                 el.apply_selector_flags(
@@ -607,7 +608,12 @@ fn relative_selector_match_early<E: Element>(
     if context
         .selector_caches
         .relative_selector_filter_map
-        .fast_reject(element, selector, context.quirks_mode())
+        .fast_reject(
+            element,
+            selector,
+            context.quirks_mode(),
+            context.current_host,
+        )
     {
         // Alright, add as unmatched to cache.
         context.selector_caches.relative_selector.add(
@@ -705,7 +711,7 @@ fn matches_relative_selector_subtree<E: Element>(
     context: &mut MatchingContext<E::Impl>,
     rightmost: SubjectOrPseudoElement,
 ) -> bool {
-    let mut current = element.first_element_child();
+    let mut current = element.first_element_child_for_relative_selector(context.current_host);
 
     while let Some(el) = current {
         if context.needs_selector_flags() {

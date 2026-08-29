@@ -27,14 +27,19 @@ enum TraversalKind {
     Descendants,
 }
 
-fn add_to_filter<E: Element>(element: &E, filter: &mut BloomFilter, kind: TraversalKind) -> bool {
-    let mut child = element.first_element_child();
+fn add_to_filter<E: Element>(
+    element: &E,
+    filter: &mut BloomFilter,
+    kind: TraversalKind,
+    current_host: Option<OpaqueElement>,
+) -> bool {
+    let mut child = element.first_element_child_for_relative_selector(current_host);
     while let Some(e) = child {
         if !e.add_element_unique_hashes(filter) {
             return false;
         }
         if kind == TraversalKind::Descendants {
-            if !add_to_filter(&e, filter, kind) {
+            if !add_to_filter(&e, filter, kind, current_host) {
                 return false;
             }
         }
@@ -44,7 +49,7 @@ fn add_to_filter<E: Element>(element: &E, filter: &mut BloomFilter, kind: Traver
 }
 
 #[derive(Clone, Copy, Hash, Eq, PartialEq)]
-struct Key(OpaqueElement, TraversalKind);
+struct Key(OpaqueElement, TraversalKind, Option<OpaqueElement>);
 
 /// Map of bloom filters for fast-rejecting relative selectors.
 #[derive(Default)]
@@ -84,10 +89,15 @@ fn fast_reject<Impl: SelectorImpl>(
 }
 
 impl RelativeSelectorFilterMap {
-    fn get_filter<E: Element>(&mut self, element: &E, kind: TraversalKind) -> Option<&BloomFilter> {
+    fn get_filter<E: Element>(
+        &mut self,
+        element: &E,
+        kind: TraversalKind,
+        current_host: Option<OpaqueElement>,
+    ) -> Option<&BloomFilter> {
         // Insert flag to indicate that we looked up the filter once, and
         // create the filter if and only if that flag is there.
-        let key = Key(element.opaque(), kind);
+        let key = Key(element.opaque(), kind, current_host);
         let entry = self
             .map
             .entry(key)
@@ -97,7 +107,7 @@ impl RelativeSelectorFilterMap {
                 }
                 let mut filter = BloomFilter::new();
                 // Go through all children/descendants of this element and add their hashes.
-                if add_to_filter(element, &mut filter, kind) {
+                if add_to_filter(element, &mut filter, kind, current_host) {
                     *entry = Entry::HasFilter(Box::new(filter));
                 }
             })
@@ -118,6 +128,7 @@ impl RelativeSelectorFilterMap {
         element: &E,
         selector: &RelativeSelector<Impl>,
         quirks_mode: QuirksMode,
+        current_host: Option<OpaqueElement>,
     ) -> bool {
         if matches!(
             selector.match_hint,
@@ -148,11 +159,11 @@ impl RelativeSelectorFilterMap {
             // This is less likely to reject, especially for sibling subtree matches; however, it's less
             // expensive memory-wise, compared to storing filters for each sibling.
             element.parent_element().map_or(false, |parent| {
-                self.get_filter(&parent, kind)
+                self.get_filter(&parent, kind, current_host)
                     .map_or(false, |filter| fast_reject(selector, quirks_mode, filter))
             })
         } else {
-            self.get_filter(element, kind)
+            self.get_filter(element, kind, current_host)
                 .map_or(false, |filter| fast_reject(selector, quirks_mode, filter))
         }
     }
