@@ -305,6 +305,21 @@ trait PrivateMatchMethods: TElement {
             return has_animations;
         }
 
+        // A normal restyle can change the animation-free computed value used
+        // by implicit keyframes even when the animation-* properties are
+        // unchanged. Rebuild those keyframes from the new base style without
+        // restarting the retained animation. Animation-only traversals must
+        // keep their existing endpoints so repeated sampling cannot feed an
+        // animated value back into the underlying value.
+        if has_animations
+            && !context
+                .shared
+                .traversal_flags
+                .contains(TraversalFlags::AnimationOnly)
+        {
+            return true;
+        }
+
         false
     }
 

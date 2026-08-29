@@ -1481,15 +1481,33 @@ impl AnimationSetKey {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, MallocSizeOf)]
+enum AnimationSamplingMode {
+    #[default]
+    Enabled,
+    SuppressedForBaseStyle,
+}
+
 #[derive(Clone, Debug, Default, MallocSizeOf)]
 /// A set of animations for a document.
 pub struct DocumentAnimationSet {
     /// The `ElementAnimationSet`s that this set contains.
     #[ignore_malloc_size_of = "Arc is hard"]
     pub sets: Arc<RwLock<FxHashMap<AnimationSetKey, ElementAnimationSet>>>,
+
+    sampling_mode: AnimationSamplingMode,
 }
 
 impl DocumentAnimationSet {
+    /// Return a shared animation set that updates retained animation state but
+    /// omits sampled declarations while calculating animation-free base style.
+    pub fn for_base_style_recalculation(&self) -> Self {
+        Self {
+            sets: self.sets.clone(),
+            sampling_mode: AnimationSamplingMode::SuppressedForBaseStyle,
+        }
+    }
+
     /// Return whether or not the provided node has active CSS animations.
     pub fn has_active_animations(&self, key: &AnimationSetKey) -> bool {
         self.sets
@@ -1514,6 +1532,12 @@ impl DocumentAnimationSet {
         time: f64,
         shared_lock: &SharedRwLock,
     ) -> Option<Arc<Locked<PropertyDeclarationBlock>>> {
+        if matches!(
+            self.sampling_mode,
+            AnimationSamplingMode::SuppressedForBaseStyle
+        ) {
+            return None;
+        }
         self.sets
             .read()
             .get(key)
@@ -1532,6 +1556,12 @@ impl DocumentAnimationSet {
         time: f64,
         shared_lock: &SharedRwLock,
     ) -> Option<Arc<Locked<PropertyDeclarationBlock>>> {
+        if matches!(
+            self.sampling_mode,
+            AnimationSamplingMode::SuppressedForBaseStyle
+        ) {
+            return None;
+        }
         self.sets
             .read()
             .get(key)
@@ -1552,6 +1582,12 @@ impl DocumentAnimationSet {
         time: f64,
         shared_lock: &SharedRwLock,
     ) -> AnimationDeclarations {
+        if matches!(
+            self.sampling_mode,
+            AnimationSamplingMode::SuppressedForBaseStyle
+        ) {
+            return AnimationDeclarations::default();
+        }
         let sets = self.sets.read();
         let set = match sets.get(key) {
             Some(set) => set,
