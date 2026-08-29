@@ -1256,7 +1256,9 @@ fn parse_gap_rule_shorthand<'i, 't>(
 > {
     let rules = specified::parse_gap_rule_list_with(context, input, parse_border)?;
     Ok((
-        map_gap_rule_list(&rules, |(width, _, _)| width.clone()),
+        map_gap_rule_list(&rules, |(width, _, _)| {
+            specified::GapRuleWidth::from_border_side_width(width.clone())
+        }),
         map_gap_rule_list(&rules, |(_, style, _)| *style),
         map_gap_rule_list(&rules, |(_, _, color)| color.clone()),
     ))
@@ -1332,7 +1334,7 @@ where
                 GapRuleListItem::Value(width),
                 GapRuleListItem::Value(style),
                 GapRuleListItem::Value(color),
-            ) => serialize_directional_border(dest, width, style, color)?,
+            ) => serialize_directional_border(dest, width.as_border_side_width(), style, color)?,
             (
                 GapRuleListItem::Repeat {
                     count,
@@ -1345,7 +1347,7 @@ where
                 count.to_css(dest)?;
                 for ((width, style), color) in widths.iter().zip(styles.iter()).zip(colors.iter()) {
                     dest.write_str(", ")?;
-                    serialize_directional_border(dest, width, style, color)?;
+                    serialize_directional_border(dest, width.as_border_side_width(), style, color)?;
                 }
                 dest.write_char(')')?;
             },

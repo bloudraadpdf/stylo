@@ -12,6 +12,7 @@
 
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
+use crate::values::computed::{self, Context, ToComputedValue};
 use crate::values::generics::gap::{
     GapRuleList as GenericGapRuleList, GapRuleListItem, GapRuleRepeatCount,
 };
@@ -27,8 +28,52 @@ pub type GapRuleList<Value> = GenericGapRuleList<Value, Integer>;
 pub type GapRuleColorList = GapRuleList<Color>;
 /// The specified value of `column-rule-style` and `row-rule-style`.
 pub type GapRuleStyleList = GapRuleList<BorderStyle>;
+
+/// A specified gap-rule width that computes with line-width snapping.
+#[derive(
+    Clone, Debug, MallocSizeOf, Parse, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped,
+)]
+#[repr(transparent)]
+#[typed_value(derive_fields)]
+pub struct GapRuleWidth(BorderSideWidth);
+
+impl GapRuleWidth {
+    /// Construct from the shared `<line-width>` parser representation.
+    pub fn from_border_side_width(width: BorderSideWidth) -> Self {
+        Self(width)
+    }
+
+    /// Return the shared `<line-width>` parser representation.
+    pub fn as_border_side_width(&self) -> &BorderSideWidth {
+        &self.0
+    }
+
+    /// Construct the initial `medium` width.
+    pub fn medium() -> Self {
+        Self(BorderSideWidth::medium())
+    }
+}
+
+impl ToComputedValue for GapRuleWidth {
+    type ComputedValue = computed::bd_gaps::GapRuleWidth;
+
+    fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
+        let width = self.0.to_computed_value(context);
+        computed::bd_gaps::GapRuleWidth::new(
+            width.0,
+            app_units::Au(context.device().app_units_per_device_pixel()),
+        )
+    }
+
+    fn from_computed_value(computed: &Self::ComputedValue) -> Self {
+        Self(BorderSideWidth::from_computed_value(
+            &computed::BorderSideWidth(computed.length()),
+        ))
+    }
+}
+
 /// The specified value of `column-rule-width` and `row-rule-width`.
-pub type GapRuleWidthList = GapRuleList<BorderSideWidth>;
+pub type GapRuleWidthList = GapRuleList<GapRuleWidth>;
 
 impl<Value: Parse> Parse for GapRuleList<Value> {
     fn parse<'i, 't>(

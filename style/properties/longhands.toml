@@ -880,9 +880,9 @@ affects = "paint"
 
 [column-rule-width]
 type = "GapRuleWidthList"
-initial = "computed::GapRuleList::single(computed::BorderSideWidth::medium())"
+initial = "computed::GapRuleList::single(computed::GapRuleWidth::medium())"
 struct = "column"
-initial_specified_value = "specified::GapRuleList::single(specified::BorderSideWidth::medium())"
+initial_specified_value = "specified::GapRuleList::single(specified::GapRuleWidth::medium())"
 servo_pref = "layout.columns.enabled"
 spec = "https://drafts.csswg.org/css-gaps-1/#propdef-column-rule-width"
 affects = "layout"
@@ -911,9 +911,9 @@ engine = "servo"
 
 [row-rule-width]
 type = "GapRuleWidthList"
-initial = "computed::GapRuleList::single(computed::BorderSideWidth::medium())"
+initial = "computed::GapRuleList::single(computed::GapRuleWidth::medium())"
 struct = "column"
-initial_specified_value = "specified::GapRuleList::single(specified::BorderSideWidth::medium())"
+initial_specified_value = "specified::GapRuleList::single(specified::GapRuleWidth::medium())"
 servo_pref = "layout.columns.enabled"
 spec = "https://drafts.csswg.org/css-gaps-1/#propdef-row-rule-width"
 affects = "layout"

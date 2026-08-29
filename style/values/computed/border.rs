@@ -33,6 +33,19 @@ pub type LineWidth = Au;
 #[typed_value(derive_fields)]
 pub struct BorderSideWidth(pub Au);
 
+/// Snap a non-negative length to the device-pixel grid used by line widths.
+pub(crate) fn snap_as_border_width(len: Au, app_units_per_device_pixel: i32) -> Au {
+    debug_assert!(len >= Au(0));
+    debug_assert!(app_units_per_device_pixel > 0);
+    if len == Au(0) {
+        return len;
+    }
+    std::cmp::max(
+        Au(app_units_per_device_pixel),
+        Au(len.0 / app_units_per_device_pixel * app_units_per_device_pixel),
+    )
+}
+
 impl BorderSideWidth {
     /// The `medium` value.
     pub fn medium() -> Self {

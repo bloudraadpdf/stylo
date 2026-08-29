@@ -204,16 +204,10 @@ impl Parse for BorderSideWidth {
 
 // https://drafts.csswg.org/css-values-4/#snap-a-length-as-a-border-width
 fn snap_as_border_width(len: Au, context: &Context) -> Au {
-    debug_assert!(len >= Au(0));
-
-    // Round `width` down to the nearest device pixel, but any non-zero value that would round
-    // down to zero is clamped to 1 device pixel.
-    if len == Au(0) {
-        return len;
-    }
-
-    let au_per_dev_px = context.device().app_units_per_device_pixel();
-    std::cmp::max(Au(au_per_dev_px), Au(len.0 / au_per_dev_px * au_per_dev_px))
+    crate::values::computed::border::snap_as_border_width(
+        len,
+        context.device().app_units_per_device_pixel(),
+    )
 }
 
 // peedeeef-fork note: `BorderSideWidth::to_computed_value` no longer
