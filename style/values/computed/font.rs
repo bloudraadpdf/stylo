@@ -6,7 +6,7 @@
 
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
-use crate::values::animated::ToAnimatedValue;
+use crate::values::animated::{Animate, Procedure, ToAnimatedValue};
 use crate::values::computed::{
     Angle, Context, Integer, Length, NonNegativeFiniteLength, NonNegativeLength, NonNegativeNumber,
     Number, Percentage, ToComputedValue, Zoom,
@@ -58,6 +58,7 @@ pub use crate::values::specified::Number as SpecifiedNumber;
 /// cbindgen:derive-gte
 #[repr(C)]
 #[derive(
+    Animate,
     Clone,
     ComputeSquaredDistance,
     Copy,
@@ -248,7 +249,6 @@ impl FontWeight {
 }
 
 #[derive(
-    Animate,
     Clone,
     ComputeSquaredDistance,
     Copy,
@@ -831,7 +831,6 @@ impl FontFamilyList {
 /// context, and must resolve the reference metric against the face that
 /// actually wins the authored font stack.
 #[derive(
-    Animate,
     Clone,
     ComputeSquaredDistance,
     Copy,
@@ -853,6 +852,22 @@ pub enum FontSizeAdjustFactor {
     /// Resolve the ratio from the first available face in the authored stack.
     #[animation(error)]
     FromFont,
+}
+
+impl Animate for FontSizeAdjustFactor {
+    fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
+        match (self, other) {
+            (Self::Number(from), Self::Number(to)) => {
+                let result = from.animate(to, procedure)?;
+                Ok(Self::Number(crate::values::generics::NonNegative(
+                    result.0.max(0.0),
+                )))
+            },
+            (Self::Number(_), Self::FromFont)
+            | (Self::FromFont, Self::Number(_))
+            | (Self::FromFont, Self::FromFont) => Err(()),
+        }
+    }
 }
 
 /// Preserve the readability of text when font fallback occurs.
@@ -1435,5 +1450,26 @@ impl ToResolvedValue for LineHeight {
     #[inline]
     fn from_resolved_value(value: Self::ResolvedValue) -> Self {
         value
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{FontSizeAdjust, FontSizeAdjustFactor};
+    use crate::values::animated::{Animate, Procedure};
+    use crate::values::generics::NonNegative;
+    use style_traits::ToCss;
+
+    fn ex_height(value: f32) -> FontSizeAdjust {
+        FontSizeAdjust::ExHeight(FontSizeAdjustFactor::Number(NonNegative(value)))
+    }
+
+    #[test]
+    fn font_size_adjust_clamps_the_final_extrapolated_factor() {
+        let value = ex_height(0.0)
+            .animate(&ex_height(2.0), Procedure::Interpolate { progress: -0.5 })
+            .expect("matching font metrics must interpolate numerically");
+
+        assert_eq!(value.to_css_string(), "0");
     }
 }
