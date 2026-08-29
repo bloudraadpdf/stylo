@@ -652,7 +652,9 @@ fn match_relative_selectors<E: Element>(
     }
     context
         .nest_for_relative_selector(element.opaque(), |context| {
-            do_match_relative_selectors(selectors, element, context, rightmost)
+            context.with_featureless(false, |context| {
+                do_match_relative_selectors(selectors, element, context, rightmost)
+            })
         })
         .into()
 }
