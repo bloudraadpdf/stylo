@@ -73,9 +73,30 @@ pub enum RubyMerge {
 )]
 #[allow(missing_docs)]
 pub enum RubyOverhang {
-    /// Annotations may overhang adjacent atomic inlines.
+    /// The user agent selects collision-free adjacent overlap opportunities.
     #[default]
     Auto,
-    /// Annotations are clipped to the ruby base extents.
-    None,
+    /// Annotations may overlap only adjacent spacing opportunities.
+    #[parse(aliases = "none")]
+    Spaces,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cssparser::{Parser, ParserInput};
+
+    fn parse_ruby_overhang(css: &str) -> RubyOverhang {
+        let mut input = ParserInput::new(css);
+        Parser::new(&mut input)
+            .parse_entirely(RubyOverhang::parse)
+            .expect("ruby-overhang keyword must parse")
+    }
+
+    #[test]
+    fn ruby_overhang_preserves_space_limited_and_ua_selected_policies() {
+        assert_eq!(parse_ruby_overhang("auto"), RubyOverhang::Auto);
+        assert_eq!(parse_ruby_overhang("spaces"), RubyOverhang::Spaces);
+        assert_eq!(parse_ruby_overhang("none"), RubyOverhang::Spaces);
+    }
 }

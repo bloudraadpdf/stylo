@@ -645,7 +645,6 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
             .set_text_align_all(TextAlign::Start)
     }
 
-    #[cfg(feature = "gecko")]
     fn should_suppress_linebreak<E>(&self, element: Option<E>) -> bool
     where
         E: TElement,
@@ -694,7 +693,6 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
     /// * inlinify block descendants,
     /// * suppress border and padding for ruby level containers,
     /// * correct unicode-bidi.
-    #[cfg(feature = "gecko")]
     fn adjust_for_ruby<E>(&mut self, element: Option<E>)
     where
         E: TElement,
@@ -1112,9 +1110,9 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
         }
         self.adjust_for_table_text_align();
         self.adjust_for_writing_mode(layout_parent_style);
+        self.adjust_for_ruby(element);
         #[cfg(feature = "gecko")]
         {
-            self.adjust_for_ruby(element);
             self.adjust_for_appearance(element);
             self.adjust_for_marker_pseudo();
         }
