@@ -13,6 +13,9 @@ use crate::values::computed::url::ComputedUrl;
 use crate::values::computed::{Image, LengthPercentage, Position};
 use crate::values::generics::basic_shape as generic;
 use crate::values::generics::basic_shape::ShapePosition;
+use crate::values::generics::border::{GenericBorderCornerRadius, GenericBorderRadius};
+use crate::values::generics::position::GenericPositionOrAuto;
+use crate::values::generics::NonNegative;
 use crate::values::specified::svg_path::{CoordPair, PathCommand};
 use crate::values::CSSFloat;
 
@@ -73,6 +76,182 @@ pub type CommandEndPoint = generic::CommandEndPoint<Position, LengthPercentage>;
 
 /// The computed value of hline and vline's endpoint.
 pub type AxisEndPoint = generic::AxisEndPoint<LengthPercentage>;
+
+fn animate_shape_length(
+    from: &LengthPercentage,
+    to: &LengthPercentage,
+    procedure: Procedure,
+) -> Result<LengthPercentage, ()> {
+    from.animate_as_percentage_dimension_mix(to, procedure)
+}
+
+fn animate_shape_position(
+    from: &Position,
+    to: &Position,
+    procedure: Procedure,
+) -> Result<Position, ()> {
+    Ok(Position::new(
+        animate_shape_length(&from.horizontal, &to.horizontal, procedure)?,
+        animate_shape_length(&from.vertical, &to.vertical, procedure)?,
+    ))
+}
+
+fn animate_shape_position_or_auto(
+    from: &GenericPositionOrAuto<Position>,
+    to: &GenericPositionOrAuto<Position>,
+    procedure: Procedure,
+) -> Result<GenericPositionOrAuto<Position>, ()> {
+    match (from, to) {
+        (GenericPositionOrAuto::Position(from), GenericPositionOrAuto::Position(to)) => {
+            animate_shape_position(from, to, procedure).map(GenericPositionOrAuto::Position)
+        },
+        (GenericPositionOrAuto::Auto, GenericPositionOrAuto::Auto) => {
+            Ok(GenericPositionOrAuto::Auto)
+        },
+        (GenericPositionOrAuto::Position(_), GenericPositionOrAuto::Auto)
+        | (GenericPositionOrAuto::Auto, GenericPositionOrAuto::Position(_)) => Err(()),
+    }
+}
+
+fn animate_shape_radius(
+    from: &ShapeRadius,
+    to: &ShapeRadius,
+    procedure: Procedure,
+) -> Result<ShapeRadius, ()> {
+    match (from, to) {
+        (ShapeRadius::Length(from), ShapeRadius::Length(to)) => {
+            animate_shape_length(&from.0, &to.0, procedure)
+                .map(NonNegative)
+                .map(ShapeRadius::Length)
+        },
+        (ShapeRadius::Length(_), ShapeRadius::ClosestSide | ShapeRadius::FarthestSide)
+        | (ShapeRadius::ClosestSide | ShapeRadius::FarthestSide, ShapeRadius::Length(_))
+        | (ShapeRadius::ClosestSide, ShapeRadius::ClosestSide)
+        | (ShapeRadius::FarthestSide, ShapeRadius::FarthestSide)
+        | (ShapeRadius::ClosestSide, ShapeRadius::FarthestSide)
+        | (ShapeRadius::FarthestSide, ShapeRadius::ClosestSide) => Err(()),
+    }
+}
+
+fn animate_shape_corner(
+    from: &GenericBorderCornerRadius<NonNegative<LengthPercentage>>,
+    to: &GenericBorderCornerRadius<NonNegative<LengthPercentage>>,
+    procedure: Procedure,
+) -> Result<GenericBorderCornerRadius<NonNegative<LengthPercentage>>, ()> {
+    Ok(GenericBorderCornerRadius::new(
+        NonNegative(animate_shape_length(
+            &from.0.width.0,
+            &to.0.width.0,
+            procedure,
+        )?),
+        NonNegative(animate_shape_length(
+            &from.0.height.0,
+            &to.0.height.0,
+            procedure,
+        )?),
+    ))
+}
+
+fn animate_shape_border_radius(
+    from: &GenericBorderRadius<NonNegative<LengthPercentage>>,
+    to: &GenericBorderRadius<NonNegative<LengthPercentage>>,
+    procedure: Procedure,
+) -> Result<GenericBorderRadius<NonNegative<LengthPercentage>>, ()> {
+    Ok(GenericBorderRadius::new(
+        animate_shape_corner(&from.top_left, &to.top_left, procedure)?,
+        animate_shape_corner(&from.top_right, &to.top_right, procedure)?,
+        animate_shape_corner(&from.bottom_right, &to.bottom_right, procedure)?,
+        animate_shape_corner(&from.bottom_left, &to.bottom_left, procedure)?,
+    ))
+}
+
+fn animate_inset_rect(
+    from: &InsetRect,
+    to: &InsetRect,
+    procedure: Procedure,
+) -> Result<InsetRect, ()> {
+    use crate::values::generics::rect::Rect;
+
+    Ok(InsetRect {
+        rect: Rect::new(
+            animate_shape_length(&from.rect.0, &to.rect.0, procedure)?,
+            animate_shape_length(&from.rect.1, &to.rect.1, procedure)?,
+            animate_shape_length(&from.rect.2, &to.rect.2, procedure)?,
+            animate_shape_length(&from.rect.3, &to.rect.3, procedure)?,
+        ),
+        round: animate_shape_border_radius(&from.round, &to.round, procedure)?,
+    })
+}
+
+fn animate_polygon(
+    from: &generic::Polygon<LengthPercentage>,
+    to: &generic::Polygon<LengthPercentage>,
+    procedure: Procedure,
+) -> Result<generic::Polygon<LengthPercentage>, ()> {
+    if from.fill != to.fill || from.coordinates.len() != to.coordinates.len() {
+        return Err(());
+    }
+    let coordinates = from
+        .coordinates
+        .iter()
+        .zip(to.coordinates.iter())
+        .map(|(from, to)| {
+            Ok(generic::PolygonCoord(
+                animate_shape_length(&from.0, &to.0, procedure)?,
+                animate_shape_length(&from.1, &to.1, procedure)?,
+            ))
+        })
+        .collect::<Result<Vec<_>, ()>>()?;
+    Ok(generic::Polygon {
+        fill: from.fill,
+        coordinates: coordinates.into(),
+    })
+}
+
+impl Animate for BasicShape {
+    fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
+        match (self, other) {
+            (Self::Rect(from), Self::Rect(to)) => {
+                animate_inset_rect(from, to, procedure).map(Self::Rect)
+            },
+            (Self::Circle(from), Self::Circle(to)) => Ok(Self::Circle(Circle {
+                position: animate_shape_position_or_auto(&from.position, &to.position, procedure)?,
+                radius: animate_shape_radius(&from.radius, &to.radius, procedure)?,
+            })),
+            (Self::Ellipse(from), Self::Ellipse(to)) => Ok(Self::Ellipse(Ellipse {
+                position: animate_shape_position_or_auto(&from.position, &to.position, procedure)?,
+                semiaxis_x: animate_shape_radius(&from.semiaxis_x, &to.semiaxis_x, procedure)?,
+                semiaxis_y: animate_shape_radius(&from.semiaxis_y, &to.semiaxis_y, procedure)?,
+            })),
+            (Self::Polygon(from), Self::Polygon(to)) => {
+                animate_polygon(from, to, procedure).map(Self::Polygon)
+            },
+            (Self::PathOrShape(from), Self::PathOrShape(to)) => {
+                from.animate(to, procedure).map(Self::PathOrShape)
+            },
+            (
+                Self::Rect(_),
+                Self::Circle(_) | Self::Ellipse(_) | Self::Polygon(_) | Self::PathOrShape(_),
+            )
+            | (
+                Self::Circle(_),
+                Self::Rect(_) | Self::Ellipse(_) | Self::Polygon(_) | Self::PathOrShape(_),
+            )
+            | (
+                Self::Ellipse(_),
+                Self::Rect(_) | Self::Circle(_) | Self::Polygon(_) | Self::PathOrShape(_),
+            )
+            | (
+                Self::Polygon(_),
+                Self::Rect(_) | Self::Circle(_) | Self::Ellipse(_) | Self::PathOrShape(_),
+            )
+            | (
+                Self::PathOrShape(_),
+                Self::Rect(_) | Self::Circle(_) | Self::Ellipse(_) | Self::Polygon(_),
+            ) => Err(()),
+        }
+    }
+}
 
 /// Animate from `Shape` to `Path`, and vice versa.
 macro_rules! animate_shape {
@@ -288,8 +467,12 @@ impl From<&generic::ArcRadii<CSSFloat>> for generic::ArcRadii<LengthPercentage> 
 
 #[cfg(test)]
 mod tests {
-    use super::ShapeCommand;
+    use super::{BasicShape, Circle, ShapeCommand, ShapeRadius};
+    use crate::values::animated::{Animate, Procedure};
+    use crate::values::computed::{Length, LengthPercentage, Percentage};
+    use crate::values::generics::{position::GenericPositionOrAuto, NonNegative};
     use crate::values::specified::svg_path::{CoordPair, PathCommand};
+    use style_traits::ToCss;
 
     #[test]
     fn path_command_line_preserves_line_variant() {
@@ -301,5 +484,45 @@ mod tests {
             ShapeCommand::from(&path),
             ShapeCommand::Line { .. }
         ));
+    }
+
+    #[test]
+    fn mixed_circle_radius_retains_calculated_representation_at_endpoint() {
+        let circle = |radius| {
+            BasicShape::Circle(Circle {
+                position: GenericPositionOrAuto::Auto,
+                radius: ShapeRadius::Length(NonNegative(radius)),
+            })
+        };
+        let from = circle(LengthPercentage::new_length(Length::new(150.0)));
+        let to = circle(LengthPercentage::new_percent(Percentage(0.5)));
+
+        let sampled = from
+            .animate(&to, Procedure::Interpolate { progress: 0.0 })
+            .expect("matching circles must interpolate");
+
+        assert_eq!(sampled.to_css_string(), "circle(calc(0% + 150px))");
+    }
+
+    #[test]
+    fn keyword_circle_radius_keeps_the_whole_shape_discrete() {
+        let circle = |position, radius| {
+            BasicShape::Circle(Circle {
+                position: GenericPositionOrAuto::Position(position),
+                radius,
+            })
+        };
+        let position = |x| {
+            crate::values::computed::Position::new(
+                LengthPercentage::new_length(Length::new(x)),
+                LengthPercentage::new_percent(Percentage(0.75)),
+            )
+        };
+        let from = circle(position(25.0), ShapeRadius::FarthestSide);
+        let to = circle(position(50.0), ShapeRadius::FarthestSide);
+
+        assert!(from
+            .animate(&to, Procedure::Interpolate { progress: 0.25 })
+            .is_err());
     }
 }

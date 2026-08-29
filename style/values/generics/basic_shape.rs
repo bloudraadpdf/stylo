@@ -366,7 +366,6 @@ impl<BasicShapeRect> ToAnimatedZero for ObjectViewBox<BasicShapeRect> {
 ///
 /// https://drafts.csswg.org/css-shapes-1/#supported-basic-shapes
 #[derive(
-    Animate,
     Clone,
     ComputeSquaredDistance,
     Debug,
