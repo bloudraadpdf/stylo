@@ -4813,6 +4813,21 @@ pub mod tests {
     }
 
     #[test]
+    fn host_has_relative_selector_may_match_featureless_host() {
+        let selectors = parse(":host:has(.match)").unwrap();
+        assert_eq!(
+            selectors.slice()[0].matches_featureless_host(false),
+            MatchesFeaturelessHost::Only
+        );
+
+        let selectors = parse(":has(.match)").unwrap();
+        assert_eq!(
+            selectors.slice()[0].matches_featureless_host(false),
+            MatchesFeaturelessHost::Never
+        );
+    }
+
+    #[test]
     fn test_parse_implicit_scope() {
         assert_eq!(
             parse_relative_expected(".foo", ParseRelative::ForScope, None).unwrap(),

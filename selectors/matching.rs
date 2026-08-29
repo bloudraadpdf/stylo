@@ -1145,6 +1145,11 @@ pub(crate) fn compound_matches_featureless_host<Impl: SelectorImpl>(
             Component::Scope | Component::ImplicitScope if scope_matches_featureless_host => {},
             // :host only matches featureless elements.
             Component::Host(..) => {},
+            // A relational condition may constrain an explicitly host-capable
+            // compound without making the host itself non-featureless. The
+            // selector-level HAS_HOST / HAS_SCOPE check prevents a bare :has()
+            // from reaching this compound classification.
+            Component::Has(..) => {},
             // Pseudo-elements are allowed to match as well.
             Component::PseudoElement(..) => {},
             // We allow logical pseudo-classes, but we'll fail matching of the inner selectors if
