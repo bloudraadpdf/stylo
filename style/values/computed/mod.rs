@@ -1083,11 +1083,13 @@ impl CalcAnglePercentage {
         Self { percentage, angle }
     }
 
-    pub(crate) fn percentage(self) -> Percentage {
+    /// Returns the percentage component.
+    pub fn percentage(self) -> Percentage {
         self.percentage
     }
 
-    pub(crate) fn angle(self) -> Angle {
+    /// Returns the angle component.
+    pub fn angle(self) -> Angle {
         self.angle
     }
 }
