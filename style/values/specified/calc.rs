@@ -1406,18 +1406,21 @@ impl CalcNode {
         Ok(node)
     }
 
-    /// Resolve a `<number>` calculation after converting context-dependent
-    /// lengths to their canonical pixel value.
-    pub fn resolve_number(&self, context: &Context) -> Result<CSSFloat, ()> {
-        let computed = self.map_leaves(|leaf| match *leaf {
+    fn resolve_contextual_leaves(&self, context: &Context) -> Self {
+        self.map_leaves(|leaf| match *leaf {
             Leaf::Length(length) => Leaf::Length(NoCalcLength::from_px(
                 length.to_computed_value(context).px(),
             )),
             Leaf::SiblingIndex => Leaf::Number(context.sibling_index()),
             Leaf::SiblingCount => Leaf::Number(context.sibling_count()),
             _ => leaf.clone(),
-        });
-        computed.to_number()
+        })
+    }
+
+    /// Resolve a `<number>` calculation after converting context-dependent
+    /// lengths to their canonical pixel value.
+    pub fn resolve_number(&self, context: &Context) -> Result<CSSFloat, ()> {
+        self.resolve_contextual_leaves(context).to_number()
     }
 
     /// Resolve a `<number>` calculation which has no contextual units.
@@ -1427,12 +1430,7 @@ impl CalcNode {
 
     /// Resolves a percentage calculation with element-dependent leaves.
     pub fn resolve_percentage(&self, context: &Context) -> Result<CSSFloat, ()> {
-        let computed = self.map_leaves(|leaf| match *leaf {
-            Leaf::SiblingIndex => Leaf::Number(context.sibling_index()),
-            Leaf::SiblingCount => Leaf::Number(context.sibling_count()),
-            _ => leaf.clone(),
-        });
-        computed.to_percentage()
+        self.resolve_contextual_leaves(context).to_percentage()
     }
 
     /// Resolves a percentage calculation which has no contextual leaves.
@@ -1521,9 +1519,37 @@ impl CalcNode {
 mod tree_counting_tests {
     use super::*;
     use crate::context::QuirksMode;
+    use crate::font_metrics::FontMetrics;
+    use crate::media_queries::MediaType;
+    use crate::properties::{style_structs::Font, ComputedValues};
+    use crate::queries::values::PrefersColorScheme;
+    use crate::servo::media_queries::{Device, FontMetricsProvider};
     use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
+    use crate::values::computed::font::GenericFontFamily;
+    use crate::values::computed::{CSSPixelLength, Length, ToComputedValue};
     use cssparser::{Parser, ParserInput};
+    use euclid::{Scale, Size2D};
     use style_traits::ParsingMode;
+    use style_traits::{CSSPixel, DevicePixel};
+
+    #[derive(Debug)]
+    struct TestFontMetricsProvider;
+
+    impl FontMetricsProvider for TestFontMetricsProvider {
+        fn query_font_metrics(
+            &self,
+            _vertical: bool,
+            _font: &Font,
+            _base_size: CSSPixelLength,
+            _flags: crate::values::specified::font::QueryFontMetricsFlags,
+        ) -> FontMetrics {
+            FontMetrics::default()
+        }
+
+        fn base_size_for_generic(&self, _generic: GenericFontFamily) -> Length {
+            Length::new(16.0)
+        }
+    }
 
     fn context() -> ParserContext<'static> {
         context_for(CssRuleType::Style)
@@ -1549,6 +1575,32 @@ mod tree_counting_tests {
         let mut input = ParserInput::new(css);
         Parser::new(&mut input)
             .parse_entirely(|input| specified::LengthPercentage::parse(&context(), input))
+    }
+
+    #[test]
+    fn percentage_sign_resolves_contextual_lengths_before_multiplication() {
+        let mut input = ParserInput::new("calc(sign(20rem - 20px) * 180%)");
+        let specified = Parser::new(&mut input)
+            .parse_entirely(|input| specified::Percentage::parse(&context(), input))
+            .expect("the percentage calculation must parse");
+        let initial_values =
+            ComputedValues::initial_values_with_font_override(Font::initial_values());
+        let device = Device::new(
+            MediaType::print(),
+            QuirksMode::NoQuirks,
+            Size2D::<f32, CSSPixel>::new(800.0, 600.0),
+            Scale::<f32, CSSPixel, DevicePixel>::new(1.0),
+            Box::new(TestFontMetricsProvider),
+            initial_values,
+            PrefersColorScheme::Light,
+        );
+        let computed = crate::values::computed::Context::for_media_query_evaluation(
+            &device,
+            QuirksMode::NoQuirks,
+            |context| specified.to_computed_value(context),
+        );
+
+        assert_eq!(computed.0, 1.8);
     }
 
     #[test]
