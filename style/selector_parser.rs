@@ -300,6 +300,36 @@ mod tests {
     }
 
     #[test]
+    fn level_five_heading_selectors_validate_and_round_trip() {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        for selector in [":heading", ":heading(0, 1, -2)", "h1:heading(1)"] {
+            let parsed = SelectorParser::parse_author_origin_no_namespace(selector, &url_data)
+                .expect("heading selectors must parse at author origin");
+            assert_eq!(parsed.to_css_string(), selector);
+        }
+        for selector in [":heading()", ":heading(1.0)", ":heading(2n)"] {
+            assert!(
+                SelectorParser::parse_author_origin_no_namespace(selector, &url_data).is_err(),
+                "{selector} must be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn public_part_descendants_validate_and_round_trip() {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        for selector in [
+            "::part(foo)::placeholder",
+            "::part(foo)::file-selector-button",
+            "::part(foo):lang(en)",
+        ] {
+            let parsed = SelectorParser::parse_author_origin_no_namespace(selector, &url_data)
+                .expect("public selectors after ::part() must parse at author origin");
+            assert_eq!(parsed.to_css_string(), selector);
+        }
+    }
+
+    #[test]
     fn can_build_and_set_arbitrary_index() {
         let mut map = <PerPseudoElementMap<i32>>::default();
         assert_eq!(map.get(&PseudoElement::After), None);

@@ -16,7 +16,7 @@ use crate::properties::longhands::display::computed_value::T as Display;
 use crate::properties::{ComputedValues, PropertyFlags};
 use crate::selector_parser::AttrValue as SelectorAttrValue;
 use crate::selector_parser::{Direction, PseudoElementCascadeType, SelectorParser};
-use crate::values::{AtomIdent, AtomString};
+use crate::values::{AtomIdent, AtomString, CSSInteger};
 use crate::{Atom, CaseSensitivityExt, LocalName, Namespace, Prefix};
 use cssparser::{match_ignore_ascii_case, CowRcStr, Parser as CssParser, SourceLocation, ToCss};
 use dom::{DocumentState, ElementState};
@@ -81,6 +81,7 @@ pub enum PseudoElement {
     // their appropriate styles.
     ColorSwatch,
     Placeholder,
+    FileSelectorButton,
 
     // Private, Servo-specific implemented pseudos. Only matchable in UA sheet.
     ServoTextControlInnerContainer,
@@ -127,6 +128,7 @@ impl ToCss for PseudoElement {
             BdSidenoteMarker => "::-bd-sidenote-marker",
             ColorSwatch => "::color-swatch",
             Placeholder => "::placeholder",
+            FileSelectorButton => "::file-selector-button",
             ServoTextControlInnerContainer => "::-servo-text-control-inner-container",
             ServoTextControlInnerEditor => "::-servo-text-control-inner-editor",
             ServoAnonymousBox => "::-servo-anonymous-box",
@@ -149,7 +151,12 @@ impl ::selectors::parser::PseudoElement for PseudoElement {
     fn valid_after_slotted(&self) -> bool {
         matches!(
             self,
-            Self::Before | Self::After | Self::Marker | Self::Placeholder | Self::DetailsContent
+            Self::Before
+                | Self::After
+                | Self::Marker
+                | Self::Placeholder
+                | Self::FileSelectorButton
+                | Self::DetailsContent
         )
     }
 }
@@ -301,6 +308,7 @@ impl PseudoElement {
             | PseudoElement::BdSidenoteCall
             | PseudoElement::BdSidenoteMarker
             | PseudoElement::Placeholder
+            | PseudoElement::FileSelectorButton
             | PseudoElement::DetailsContent
             | PseudoElement::ServoTextControlInnerContainer
             | PseudoElement::ServoTextControlInnerEditor => PseudoElementCascadeType::Lazy,
@@ -358,6 +366,27 @@ pub struct Lang(#[css(iterable)] pub Box<[AtomIdent]>);
 #[derive(Clone, Debug, Eq, Hash, MallocSizeOf, PartialEq, ToCss, ToShmem)]
 pub struct CustomState(pub AtomIdent);
 
+/// A validated list of integer heading levels for `:heading()`.
+#[derive(Clone, Debug, Eq, Hash, MallocSizeOf, PartialEq, ToShmem)]
+pub struct HeadingSelectorData {
+    levels: Vec<CSSInteger>,
+}
+
+impl HeadingSelectorData {
+    fn any() -> Self {
+        Self { levels: Vec::new() }
+    }
+
+    fn from_functional_levels(levels: Vec<CSSInteger>) -> Option<Self> {
+        (!levels.is_empty()).then_some(Self { levels })
+    }
+
+    /// Return whether this selector accepts the supplied document heading level.
+    pub fn matches_level(&self, level: CSSInteger) -> bool {
+        self.levels.is_empty() || self.levels.contains(&level)
+    }
+}
+
 /// A non tree-structural pseudo-class.
 /// See https://drafts.csswg.org/selectors-4/#structural-pseudos
 ///
@@ -396,6 +425,7 @@ pub enum NonTSPseudoClass {
     Invalid,
     Dir(Direction),
     Lang(Lang),
+    Heading(HeadingSelectorData),
     Link,
     Modal,
     MozMeterOptimum,
@@ -470,6 +500,20 @@ impl ToCss for NonTSPseudoClass {
             }
             return dest.write_char(')');
         }
+        if let Heading(ref heading) = *self {
+            dest.write_str(":heading")?;
+            if heading.levels.is_empty() {
+                return Ok(());
+            }
+            dest.write_char('(')?;
+            for (index, level) in heading.levels.iter().enumerate() {
+                if index != 0 {
+                    dest.write_str(", ")?;
+                }
+                level.to_css(dest)?;
+            }
+            return dest.write_char(')');
+        }
 
         dest.write_str(match *self {
             Self::Active => ":active",
@@ -518,6 +562,7 @@ impl ToCss for NonTSPseudoClass {
             Self::Valid => ":valid",
             Self::Visited => ":visited",
             Self::Lang(_) => unreachable!(),
+            Self::Heading(_) => unreachable!(),
         })
     }
 }
@@ -564,6 +609,7 @@ impl NonTSPseudoClass {
             Self::Dir(ref direction) => direction.element_state(),
             Self::BdNoContent
             | Self::CustomState(_)
+            | Self::Heading(_)
             | Self::Lang(_)
             | Self::ServoNonZeroBorder
             | Self::TargetAfter
@@ -692,6 +738,7 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             "user-valid" => NonTSPseudoClass::UserValid,
             "valid" => NonTSPseudoClass::Valid,
             "visited" => NonTSPseudoClass::Visited,
+            "heading" => NonTSPseudoClass::Heading(HeadingSelectorData::any()),
             "-moz-meter-optimum" => NonTSPseudoClass::MozMeterOptimum,
             "-moz-meter-sub-optimum" => NonTSPseudoClass::MozMeterSubOptimum,
             "-moz-meter-sub-sub-optimum" => NonTSPseudoClass::MozMeterSubSubOptimum,
@@ -717,14 +764,21 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
         &self,
         name: CowRcStr<'i>,
         parser: &mut CssParser<'i, 't>,
-        after_part: bool,
+        _after_part: bool,
     ) -> Result<NonTSPseudoClass, ParseError<'i>> {
         let pseudo_class = match_ignore_ascii_case! { &name,
             "dir" => {
                 NonTSPseudoClass::Dir(Direction::parse(parser)?)
             },
-            "lang" if !after_part => {
+            "lang" => {
                 NonTSPseudoClass::Lang(Lang(crate::selector_parser::parse_lang_ranges(parser)?.into()))
+            },
+            "heading" => {
+                let levels = parser.parse_comma_separated(|input| Ok(input.expect_integer()?))?;
+                let Some(heading) = HeadingSelectorData::from_functional_levels(levels) else {
+                    return Err(parser.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+                };
+                NonTSPseudoClass::Heading(heading)
             },
             "state" => {
                 let result = AtomIdent::from(parser.expect_ident()?.as_ref());
@@ -769,12 +823,8 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             },
             "details-content" => DetailsContent,
             "color-swatch" => ColorSwatch,
-            "placeholder" => {
-                if !self.in_user_agent_stylesheet() {
-                    return Err(location.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(name.clone())))
-                }
-                Placeholder
-            },
+            "placeholder" => Placeholder,
+            "file-selector-button" => FileSelectorButton,
             "-servo-text-control-inner-container" => {
                 if !self.in_user_agent_stylesheet() {
                     return Err(location.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(name.clone())))
