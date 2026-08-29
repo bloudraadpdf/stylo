@@ -10,7 +10,7 @@
 use crate::values::animated::{Animate, Procedure};
 use crate::values::computed::angle::Angle;
 use crate::values::computed::url::ComputedUrl;
-use crate::values::computed::{Image, LengthPercentage, Position};
+use crate::values::computed::{Image, LengthPercentage, NonNegativeLength, Position};
 use crate::values::generics::basic_shape as generic;
 use crate::values::generics::basic_shape::ShapePosition;
 use crate::values::generics::border::{GenericBorderCornerRadius, GenericBorderRadius};
@@ -38,7 +38,8 @@ pub type ShapeOutside = generic::GenericShapeOutside<BasicShape, Image>;
 pub type ObjectViewBox = generic::GenericObjectViewBox<InsetRect>;
 
 /// A computed basic shape.
-pub type BasicShape = generic::GenericBasicShape<Angle, Position, LengthPercentage, InsetRect>;
+pub type BasicShape =
+    generic::GenericBasicShape<Angle, Position, NonNegativeLength, LengthPercentage, InsetRect>;
 
 /// The computed value of `inset()`.
 pub type InsetRect = generic::GenericInsetRect<LengthPercentage>;
@@ -184,10 +185,10 @@ fn animate_inset_rect(
 }
 
 fn animate_polygon(
-    from: &generic::Polygon<LengthPercentage>,
-    to: &generic::Polygon<LengthPercentage>,
+    from: &generic::Polygon<NonNegativeLength, LengthPercentage>,
+    to: &generic::Polygon<NonNegativeLength, LengthPercentage>,
     procedure: Procedure,
-) -> Result<generic::Polygon<LengthPercentage>, ()> {
+) -> Result<generic::Polygon<NonNegativeLength, LengthPercentage>, ()> {
     if from.fill != to.fill || from.coordinates.len() != to.coordinates.len() {
         return Err(());
     }
@@ -204,6 +205,7 @@ fn animate_polygon(
         .collect::<Result<Vec<_>, ()>>()?;
     Ok(generic::Polygon {
         fill: from.fill,
+        round: from.round.animate(&to.round, procedure)?,
         coordinates: coordinates.into(),
     })
 }
@@ -469,7 +471,8 @@ impl From<&generic::ArcRadii<CSSFloat>> for generic::ArcRadii<LengthPercentage> 
 mod tests {
     use super::{BasicShape, Circle, ShapeCommand, ShapeRadius};
     use crate::values::animated::{Animate, Procedure};
-    use crate::values::computed::{Length, LengthPercentage, Percentage};
+    use crate::values::computed::{Length, LengthPercentage, NonNegativeLength, Percentage};
+    use crate::values::generics::basic_shape::{FillRule, Polygon, PolygonCoord};
     use crate::values::generics::{position::GenericPositionOrAuto, NonNegative};
     use crate::values::specified::svg_path::{CoordPair, PathCommand};
     use style_traits::ToCss;
@@ -524,5 +527,28 @@ mod tests {
         assert!(from
             .animate(&to, Procedure::Interpolate { progress: 0.25 })
             .is_err());
+    }
+
+    #[test]
+    fn polygon_round_interpolates_with_the_vertex_coordinates() {
+        let polygon = |round, coordinate| {
+            BasicShape::Polygon(Polygon {
+                fill: FillRule::Nonzero,
+                round: NonNegativeLength::new(round),
+                coordinates: vec![PolygonCoord(
+                    LengthPercentage::new_length(Length::new(coordinate)),
+                    LengthPercentage::new_length(Length::new(coordinate)),
+                )]
+                .into(),
+            })
+        };
+        let from = polygon(10.0, 0.0);
+        let to = polygon(30.0, 50.0);
+
+        let sampled = from
+            .animate(&to, Procedure::Interpolate { progress: 0.3 })
+            .expect("matching rounded polygons must interpolate");
+
+        assert_eq!(sampled.to_css_string(), "polygon(round 16px, 15px 15px)");
     }
 }

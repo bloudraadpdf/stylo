@@ -23,7 +23,9 @@ use crate::values::specified::image::Image;
 use crate::values::specified::length::LengthPercentageOrAuto;
 use crate::values::specified::position::Position;
 use crate::values::specified::url::SpecifiedUrl;
-use crate::values::specified::{LengthPercentage, NonNegativeLengthPercentage, SVGPathData};
+use crate::values::specified::{
+    LengthPercentage, NonNegativeLength, NonNegativeLengthPercentage, SVGPathData,
+};
 use crate::values::CSSFloat;
 use crate::Zero;
 use cssparser::{match_ignore_ascii_case, Parser};
@@ -49,7 +51,13 @@ pub type ShapeOutside = generic::GenericShapeOutside<BasicShape, Image>;
 pub type ObjectViewBox = generic::GenericObjectViewBox<BasicShapeRect>;
 
 /// A specified basic shape.
-pub type BasicShape = generic::GenericBasicShape<Angle, Position, LengthPercentage, BasicShapeRect>;
+pub type BasicShape = generic::GenericBasicShape<
+    Angle,
+    Position,
+    NonNegativeLength,
+    LengthPercentage,
+    BasicShapeRect,
+>;
 
 /// The specified value of `inset()`.
 pub type InsetRect = generic::GenericInsetRect<LengthPercentage>;
@@ -64,7 +72,7 @@ pub type Ellipse = generic::Ellipse<Position, LengthPercentage>;
 pub type ShapeRadius = generic::ShapeRadius<LengthPercentage>;
 
 /// The specified value of `Polygon`.
-pub type Polygon = generic::GenericPolygon<LengthPercentage>;
+pub type Polygon = generic::GenericPolygon<NonNegativeLength, LengthPercentage>;
 
 /// The specified value of `PathOrShapeFunction`.
 pub type PathOrShapeFunction =
@@ -591,7 +599,21 @@ impl Polygon {
         input: &mut Parser<'i, 't>,
         shape_type: ShapeType,
     ) -> Result<Self, ParseError<'i>> {
-        let fill = parse_fill_rule(input, shape_type, true /* has comma */);
+        let parsed_fill = match shape_type {
+            ShapeType::Filled => input.try_parse(FillRule::parse).ok(),
+            ShapeType::Outline => None,
+        };
+        let parsed_round = input
+            .try_parse(|i| {
+                i.expect_ident_matching("round")?;
+                NonNegativeLength::parse(context, i)
+            })
+            .ok();
+        if parsed_fill.is_some() || parsed_round.is_some() {
+            input.expect_comma()?;
+        }
+        let fill = parsed_fill.unwrap_or_default();
+        let round = parsed_round.unwrap_or_else(NonNegativeLength::zero);
         let coordinates = input
             .parse_comma_separated(|i| {
                 Ok(PolygonCoord(
@@ -601,7 +623,11 @@ impl Polygon {
             })?
             .into();
 
-        Ok(Polygon { fill, coordinates })
+        Ok(Polygon {
+            fill,
+            round,
+            coordinates,
+        })
     }
 }
 
@@ -1188,6 +1214,24 @@ mod tests {
                 ShapeType::Filled,
             )
         })
+    }
+
+    #[test]
+    fn polygon_round_uses_a_non_negative_length() {
+        let shape = parse("polygon(evenodd round 10px, 0 0, 100px 100px)")
+            .expect("CSS Shapes 1 §3.1 permits a polygon rounding radius");
+        assert_eq!(
+            shape.to_css_string(),
+            "polygon(evenodd round 10px, 0px 0px, 100px 100px)"
+        );
+        assert_eq!(
+            parse("polygon(round 0, 0 0)")
+                .expect("unitless zero is a valid length")
+                .to_css_string(),
+            "polygon(0px 0px)"
+        );
+        assert!(parse("polygon(round -1px, 0 0)").is_none());
+        assert!(parse("polygon(round 1%, 0 0)").is_none());
     }
 
     #[test]

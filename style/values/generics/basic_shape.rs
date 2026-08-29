@@ -381,7 +381,7 @@ impl<BasicShapeRect> ToAnimatedZero for ObjectViewBox<BasicShapeRect> {
     ToShmem,
 )]
 #[repr(C, u8)]
-pub enum GenericBasicShape<Angle, Position, LengthPercentage, BasicShapeRect> {
+pub enum GenericBasicShape<Angle, Position, NonNegativeLength, LengthPercentage, BasicShapeRect> {
     /// The <basic-shape-rect>.
     Rect(BasicShapeRect),
     /// Defines a circle with a center and a radius.
@@ -399,7 +399,7 @@ pub enum GenericBasicShape<Angle, Position, LengthPercentage, BasicShapeRect> {
         Ellipse<Position, LengthPercentage>,
     ),
     /// Defines a polygon with pair arguments.
-    Polygon(GenericPolygon<LengthPercentage>),
+    Polygon(#[css(field_bound)] GenericPolygon<NonNegativeLength, LengthPercentage>),
     /// Defines a path() or shape().
     PathOrShape(
         #[animation(field_bound)]
@@ -541,22 +541,57 @@ pub use self::GenericShapeRadius as ShapeRadius;
     SpecifiedValueInfo,
     ToAnimatedValue,
     ToComputedValue,
-    ToCss,
     ToResolvedValue,
     ToShmem,
+    ToTyped,
 )]
-#[css(comma, function = "polygon")]
 #[repr(C)]
-pub struct GenericPolygon<LengthPercentage> {
+pub struct GenericPolygon<NonNegativeLength, LengthPercentage> {
     /// The filling rule for a polygon.
-    #[css(skip_if = "is_default")]
     pub fill: FillRule,
+    /// The rounding radius for each vertex. Zero is the canonical omitted value.
+    pub round: NonNegativeLength,
     /// A collection of (x, y) coordinates to draw the polygon.
-    #[css(iterable)]
     pub coordinates: crate::OwnedSlice<PolygonCoord<LengthPercentage>>,
 }
 
 pub use self::GenericPolygon as Polygon;
+
+impl<NonNegativeLength, LengthPercentage> ToCss
+    for GenericPolygon<NonNegativeLength, LengthPercentage>
+where
+    NonNegativeLength: ToCss + Zero,
+    PolygonCoord<LengthPercentage>: ToCss,
+{
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        dest.write_str("polygon(")?;
+        let has_fill = !is_default(&self.fill);
+        let has_round = !self.round.is_zero();
+        if has_fill {
+            self.fill.to_css(dest)?;
+        }
+        if has_round {
+            if has_fill {
+                dest.write_char(' ')?;
+            }
+            dest.write_str("round ")?;
+            self.round.to_css(dest)?;
+        }
+        if has_fill || has_round {
+            dest.write_str(", ")?;
+        }
+        for (index, coordinate) in self.coordinates.iter().enumerate() {
+            if index != 0 {
+                dest.write_str(", ")?;
+            }
+            coordinate.to_css(dest)?;
+        }
+        dest.write_char(')')
+    }
+}
 
 /// Coordinates for Polygon.
 #[derive(
@@ -772,32 +807,41 @@ impl<L> Default for ShapeRadius<L> {
     }
 }
 
-impl<L> Animate for Polygon<L>
+fn matching_fill_rule(from: FillRule, to: FillRule) -> Result<FillRule, ()> {
+    if from == to {
+        Ok(from)
+    } else {
+        Err(())
+    }
+}
+
+impl<NonNegativeLength, LengthPercentage> Animate for Polygon<NonNegativeLength, LengthPercentage>
 where
-    L: Animate,
+    NonNegativeLength: Animate,
+    LengthPercentage: Animate,
 {
     fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
-        if self.fill != other.fill {
-            return Err(());
-        }
+        let fill = matching_fill_rule(self.fill, other.fill)?;
         let coordinates =
             lists::by_computed_value::animate(&self.coordinates, &other.coordinates, procedure)?;
         Ok(Polygon {
-            fill: self.fill,
+            fill,
+            round: self.round.animate(&other.round, procedure)?,
             coordinates,
         })
     }
 }
 
-impl<L> ComputeSquaredDistance for Polygon<L>
+impl<NonNegativeLength, LengthPercentage> ComputeSquaredDistance
+    for Polygon<NonNegativeLength, LengthPercentage>
 where
-    L: ComputeSquaredDistance,
+    NonNegativeLength: ComputeSquaredDistance,
+    LengthPercentage: ComputeSquaredDistance,
 {
     fn compute_squared_distance(&self, other: &Self) -> Result<SquaredDistance, ()> {
-        if self.fill != other.fill {
-            return Err(());
-        }
-        lists::by_computed_value::squared_distance(&self.coordinates, &other.coordinates)
+        matching_fill_rule(self.fill, other.fill)?;
+        Ok(self.round.compute_squared_distance(&other.round)?
+            + lists::by_computed_value::squared_distance(&self.coordinates, &other.coordinates)?)
     }
 }
 
@@ -856,13 +900,11 @@ where
     LengthPercentage: Animate,
 {
     fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
-        if self.fill != other.fill {
-            return Err(());
-        }
+        let fill = matching_fill_rule(self.fill, other.fill)?;
         let commands =
             lists::by_computed_value::animate(&self.commands, &other.commands, procedure)?;
         Ok(Self {
-            fill: self.fill,
+            fill,
             commands,
         })
     }
@@ -876,9 +918,7 @@ where
     LengthPercentage: ComputeSquaredDistance,
 {
     fn compute_squared_distance(&self, other: &Self) -> Result<SquaredDistance, ()> {
-        if self.fill != other.fill {
-            return Err(());
-        }
+        matching_fill_rule(self.fill, other.fill)?;
         lists::by_computed_value::squared_distance(&self.commands, &other.commands)
     }
 }
