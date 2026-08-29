@@ -1611,8 +1611,10 @@ impl Animate for ComputedTranslate {
             (&Translate::Translate(_, ..), _) | (_, &Translate::Translate(_, ..)) => {
                 let (from, to) = (self.resolve(), other.resolve());
                 Ok(Translate::Translate(
-                    from.0.animate(&to.0, procedure)?,
-                    from.1.animate(&to.1, procedure)?,
+                    from.0
+                        .animate_as_percentage_dimension_mix(&to.0, procedure)?,
+                    from.1
+                        .animate_as_percentage_dimension_mix(&to.1, procedure)?,
                     from.2.animate(&to.2, procedure)?,
                 ))
             },

@@ -1425,10 +1425,24 @@ impl specified::CalcLengthPercentage {
 /// https://drafts.csswg.org/css-transitions/#animtype-lpcalc
 /// https://drafts.csswg.org/css-values-4/#combine-math
 /// https://drafts.csswg.org/css-values-4/#combine-mixed
-impl Animate for LengthPercentage {
-    #[inline]
-    fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
-        if let Procedure::Interpolate { progress } = procedure {
+#[derive(Clone, Copy)]
+enum InterpolationEndpointRepresentation {
+    ExactComputedValue,
+    CalculatedPercentageDimensionMix,
+}
+
+impl LengthPercentage {
+    fn animate_with_endpoint_representation(
+        &self,
+        other: &Self,
+        procedure: Procedure,
+        endpoint_representation: InterpolationEndpointRepresentation,
+    ) -> Result<Self, ()> {
+        if let (
+            Procedure::Interpolate { progress },
+            InterpolationEndpointRepresentation::ExactComputedValue,
+        ) = (procedure, endpoint_representation)
+        {
             if progress == 0.0 {
                 return Ok(self.clone());
             }
@@ -1465,6 +1479,32 @@ impl Animate for LengthPercentage {
                 )
             },
         })
+    }
+
+    /// Interpolate a value whose property requires a mixed percentage and
+    /// dimension pair to remain in its calculated representation at an
+    /// interval endpoint.
+    pub(crate) fn animate_as_percentage_dimension_mix(
+        &self,
+        other: &Self,
+        procedure: Procedure,
+    ) -> Result<Self, ()> {
+        self.animate_with_endpoint_representation(
+            other,
+            procedure,
+            InterpolationEndpointRepresentation::CalculatedPercentageDimensionMix,
+        )
+    }
+}
+
+impl Animate for LengthPercentage {
+    #[inline]
+    fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
+        self.animate_with_endpoint_representation(
+            other,
+            procedure,
+            InterpolationEndpointRepresentation::ExactComputedValue,
+        )
     }
 }
 
@@ -1527,5 +1567,17 @@ mod tests {
             .expect("length-percentage endpoints must interpolate");
 
         assert_eq!(sampled.to_css_string(), "20px");
+    }
+
+    #[test]
+    fn property_specific_mixed_interpolation_retains_calculated_endpoint() {
+        let from = LengthPercentage::new_length(Length::new(480.0));
+        let to = LengthPercentage::new_percent(Percentage(2.4));
+
+        let sampled = from
+            .animate_as_percentage_dimension_mix(&to, Procedure::Interpolate { progress: 0.0 })
+            .expect("mixed length-percentage endpoints must interpolate");
+
+        assert_eq!(sampled.to_css_string(), "calc(0% + 480px)");
     }
 }
