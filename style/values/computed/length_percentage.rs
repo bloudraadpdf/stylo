@@ -1428,6 +1428,14 @@ impl specified::CalcLengthPercentage {
 impl Animate for LengthPercentage {
     #[inline]
     fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
+        if let Procedure::Interpolate { progress } = procedure {
+            if progress == 0.0 {
+                return Ok(self.clone());
+            }
+            if progress == 1.0 {
+                return Ok(other.clone());
+            }
+        }
         Ok(match (self.unpack(), other.unpack()) {
             (Unpacked::Length(one), Unpacked::Length(other)) => {
                 Self::new_length(one.animate(&other, procedure)?)
@@ -1502,5 +1510,22 @@ impl TryTacticAdjustment for CalcNode {
             Self::AnchorSize(a) => a.try_tactic_adjustment(old_side, new_side),
             _ => {},
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mixed_length_percentage_interpolation_preserves_the_exact_end_value() {
+        let from = LengthPercentage::new_percent(Percentage(0.5));
+        let to = LengthPercentage::new_length(Length::new(20.0));
+
+        let sampled = from
+            .animate(&to, Procedure::Interpolate { progress: 1.0 })
+            .expect("length-percentage endpoints must interpolate");
+
+        assert_eq!(sampled.to_css_string(), "20px");
     }
 }
