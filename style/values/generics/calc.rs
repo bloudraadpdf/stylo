@@ -66,6 +66,36 @@ pub enum ModRemOp {
     Rem,
 }
 
+/// Whether a `progress()` result is constrained to the unit interval.
+#[derive(Clone, Copy, Debug, Deserialize, MallocSizeOf, PartialEq, Serialize)]
+// Value-state conversions are separate from the representation traits above.
+#[derive(ToAnimatedValue, ToAnimatedZero, ToComputedValue, ToResolvedValue, ToShmem)]
+#[repr(u8)]
+pub enum ProgressClamping {
+    /// The default `progress()` behavior.
+    Clamped,
+    /// The `progress(no-clamp ...)` behavior.
+    Unclamped,
+}
+
+impl ProgressClamping {
+    fn apply(self, value: f32, start: f32, end: f32) -> f32 {
+        if start != end {
+            let progress = (value - start) / (end - start);
+            return match self {
+                Self::Clamped => progress.clamp(0.0, 1.0),
+                Self::Unclamped => progress,
+            };
+        }
+        match self {
+            Self::Clamped => 0.0,
+            Self::Unclamped if value == start => 0.0,
+            Self::Unclamped if value < start => f32::NEG_INFINITY,
+            Self::Unclamped => f32::INFINITY,
+        }
+    }
+}
+
 impl ModRemOp {
     fn apply(self, dividend: f32, divisor: f32) -> f32 {
         // In mod(A, B) only, if B is infinite and A has opposite sign to B
@@ -294,6 +324,17 @@ pub enum GenericCalcNode<L> {
     Abs(Box<GenericCalcNode<L>>),
     /// A `sign()` function.
     Sign(Box<GenericCalcNode<L>>),
+    /// A `progress()` function.
+    Progress {
+        /// The current value.
+        value: Box<GenericCalcNode<L>>,
+        /// The start value.
+        start: Box<GenericCalcNode<L>>,
+        /// The end value.
+        end: Box<GenericCalcNode<L>>,
+        /// Whether the result is clamped to the unit interval.
+        clamping: ProgressClamping,
+    },
     /// An `anchor()` function.
     Anchor(Box<GenericCalcAnchorFunction<L>>),
     /// An `anchor-size()` function.
@@ -608,6 +649,17 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 let _ = child.unit()?;
                 CalcUnits::empty()
             },
+            CalcNode::Progress {
+                value, start, end, ..
+            } => {
+                let value_unit = value.unit()?;
+                let start_unit = start.unit()?;
+                let end_unit = end.unit()?;
+                if !value_unit.can_sum_with(start_unit) || !start_unit.can_sum_with(end_unit) {
+                    return Err(());
+                }
+                CalcUnits::empty()
+            },
             CalcNode::Anchor(..) | CalcNode::AnchorSize(..) => CalcUnits::LENGTH_PERCENTAGE,
         })
     }
@@ -710,6 +762,9 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
             },
             CalcNode::Sign(ref mut child) => {
                 child.negate();
+            },
+            CalcNode::Progress { .. } => {
+                wrap_self_in_negate(self);
             },
             CalcNode::Anchor(_) | CalcNode::AnchorSize(_) => {
                 wrap_self_in_negate(self);
@@ -836,6 +891,13 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                     Ok(())
                 },
                 CalcNode::Abs(child) | CalcNode::Sign(child) => map_internal(child, op),
+                CalcNode::Progress {
+                    value, start, end, ..
+                } => {
+                    map_internal(value, op)?;
+                    map_internal(start, op)?;
+                    map_internal(end, op)
+                },
                 // It is invalid to treat inner `CalcNode`s here - `anchor(--foo 50%) / 2` != `anchor(--foo 25%)`.
                 // Same applies to fallback, as we don't know if it will be used. Similar reasoning applies to `anchor-size()`.
                 CalcNode::Anchor(_) | CalcNode::AnchorSize(_) => Err(()),
@@ -920,6 +982,17 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
             Self::Hypot(ref c) => CalcNode::Hypot(map_children(c, map)),
             Self::Abs(ref c) => CalcNode::Abs(Box::new(c.map_leaves_internal(map))),
             Self::Sign(ref c) => CalcNode::Sign(Box::new(c.map_leaves_internal(map))),
+            Self::Progress {
+                ref value,
+                ref start,
+                ref end,
+                clamping,
+            } => CalcNode::Progress {
+                value: Box::new(value.map_leaves_internal(map)),
+                start: Box::new(start.map_leaves_internal(map)),
+                end: Box::new(end.map_leaves_internal(map)),
+                clamping,
+            },
             Self::Anchor(ref f) => CalcNode::Anchor(Box::new(GenericAnchorFunction {
                 target_element: f.target_element.clone(),
                 side: match &f.side {
@@ -1113,7 +1186,7 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                     if step.is_infinite() {
                         match strategy {
                             RoundingStrategy::Nearest | RoundingStrategy::ToZero => {
-                                return if value.is_sign_negative() { -0.0 } else { 0.0 }
+                                return if value.is_sign_negative() { -0.0 } else { 0.0 };
                             },
                             RoundingStrategy::Up => {
                                 return if !value.is_sign_negative() && !value.is_zero() {
@@ -1122,7 +1195,7 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                                     value
                                 } else {
                                     -0.0
-                                }
+                                };
                             },
                             RoundingStrategy::Down => {
                                 return if value.is_sign_negative() && !value.is_zero() {
@@ -1131,7 +1204,7 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                                     value
                                 } else {
                                     0.0
-                                }
+                                };
                             },
                         }
                     }
@@ -1213,6 +1286,26 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 let result = c.resolve_internal(leaf_to_output_fn)?;
                 Ok(L::sign_from(&result)?)
             },
+            Self::Progress {
+                value,
+                start,
+                end,
+                clamping,
+            } => {
+                let value = value.resolve_internal(leaf_to_output_fn)?;
+                let start = start.resolve_internal(leaf_to_output_fn)?;
+                let end = end.resolve_internal(leaf_to_output_fn)?;
+                if !value.is_same_unit_as(&start) || !start.is_same_unit_as(&end) {
+                    return Err(());
+                }
+                if value.sort_key() != start.sort_key() || start.sort_key() != end.sort_key() {
+                    return Err(());
+                }
+                let value = value.unitless_value().ok_or(())?;
+                let start = start.unitless_value().ok_or(())?;
+                let end = end.unitless_value().ok_or(())?;
+                Ok(L::new_number(clamping.apply(value, start, end)))
+            },
             Self::Anchor(_) | Self::AnchorSize(_) => Err(()),
         }
     }
@@ -1261,6 +1354,13 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
             } => {
                 dividend.map_node_internal(mapping_fn)?;
                 divisor.map_node_internal(mapping_fn)?;
+            },
+            Self::Progress {
+                value, start, end, ..
+            } => {
+                value.map_node_internal(mapping_fn)?;
+                start.map_node_internal(mapping_fn)?;
+                end.map_node_internal(mapping_fn)?;
             },
         };
         Ok(())
@@ -1329,6 +1429,16 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
             } => {
                 dividend.visit_depth_first_internal(f);
                 divisor.visit_depth_first_internal(f);
+            },
+            Self::Progress {
+                ref mut value,
+                ref mut start,
+                ref mut end,
+                ..
+            } => {
+                value.visit_depth_first_internal(f);
+                start.visit_depth_first_internal(f);
+                end.visit_depth_first_internal(f);
             },
             Self::Sum(ref mut children)
             | Self::Product(ref mut children)
@@ -1727,6 +1837,30 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                     replace_self_with!(&mut result);
                 }
             },
+            Self::Progress {
+                ref value,
+                ref start,
+                ref end,
+                clamping,
+            } => {
+                let value = value_or_stop!(value.as_leaf().ok_or(()));
+                let start = value_or_stop!(start.as_leaf().ok_or(()));
+                let end = value_or_stop!(end.as_leaf().ok_or(()));
+                if value.sort_key() != start.sort_key() || start.sort_key() != end.sort_key() {
+                    return;
+                }
+                let numerator = value_or_stop!(value.try_op(start, Sub::sub));
+                let denominator = value_or_stop!(end.try_op(start, Sub::sub));
+                let numerator = value_or_stop!(numerator.unitless_value().ok_or(()));
+                let denominator = value_or_stop!(denominator.unitless_value().ok_or(()));
+                let progress = if denominator == 0.0 {
+                    clamping.apply(numerator, 0.0, 0.0)
+                } else {
+                    clamping.apply(numerator, 0.0, denominator)
+                };
+                let mut result = Self::Leaf(L::new_number(progress));
+                replace_self_with!(&mut result);
+            },
             Self::Negate(ref mut child) => {
                 // Step 6.
                 match &mut **child {
@@ -1833,6 +1967,13 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
             },
             Self::Sign(_) => {
                 dest.write_str("sign(")?;
+                true
+            },
+            Self::Progress { clamping, .. } => {
+                dest.write_str("progress(")?;
+                if matches!(clamping, ProgressClamping::Unclamped) {
+                    dest.write_str("no-clamp ")?;
+                }
                 true
             },
             Self::Negate(_) => {
@@ -1968,6 +2109,18 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 dividend.to_css_impl(dest, ArgumentLevel::ArgumentRoot)?;
                 dest.write_str(", ")?;
                 divisor.to_css_impl(dest, ArgumentLevel::ArgumentRoot)?;
+            },
+            Self::Progress {
+                ref value,
+                ref start,
+                ref end,
+                ..
+            } => {
+                value.to_css_impl(dest, ArgumentLevel::ArgumentRoot)?;
+                dest.write_str(", ")?;
+                start.to_css_impl(dest, ArgumentLevel::ArgumentRoot)?;
+                dest.write_str(", ")?;
+                end.to_css_impl(dest, ArgumentLevel::ArgumentRoot)?;
             },
             Self::Abs(ref v) | Self::Sign(ref v) => {
                 v.to_css_impl(dest, ArgumentLevel::ArgumentRoot)?

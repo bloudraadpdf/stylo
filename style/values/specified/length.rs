@@ -2546,6 +2546,17 @@ fn calc_size_expression(node: CalcNode) -> Result<GenericCalcSizeExpression<NoCa
         GenericCalcNode::Sign(value) => {
             GenericCalcSizeExpression::Sign(Box::new(calc_size_expression(*value)?))
         },
+        GenericCalcNode::Progress {
+            value,
+            start,
+            end,
+            clamping,
+        } => GenericCalcSizeExpression::Progress {
+            value: Box::new(calc_size_expression(*value)?),
+            start: Box::new(calc_size_expression(*start)?),
+            end: Box::new(calc_size_expression(*end)?),
+            clamping,
+        },
     })
 }
 

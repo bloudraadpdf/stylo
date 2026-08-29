@@ -13,7 +13,7 @@ use crate::stylesheets::CssRuleType;
 use crate::values::computed::{Context, ToComputedValue};
 use crate::values::generics::calc::{
     self as generic, CalcNodeLeaf, CalcUnits, MinMaxOp, ModRemOp, PositivePercentageBasis,
-    RoundingStrategy, SortKey,
+    ProgressClamping, RoundingStrategy, SortKey,
 };
 use crate::values::generics::length::GenericAnchorSizeFunction;
 use crate::values::generics::position::{
@@ -80,6 +80,8 @@ pub enum MathFunction {
     Abs,
     /// `sign()`: https://drafts.csswg.org/css-values-4/#funcdef-sign
     Sign,
+    /// `progress()`: https://drafts.csswg.org/css-values-5/#funcdef-progress
+    Progress,
 }
 
 /// A leaf node inside a `Calc` expression's AST.
@@ -1009,6 +1011,28 @@ impl CalcNode {
                     )?;
                     Ok(Self::Sign(Box::new(node)))
                 },
+                MathFunction::Progress => {
+                    let progress_allowed = allowed.new_including(CalcUnits::ALL);
+                    let clamping = if input
+                        .try_parse(|input| input.expect_ident_matching("no-clamp"))
+                        .is_ok()
+                    {
+                        ProgressClamping::Unclamped
+                    } else {
+                        ProgressClamping::Clamped
+                    };
+                    let value = Box::new(Self::parse_argument(context, input, progress_allowed)?);
+                    input.expect_comma()?;
+                    let start = Box::new(Self::parse_argument(context, input, progress_allowed)?);
+                    input.expect_comma()?;
+                    let end = Box::new(Self::parse_argument(context, input, progress_allowed)?);
+                    Ok(Self::Progress {
+                        value,
+                        start,
+                        end,
+                        clamping,
+                    })
+                },
             }
         })
     }
@@ -1577,9 +1601,8 @@ mod tree_counting_tests {
             .parse_entirely(|input| specified::LengthPercentage::parse(&context(), input))
     }
 
-    #[test]
-    fn percentage_sign_resolves_contextual_lengths_before_multiplication() {
-        let mut input = ParserInput::new("calc(sign(20rem - 20px) * 180%)");
+    fn compute_percentage(css: &str) -> f32 {
+        let mut input = ParserInput::new(css);
         let specified = Parser::new(&mut input)
             .parse_entirely(|input| specified::Percentage::parse(&context(), input))
             .expect("the percentage calculation must parse");
@@ -1594,13 +1617,40 @@ mod tree_counting_tests {
             initial_values,
             PrefersColorScheme::Light,
         );
-        let computed = crate::values::computed::Context::for_media_query_evaluation(
+        crate::values::computed::Context::for_media_query_evaluation(
             &device,
             QuirksMode::NoQuirks,
-            |context| specified.to_computed_value(context),
+            |context| specified.to_computed_value(context).0,
+        )
+    }
+
+    #[test]
+    fn percentage_sign_resolves_contextual_lengths_before_multiplication() {
+        assert_eq!(compute_percentage("calc(sign(20rem - 20px) * 180%)"), 1.8,);
+    }
+
+    #[test]
+    fn percentage_progress_resolves_contextual_lengths_before_multiplication() {
+        assert_eq!(
+            compute_percentage("calc(progress(10rem, 20px, 100px) * 180%)"),
+            1.8,
+        );
+        assert_eq!(
+            compute_percentage("calc(progress(no-clamp 0px, 10px, 20px) * 100%)"),
+            -1.0,
+        );
+        assert_eq!(
+            compute_percentage("calc(progress(20px, 10px, 10px) * 100%)"),
+            0.0,
         );
 
-        assert_eq!(computed.0, 1.8);
+        let mut input = ParserInput::new("calc(progress(10px, 1s, 20px) * 100%)");
+        assert!(
+            Parser::new(&mut input)
+                .parse_entirely(|input| specified::Percentage::parse(&context(), input))
+                .is_err(),
+            "progress() arguments with inconsistent types must be rejected",
+        );
     }
 
     #[test]

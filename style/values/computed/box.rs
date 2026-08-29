@@ -79,6 +79,20 @@ pub trait FloatOffsetCalculationFold {
     fn abs(&mut self, value: Self::Output) -> Self::Output;
     /// Fold `sign()`.
     fn sign(&mut self, value: Self::Output) -> Self::Output;
+    /// Fold a clamped `progress()`.
+    fn progress_clamped(
+        &mut self,
+        value: Self::Output,
+        start: Self::Output,
+        end: Self::Output,
+    ) -> Self::Output;
+    /// Fold an unclamped `progress(no-clamp …)`.
+    fn progress_unclamped(
+        &mut self,
+        value: Self::Output,
+        start: Self::Output,
+        end: Self::Output,
+    ) -> Self::Output;
 }
 
 /// A finite scalar leaf in a computed `float-offset` calculation.

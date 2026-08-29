@@ -2091,6 +2091,22 @@ mod tests {
             fn sign(&mut self, _: Self::Output) -> Self::Output {
                 unreachable!("sign() is outside this fold-dispatch test")
             }
+            fn progress_clamped(
+                &mut self,
+                _: Self::Output,
+                _: Self::Output,
+                _: Self::Output,
+            ) -> Self::Output {
+                unreachable!("progress() is outside this fold-dispatch test")
+            }
+            fn progress_unclamped(
+                &mut self,
+                _: Self::Output,
+                _: Self::Output,
+                _: Self::Output,
+            ) -> Self::Output {
+                unreachable!("progress() is outside this fold-dispatch test")
+            }
         }
 
         let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());

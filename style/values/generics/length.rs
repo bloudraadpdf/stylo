@@ -353,6 +353,12 @@ pub enum GenericCalcSizeExpression<Length> {
     Hypot(crate::OwnedSlice<Self>),
     Abs(Box<Self>),
     Sign(Box<Self>),
+    Progress {
+        value: Box<Self>,
+        start: Box<Self>,
+        end: Box<Self>,
+        clamping: crate::values::generics::calc::ProgressClamping,
+    },
 }
 
 /// A `calc-size()` value whose basis and calculation stay distinct through
@@ -477,6 +483,26 @@ impl<Length: ToCss> ToCss for GenericCalcSizeExpression<Length> {
                     "sign("
                 })?;
                 value.to_css(dest)?;
+                dest.write_char(')')
+            },
+            Self::Progress {
+                value,
+                start,
+                end,
+                clamping,
+            } => {
+                dest.write_str("progress(")?;
+                if matches!(
+                    clamping,
+                    crate::values::generics::calc::ProgressClamping::Unclamped
+                ) {
+                    dest.write_str("no-clamp ")?;
+                }
+                value.to_css(dest)?;
+                dest.write_str(", ")?;
+                start.to_css(dest)?;
+                dest.write_str(", ")?;
+                end.to_css(dest)?;
                 dest.write_char(')')
             },
         }

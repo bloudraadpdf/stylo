@@ -943,7 +943,9 @@ fn fold_float_offset_calc_node<F: crate::values::computed::box_::FloatOffsetCalc
     node: &CalcNode,
     fold: &mut F,
 ) -> Result<F::Output, crate::values::computed::box_::UnsupportedFloatOffsetCalculation> {
-    use crate::values::generics::calc::{GenericCalcNode, MinMaxOp, ModRemOp, RoundingStrategy};
+    use crate::values::generics::calc::{
+        GenericCalcNode, MinMaxOp, ModRemOp, ProgressClamping, RoundingStrategy,
+    };
 
     fn fold_children<F: crate::values::computed::box_::FloatOffsetCalculationFold>(
         children: &[CalcNode],
@@ -1035,6 +1037,20 @@ fn fold_float_offset_calc_node<F: crate::values::computed::box_::FloatOffsetCalc
         GenericCalcNode::Sign(value) => {
             let value = fold_float_offset_calc_node(value, fold)?;
             Ok(fold.sign(value))
+        },
+        GenericCalcNode::Progress {
+            value,
+            start,
+            end,
+            clamping,
+        } => {
+            let value = fold_float_offset_calc_node(value, fold)?;
+            let start = fold_float_offset_calc_node(start, fold)?;
+            let end = fold_float_offset_calc_node(end, fold)?;
+            Ok(match clamping {
+                ProgressClamping::Clamped => fold.progress_clamped(value, start, end),
+                ProgressClamping::Unclamped => fold.progress_unclamped(value, start, end),
+            })
         },
         GenericCalcNode::Anchor(_) => {
             Err(crate::values::computed::box_::UnsupportedFloatOffsetCalculation::Anchor)
