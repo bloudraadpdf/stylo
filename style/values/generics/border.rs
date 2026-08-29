@@ -77,7 +77,6 @@ pub use self::GenericBorderImageSlice as BorderImageSlice;
 
 /// A generic value for the `border-*-radius` longhand properties.
 #[derive(
-    Animate,
     Clone,
     ComputeSquaredDistance,
     Copy,
@@ -173,16 +172,25 @@ impl<L> BorderSpacing<L> {
     ToResolvedValue,
     ToShmem,
 )]
+#[animation(no_bound(LengthPercentage))]
 #[repr(C)]
 pub struct GenericBorderRadius<LengthPercentage> {
     /// The top left radius.
+    #[animation(field_bound)]
+    #[distance(field_bound)]
     #[shmem(field_bound)]
     pub top_left: GenericBorderCornerRadius<LengthPercentage>,
     /// The top right radius.
+    #[animation(field_bound)]
+    #[distance(field_bound)]
     pub top_right: GenericBorderCornerRadius<LengthPercentage>,
     /// The bottom right radius.
+    #[animation(field_bound)]
+    #[distance(field_bound)]
     pub bottom_right: GenericBorderCornerRadius<LengthPercentage>,
     /// The bottom left radius.
+    #[animation(field_bound)]
+    #[distance(field_bound)]
     pub bottom_left: GenericBorderCornerRadius<LengthPercentage>,
 }
 

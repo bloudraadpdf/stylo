@@ -6,7 +6,7 @@
 
 use crate::derives::*;
 use crate::properties::{LogicalGroupId, LonghandId};
-use crate::values::animated::{Context as AnimatedContext, ToAnimatedValue};
+use crate::values::animated::{Animate, Context as AnimatedContext, Procedure, ToAnimatedValue};
 use crate::values::computed::length::{
     CSSPixelLength, NonNegativeLength, NonNegativeLengthPercentage,
 };
@@ -107,6 +107,24 @@ pub type BorderRadius = GenericBorderRadius<NonNegativeLengthPercentage>;
 /// A computed value for the `border-*-radius` longhand properties.
 pub type BorderCornerRadius = GenericBorderCornerRadius<NonNegativeLengthPercentage>;
 
+impl Animate for BorderCornerRadius {
+    fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
+        let width = NonNegative(
+            self.0
+                .width
+                .0
+                .animate_as_percentage_dimension_mix(&other.0.width.0, procedure)?,
+        );
+        let height = NonNegative(
+            self.0
+                .height
+                .0
+                .animate_as_percentage_dimension_mix(&other.0.height.0, procedure)?,
+        );
+        Ok(GenericBorderCornerRadius(Size2D::new(width, height)))
+    }
+}
+
 /// A computed value for the `border-spacing` longhand property.
 pub type BorderSpacing = GenericBorderSpacing<NonNegativeLength>;
 
@@ -146,5 +164,28 @@ impl BorderSpacing {
     /// Returns the vertical spacing.
     pub fn vertical(&self) -> Au {
         Au::from(*self.0.height())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::values::animated::{Animate, Procedure};
+    use crate::values::computed::length::{Length, LengthPercentage};
+    use crate::values::computed::Percentage;
+    use style_traits::ToCss;
+
+    #[test]
+    fn mixed_border_radius_interpolation_retains_calculated_endpoint() {
+        let length = NonNegative(LengthPercentage::new_length(Length::new(10.0)));
+        let percentage = NonNegative(LengthPercentage::new_percent(Percentage(1.0)));
+        let from = BorderCornerRadius::new(length.clone(), length);
+        let to = BorderCornerRadius::new(percentage.clone(), percentage);
+
+        let sampled = from
+            .animate(&to, Procedure::Interpolate { progress: 0.0 })
+            .expect("border-radius components must interpolate");
+
+        assert_eq!(sampled.to_css_string(), "calc(0% + 10px)");
     }
 }
