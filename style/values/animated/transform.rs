@@ -252,6 +252,16 @@ impl From<MatrixDecomposed2D> for Matrix3D {
     }
 }
 
+#[cfg(feature = "servo")]
+fn decompose_2d_matrix_for_servo(matrix: Matrix3D) -> Result<MatrixDecomposed2D, ()> {
+    // CSS Transforms 1, "Decomposing a 2D matrix", step 1: a matrix
+    // whose determinant is zero is singular and decomposition must fail.
+    if matrix.determinant() == 0.0 {
+        return Err(());
+    }
+    Ok(MatrixDecomposed2D::from(matrix))
+}
+
 impl Animate for Matrix {
     #[cfg(feature = "servo")]
     fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
@@ -913,8 +923,8 @@ impl Animate for Matrix3D {
                 _ => Err(()),
             }
         } else {
-            let this = MatrixDecomposed2D::from(*self);
-            let other = MatrixDecomposed2D::from(*other);
+            let this = decompose_2d_matrix_for_servo(*self)?;
+            let other = decompose_2d_matrix_for_servo(*other)?;
             Ok(Matrix3D::from(this.animate(&other, procedure)?))
         }
     }
@@ -944,8 +954,8 @@ impl ComputeSquaredDistance for Matrix3D {
             let to = decompose_3d_matrix(*other)?;
             from.compute_squared_distance(&to)
         } else {
-            let from = MatrixDecomposed2D::from(*self);
-            let to = MatrixDecomposed2D::from(*other);
+            let from = decompose_2d_matrix_for_servo(*self)?;
+            let to = decompose_2d_matrix_for_servo(*other)?;
             from.compute_squared_distance(&to)
         }
     }
@@ -1704,6 +1714,33 @@ mod tests {
 
         assert!(from
             .animate(&to, Procedure::Interpolate { progress: 0.25 })
+            .is_err());
+    }
+
+    #[test]
+    fn matching_singular_2d_matrices_reject_interpolation_and_accumulation() {
+        let singular = Matrix3D::from(Matrix {
+            a: 1.0,
+            b: 1.0,
+            c: 0.0,
+            d: 0.0,
+            e: 0.0,
+            f: 100.0,
+        });
+        let translated = Matrix3D::from(Matrix {
+            a: 1.0,
+            b: 0.0,
+            c: 0.0,
+            d: 1.0,
+            e: 100.0,
+            f: 0.0,
+        });
+
+        assert!(singular
+            .animate(&translated, Procedure::Interpolate { progress: 0.25 })
+            .is_err());
+        assert!(singular
+            .animate(&translated, Procedure::Accumulate { count: 1 })
             .is_err());
     }
 }
