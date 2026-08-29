@@ -35,10 +35,8 @@ pub enum GenericBackgroundSize<LengthPercent> {
         height: GenericLengthPercentageOrAuto<LengthPercent>,
     },
     /// `cover`
-    #[animation(error)]
     Cover,
     /// `contain`
-    #[animation(error)]
     Contain,
 }
 
