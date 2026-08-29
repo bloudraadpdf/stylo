@@ -1255,6 +1255,11 @@ impl Animate for ComputedTransformOperation {
     }
 }
 
+enum MismatchedTransformMatrixError {
+    UnresolvedReferenceBox,
+    NonInterpolable,
+}
+
 impl ComputedTransformOperation {
     /// If there are no size dependencies, we try to animate in-place, to avoid
     /// creating deeply nested Interpolate* operations.
@@ -1262,11 +1267,15 @@ impl ComputedTransformOperation {
         left: &[Self],
         right: &[Self],
         procedure: Procedure,
-    ) -> Result<Self, ()> {
-        let (left, _left_3d) = Transform::components_to_transform_3d_matrix(left, None)?;
-        let (right, _right_3d) = Transform::components_to_transform_3d_matrix(right, None)?;
+    ) -> Result<Self, MismatchedTransformMatrixError> {
+        let (left, _left_3d) = Transform::components_to_transform_3d_matrix(left, None)
+            .map_err(|()| MismatchedTransformMatrixError::UnresolvedReferenceBox)?;
+        let (right, _right_3d) = Transform::components_to_transform_3d_matrix(right, None)
+            .map_err(|()| MismatchedTransformMatrixError::UnresolvedReferenceBox)?;
         Ok(Self::Matrix3D(
-            Matrix3D::from(left).animate(&Matrix3D::from(right), procedure)?,
+            Matrix3D::from(left)
+                .animate(&Matrix3D::from(right), procedure)
+                .map_err(|()| MismatchedTransformMatrixError::NonInterpolable)?,
         ))
     }
 
@@ -1275,8 +1284,10 @@ impl ComputedTransformOperation {
         right: &[Self],
         procedure: Procedure,
     ) -> Result<Self, ()> {
-        if let Ok(op) = Self::try_animate_mismatched_transforms_in_place(left, right, procedure) {
-            return Ok(op);
+        match Self::try_animate_mismatched_transforms_in_place(left, right, procedure) {
+            Ok(operation) => return Ok(operation),
+            Err(MismatchedTransformMatrixError::NonInterpolable) => return Err(()),
+            Err(MismatchedTransformMatrixError::UnresolvedReferenceBox) => {},
         }
         let from_list = Transform(left.to_vec().into());
         let to_list = Transform(right.to_vec().into());
@@ -1665,5 +1676,32 @@ impl ComputeSquaredDistance for ComputedScale {
         Ok(from.0.compute_squared_distance(&to.0)?
             + from.1.compute_squared_distance(&to.1)?
             + from.2.compute_squared_distance(&to.2)?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mismatched_singular_matrices_require_discrete_fallback() {
+        let mut singular = Matrix3D::identity();
+        singular.m33 = 0.0;
+        let from = Transform(vec![TransformOperation::Matrix3D(singular)].into());
+        let to = Transform(
+            vec![TransformOperation::Matrix(Matrix {
+                a: 3.0,
+                b: 0.0,
+                c: 0.0,
+                d: 3.0,
+                e: 0.0,
+                f: 0.0,
+            })]
+            .into(),
+        );
+
+        assert!(from
+            .animate(&to, Procedure::Interpolate { progress: 0.25 })
+            .is_err());
     }
 }
