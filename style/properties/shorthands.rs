@@ -1228,19 +1228,18 @@ fn map_gap_rule_list<Value, Converted>(
     use crate::values::generics::gap::GapRuleListItem;
 
     let items = list
-        .0
         .iter()
         .map(|item| match item {
             GapRuleListItem::Value(value) => GapRuleListItem::Value(convert(value)),
-            GapRuleListItem::Repeat { count, values } => GapRuleListItem::Repeat {
-                count: count.clone(),
-                values: crate::OwnedSlice::from(
-                    values.iter().map(&mut convert).collect::<Vec<_>>(),
-                ),
-            },
+            GapRuleListItem::Repeat { count, values } => GapRuleListItem::repeat(
+                count.clone(),
+                values.iter().map(&mut convert).collect::<Vec<_>>(),
+            )
+            .expect("specified repeaters have a non-empty body"),
         })
         .collect::<Vec<_>>();
-    crate::values::generics::gap::GapRuleList(crate::OwnedSlice::from(items))
+    crate::values::generics::gap::GapRuleList::from_vec(items)
+        .expect("specified gap-rule lists are non-empty")
 }
 
 #[cfg(feature = "servo")]
@@ -1271,14 +1270,10 @@ fn gap_rule_list_shapes_match(
 ) -> bool {
     use crate::values::generics::gap::GapRuleListItem;
 
-    widths.0.len() == styles.0.len()
-        && styles.0.len() == colors.0.len()
-        && widths
-            .0
-            .iter()
-            .zip(styles.0.iter())
-            .zip(colors.0.iter())
-            .all(|((width, style), color)| match (width, style, color) {
+    widths.len() == styles.len()
+        && styles.len() == colors.len()
+        && widths.iter().zip(styles.iter()).zip(colors.iter()).all(
+            |((width, style), color)| match (width, style, color) {
                 (
                     GapRuleListItem::Value(_),
                     GapRuleListItem::Value(_),
@@ -1304,7 +1299,8 @@ fn gap_rule_list_shapes_match(
                         && style_values.len() == color_values.len()
                 },
                 _ => false,
-            })
+            },
+        )
 }
 
 #[cfg(feature = "servo")]
@@ -1323,10 +1319,9 @@ where
         return Ok(());
     }
     for (index, ((width, style), color)) in widths
-        .0
         .iter()
-        .zip(styles.0.iter())
-        .zip(colors.0.iter())
+        .zip(styles.iter())
+        .zip(colors.iter())
         .enumerate()
     {
         if index != 0 {

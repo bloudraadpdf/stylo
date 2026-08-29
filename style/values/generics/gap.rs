@@ -10,6 +10,39 @@ use crate::values::distance::{ComputeSquaredDistance, SquaredDistance};
 use std::fmt::{self, Write};
 use style_traits::{CssWriter, ToCss};
 
+/// A non-empty owned sequence used by gap-decoration lists and repeaters.
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToAnimatedValue,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(C)]
+pub struct NonEmptyGapRuleValues<Value>(crate::OwnedSlice<Value>);
+
+impl<Value> NonEmptyGapRuleValues<Value> {
+    /// Construct a sequence, rejecting an empty input.
+    pub fn from_vec(values: Vec<Value>) -> Option<Self> {
+        (!values.is_empty()).then(|| Self(crate::OwnedSlice::from(values)))
+    }
+
+    /// Iterate over every value in order.
+    pub fn iter(&self) -> impl Iterator<Item = &Value> {
+        self.0.iter()
+    }
+
+    /// Return the number of values.
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+}
+
 /// The repetition count in a gap-decoration `repeat()` item.
 #[derive(
     Clone,
@@ -65,8 +98,18 @@ pub enum GenericGapRuleListItem<Value, Integer> {
         /// The fixed count or `auto` keyword.
         count: GapRuleRepeatCount<Integer>,
         /// The non-empty body of the repeater.
-        values: crate::OwnedSlice<Value>,
+        values: NonEmptyGapRuleValues<Value>,
     },
+}
+
+impl<Value, Integer> GenericGapRuleListItem<Value, Integer> {
+    /// Construct a repeater, rejecting an empty body.
+    pub fn repeat(count: GapRuleRepeatCount<Integer>, values: Vec<Value>) -> Option<Self> {
+        Some(Self::Repeat {
+            count,
+            values: NonEmptyGapRuleValues::from_vec(values)?,
+        })
+    }
 }
 
 impl<Value: ToCss, Integer: ToCss> ToCss for GenericGapRuleListItem<Value, Integer> {
@@ -104,76 +147,91 @@ impl<Value: ToCss, Integer: ToCss> ToCss for GenericGapRuleListItem<Value, Integ
 )]
 #[repr(C)]
 pub struct GenericGapRuleList<Value, Integer>(
-    pub crate::OwnedSlice<GenericGapRuleListItem<Value, Integer>>,
+    NonEmptyGapRuleValues<GenericGapRuleListItem<Value, Integer>>,
 );
 
 impl<Value, Integer> GenericGapRuleList<Value, Integer> {
     /// Construct a one-value list.
     pub fn single(value: Value) -> Self {
-        Self(crate::OwnedSlice::from(vec![
+        Self(NonEmptyGapRuleValues(crate::OwnedSlice::from(vec![
             GenericGapRuleListItem::Value(value),
-        ]))
+        ])))
+    }
+
+    /// Construct a list, rejecting an empty input.
+    pub fn from_vec(items: Vec<GenericGapRuleListItem<Value, Integer>>) -> Option<Self> {
+        Some(Self(NonEmptyGapRuleValues::from_vec(items)?))
+    }
+
+    /// Iterate over every list item in order.
+    pub fn iter(&self) -> impl Iterator<Item = &GenericGapRuleListItem<Value, Integer>> {
+        self.0.iter()
+    }
+
+    /// Return the number of list items before fixed-repeater expansion.
+    pub fn len(&self) -> usize {
+        self.0.len()
     }
 }
 
-impl<Value, Integer> Animate for GenericGapRuleListItem<Value, Integer>
+enum ExpandedGapRuleList<Value> {
+    Fixed(Vec<Value>),
+    Auto {
+        leading: Vec<Value>,
+        repeated: Vec<Value>,
+        trailing: Vec<Value>,
+    },
+}
+
+impl<Value, Integer> GenericGapRuleList<Value, Integer>
 where
-    Value: Animate,
-    Integer: Clone + PartialEq,
+    Value: Clone,
+    Integer: Copy + TryInto<usize>,
 {
-    fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
-        match (self, other) {
-            (Self::Value(left), Self::Value(right)) => {
-                Ok(Self::Value(left.animate(right, procedure)?))
-            },
-            (
-                Self::Repeat {
-                    count: left_count,
-                    values: left_values,
+    fn expanded(&self) -> Result<ExpandedGapRuleList<Value>, ()> {
+        let mut leading = Vec::new();
+        let mut repeated = None;
+        let mut trailing = Vec::new();
+
+        for item in self.iter() {
+            let destination = if repeated.is_some() {
+                &mut trailing
+            } else {
+                &mut leading
+            };
+            match item {
+                GenericGapRuleListItem::Value(value) => destination.push(value.clone()),
+                GenericGapRuleListItem::Repeat {
+                    count: GapRuleRepeatCount::Number(count),
+                    values,
+                } => {
+                    let count = (*count).try_into().map_err(|_| ())?;
+                    let additional = values.len().checked_mul(count).ok_or(())?;
+                    destination.try_reserve(additional).map_err(|_| ())?;
+                    for _ in 0..count {
+                        destination.extend(values.iter().cloned());
+                    }
                 },
-                Self::Repeat {
-                    count: right_count,
-                    values: right_values,
+                GenericGapRuleListItem::Repeat {
+                    count: GapRuleRepeatCount::Auto,
+                    values,
+                } => {
+                    if repeated.is_some() {
+                        return Err(());
+                    }
+                    repeated = Some(values.iter().cloned().collect());
                 },
-            ) if left_count == right_count => Ok(Self::Repeat {
-                count: left_count.clone(),
-                values: crate::OwnedSlice::from(
-                    crate::values::animated::lists::by_computed_value::animate::<_, Vec<_>>(
-                        left_values,
-                        right_values,
-                        procedure,
-                    )?,
-                ),
-            }),
-            _ => Err(()),
+            }
         }
-    }
-}
 
-impl<Value, Integer> ComputeSquaredDistance for GenericGapRuleListItem<Value, Integer>
-where
-    Value: ComputeSquaredDistance,
-    Integer: PartialEq,
-{
-    fn compute_squared_distance(&self, other: &Self) -> Result<SquaredDistance, ()> {
-        match (self, other) {
-            (Self::Value(left), Self::Value(right)) => left.compute_squared_distance(right),
-            (
-                Self::Repeat {
-                    count: left_count,
-                    values: left_values,
-                },
-                Self::Repeat {
-                    count: right_count,
-                    values: right_values,
-                },
-            ) if left_count == right_count => {
-                crate::values::animated::lists::by_computed_value::squared_distance(
-                    left_values,
-                    right_values,
-                )
-            },
-            _ => Err(()),
+        match repeated {
+            Some(repeated) => Ok(ExpandedGapRuleList::Auto {
+                leading,
+                repeated,
+                trailing,
+            }),
+            None if leading.is_empty() => Err(()),
+            None => Ok(ExpandedGapRuleList::Fixed(leading)),
         }
     }
 }
@@ -188,12 +246,13 @@ where
             Self::Value(value) => Ok(Self::Value(value.to_animated_zero()?)),
             Self::Repeat { count, values } => Ok(Self::Repeat {
                 count: count.clone(),
-                values: crate::OwnedSlice::from(
+                values: NonEmptyGapRuleValues::from_vec(
                     values
                         .iter()
                         .map(ToAnimatedZero::to_animated_zero)
                         .collect::<Result<Vec<_>, _>>()?,
-                ),
+                )
+                .ok_or(())?,
             }),
         }
     }
@@ -201,23 +260,97 @@ where
 
 impl<Value, Integer> Animate for GenericGapRuleList<Value, Integer>
 where
-    GenericGapRuleListItem<Value, Integer>: Animate,
+    Value: Animate + Clone,
+    Integer: Copy + TryInto<usize>,
 {
     fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
-        Ok(Self(crate::OwnedSlice::from(
-            crate::values::animated::lists::repeatable_list::animate::<_, Vec<_>>(
-                &self.0, &other.0, procedure,
-            )?,
-        )))
+        use crate::values::animated::lists::{by_computed_value, repeatable_list};
+
+        let items: Vec<GenericGapRuleListItem<Value, Integer>> =
+            match (self.expanded()?, other.expanded()?) {
+                (ExpandedGapRuleList::Fixed(left), ExpandedGapRuleList::Fixed(right)) => {
+                    repeatable_list::animate::<_, Vec<_>>(&left, &right, procedure)?
+                        .into_iter()
+                        .map(GenericGapRuleListItem::Value)
+                        .collect()
+                },
+                (
+                    ExpandedGapRuleList::Auto {
+                        leading: left_leading,
+                        repeated: left_repeated,
+                        trailing: left_trailing,
+                    },
+                    ExpandedGapRuleList::Auto {
+                        leading: right_leading,
+                        repeated: right_repeated,
+                        trailing: right_trailing,
+                    },
+                ) => {
+                    let leading = by_computed_value::animate::<_, Vec<_>>(
+                        &left_leading,
+                        &right_leading,
+                        procedure,
+                    )?;
+                    let repeated = repeatable_list::animate::<_, Vec<_>>(
+                        &left_repeated,
+                        &right_repeated,
+                        procedure,
+                    )?;
+                    let trailing = by_computed_value::animate::<_, Vec<_>>(
+                        &left_trailing,
+                        &right_trailing,
+                        procedure,
+                    )?;
+                    leading
+                        .into_iter()
+                        .map(GenericGapRuleListItem::Value)
+                        .chain(std::iter::once(GenericGapRuleListItem::Repeat {
+                            count: GapRuleRepeatCount::Auto,
+                            values: NonEmptyGapRuleValues::from_vec(repeated).ok_or(())?,
+                        }))
+                        .chain(trailing.into_iter().map(GenericGapRuleListItem::Value))
+                        .collect()
+                },
+                (ExpandedGapRuleList::Fixed(_), ExpandedGapRuleList::Auto { .. })
+                | (ExpandedGapRuleList::Auto { .. }, ExpandedGapRuleList::Fixed(_)) => {
+                    return Err(())
+                },
+            };
+        Self::from_vec(items).ok_or(())
     }
 }
 
 impl<Value, Integer> ComputeSquaredDistance for GenericGapRuleList<Value, Integer>
 where
-    GenericGapRuleListItem<Value, Integer>: ComputeSquaredDistance,
+    Value: Clone + ComputeSquaredDistance,
+    Integer: Copy + TryInto<usize>,
 {
     fn compute_squared_distance(&self, other: &Self) -> Result<SquaredDistance, ()> {
-        crate::values::animated::lists::repeatable_list::squared_distance(&self.0, &other.0)
+        use crate::values::animated::lists::{by_computed_value, repeatable_list};
+
+        match (self.expanded()?, other.expanded()?) {
+            (ExpandedGapRuleList::Fixed(left), ExpandedGapRuleList::Fixed(right)) => {
+                repeatable_list::squared_distance(&left, &right)
+            },
+            (
+                ExpandedGapRuleList::Auto {
+                    leading: left_leading,
+                    repeated: left_repeated,
+                    trailing: left_trailing,
+                },
+                ExpandedGapRuleList::Auto {
+                    leading: right_leading,
+                    repeated: right_repeated,
+                    trailing: right_trailing,
+                },
+            ) => Ok(
+                by_computed_value::squared_distance(&left_leading, &right_leading)?
+                    + repeatable_list::squared_distance(&left_repeated, &right_repeated)?
+                    + by_computed_value::squared_distance(&left_trailing, &right_trailing)?,
+            ),
+            (ExpandedGapRuleList::Fixed(_), ExpandedGapRuleList::Auto { .. })
+            | (ExpandedGapRuleList::Auto { .. }, ExpandedGapRuleList::Fixed(_)) => Err(()),
+        }
     }
 }
 
@@ -226,12 +359,12 @@ where
     GenericGapRuleListItem<Value, Integer>: ToAnimatedZero,
 {
     fn to_animated_zero(&self) -> Result<Self, ()> {
-        Ok(Self(crate::OwnedSlice::from(
-            self.0
-                .iter()
+        Self::from_vec(
+            self.iter()
                 .map(ToAnimatedZero::to_animated_zero)
                 .collect::<Result<Vec<_>, _>>()?,
-        )))
+        )
+        .ok_or(())
     }
 }
 
@@ -240,7 +373,7 @@ impl<Value: ToCss, Integer: ToCss> ToCss for GenericGapRuleList<Value, Integer> 
     where
         W: Write,
     {
-        for (index, item) in self.0.iter().enumerate() {
+        for (index, item) in self.iter().enumerate() {
             if index != 0 {
                 dest.write_str(", ")?;
             }
@@ -252,3 +385,69 @@ impl<Value: ToCss, Integer: ToCss> ToCss for GenericGapRuleList<Value, Integer> 
 
 pub use self::GenericGapRuleList as GapRuleList;
 pub use self::GenericGapRuleListItem as GapRuleListItem;
+
+#[cfg(test)]
+mod tests {
+    use super::{GapRuleList, GapRuleListItem, GapRuleRepeatCount};
+    use crate::values::animated::{Animate, Procedure};
+
+    type TestList = GapRuleList<f64, i32>;
+    type TestItem = GapRuleListItem<f64, i32>;
+
+    fn list(items: Vec<TestItem>) -> TestList {
+        GapRuleList::from_vec(items).expect("test list is non-empty")
+    }
+
+    fn auto(items: Vec<f64>) -> TestItem {
+        TestItem::repeat(GapRuleRepeatCount::Auto, items).expect("test repeater is non-empty")
+    }
+
+    #[test]
+    fn constructors_reject_empty_gap_rule_sequences() {
+        assert!(TestList::from_vec(Vec::new()).is_none());
+        assert!(TestItem::repeat(GapRuleRepeatCount::Auto, Vec::new()).is_none());
+    }
+
+    #[test]
+    fn integer_repeaters_expand_before_repeatable_list_interpolation() {
+        let from = list(vec![TestItem::repeat(
+            GapRuleRepeatCount::Number(2),
+            vec![10.0, 20.0],
+        )
+        .expect("test repeater is non-empty")]);
+        let to = list(vec![TestItem::Value(20.0)]);
+
+        assert_eq!(
+            from.animate(&to, Procedure::Interpolate { progress: 0.5 }),
+            Ok(list(vec![
+                TestItem::Value(15.0),
+                TestItem::Value(20.0),
+                TestItem::Value(15.0),
+                TestItem::Value(20.0),
+            ])),
+        );
+    }
+
+    #[test]
+    fn auto_repeater_bodies_use_repeatable_list_interpolation() {
+        let from = list(vec![
+            TestItem::Value(10.0),
+            auto(vec![20.0]),
+            TestItem::Value(30.0),
+        ]);
+        let to = list(vec![
+            TestItem::Value(20.0),
+            auto(vec![40.0, 50.0]),
+            TestItem::Value(40.0),
+        ]);
+
+        assert_eq!(
+            from.animate(&to, Procedure::Interpolate { progress: 0.5 }),
+            Ok(list(vec![
+                TestItem::Value(15.0),
+                auto(vec![30.0, 35.0]),
+                TestItem::Value(35.0),
+            ])),
+        );
+    }
+}

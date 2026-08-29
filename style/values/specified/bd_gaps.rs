@@ -67,10 +67,8 @@ pub(crate) fn parse_gap_rule_list_with<'i, 't, Value>(
             };
             input.expect_comma()?;
             let values = input.parse_comma_separated(|input| parse_value(context, input))?;
-            Ok(GapRuleListItem::Repeat {
-                count,
-                values: crate::OwnedSlice::from(values),
-            })
+            GapRuleListItem::repeat(count, values)
+                .ok_or_else(|| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
         })?;
 
         if matches!(
@@ -87,7 +85,8 @@ pub(crate) fn parse_gap_rule_list_with<'i, 't, Value>(
         }
         Ok(item)
     })?;
-    Ok(GenericGapRuleList(crate::OwnedSlice::from(items)))
+    GenericGapRuleList::from_vec(items)
+        .ok_or_else(|| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
 }
 
 macro_rules! gap_keyword {
