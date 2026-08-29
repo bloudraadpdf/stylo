@@ -1508,6 +1508,14 @@ impl DocumentAnimationSet {
         }
     }
 
+    /// Whether this view calculates animation-free base style.
+    pub fn recalculates_base_style(&self) -> bool {
+        matches!(
+            self.sampling_mode,
+            AnimationSamplingMode::SuppressedForBaseStyle
+        )
+    }
+
     /// Return whether or not the provided node has active CSS animations.
     pub fn has_active_animations(&self, key: &AnimationSetKey) -> bool {
         self.sets

@@ -311,12 +311,7 @@ trait PrivateMatchMethods: TElement {
         // restarting the retained animation. Animation-only traversals must
         // keep their existing endpoints so repeated sampling cannot feed an
         // animated value back into the underlying value.
-        if has_animations
-            && !context
-                .shared
-                .traversal_flags
-                .contains(TraversalFlags::AnimationOnly)
-        {
+        if has_animations && context.shared.animations.recalculates_base_style() {
             return true;
         }
 
