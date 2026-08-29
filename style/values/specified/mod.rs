@@ -393,6 +393,7 @@ pub mod url;
 pub enum AngleOrPercentage {
     Percentage(Percentage),
     Angle(Angle),
+    Calc(calc::CalcAnglePercentage),
 }
 
 impl AngleOrPercentage {
@@ -405,7 +406,20 @@ impl AngleOrPercentage {
             return Ok(AngleOrPercentage::Percentage(per));
         }
 
-        Angle::parse_internal(context, input, allow_unitless_zero).map(AngleOrPercentage::Angle)
+        if let Ok(angle) =
+            input.try_parse(|i| Angle::parse_internal(context, i, allow_unitless_zero))
+        {
+            return Ok(AngleOrPercentage::Angle(angle));
+        }
+
+        let location = input.current_source_location();
+        let token = input.next()?.clone();
+        let Token::Function(ref name) = token else {
+            return Err(input.new_unexpected_token_error(token));
+        };
+        let function = calc::CalcNode::math_function(context, name, location)?;
+        calc::CalcNode::parse_angle_percentage(context, input, function)
+            .map(AngleOrPercentage::Calc)
     }
 
     /// Allow unitless angles, used for conic-gradients as specified by the spec.

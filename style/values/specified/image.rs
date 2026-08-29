@@ -1439,13 +1439,15 @@ pub enum ImageRendering {
 
 #[cfg(all(test, feature = "servo"))]
 mod image_tests {
-    use super::{generic, ColorInterpolationMethod, Image, Parse, ParserContext};
+    use super::{
+        generic, AngleOrPercentage, ColorInterpolationMethod, Image, Parse, ParserContext,
+    };
     use crate::context::QuirksMode;
     use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
     use cssparser::{Parser, ParserInput};
-    use style_traits::ParsingMode;
+    use style_traits::{ParsingMode, ToCss};
 
-    fn parse_image(css: &str) -> Image {
+    fn image_result(css: &str) -> Result<Image, ()> {
         let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
         let context = ParserContext::new(
             Origin::Author,
@@ -1461,12 +1463,65 @@ mod image_tests {
 
         Parser::new(&mut input)
             .parse_entirely(|input| Image::parse(&context, input))
-            .expect("image must parse")
+            .map_err(|_| ())
+    }
+
+    fn parse_image(css: &str) -> Image {
+        image_result(css).expect("image must parse")
     }
 
     #[test]
     fn servo_accepts_standard_cross_fade_images() {
         parse_image("cross-fade(25% red, url('green.png'), blue)");
+    }
+
+    #[test]
+    fn conic_stops_retain_mixed_angle_percentage_calculations() {
+        for (specified, canonical) in [
+            (
+                "conic-gradient(red, calc(0deg + 100%), blue)",
+                "conic-gradient(red, calc(100% + 0deg), blue)",
+            ),
+            (
+                "conic-gradient(red calc(0deg + 100%), blue)",
+                "conic-gradient(red calc(100% + 0deg), blue)",
+            ),
+            (
+                "conic-gradient(red calc(90deg + 50%), blue)",
+                "conic-gradient(red calc(50% + 90deg), blue)",
+            ),
+            (
+                "conic-gradient(red calc(90deg + 0%), blue)",
+                "conic-gradient(red calc(0% + 90deg), blue)",
+            ),
+            (
+                "conic-gradient(red calc(100% - 45deg), blue)",
+                "conic-gradient(red calc(100% - 45deg), blue)",
+            ),
+            (
+                "repeating-conic-gradient(red calc(90deg + 50%), blue)",
+                "repeating-conic-gradient(red calc(50% + 90deg), blue)",
+            ),
+        ] {
+            assert_eq!(parse_image(specified).to_css_string(), canonical);
+        }
+
+        let image = parse_image("conic-gradient(red calc(90deg + 50%), blue)");
+        let Image::Gradient(gradient) = image else {
+            panic!("conic gradient must remain a typed gradient");
+        };
+        let generic::Gradient::Conic { items, .. } = *gradient else {
+            panic!("image must remain a conic gradient");
+        };
+        assert!(matches!(
+            items[0],
+            generic::GradientItem::ComplexColorStop {
+                position: AngleOrPercentage::Calc(_),
+                ..
+            }
+        ));
+        assert!(image_result("conic-gradient(from calc(50% + 30deg), red, blue)").is_err());
+        assert!(image_result("radial-gradient(red calc(50% + 30deg), blue)").is_err());
     }
 
     #[test]

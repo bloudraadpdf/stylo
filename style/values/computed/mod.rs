@@ -38,7 +38,9 @@ use servo_arc::Arc;
 use std::cell::RefCell;
 use std::cmp;
 use std::f32;
+use std::fmt;
 use std::ops::{Add, Sub};
+use style_traits::{CssWriter, ToCss};
 
 pub use self::align::{
     AlignTracks, ContentDistribution, ItemPlacement, JustifyItems, JustifyTracks, SelfAlignment,
@@ -1056,6 +1058,51 @@ trivial_to_computed_value!(crate::values::generics::color::ColorMixFlags);
 pub enum AngleOrPercentage {
     Percentage(Percentage),
     Angle(Angle),
+    Calc(CalcAnglePercentage),
+}
+
+#[allow(missing_docs)]
+#[derive(
+    Animate,
+    Clone,
+    ComputeSquaredDistance,
+    Copy,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    ToAnimatedZero,
+    ToResolvedValue,
+)]
+pub struct CalcAnglePercentage {
+    percentage: Percentage,
+    angle: Angle,
+}
+
+impl CalcAnglePercentage {
+    pub(crate) fn new(percentage: Percentage, angle: Angle) -> Self {
+        Self { percentage, angle }
+    }
+
+    pub(crate) fn percentage(self) -> Percentage {
+        self.percentage
+    }
+
+    pub(crate) fn angle(self) -> Angle {
+        self.angle
+    }
+}
+
+impl ToCss for CalcAnglePercentage {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: fmt::Write,
+    {
+        specified::calc::serialize_angle_percentage_calc(
+            self.percentage.0,
+            self.angle.degrees(),
+            dest,
+        )
+    }
 }
 
 impl ToComputedValue for specified::AngleOrPercentage {
@@ -1070,6 +1117,9 @@ impl ToComputedValue for specified::AngleOrPercentage {
             specified::AngleOrPercentage::Angle(angle) => {
                 AngleOrPercentage::Angle(angle.to_computed_value(context))
             },
+            specified::AngleOrPercentage::Calc(calc) => {
+                AngleOrPercentage::Calc(calc.to_computed_value(context))
+            },
         }
     }
     #[inline]
@@ -1080,6 +1130,9 @@ impl ToComputedValue for specified::AngleOrPercentage {
             ),
             AngleOrPercentage::Angle(angle) => {
                 specified::AngleOrPercentage::Angle(ToComputedValue::from_computed_value(&angle))
+            },
+            AngleOrPercentage::Calc(calc) => {
+                specified::AngleOrPercentage::Calc(ToComputedValue::from_computed_value(&calc))
             },
         }
     }

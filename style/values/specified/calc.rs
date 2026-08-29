@@ -169,6 +169,86 @@ pub struct CalcLengthPercentage {
     pub node: CalcNode,
 }
 
+/// A validated mixed `<angle-percentage>` calculation.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToShmem)]
+pub struct CalcAnglePercentage {
+    percentage: CSSFloat,
+    angle: Angle,
+}
+
+impl CalcAnglePercentage {
+    fn from_node(mut node: CalcNode) -> Result<Self, ()> {
+        node.simplify_and_sort();
+        let CalcNode::Sum(items) = node else {
+            return Err(());
+        };
+        let mut percentage = None;
+        let mut angle = None;
+        for item in items.into_vec() {
+            match item {
+                CalcNode::Leaf(Leaf::Percentage(value)) if percentage.is_none() => {
+                    percentage = Some(value);
+                },
+                CalcNode::Leaf(Leaf::Angle(value)) if angle.is_none() => {
+                    angle = Some(value);
+                },
+                _ => return Err(()),
+            }
+        }
+        Ok(Self {
+            percentage: percentage.ok_or(())?,
+            angle: angle.ok_or(())?,
+        })
+    }
+}
+
+impl ToCss for CalcAnglePercentage {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        serialize_angle_percentage_calc(self.percentage, self.angle.degrees(), dest)
+    }
+}
+
+impl ToComputedValue for CalcAnglePercentage {
+    type ComputedValue = crate::values::computed::CalcAnglePercentage;
+
+    fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
+        Self::ComputedValue::new(
+            crate::values::computed::Percentage(self.percentage),
+            self.angle.to_computed_value(context),
+        )
+    }
+
+    fn from_computed_value(computed: &Self::ComputedValue) -> Self {
+        Self {
+            percentage: computed.percentage().0,
+            angle: Angle::from_computed_value(&computed.angle()),
+        }
+    }
+}
+
+pub(crate) fn serialize_angle_percentage_calc<W>(
+    percentage: CSSFloat,
+    angle_degrees: CSSFloat,
+    dest: &mut CssWriter<W>,
+) -> fmt::Result
+where
+    W: Write,
+{
+    dest.write_str("calc(")?;
+    serialize_percentage(percentage, dest)?;
+    if angle_degrees.is_sign_negative() {
+        dest.write_str(" - ")?;
+        crate::values::serialize_specified_dimension(angle_degrees.abs(), "deg", false, dest)?;
+    } else {
+        dest.write_str(" + ")?;
+        crate::values::serialize_specified_dimension(angle_degrees, "deg", false, dest)?;
+    }
+    dest.write_char(')')
+}
+
 impl CalcLengthPercentage {
     fn same_unit_length_as(a: &Self, b: &Self) -> Option<(CSSFloat, CSSFloat)> {
         debug_assert_eq!(a.clamping_mode, b.clamping_mode);
@@ -1507,6 +1587,22 @@ impl CalcNode {
     ) -> Result<Angle, ParseError<'i>> {
         Self::parse(context, input, function, AllowParse::new(CalcUnits::ANGLE))?
             .to_angle()
+            .map_err(|()| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
+    }
+
+    /// Convenience parsing function for a mixed `<angle-percentage>`.
+    pub fn parse_angle_percentage<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+        function: MathFunction,
+    ) -> Result<CalcAnglePercentage, ParseError<'i>> {
+        let node = Self::parse(
+            context,
+            input,
+            function,
+            AllowParse::new(CalcUnits::ANGLE_PERCENTAGE),
+        )?;
+        CalcAnglePercentage::from_node(node)
             .map_err(|()| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
     }
 

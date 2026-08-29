@@ -366,6 +366,8 @@ bitflags! {
 
         /// <length-percentage>
         const LENGTH_PERCENTAGE = Self::LENGTH.bits() | Self::PERCENTAGE.bits();
+        /// <angle-percentage>
+        const ANGLE_PERCENTAGE = Self::ANGLE.bits() | Self::PERCENTAGE.bits();
         // NOTE: When you add to this, make sure to make Atan2 deal with these.
         /// Allow all units.
         const ALL = Self::LENGTH.bits() | Self::PERCENTAGE.bits() | Self::ANGLE.bits() |
@@ -384,12 +386,21 @@ impl CalcUnits {
     /// Returns true if this unit is allowed to be summed with the given unit, otherwise false.
     #[inline]
     fn can_sum_with(&self, other: Self) -> bool {
-        match *self {
-            Self::LENGTH => other.intersects(Self::LENGTH | Self::PERCENTAGE),
-            Self::PERCENTAGE => other.intersects(Self::LENGTH | Self::PERCENTAGE),
-            Self::LENGTH_PERCENTAGE => other.intersects(Self::LENGTH | Self::PERCENTAGE),
-            u => u.is_single_unit() && other == u,
+        if !self.is_empty()
+            && !other.is_empty()
+            && Self::LENGTH_PERCENTAGE.contains(*self)
+            && Self::LENGTH_PERCENTAGE.contains(other)
+        {
+            return true;
         }
+        if !self.is_empty()
+            && !other.is_empty()
+            && Self::ANGLE_PERCENTAGE.contains(*self)
+            && Self::ANGLE_PERCENTAGE.contains(other)
+        {
+            return true;
+        }
+        self.is_single_unit() && other == *self
     }
 }
 
@@ -2216,6 +2227,13 @@ mod tests {
         assert!(CalcUnits::LENGTH_PERCENTAGE.can_sum_with(CalcUnits::LENGTH));
         assert!(CalcUnits::LENGTH_PERCENTAGE.can_sum_with(CalcUnits::PERCENTAGE));
         assert!(CalcUnits::LENGTH_PERCENTAGE.can_sum_with(CalcUnits::LENGTH_PERCENTAGE));
+
+        assert!(CalcUnits::ANGLE.can_sum_with(CalcUnits::PERCENTAGE));
+        assert!(CalcUnits::PERCENTAGE.can_sum_with(CalcUnits::ANGLE));
+        assert!(CalcUnits::ANGLE_PERCENTAGE.can_sum_with(CalcUnits::ANGLE));
+        assert!(CalcUnits::ANGLE_PERCENTAGE.can_sum_with(CalcUnits::PERCENTAGE));
+        assert!(!CalcUnits::LENGTH_PERCENTAGE.can_sum_with(CalcUnits::ANGLE_PERCENTAGE));
+        assert!(!CalcUnits::PERCENTAGE.can_sum_with(CalcUnits::empty()));
 
         assert!(!CalcUnits::ANGLE.can_sum_with(CalcUnits::TIME));
         assert!(CalcUnits::ANGLE.can_sum_with(CalcUnits::ANGLE));
