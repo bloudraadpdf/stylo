@@ -153,12 +153,8 @@ bitflags! {
         const PAUSED = 1u64 << 57;
         /// <https://html.spec.whatwg.org/multipage/#selector-seeking>
         const SEEKING = 1u64 << 58;
-        /// <https://html.spec.whatwg.org/multipage/#selector-buffering>
-        const BUFFERING = 1u64 << 59;
-        /// <https://html.spec.whatwg.org/multipage/#selector-stalled>
-        const STALLED = 1u64 << 60;
         /// <https://html.spec.whatwg.org/multipage/#selector-muted>
-        const MUTED = 1u64 << 61;
+        const MUTED = 1u64 << 59;
 
         /// Some convenience unions.
         const DIR_STATES = Self::LTR.bits() | Self::RTL.bits();
@@ -175,8 +171,6 @@ bitflags! {
         const MEDIA_STATES = Self::PLAYING.bits() |
                              Self::PAUSED.bits() |
                              Self::SEEKING.bits() |
-                             Self::BUFFERING.bits() |
-                             Self::STALLED.bits() |
                              Self::MUTED.bits();
     }
 }

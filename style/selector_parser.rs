@@ -332,14 +332,15 @@ mod tests {
             ":playing",
             ":paused",
             ":seeking",
-            ":buffering",
-            ":stalled",
             ":muted",
             ".subject:has(video:playing)",
         ] {
             let parsed = SelectorParser::parse_author_origin_no_namespace(selector, &url_data)
                 .expect("media-state pseudo-class must parse at author origin");
             assert_eq!(parsed.to_css_string(), selector);
+        }
+        for selector in [":buffering", ":stalled"] {
+            assert!(SelectorParser::parse_author_origin_no_namespace(selector, &url_data).is_err());
         }
     }
 
