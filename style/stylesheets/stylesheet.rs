@@ -4071,6 +4071,15 @@ mod tests {
     }
 
     #[test]
+    fn servo_exposes_text_underline_position() {
+        assert!(
+            crate::properties::PropertyId::parse_enabled_for_all_content("text-underline-position")
+                .is_ok(),
+            "the standard inherited discrete property must enter the Servo parser",
+        );
+    }
+
+    #[test]
     fn servo_parses_mask_geometry_boxes() {
         let stylesheet = parse_stylesheet(
             ".a { mask-clip: fill-box } .b { mask-clip: stroke-box } \

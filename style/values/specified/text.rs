@@ -1358,6 +1358,7 @@ impl Parse for TextDecorationInset {
     MallocSizeOf,
     Parse,
     PartialEq,
+    Serialize,
     SpecifiedValueInfo,
     ToComputedValue,
     ToResolvedValue,
