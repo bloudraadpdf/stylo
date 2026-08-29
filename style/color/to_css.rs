@@ -16,7 +16,7 @@ use style_traits::{CssWriter, ToCss};
 /// Serializes a legacy sRGB channel without letting finite-precision
 /// interpolation move a mathematical half-integer below its rounding tie.
 fn legacy_srgb_channel(value: f32) -> u8 {
-    const HALF_STEP_EPSILON: f32 = 0.0001;
+    const HALF_STEP_EPSILON: f32 = 0.0002;
 
     let scaled = value * 255.0;
     let nearest_half_step = (scaled * 2.0).round() / 2.0;
