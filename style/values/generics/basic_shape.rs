@@ -390,14 +390,14 @@ pub enum GenericBasicShape<Angle, Position, LengthPercentage, BasicShapeRect> {
         #[animation(field_bound)]
         #[css(field_bound)]
         #[shmem(field_bound)]
-        Circle<LengthPercentage>,
+        Circle<Position, LengthPercentage>,
     ),
     /// Defines an ellipse with a center and x-axis/y-axis radii.
     Ellipse(
         #[animation(field_bound)]
         #[css(field_bound)]
         #[shmem(field_bound)]
-        Ellipse<LengthPercentage>,
+        Ellipse<Position, LengthPercentage>,
     ),
     /// Defines a polygon with pair arguments.
     Polygon(GenericPolygon<LengthPercentage>),
@@ -460,8 +460,8 @@ pub use self::GenericInsetRect as InsetRect;
 )]
 #[css(function)]
 #[repr(C)]
-pub struct Circle<LengthPercentage> {
-    pub position: GenericPositionOrAuto<ShapePosition<LengthPercentage>>,
+pub struct Circle<Position, LengthPercentage> {
+    pub position: GenericPositionOrAuto<Position>,
     #[animation(field_bound)]
     pub radius: GenericShapeRadius<LengthPercentage>,
 }
@@ -486,8 +486,8 @@ pub struct Circle<LengthPercentage> {
 )]
 #[css(function)]
 #[repr(C)]
-pub struct Ellipse<LengthPercentage> {
-    pub position: GenericPositionOrAuto<ShapePosition<LengthPercentage>>,
+pub struct Ellipse<Position, LengthPercentage> {
+    pub position: GenericPositionOrAuto<Position>,
     #[animation(field_bound)]
     pub semiaxis_x: GenericShapeRadius<LengthPercentage>,
     #[animation(field_bound)]
@@ -705,10 +705,10 @@ where
     }
 }
 
-impl<LengthPercentage> ToCss for Circle<LengthPercentage>
+impl<Position, LengthPercentage> ToCss for Circle<Position, LengthPercentage>
 where
     LengthPercentage: ToCss + PartialEq,
-    ShapePosition<LengthPercentage>: ToCss,
+    Position: ToCss,
 {
     fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
     where
@@ -734,10 +734,10 @@ where
     }
 }
 
-impl<LengthPercentage> ToCss for Ellipse<LengthPercentage>
+impl<Position, LengthPercentage> ToCss for Ellipse<Position, LengthPercentage>
 where
     LengthPercentage: ToCss + PartialEq,
-    ShapePosition<LengthPercentage>: ToCss,
+    Position: ToCss,
 {
     fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
     where

@@ -41,10 +41,10 @@ pub type BasicShape = generic::GenericBasicShape<Angle, Position, LengthPercenta
 pub type InsetRect = generic::GenericInsetRect<LengthPercentage>;
 
 /// A computed circle.
-pub type Circle = generic::Circle<LengthPercentage>;
+pub type Circle = generic::Circle<Position, LengthPercentage>;
 
 /// A computed ellipse.
-pub type Ellipse = generic::Ellipse<LengthPercentage>;
+pub type Ellipse = generic::Ellipse<Position, LengthPercentage>;
 
 /// The computed value of `ShapeRadius`.
 pub type ShapeRadius = generic::GenericShapeRadius<LengthPercentage>;

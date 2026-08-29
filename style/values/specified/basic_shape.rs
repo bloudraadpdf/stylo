@@ -21,9 +21,8 @@ use crate::values::specified::angle::Angle;
 use crate::values::specified::border::BorderRadius;
 use crate::values::specified::image::Image;
 use crate::values::specified::length::LengthPercentageOrAuto;
-use crate::values::specified::position::{Position, Side};
+use crate::values::specified::position::Position;
 use crate::values::specified::url::SpecifiedUrl;
-use crate::values::specified::PositionComponent;
 use crate::values::specified::{LengthPercentage, NonNegativeLengthPercentage, SVGPathData};
 use crate::values::CSSFloat;
 use crate::Zero;
@@ -49,11 +48,6 @@ pub type ShapeOutside = generic::GenericShapeOutside<BasicShape, Image>;
 /// A specified `object-view-box` value.
 pub type ObjectViewBox = generic::GenericObjectViewBox<BasicShapeRect>;
 
-/// A specified value for `at <position>` in circle() and ellipse().
-// Note: its computed value is the same as computed::position::Position. We just want to always use
-// LengthPercentage as the type of its components, for basic shapes.
-pub type RadialPosition = generic::ShapePosition<LengthPercentage>;
-
 /// A specified basic shape.
 pub type BasicShape = generic::GenericBasicShape<Angle, Position, LengthPercentage, BasicShapeRect>;
 
@@ -61,10 +55,10 @@ pub type BasicShape = generic::GenericBasicShape<Angle, Position, LengthPercenta
 pub type InsetRect = generic::GenericInsetRect<LengthPercentage>;
 
 /// A specified circle.
-pub type Circle = generic::Circle<LengthPercentage>;
+pub type Circle = generic::Circle<Position, LengthPercentage>;
 
 /// A specified ellipse.
-pub type Ellipse = generic::Ellipse<LengthPercentage>;
+pub type Ellipse = generic::Ellipse<Position, LengthPercentage>;
 
 /// The specified value of `ShapeRadius`.
 pub type ShapeRadius = generic::ShapeRadius<LengthPercentage>;
@@ -481,60 +475,13 @@ impl InsetRect {
     }
 }
 
-impl ToCss for RadialPosition {
-    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
-    where
-        W: Write,
-    {
-        self.horizontal.to_css(dest)?;
-        dest.write_char(' ')?;
-        self.vertical.to_css(dest)
-    }
-}
-
-fn convert_to_length_percentage<S: Side>(c: PositionComponent<S>) -> LengthPercentage {
-    use crate::values::specified::{AllowedNumericType, Percentage};
-    // Convert the value when parsing, to make sure we serialize it properly for both
-    // specified and computed values.
-    // https://drafts.csswg.org/css-shapes-1/#basic-shape-serialization
-    match c {
-        // Since <position> keywords stand in for percentages, keywords without an offset
-        // turn into percentages.
-        PositionComponent::Center => LengthPercentage::from(Percentage::new(0.5)),
-        PositionComponent::Side(keyword, None) => {
-            Percentage::new(if keyword.is_start() { 0. } else { 1. }).into()
-        },
-        // Per spec issue, https://github.com/w3c/csswg-drafts/issues/8695, the part of
-        // "avoiding calc() expressions where possible" and "avoiding calc()
-        // transformations" will be removed from the spec, and we should follow the
-        // css-values-4 for position, i.e. we make it as length-percentage always.
-        // https://drafts.csswg.org/css-shapes-1/#basic-shape-serialization.
-        // https://drafts.csswg.org/css-values-4/#typedef-position
-        PositionComponent::Side(keyword, Some(length)) => {
-            if keyword.is_start() {
-                length
-            } else {
-                length.hundred_percent_minus(AllowedNumericType::All)
-            }
-        },
-        PositionComponent::Length(length) => length,
-    }
-}
-
 fn parse_at_position<'i, 't>(
     context: &ParserContext,
     input: &mut Parser<'i, 't>,
-) -> Result<GenericPositionOrAuto<RadialPosition>, ParseError<'i>> {
-    use crate::values::specified::position::Position;
+) -> Result<GenericPositionOrAuto<Position>, ParseError<'i>> {
     if input.try_parse(|i| i.expect_ident_matching("at")).is_ok() {
-        Position::parse(context, input).map(|pos| {
-            GenericPositionOrAuto::Position(RadialPosition::new(
-                convert_to_length_percentage(pos.horizontal),
-                convert_to_length_percentage(pos.vertical),
-            ))
-        })
+        Position::parse(context, input).map(GenericPositionOrAuto::Position)
     } else {
-        // `at <position>` is omitted.
         Ok(GenericPositionOrAuto::Auto)
     }
 }
@@ -1152,29 +1099,49 @@ enum ByTo {
 }
 
 #[cfg(test)]
-mod object_view_box_tests {
-    use super::{ObjectViewBox, Parse, ParserContext};
+mod tests {
+    use super::{AllowedBasicShapes, BasicShape, ObjectViewBox, Parse, ParserContext, ShapeType};
     use crate::context::QuirksMode;
+    use crate::font_metrics::FontMetrics;
+    use crate::media_queries::Device;
+    use crate::properties::{style_structs::Font, ComputedValues};
+    use crate::queries::values::PrefersColorScheme;
+    use crate::servo::media_queries::FontMetricsProvider;
     use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
+    use crate::values::computed::font::GenericFontFamily;
+    use crate::values::computed::{CSSPixelLength, Context, Length, ToComputedValue};
+    use crate::values::specified::font::QueryFontMetricsFlags;
     use cssparser::{Parser, ParserInput};
-    use style_traits::ParsingMode;
+    use euclid::{Scale, Size2D};
+    use style_traits::{CSSPixel, DevicePixel, ParseError, ParsingMode, ToCss};
 
-    fn parses(css: &str) -> bool {
-        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
-        let context = ParserContext::new(
+    fn parser_context(url_data: &UrlExtraData) -> ParserContext<'_> {
+        ParserContext::new(
             Origin::Author,
-            &url_data,
+            url_data,
             Some(CssRuleType::Style),
             ParsingMode::DEFAULT,
             QuirksMode::NoQuirks,
             Default::default(),
             None,
             None,
-        );
+        )
+    }
+
+    fn parse_value<'i, T, F>(css: &'i str, parse: F) -> Option<T>
+    where
+        F: for<'t> FnOnce(&ParserContext<'_>, &mut Parser<'i, 't>) -> Result<T, ParseError<'i>>,
+    {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let context = parser_context(&url_data);
         let mut input = ParserInput::new(css);
         Parser::new(&mut input)
-            .parse_entirely(|input| ObjectViewBox::parse(&context, input))
-            .is_ok()
+            .parse_entirely(|input| parse(&context, input))
+            .ok()
+    }
+
+    fn parses(css: &str) -> bool {
+        parse_value(css, ObjectViewBox::parse).is_some()
     }
 
     #[test]
@@ -1191,6 +1158,66 @@ mod object_view_box_tests {
         for invalid in ["circle(10px)", "ellipse(10px 20px)", "polygon(0 0)"] {
             assert!(!parses(invalid), "{invalid} must be rejected");
         }
+    }
+
+    #[derive(Debug)]
+    struct TestFontMetricsProvider;
+
+    impl FontMetricsProvider for TestFontMetricsProvider {
+        fn query_font_metrics(
+            &self,
+            _vertical: bool,
+            _font: &Font,
+            _base_size: CSSPixelLength,
+            _flags: QueryFontMetricsFlags,
+        ) -> FontMetrics {
+            FontMetrics::default()
+        }
+
+        fn base_size_for_generic(&self, _generic: GenericFontFamily) -> Length {
+            Length::new(16.0)
+        }
+    }
+
+    fn parse(css: &str) -> Option<BasicShape> {
+        parse_value(css, |context, input| {
+            BasicShape::parse(
+                context,
+                input,
+                AllowedBasicShapes::SHAPE_OUTSIDE,
+                ShapeType::Filled,
+            )
+        })
+    }
+
+    #[test]
+    fn radial_position_has_separate_specified_and_computed_serialisation() {
+        let specified = parse("circle(1in at bottom 2in right 1in)").unwrap();
+        assert_eq!(
+            specified.to_css_string(),
+            "circle(1in at right 1in bottom 2in)"
+        );
+        assert!(parse("circle(1in at 50% left)").is_none());
+
+        let initial_values =
+            ComputedValues::initial_values_with_font_override(Font::initial_values());
+        let device = Device::new(
+            crate::media_queries::MediaType::print(),
+            QuirksMode::NoQuirks,
+            Size2D::<f32, CSSPixel>::new(800.0, 600.0),
+            Scale::<f32, CSSPixel, DevicePixel>::new(1.0),
+            Box::new(TestFontMetricsProvider),
+            initial_values,
+            PrefersColorScheme::Light,
+        );
+        let computed: crate::values::computed::basic_shape::BasicShape =
+            Context::for_media_query_evaluation(&device, QuirksMode::NoQuirks, |context| {
+                specified.to_computed_value(context)
+            });
+        assert_eq!(
+            computed.to_css_string(),
+            "circle(96px at calc(100% - 96px) calc(100% - 192px))"
+        );
     }
 }
 
