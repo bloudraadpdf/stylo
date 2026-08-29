@@ -3471,8 +3471,11 @@ pub mod font {
     pub use crate::properties::shorthands_generated::font::*;
 
     use super::*;
+    #[cfg(feature = "servo")]
+    use crate::derives::Parse;
     #[cfg(feature = "gecko")]
-    use crate::properties::longhands::{font_family, font_language_override, font_size};
+    use crate::properties::longhands::font_language_override;
+    use crate::properties::longhands::{font_family, font_size};
     use crate::properties::longhands::{
         font_feature_settings, font_kerning, font_optical_sizing, font_size_adjust, font_stretch,
         font_style, font_variant_alternates, font_variant_caps, font_variant_east_asian,
@@ -3485,6 +3488,56 @@ pub mod font {
         FontFamily, FontSize, FontStretch, FontStretchKeyword, FontStyle, FontWeight, LineHeight,
     };
 
+    /// CSS Fonts 4 §2.1.3 system-family-name values supported by the font shorthand.
+    ///
+    /// Servo resolves these keywords during shorthand expansion because it has no
+    /// platform system-font metrics. Keeping this separate from `SystemFont`
+    /// ensures a Servo specified longhand can never contain an unresolved system
+    /// font and reach computed-value construction.
+    #[cfg(feature = "servo")]
+    #[derive(Clone, Copy, Debug, Parse, PartialEq)]
+    enum SystemFontKeyword {
+        Caption,
+        Icon,
+        Menu,
+        MessageBox,
+        SmallCaption,
+        StatusBar,
+    }
+
+    fn expanded_longhands(
+        font_family: FontFamily,
+        font_size: FontSize,
+        font_style: FontStyle,
+        font_stretch: FontStretch,
+        font_weight: FontWeight,
+        line_height: LineHeight,
+        font_variant_caps: font_variant_caps::SpecifiedValue,
+    ) -> Longhands {
+        Longhands {
+            font_family,
+            font_size,
+            font_style,
+            font_stretch,
+            font_weight,
+            line_height,
+            font_kerning: font_kerning::get_initial_specified_value(),
+            #[cfg(feature = "gecko")]
+            font_language_override: font_language_override::get_initial_specified_value(),
+            font_size_adjust: font_size_adjust::get_initial_specified_value(),
+            font_variant_alternates: font_variant_alternates::get_initial_specified_value(),
+            font_variant_east_asian: font_variant_east_asian::get_initial_specified_value(),
+            font_variant_emoji: font_variant_emoji::get_initial_specified_value(),
+            font_variant_ligatures: font_variant_ligatures::get_initial_specified_value(),
+            font_variant_numeric: font_variant_numeric::get_initial_specified_value(),
+            font_variant_position: font_variant_position::get_initial_specified_value(),
+            font_feature_settings: font_feature_settings::get_initial_specified_value(),
+            font_optical_sizing: font_optical_sizing::get_initial_specified_value(),
+            font_variant_caps,
+            font_variation_settings: font_variation_settings::get_initial_specified_value(),
+        }
+    }
+
     pub fn parse_value<'i, 't>(
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
@@ -3496,27 +3549,32 @@ pub mod font {
         let mut stretch = None;
         #[cfg(feature = "gecko")]
         if let Ok(sys) = input.try_parse(|i| SystemFont::parse(context, i)) {
-            return Ok(Longhands {
-                font_family: font_family::SpecifiedValue::system_font(sys),
-                font_size: font_size::SpecifiedValue::system_font(sys),
-                font_style: font_style::SpecifiedValue::system_font(sys),
-                font_stretch: font_stretch::SpecifiedValue::system_font(sys),
-                font_weight: font_weight::SpecifiedValue::system_font(sys),
-                line_height: LineHeight::normal(),
-                font_kerning: font_kerning::get_initial_specified_value(),
-                font_language_override: font_language_override::get_initial_specified_value(),
-                font_size_adjust: font_size_adjust::get_initial_specified_value(),
-                font_variant_alternates: font_variant_alternates::get_initial_specified_value(),
-                font_variant_east_asian: font_variant_east_asian::get_initial_specified_value(),
-                font_variant_emoji: font_variant_emoji::get_initial_specified_value(),
-                font_variant_ligatures: font_variant_ligatures::get_initial_specified_value(),
-                font_variant_numeric: font_variant_numeric::get_initial_specified_value(),
-                font_variant_position: font_variant_position::get_initial_specified_value(),
-                font_feature_settings: font_feature_settings::get_initial_specified_value(),
-                font_optical_sizing: font_optical_sizing::get_initial_specified_value(),
-                font_variant_caps: font_variant_caps::get_initial_specified_value(),
-                font_variation_settings: font_variation_settings::get_initial_specified_value(),
-            });
+            return Ok(expanded_longhands(
+                font_family::SpecifiedValue::system_font(sys),
+                font_size::SpecifiedValue::system_font(sys),
+                font_style::SpecifiedValue::system_font(sys),
+                font_stretch::SpecifiedValue::system_font(sys),
+                font_weight::SpecifiedValue::system_font(sys),
+                LineHeight::normal(),
+                font_variant_caps::get_initial_specified_value(),
+            ));
+        }
+        #[cfg(feature = "servo")]
+        if input.try_parse(SystemFontKeyword::parse).is_ok() {
+            // CSS Fonts 4 §2.8: substitute a UA-default font when the requested
+            // system font is unavailable, and reset unavailable characteristics
+            // to their initial values.
+            return Ok(expanded_longhands(
+                <FontFamily as crate::values::computed::ToComputedValue>::from_computed_value(
+                    &font_family::get_initial_value(),
+                ),
+                font_size::get_initial_specified_value(),
+                font_style::get_initial_specified_value(),
+                font_stretch::get_initial_specified_value(),
+                font_weight::get_initial_specified_value(),
+                LineHeight::normal(),
+                font_variant_caps::get_initial_specified_value(),
+            ));
         }
 
         let size;
@@ -3567,28 +3625,15 @@ pub mod font {
 
         let family = FontFamily::parse(context, input)?;
         let stretch = stretch.map(FontStretch::Keyword);
-        Ok(Longhands {
-            font_style: unwrap_or_initial!(font_style, style),
-            font_weight: unwrap_or_initial!(font_weight, weight),
-            font_stretch: unwrap_or_initial!(font_stretch, stretch),
-            font_variant_caps: unwrap_or_initial!(font_variant_caps, variant_caps),
-            font_size: size,
-            line_height: line_height.unwrap_or(LineHeight::normal()),
-            font_family: family,
-            font_optical_sizing: font_optical_sizing::get_initial_specified_value(),
-            font_variation_settings: font_variation_settings::get_initial_specified_value(),
-            font_kerning: font_kerning::get_initial_specified_value(),
-            #[cfg(feature = "gecko")]
-            font_language_override: font_language_override::get_initial_specified_value(),
-            font_size_adjust: font_size_adjust::get_initial_specified_value(),
-            font_variant_alternates: font_variant_alternates::get_initial_specified_value(),
-            font_variant_east_asian: font_variant_east_asian::get_initial_specified_value(),
-            font_variant_emoji: font_variant_emoji::get_initial_specified_value(),
-            font_variant_ligatures: font_variant_ligatures::get_initial_specified_value(),
-            font_variant_numeric: font_variant_numeric::get_initial_specified_value(),
-            font_variant_position: font_variant_position::get_initial_specified_value(),
-            font_feature_settings: font_feature_settings::get_initial_specified_value(),
-        })
+        Ok(expanded_longhands(
+            family,
+            size,
+            unwrap_or_initial!(font_style, style),
+            unwrap_or_initial!(font_stretch, stretch),
+            unwrap_or_initial!(font_weight, weight),
+            line_height.unwrap_or(LineHeight::normal()),
+            unwrap_or_initial!(font_variant_caps, variant_caps),
+        ))
     }
 
     #[cfg(feature = "gecko")]
@@ -5881,6 +5926,62 @@ pub mod overflow_clip_margin_inline {
                 ],
             )
         }
+    }
+}
+
+#[cfg(all(test, feature = "servo"))]
+mod font_tests {
+    use super::font;
+    use crate::context::QuirksMode;
+    use crate::parser::ParserContext;
+    use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
+    use cssparser::{Parser, ParserInput};
+    use style_traits::{ParsingMode, ToCss};
+
+    fn parse(css: &str) -> font::Longhands {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input = ParserInput::new(css);
+        let mut parser = Parser::new(&mut input);
+        parser
+            .parse_entirely(|input| font::parse_value(&context, input))
+            .expect("CSS Fonts 4 system-font shorthand should parse")
+    }
+
+    #[test]
+    fn unavailable_system_fonts_expand_to_initial_longhands() {
+        for keyword in [
+            "caption",
+            "icon",
+            "menu",
+            "message-box",
+            "small-caption",
+            "status-bar",
+        ] {
+            let longhands = parse(keyword);
+            assert_eq!(longhands.font_family.to_css_string(), "serif");
+            assert_eq!(longhands.font_size.to_css_string(), "medium");
+            assert_eq!(longhands.font_style.to_css_string(), "normal");
+            assert_eq!(longhands.font_stretch.to_css_string(), "normal");
+            assert_eq!(longhands.font_weight.to_css_string(), "normal");
+            assert_eq!(longhands.line_height.to_css_string(), "normal");
+        }
+    }
+
+    #[test]
+    fn system_font_names_after_the_initial_position_remain_family_names() {
+        let longhands = parse("large menu");
+        assert_eq!(longhands.font_size.to_css_string(), "large");
+        assert_eq!(longhands.font_family.to_css_string(), "menu");
     }
 }
 
