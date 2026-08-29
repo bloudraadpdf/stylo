@@ -1151,7 +1151,7 @@ pub(crate) fn compound_matches_featureless_host<Impl: SelectorImpl>(
             // element is that subject.
             Component::RelativeSelectorAnchor => {},
             // :host only matches featureless elements.
-            Component::Host(..) => {},
+            Component::Host(..) | Component::HostContext(..) => {},
             // A relational condition may constrain an explicitly host-capable
             // compound without making the host itself non-featureless. The
             // selector-level HAS_HOST / HAS_SCOPE check prevents a bare :has()
@@ -1314,6 +1314,26 @@ where
         },
         Component::Host(ref selector) => {
             return matches_host(element, selector.as_ref(), &mut context.shared, rightmost);
+        },
+        Component::HostContext(ref selector) => {
+            if context.shared.shadow_host() != Some(element.opaque()) {
+                return KleeneValue::False;
+            }
+            return context.shared.nest(|context| {
+                let mut candidate = Some(element.clone());
+                while let Some(current) = candidate {
+                    let matched = context.with_featureless(false, |context| {
+                        matches_complex_selector(selector.iter(), &current, context, rightmost)
+                    });
+                    if matched.to_bool(true) {
+                        return matched;
+                    }
+                    candidate = current
+                        .parent_element()
+                        .or_else(|| current.containing_shadow_host());
+                }
+                KleeneValue::False
+            });
         },
         Component::ParentSelector => match context.shared.scope_element {
             Some(ref scope_element) => element.opaque() == *scope_element,
