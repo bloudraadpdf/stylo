@@ -274,6 +274,7 @@ pub use self::text::{TextAlignKeyword, TextDecorationLine, TextOverflow, WordSpa
 pub use self::text::{TextAlignLast, TextAutospace, TextUnderlinePosition};
 pub use self::text::{
     TextDecorationInset, TextDecorationLength, TextDecorationSkipInk, TextJustify, TextTransform,
+    TextUnderlineOffset,
 };
 pub use self::text_decor_4::{TextDecorationSkipKind, TextDecorationTrim, TextEmphasisSkip};
 pub use self::time::Time;

@@ -6709,8 +6709,8 @@ spec = "https://drafts.csswg.org/css-text-decor/#propdef-text-emphasis-style"
 affects = "overflow"
 
 [text-underline-offset]
-type = "LengthPercentageOrAuto"
-initial = "computed::LengthPercentageOrAuto::auto()"
+type = "TextUnderlineOffset"
+initial = "computed::TextUnderlineOffset::auto()"
 struct = "inherited_text"
 spec = "https://drafts.csswg.org/css-text-decor-4/#underline-offset"
 affects = "overflow"

@@ -5,10 +5,12 @@
 //! Computed types for text properties.
 
 use crate::derives::*;
+use crate::values::animated::{Animate, Procedure};
 use crate::values::computed::length::{Length, LengthPercentage};
+use crate::values::generics::length::GenericLengthPercentageOrAuto;
 use crate::values::generics::text::{
     GenericHyphenateLimitChars, GenericInitialLetter, GenericTextDecorationInset,
-    GenericTextDecorationLength, GenericTextIndent,
+    GenericTextDecorationLength, GenericTextIndent, GenericTextUnderlineOffset,
 };
 use crate::values::generics::NumberOrAuto;
 use crate::values::specified::text as specified;
@@ -30,6 +32,84 @@ pub type InitialLetter = GenericInitialLetter<CSSFloat, CSSInteger>;
 
 /// Implements type for `text-decoration-thickness` property.
 pub type TextDecorationLength = GenericTextDecorationLength<LengthPercentage>;
+
+impl Animate for TextDecorationLength {
+    fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
+        match (self, other) {
+            (Self::LengthPercentage(from), Self::LengthPercentage(to)) => Ok(
+                Self::LengthPercentage(from.animate_as_percentage_dimension_mix(to, procedure)?),
+            ),
+            (Self::Auto, Self::Auto) => Ok(Self::Auto),
+            (Self::FromFont, Self::FromFont) => Ok(Self::FromFont),
+            (Self::LengthPercentage(_), Self::Auto | Self::FromFont)
+            | (Self::Auto, Self::LengthPercentage(_) | Self::FromFont)
+            | (Self::FromFont, Self::LengthPercentage(_) | Self::Auto) => Err(()),
+        }
+    }
+}
+
+/// Computed value for `text-underline-offset`.
+pub type TextUnderlineOffset = GenericTextUnderlineOffset<LengthPercentage>;
+
+impl Animate for TextUnderlineOffset {
+    fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
+        match (&self.0, &other.0) {
+            (
+                GenericLengthPercentageOrAuto::LengthPercentage(from),
+                GenericLengthPercentageOrAuto::LengthPercentage(to),
+            ) => Ok(Self(GenericLengthPercentageOrAuto::LengthPercentage(
+                from.animate_as_percentage_dimension_mix(to, procedure)?,
+            ))),
+            (GenericLengthPercentageOrAuto::Auto, GenericLengthPercentageOrAuto::Auto) => {
+                Ok(Self::auto())
+            },
+            (
+                GenericLengthPercentageOrAuto::LengthPercentage(_),
+                GenericLengthPercentageOrAuto::Auto,
+            )
+            | (
+                GenericLengthPercentageOrAuto::Auto,
+                GenericLengthPercentageOrAuto::LengthPercentage(_),
+            ) => Err(()),
+        }
+    }
+}
+
+#[cfg(test)]
+mod text_decoration_animation_tests {
+    use super::*;
+    use crate::values::computed::Percentage;
+
+    #[test]
+    fn mixed_text_decoration_thickness_retains_calculated_endpoint() {
+        let from =
+            TextDecorationLength::LengthPercentage(LengthPercentage::new_length(Length::new(16.0)));
+        let to =
+            TextDecorationLength::LengthPercentage(LengthPercentage::new_percent(Percentage(2.0)));
+
+        let sampled = from
+            .animate(&to, Procedure::Interpolate { progress: 0.0 })
+            .expect("mixed text-decoration-thickness endpoints must interpolate");
+
+        assert_eq!(sampled.to_css_string(), "calc(0% + 16px)");
+    }
+
+    #[test]
+    fn mixed_text_underline_offset_retains_calculated_endpoint() {
+        let from: TextUnderlineOffset = GenericTextUnderlineOffset::length_percentage(
+            LengthPercentage::new_percent(Percentage(1.0)),
+        );
+        let to: TextUnderlineOffset = GenericTextUnderlineOffset::length_percentage(
+            LengthPercentage::new_length(Length::new(32.0)),
+        );
+
+        let sampled = from
+            .animate(&to, Procedure::Interpolate { progress: 1.0 })
+            .expect("mixed text-underline-offset endpoints must interpolate");
+
+        assert_eq!(sampled.to_css_string(), "calc(0% + 32px)");
+    }
+}
 
 /// Implements type for `text-decoration-inset` property.
 pub type TextDecorationInset = GenericTextDecorationInset<Length>;

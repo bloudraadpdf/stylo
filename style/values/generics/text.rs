@@ -5,6 +5,7 @@
 //! Generic types for text properties.
 
 use crate::derives::*;
+use crate::values::generics::length::GenericLengthPercentageOrAuto;
 use crate::Zero;
 use std::fmt::{self, Write};
 use style_traits::{CssWriter, ToCss};
@@ -140,7 +141,6 @@ impl<N: ToCss + Zero, I: ToCss + Zero> ToCss for InitialLetter<N, I> {
 #[repr(C, u8)]
 #[cfg_attr(feature = "servo", derive(Deserialize, Serialize))]
 #[derive(
-    Animate,
     Clone,
     Copy,
     ComputeSquaredDistance,
@@ -163,6 +163,50 @@ pub enum GenericTextDecorationLength<L> {
     LengthPercentage(L),
     Auto,
     FromFont,
+}
+
+/// A property-specific length-percentage or `auto` value for
+/// `text-underline-offset`.
+///
+/// The wrapper lets the computed value use the mixed percentage/dimension
+/// interpolation algorithm without changing endpoint serialization for every
+/// other property that uses `GenericLengthPercentageOrAuto`.
+#[repr(transparent)]
+#[derive(
+    Clone,
+    ComputeSquaredDistance,
+    Copy,
+    Debug,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToAnimatedValue,
+    ToAnimatedZero,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+pub struct GenericTextUnderlineOffset<L>(pub(crate) GenericLengthPercentageOrAuto<L>);
+
+impl<L> GenericTextUnderlineOffset<L> {
+    /// The initial `auto` value.
+    pub fn auto() -> Self {
+        Self(GenericLengthPercentageOrAuto::Auto)
+    }
+
+    /// Construct a concrete length-percentage value.
+    #[cfg(test)]
+    pub(crate) fn length_percentage(value: L) -> Self {
+        Self(GenericLengthPercentageOrAuto::LengthPercentage(value))
+    }
+
+    /// Consume this value and return its typed length-percentage-or-auto value.
+    pub fn into_inner(self) -> GenericLengthPercentageOrAuto<L> {
+        self.0
+    }
 }
 
 /// Text decoration inset values.

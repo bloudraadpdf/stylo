@@ -1300,6 +1300,10 @@ pub enum TextDecorationSkipInk {
 /// Implements type for `text-decoration-thickness` property
 pub type TextDecorationLength = GenericTextDecorationLength<LengthPercentage>;
 
+/// Specified value for `text-underline-offset`.
+pub type TextUnderlineOffset =
+    crate::values::generics::text::GenericTextUnderlineOffset<LengthPercentage>;
+
 impl TextDecorationLength {
     /// `Auto` value.
     #[inline]

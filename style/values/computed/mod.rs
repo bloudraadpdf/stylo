@@ -274,6 +274,7 @@ pub use self::text::{TextAlign, TextAlignLast, TextEmphasisPosition, TextEmphasi
 pub use self::text::{TextAutospace, TextUnderlinePosition};
 pub use self::text::{
     TextDecorationInset, TextDecorationLength, TextDecorationSkipInk, TextJustify,
+    TextUnderlineOffset,
 };
 pub use self::text_decor_4::{TextDecorationSkipKind, TextDecorationTrim, TextEmphasisSkip};
 pub use self::time::Time;
