@@ -6,6 +6,32 @@
 //!
 //! See https://drafts.csswg.org/web-animations-1/#animating-properties
 
+use crate::values::animated::Procedure;
+use std::iter::FromIterator;
+
+fn animate_repeatable<T, C>(
+    left: &[T],
+    right: &[T],
+    procedure: Procedure,
+    animate: impl Fn(&T, &T, Procedure) -> Result<T, ()>,
+) -> Result<C, ()>
+where
+    C: FromIterator<T>,
+{
+    use num_integer::lcm;
+
+    if left.is_empty() || right.is_empty() {
+        return Err(());
+    }
+    let len = lcm(left.len(), right.len());
+    left.iter()
+        .cycle()
+        .zip(right.iter().cycle())
+        .take(len)
+        .map(|(left, right)| animate(left, right, procedure))
+        .collect()
+}
+
 /// https://drafts.csswg.org/web-animations-1/#by-computed-value
 pub mod by_computed_value {
     use crate::values::{
@@ -107,18 +133,7 @@ pub mod repeatable_list {
         T: Animate,
         C: FromIterator<T>,
     {
-        use num_integer::lcm;
-        // If the length of either list is zero, the least common multiple is undefined.
-        if left.is_empty() || right.is_empty() {
-            return Err(());
-        }
-        let len = lcm(left.len(), right.len());
-        left.iter()
-            .cycle()
-            .zip(right.iter().cycle())
-            .take(len)
-            .map(|(left, right)| left.animate(right, procedure))
-            .collect()
+        super::animate_repeatable(left, right, procedure, T::animate)
     }
 
     #[allow(missing_docs)]
@@ -137,5 +152,38 @@ pub mod repeatable_list {
             .take(len)
             .map(|(left, right)| left.compute_squared_distance(right))
             .sum()
+    }
+}
+
+/// Repeatable-list interpolation for position components whose percentage and
+/// dimension terms remain distinct throughout the interpolation interval.
+///
+/// <https://drafts.csswg.org/web-animations-1/#repeatable-list>
+pub mod repeatable_list_percentage_dimension_mix {
+    use crate::values::{
+        animated::Procedure, computed::LengthPercentage, distance::SquaredDistance,
+    };
+    use std::iter::FromIterator;
+
+    #[allow(missing_docs)]
+    pub fn animate<C>(
+        left: &[LengthPercentage],
+        right: &[LengthPercentage],
+        procedure: Procedure,
+    ) -> Result<C, ()>
+    where
+        C: FromIterator<LengthPercentage>,
+    {
+        super::animate_repeatable(left, right, procedure, |left, right, procedure| {
+            left.animate_as_percentage_dimension_mix(right, procedure)
+        })
+    }
+
+    #[allow(missing_docs)]
+    pub fn squared_distance(
+        left: &[LengthPercentage],
+        right: &[LengthPercentage],
+    ) -> Result<SquaredDistance, ()> {
+        super::repeatable_list::squared_distance(left, right)
     }
 }

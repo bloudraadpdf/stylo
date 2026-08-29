@@ -403,7 +403,7 @@ initial = "computed::LengthPercentage::zero_percent()"
 struct = "background"
 initial_specified_value = "SpecifiedValue::initial_specified_value()"
 spec = "https://drafts.csswg.org/css-backgrounds-4/#propdef-background-position-x"
-vector = { animation_type = "repeatable_list" }
+vector = { animation_type = "repeatable_list_percentage_dimension_mix" }
 servo_restyle_damage = "repaint"
 affects = "paint"
 rule_types_allowed = ["style", "keyframe", "page", "scope"]
@@ -414,7 +414,7 @@ initial = "computed::LengthPercentage::zero_percent()"
 struct = "background"
 initial_specified_value = "SpecifiedValue::initial_specified_value()"
 spec = "https://drafts.csswg.org/css-backgrounds-4/#propdef-background-position-y"
-vector = { animation_type = "repeatable_list" }
+vector = { animation_type = "repeatable_list_percentage_dimension_mix" }
 servo_restyle_damage = "repaint"
 affects = "paint"
 rule_types_allowed = ["style", "keyframe", "page", "scope"]
