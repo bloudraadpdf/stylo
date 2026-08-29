@@ -563,7 +563,8 @@ fn matches_relative_selector<E: Element>(
         } else {
             ElementSelectorFlags::RELATIVE_SELECTOR_SEARCH_DIRECTION_SIBLING
         };
-        let mut next_element = element.next_sibling_element();
+        let mut next_element =
+            element.next_sibling_element_for_relative_selector(context.current_host);
         while let Some(el) = next_element {
             if context.needs_selector_flags() {
                 el.apply_selector_flags(sibling_flag);

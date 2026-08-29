@@ -130,6 +130,13 @@ impl RelativeSelectorFilterMap {
         quirks_mode: QuirksMode,
         current_host: Option<OpaqueElement>,
     ) -> bool {
+        if !selector.match_hint.is_descendant_direction()
+            && element
+                .next_sibling_element_for_relative_selector(current_host)
+                .is_none()
+        {
+            return true;
+        }
         if matches!(
             selector.match_hint,
             RelativeSelectorMatchHint::InNextSibling

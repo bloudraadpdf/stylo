@@ -301,6 +301,16 @@ where
         Some(Self::new(sibling, self.snapshot_map))
     }
 
+    fn next_sibling_element_for_relative_selector(
+        &self,
+        current_host: Option<OpaqueElement>,
+    ) -> Option<Self> {
+        let sibling = self
+            .element
+            .next_sibling_element_for_relative_selector(current_host)?;
+        Some(Self::new(sibling, self.snapshot_map))
+    }
+
     fn first_element_child(&self) -> Option<Self> {
         let child = self.element.first_element_child()?;
         Some(Self::new(child, self.snapshot_map))

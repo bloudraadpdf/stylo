@@ -75,6 +75,16 @@ pub trait Element: Sized + Clone + Debug {
     /// Skips non-element nodes
     fn next_sibling_element(&self) -> Option<Self>;
 
+    /// Returns the next sibling in the tree scope used by a relative selector.
+    /// A current shadow host replaces the shadow root and has no sibling in
+    /// that scope.
+    fn next_sibling_element_for_relative_selector(
+        &self,
+        _current_host: Option<OpaqueElement>,
+    ) -> Option<Self> {
+        self.next_sibling_element()
+    }
+
     /// Skips non-element nodes
     fn first_element_child(&self) -> Option<Self>;
 
