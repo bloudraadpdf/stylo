@@ -267,8 +267,8 @@ impl Animate for Matrix {
     fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
         let this = Matrix3D::from(*self);
         let other = Matrix3D::from(*other);
-        let this = MatrixDecomposed2D::from(this);
-        let other = MatrixDecomposed2D::from(other);
+        let this = decompose_2d_matrix_for_servo(this)?;
+        let other = decompose_2d_matrix_for_servo(other)?;
         Matrix3D::from(this.animate(&other, procedure)?).into_2d()
     }
 
@@ -1719,23 +1719,32 @@ mod tests {
 
     #[test]
     fn matching_singular_2d_matrices_reject_interpolation_and_accumulation() {
-        let singular = Matrix3D::from(Matrix {
+        let singular_2d = Matrix {
             a: 1.0,
             b: 1.0,
             c: 0.0,
             d: 0.0,
             e: 0.0,
             f: 100.0,
-        });
-        let translated = Matrix3D::from(Matrix {
+        };
+        let translated_2d = Matrix {
             a: 1.0,
             b: 0.0,
             c: 0.0,
             d: 1.0,
             e: 100.0,
             f: 0.0,
-        });
+        };
 
+        assert!(singular_2d
+            .animate(&translated_2d, Procedure::Interpolate { progress: 0.25 })
+            .is_err());
+        assert!(singular_2d
+            .animate(&translated_2d, Procedure::Accumulate { count: 1 })
+            .is_err());
+
+        let singular = Matrix3D::from(singular_2d);
+        let translated = Matrix3D::from(translated_2d);
         assert!(singular
             .animate(&translated, Procedure::Interpolate { progress: 0.25 })
             .is_err());
