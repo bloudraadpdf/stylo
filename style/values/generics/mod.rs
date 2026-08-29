@@ -111,6 +111,7 @@ impl<T: Zero> Zero for NonNegative<T> {
     ToCss,
     ToResolvedValue,
     ToShmem,
+    ToTyped,
 )]
 #[repr(transparent)]
 pub struct GreaterThanOrEqualToOne<T>(pub T);

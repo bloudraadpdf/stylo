@@ -1804,6 +1804,7 @@ mod tests {
     use crate::properties::animated_properties::AnimationValue;
     use crate::properties::style_structs::Font;
     use crate::properties::ComputedValues;
+    use crate::values::animated::{Animate, Procedure};
     use crate::Atom;
 
     fn pending_animation() -> Animation {
@@ -1848,6 +1849,24 @@ mod tests {
         assert_eq!(
             ComputedKeyframe::composite(AnimationComposition::Accumulate, &underlying, &value),
             AnimationValue::Opacity(0.5),
+        );
+    }
+
+    #[test]
+    fn positive_fragment_line_counts_interpolate_as_integers() {
+        let interpolate = Procedure::Interpolate { progress: 0.3 };
+
+        assert_eq!(
+            AnimationValue::Orphans(10)
+                .animate(&AnimationValue::Orphans(20), interpolate)
+                .expect("orphans values must interpolate"),
+            AnimationValue::Orphans(13),
+        );
+        assert_eq!(
+            AnimationValue::Widows(10)
+                .animate(&AnimationValue::Widows(20), interpolate)
+                .expect("widows values must interpolate"),
+            AnimationValue::Widows(13),
         );
     }
 

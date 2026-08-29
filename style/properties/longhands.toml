@@ -2203,12 +2203,10 @@ servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
 [orphans]
-type = "Integer"
-initial = "2"
-parse_method = "parse_positive"
+type = "PositiveInteger"
+initial = "From::from(2)"
 struct = "inherited_text"
 spec = "https://drafts.csswg.org/css-break/#propdef-orphans"
-animation_type = "discrete"
 affects = "layout"
 rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
@@ -6105,12 +6103,10 @@ servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
 [widows]
-type = "Integer"
-initial = "2"
-parse_method = "parse_positive"
+type = "PositiveInteger"
+initial = "From::from(2)"
 struct = "inherited_text"
 spec = "https://drafts.csswg.org/css-break/#propdef-widows"
-animation_type = "discrete"
 affects = "layout"
 rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
