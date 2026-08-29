@@ -1145,6 +1145,10 @@ pub(crate) fn compound_matches_featureless_host<Impl: SelectorImpl>(
     for component in iter {
         match component {
             Component::Scope | Component::ImplicitScope if scope_matches_featureless_host => {},
+            // The typed anchor closes a relative selector back onto its
+            // subject. Its own equality check decides whether this featureless
+            // element is that subject.
+            Component::RelativeSelectorAnchor => {},
             // :host only matches featureless elements.
             Component::Host(..) => {},
             // A relational condition may constrain an explicitly host-capable
