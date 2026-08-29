@@ -870,8 +870,68 @@ impl Animate for FontSizeAdjustFactor {
     }
 }
 
-/// Preserve the readability of text when font fallback occurs.
-pub type FontSizeAdjust = generics::GenericFontSizeAdjust<FontSizeAdjustFactor>;
+/// Computed value for `font-size-adjust`.
+///
+/// CSS Fonts 5 defines the computed value as a metric keyword and a factor,
+/// with an omitted metric defaulting to `ex-height`. The specified value keeps
+/// the authored distinction for CSSOM, but that distinction cannot survive in
+/// this type and therefore cannot make equivalent endpoints animate
+/// discretely.
+#[allow(missing_docs)]
+#[repr(u8)]
+#[derive(
+    Animate,
+    Clone,
+    ComputeSquaredDistance,
+    Copy,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    ToAnimatedValue,
+    ToAnimatedZero,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[cfg_attr(feature = "servo", derive(Deserialize, Serialize))]
+pub enum FontSizeAdjust {
+    #[animation(error)]
+    None,
+    ExHeight(FontSizeAdjustFactor),
+    CapHeight(FontSizeAdjustFactor),
+    ChWidth(FontSizeAdjustFactor),
+    IcWidth(FontSizeAdjustFactor),
+    IcHeight(FontSizeAdjustFactor),
+}
+
+impl ToCss for FontSizeAdjust {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        match self {
+            Self::None => dest.write_str("none"),
+            Self::ExHeight(value) => value.to_css(dest),
+            Self::CapHeight(value) => {
+                dest.write_str("cap-height ")?;
+                value.to_css(dest)
+            },
+            Self::ChWidth(value) => {
+                dest.write_str("ch-width ")?;
+                value.to_css(dest)
+            },
+            Self::IcWidth(value) => {
+                dest.write_str("ic-width ")?;
+                value.to_css(dest)
+            },
+            Self::IcHeight(value) => {
+                dest.write_str("ic-height ")?;
+                value.to_css(dest)
+            },
+        }
+    }
+}
 
 impl FontSizeAdjust {
     #[inline]
@@ -905,7 +965,7 @@ impl ToComputedValue for specified::FontSizeAdjust {
         match self {
             Self::None => FontSizeAdjust::None,
             Self::ExHeight(val) => resolve!(ExHeight, val),
-            Self::ExplicitExHeight(val) => resolve!(ExplicitExHeight, val),
+            Self::ExplicitExHeight(val) => resolve!(ExHeight, val),
             Self::CapHeight(val) => resolve!(CapHeight, val),
             Self::ChWidth(val) => resolve!(ChWidth, val),
             Self::IcWidth(val) => resolve!(IcWidth, val),
@@ -927,7 +987,6 @@ impl ToComputedValue for specified::FontSizeAdjust {
         match *computed {
             FontSizeAdjust::None => Self::None,
             FontSizeAdjust::ExHeight(ref val) => case!(ExHeight, val),
-            FontSizeAdjust::ExplicitExHeight(ref val) => case!(ExplicitExHeight, val),
             FontSizeAdjust::CapHeight(ref val) => case!(CapHeight, val),
             FontSizeAdjust::ChWidth(ref val) => case!(ChWidth, val),
             FontSizeAdjust::IcWidth(ref val) => case!(IcWidth, val),
