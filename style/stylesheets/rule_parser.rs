@@ -18,7 +18,7 @@ use crate::properties_and_values::rule::{parse_property_block, PropertyRuleName}
 use crate::selector_parser::{SelectorImpl, SelectorParser};
 use crate::shared_lock::{Locked, SharedRwLock};
 use crate::str::starts_with_ignore_ascii_case;
-use crate::stylesheets::container_rule::{ContainerCondition, ContainerRule};
+use crate::stylesheets::container_rule::{ContainerConditions, ContainerRule};
 use crate::stylesheets::document_rule::DocumentCondition;
 use crate::stylesheets::font_feature_values_rule::parse_family_name_list;
 use crate::stylesheets::import_rule::{ImportLayer, ImportRule, ImportSupportsCondition};
@@ -259,7 +259,7 @@ pub enum AtRulePrelude {
     /// A @media rule prelude, with its media queries.
     Media(Arc<Locked<MediaList>>),
     /// A @container rule prelude.
-    Container(Arc<ContainerCondition>),
+    Container(Arc<ContainerConditions>),
     /// An @supports rule, with its conditional
     Supports(SupportsCondition),
     /// A @keyframes rule, with its animation name and vendor prefix if exists.
@@ -776,8 +776,8 @@ impl<'a, 'i> AtRuleParser<'i> for NestedRuleParser<'a, 'i> {
                 AtRulePrelude::FontFace
             },
             "container" if cfg!(feature = "gecko") || cfg!(feature = "servo") => {
-                let condition = Arc::new(ContainerCondition::parse(&self.context, input)?);
-                AtRulePrelude::Container(condition)
+                let conditions = Arc::new(ContainerConditions::parse(&self.context, input)?);
+                AtRulePrelude::Container(conditions)
             },
             "layer" => {
                 let names = input.try_parse(|input| {
@@ -1024,10 +1024,10 @@ impl<'a, 'i> AtRuleParser<'i> for NestedRuleParser<'a, 'i> {
                     source_location,
                 }))
             },
-            AtRulePrelude::Container(condition) => {
+            AtRulePrelude::Container(conditions) => {
                 let source_location = start.source_location();
                 CssRule::Container(Arc::new(ContainerRule {
-                    condition,
+                    conditions,
                     rules: self.parse_nested_rules(input, CssRuleType::Container),
                     source_location,
                 }))

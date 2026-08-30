@@ -3702,6 +3702,23 @@ mod tests {
     }
 
     #[test]
+    fn servo_parses_name_only_and_multiple_container_conditions() {
+        let stylesheet = parse_stylesheet(
+            "@container card {} @container (width > 300px), wide (width < 1000px) {}",
+        );
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules(&guard);
+
+        assert_eq!(rules.len(), 2);
+        assert_eq!(rules[0].to_css_string(&guard), "@container card {\n}");
+        assert_eq!(
+            rules[1].to_css_string(&guard),
+            "@container (width > 300px), wide (width < 1000px) {\n}"
+        );
+    }
+
+    #[test]
     fn servo_parses_container_relative_units() {
         let stylesheet = parse_stylesheet("div { width: 10cqw; height: 5cqh; }");
         let guard = stylesheet.shared_lock.read();

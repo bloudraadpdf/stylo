@@ -30,13 +30,13 @@ use malloc_size_of::{MallocSizeOfOps, MallocUnconditionalShallowSizeOf};
 use selectors::kleene_value::KleeneValue;
 use servo_arc::Arc;
 use std::fmt::{self, Write};
-use style_traits::{CssStringWriter, CssWriter, ParseError, ToCss};
+use style_traits::{CssStringWriter, CssWriter, ParseError, StyleParseErrorKind, ToCss};
 
 /// A container rule.
 #[derive(Debug, ToShmem)]
 pub struct ContainerRule {
-    /// The container query and name.
-    pub condition: Arc<ContainerCondition>,
+    /// The non-empty container condition list.
+    pub conditions: Arc<ContainerConditions>,
     /// The nested rules inside the block.
     pub rules: Arc<Locked<CssRules>>,
     /// The source position where this rule was found.
@@ -44,14 +44,17 @@ pub struct ContainerRule {
 }
 
 impl ContainerRule {
-    /// Returns the query condition.
-    pub fn query_condition(&self) -> &QueryCondition {
-        &self.condition.condition
+    /// Returns every comma-separated condition in source order.
+    pub fn conditions(&self) -> &[ContainerCondition] {
+        &self.conditions.0
     }
 
-    /// Returns the query name filter.
-    pub fn container_name(&self) -> &ContainerName {
-        &self.condition.name
+    /// Returns the sole condition used by the legacy CSSOM attributes.
+    pub fn single_condition(&self) -> Option<&ContainerCondition> {
+        let [condition] = self.conditions() else {
+            return None;
+        };
+        Some(condition)
     }
 
     /// Measure heap usage.
@@ -67,7 +70,7 @@ impl DeepCloneWithLock for ContainerRule {
     fn deep_clone_with_lock(&self, lock: &SharedRwLock, guard: &SharedRwLockReadGuard) -> Self {
         let rules = self.rules.read_with(guard);
         Self {
-            condition: self.condition.clone(),
+            conditions: self.conditions.clone(),
             rules: Arc::new(lock.wrap(rules.deep_clone_with_lock(lock, guard))),
             source_location: self.source_location.clone(),
         }
@@ -77,26 +80,100 @@ impl DeepCloneWithLock for ContainerRule {
 impl ToCssWithGuard for ContainerRule {
     fn to_css(&self, guard: &SharedRwLockReadGuard, dest: &mut CssStringWriter) -> fmt::Result {
         dest.write_str("@container ")?;
-        {
-            let mut writer = CssWriter::new(dest);
-            if !self.condition.name.is_none() {
-                self.condition.name.to_css(&mut writer)?;
-                writer.write_char(' ')?;
-            }
-            self.condition.condition.to_css(&mut writer)?;
-        }
+        self.conditions.to_css(&mut CssWriter::new(dest))?;
         self.rules.read_with(guard).to_css_block(guard, dest)
     }
 }
 
+/// A non-empty comma-separated list of container conditions.
+#[derive(Debug, ToShmem)]
+pub struct ContainerConditions(Box<[ContainerCondition]>);
+
+impl ContainerConditions {
+    /// Parse one or more comma-separated conditions.
+    pub fn parse<'a>(
+        context: &ParserContext,
+        input: &mut Parser<'a, '_>,
+    ) -> Result<Self, ParseError<'a>> {
+        let conditions =
+            input.parse_comma_separated(|input| ContainerCondition::parse(context, input))?;
+        debug_assert!(!conditions.is_empty());
+        Ok(Self(conditions.into_boxed_slice()))
+    }
+
+    /// Match when any listed condition matches its selected container.
+    pub(crate) fn matches<E>(
+        &self,
+        stylist: &Stylist,
+        element: E,
+        originating_element_style: Option<&ComputedValues>,
+        invalidation_flags: &mut ComputedValueFlags,
+    ) -> KleeneValue
+    where
+        E: TElement,
+    {
+        KleeneValue::any(self.0.iter(), |condition| {
+            condition.matches(
+                stylist,
+                element,
+                originating_element_style,
+                invalidation_flags,
+            )
+        })
+    }
+}
+
+impl ToCss for ContainerConditions {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        for (index, condition) in self.0.iter().enumerate() {
+            if index != 0 {
+                dest.write_str(", ")?;
+            }
+            condition.to_css(dest)?;
+        }
+        Ok(())
+    }
+}
+
 /// A container condition and filter, combined.
-#[derive(Debug, ToShmem, ToCss)]
+#[derive(Debug, ToShmem)]
 pub struct ContainerCondition {
-    #[css(skip_if = "ContainerName::is_none")]
     name: ContainerName,
-    condition: QueryCondition,
-    #[css(skip)]
+    condition: Option<QueryCondition>,
     flags: FeatureFlags,
+}
+
+impl ContainerCondition {
+    /// Returns the container name filter.
+    pub fn name(&self) -> &ContainerName {
+        &self.name
+    }
+
+    /// Returns the optional query after the name filter.
+    pub fn query(&self) -> Option<&QueryCondition> {
+        self.condition.as_ref()
+    }
+}
+
+impl ToCss for ContainerCondition {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        if !self.name.is_none() {
+            self.name.to_css(dest)?;
+            if self.condition.is_some() {
+                dest.write_char(' ')?;
+            }
+        }
+        if let Some(condition) = self.condition.as_ref() {
+            condition.to_css(dest)?;
+        }
+        Ok(())
+    }
 }
 
 /// The result of a successful container query lookup.
@@ -168,8 +245,21 @@ impl ContainerCondition {
             .try_parse(|input| ContainerName::parse_for_query(context, input))
             .ok()
             .unwrap_or_else(ContainerName::none);
-        let condition = QueryCondition::parse(context, input, FeatureType::Container)?;
-        let flags = condition.cumulative_flags();
+        let condition = if input.is_exhausted() {
+            if name.is_none() {
+                return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+            }
+            None
+        } else {
+            Some(QueryCondition::parse(
+                context,
+                input,
+                FeatureType::Container,
+            )?)
+        };
+        let flags = condition
+            .as_ref()
+            .map_or_else(FeatureFlags::empty, QueryCondition::cumulative_flags);
         Ok(Self {
             name,
             condition,
@@ -256,6 +346,9 @@ impl ContainerCondition {
         E: TElement,
     {
         let result = self.find_container(element, originating_element_style);
+        let Some(condition) = self.condition.as_ref() else {
+            return KleeneValue::from(result.is_some());
+        };
         let (container, info) = match result {
             Some(r) => (Some(r.element), Some((r.info, r.style))),
             None => (None, None),
@@ -271,9 +364,7 @@ impl ContainerCondition {
             info,
             size_query_container_lookup,
             |context| {
-                let matches = self
-                    .condition
-                    .matches(context, &mut CustomMediaEvaluator::none());
+                let matches = condition.matches(context, &mut CustomMediaEvaluator::none());
                 if context
                     .style()
                     .flags()

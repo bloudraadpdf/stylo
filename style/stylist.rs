@@ -41,7 +41,7 @@ use crate::shared_lock::{Locked, SharedRwLockReadGuard, StylesheetGuards};
 use crate::sharing::{RevalidationResult, ScopeRevalidationResult};
 use crate::stylesheet_set::{DataValidity, DocumentStylesheetSet, SheetRebuildKind};
 use crate::stylesheet_set::{DocumentStylesheetFlusher, SheetCollectionFlusher};
-use crate::stylesheets::container_rule::ContainerCondition;
+use crate::stylesheets::container_rule::ContainerConditions;
 use crate::stylesheets::import_rule::ImportLayer;
 use crate::stylesheets::keyframes_rule::KeyframesAnimation;
 use crate::stylesheets::layer_rule::{LayerName, LayerOrder};
@@ -2751,14 +2751,14 @@ impl ContainerConditionId {
 struct ContainerConditionReference {
     parent: ContainerConditionId,
     #[ignore_malloc_size_of = "Arc"]
-    condition: Option<Arc<ContainerCondition>>,
+    conditions: Option<Arc<ContainerConditions>>,
 }
 
 impl ContainerConditionReference {
     const fn none() -> Self {
         Self {
             parent: ContainerConditionId::none(),
-            condition: None,
+            conditions: None,
         }
     }
 }
@@ -3531,11 +3531,11 @@ impl CascadeData {
     {
         loop {
             let condition_ref = &self.container_conditions[id.0 as usize];
-            let condition = match condition_ref.condition {
+            let conditions = match condition_ref.conditions {
                 None => return true,
                 Some(ref c) => c,
             };
-            let matches = condition
+            let matches = conditions
                 .matches(
                     stylist,
                     element,
@@ -4204,7 +4204,7 @@ impl CascadeData {
                     let id = ContainerConditionId(self.container_conditions.len() as u16);
                     self.container_conditions.push(ContainerConditionReference {
                         parent: containing_rule_state.container_condition_id,
-                        condition: Some(rule.condition.clone()),
+                        conditions: Some(rule.conditions.clone()),
                     });
                     containing_rule_state.container_condition_id = id;
                 },
