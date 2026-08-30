@@ -5604,6 +5604,14 @@ struct = "svg"
 spec = "https://svgwg.org/svg2-draft/pservers.html#StopOpacityProperty"
 affects = "paint"
 
+[speak]
+struct = "inherited_text"
+engine = "servo"
+spec = "https://drafts.csswg.org/css-speech-1/#propdef-speak"
+animation_type = "discrete"
+affects = ""
+keyword = { values = ["auto", "never", "always"] }
+
 [stroke]
 type = "SVGPaint"
 initial = "Default::default()"

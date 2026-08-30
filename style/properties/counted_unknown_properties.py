@@ -4,7 +4,6 @@
 
 COUNTED_UNKNOWN_PROPERTIES = [
     "-webkit-tap-highlight-color",
-    "speak",
     "-webkit-user-drag",
     "-webkit-user-modify",
     "-webkit-margin-before",
