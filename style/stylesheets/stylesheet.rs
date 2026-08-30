@@ -4171,6 +4171,23 @@ mod tests {
     }
 
     #[test]
+    fn servo_parses_svg_pointer_event_values() {
+        for value in [
+            "bounding-box",
+            "visiblepainted",
+            "visiblefill",
+            "visiblestroke",
+            "visible",
+            "painted",
+            "fill",
+            "stroke",
+            "all",
+        ] {
+            assert_parsed_declaration_count(&format!(".target {{ pointer-events: {value}; }}"), 1);
+        }
+    }
+
+    #[test]
     fn servo_parses_standard_text_size_adjust_values() {
         assert_standard_properties(&["text-size-adjust"]);
         assert_parsed_declaration_count(".target { text-size-adjust: calc(0% + 0%); }", 1);
