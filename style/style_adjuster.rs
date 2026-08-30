@@ -140,6 +140,36 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
         StyleAdjuster { style }
     }
 
+    fn adjust_for_math_display<E>(&mut self, element: Option<E>)
+    where
+        E: TElement,
+    {
+        let display = self.style.get_box().clone_display();
+        let Some(outside) = display.math_outside() else {
+            return;
+        };
+        let adjusted = match element.filter(|element| element.is_mathml_element()) {
+            Some(element)
+                if self.style.pseudo.is_none() && element.local_name().as_ref() == "mtable" =>
+            {
+                outside.table()
+            },
+            Some(element)
+                if self.style.pseudo.is_none() && element.local_name().as_ref() == "mtr" =>
+            {
+                Display::TableRow
+            },
+            Some(element)
+                if self.style.pseudo.is_none() && element.local_name().as_ref() == "mtd" =>
+            {
+                Display::TableCell
+            },
+            Some(_) if self.style.pseudo.is_none() => return,
+            Some(_) | None => outside.flow(),
+        };
+        self.style.mutate_box().set_display(adjusted);
+    }
+
     /// <https://fullscreen.spec.whatwg.org/#new-stacking-layer>
     ///
     ///    Any position value other than 'absolute' and 'fixed' are
@@ -1097,6 +1127,7 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
             self.adjust_for_text_control_editing_root();
         }
         self.adjust_for_top_layer();
+        self.adjust_for_math_display(element);
         self.blockify_if_necessary(layout_parent_style, element);
         #[cfg(feature = "gecko")]
         self.adjust_for_webkit_line_clamp();

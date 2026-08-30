@@ -111,6 +111,7 @@ pub enum DisplayInside {
     RubyTextContainer,
     #[cfg(feature = "gecko")]
     WebkitBox,
+    Math,
 }
 
 impl DisplayInside {
@@ -128,8 +129,35 @@ impl DisplayInside {
     ///     — except for ruby, which defaults to inline.
     fn default_display_outside(self) -> DisplayOutside {
         match self {
-            DisplayInside::Ruby => DisplayOutside::Inline,
+            DisplayInside::Ruby | DisplayInside::Math => DisplayOutside::Inline,
             _ => DisplayOutside::Block,
+        }
+    }
+}
+
+/// The outer type of a MathML Core math display value.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MathDisplayOutside {
+    /// `display: inline math`.
+    Inline,
+    /// `display: block math`.
+    Block,
+}
+
+impl MathDisplayOutside {
+    /// Resolve math layout to ordinary flow layout.
+    pub const fn flow(self) -> Display {
+        match self {
+            Self::Inline => Display::Inline,
+            Self::Block => Display::Block,
+        }
+    }
+
+    /// Resolve math layout to table layout.
+    pub const fn table(self) -> Display {
+        match self {
+            Self::Inline => Display::InlineTable,
+            Self::Block => Display::Table,
         }
     }
 }
@@ -329,6 +357,18 @@ impl Display {
             _ => false,
         }
     }
+
+    /// Return the typed outer half of an inline or block math display.
+    pub fn math_outside(self) -> Option<MathDisplayOutside> {
+        if self.inside() != DisplayInside::Math {
+            return None;
+        }
+        match self.outside() {
+            DisplayOutside::Inline => Some(MathDisplayOutside::Inline),
+            DisplayOutside::Block => Some(MathDisplayOutside::Block),
+            _ => None,
+        }
+    }
 }
 
 /// Shared Display impl for both Gecko and Servo.
@@ -481,6 +521,7 @@ impl DisplayKeyword {
             "grid" if grid_enabled() => Inside(DisplayInside::Grid),
             "grid-lanes" if grid_enabled() => Inside(DisplayInside::GridLanes),
             "ruby" => Inside(DisplayInside::Ruby),
+            "math" => Inside(DisplayInside::Math),
         })
     }
 }
@@ -507,6 +548,7 @@ impl ToCss for Display {
                 (DisplayOutside::Inline, DisplayInside::Flex) => dest.write_str("inline-flex"),
                 (DisplayOutside::Inline, DisplayInside::Table) => dest.write_str("inline-table"),
                 (DisplayOutside::Block, DisplayInside::Ruby) => dest.write_str("block ruby"),
+                (DisplayOutside::Block, DisplayInside::Math) => dest.write_str("block math"),
                 (_, inside) => {
                     if self.is_list_item() {
                         if outside != DisplayOutside::Block {
@@ -609,6 +651,32 @@ mod display_tests {
 
     fn parse_display(css: &str) -> Display {
         parse_box_test_value(css).expect("display value should parse")
+    }
+
+    #[test]
+    fn math_parses_as_a_distinct_inner_display_type() {
+        for (css, outside) in [
+            ("math", DisplayOutside::Inline),
+            ("inline math", DisplayOutside::Inline),
+            ("math inline", DisplayOutside::Inline),
+            ("block math", DisplayOutside::Block),
+            ("math block", DisplayOutside::Block),
+        ] {
+            let display = parse_display(css);
+            assert_eq!(display.outside(), outside, "{css}");
+            assert_eq!(display.inside(), DisplayInside::Math, "{css}");
+            assert_eq!(
+                display.math_outside().map(MathDisplayOutside::flow),
+                Some(match outside {
+                    DisplayOutside::Inline => Display::Inline,
+                    DisplayOutside::Block => Display::Block,
+                    _ => unreachable!(),
+                }),
+                "{css}"
+            );
+        }
+        assert_eq!(parse_display("math").to_css_string(), "math");
+        assert_eq!(parse_display("block math").to_css_string(), "block math");
     }
 
     #[test]
@@ -735,6 +803,7 @@ impl SpecifiedValueInfo for Display {
             "ruby-base-container",
             "ruby-text",
             "ruby-text-container",
+            "math",
             "table",
             "table-caption",
             "table-cell",
