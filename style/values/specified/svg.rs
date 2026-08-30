@@ -14,7 +14,7 @@ use crate::values::specified::LengthPercentage;
 use crate::values::specified::SVGPathData;
 use crate::values::specified::{NonNegativeLengthPercentage, Opacity};
 use crate::values::CustomIdent;
-use cssparser::{Parser, Token};
+use cssparser::{match_ignore_ascii_case, Parser, Token};
 use std::fmt::{self, Write};
 use style_traits::{CommaWithSpace, CssWriter, ParseError, Separator};
 use style_traits::{StyleParseErrorKind, ToCss};
@@ -30,6 +30,162 @@ pub type SVGWidth = generic::GenericSVGLength<NonNegativeLengthPercentage>;
 
 /// [ <length> | <percentage> | <number> ]# | context-value
 pub type SVGStrokeDashArray = generic::GenericSVGStrokeDashArray<NonNegativeLengthPercentage>;
+
+macro_rules! define_svg_line_join_axis {
+    ($(#[$enum_meta:meta])* $name:ident { $($(#[$variant_meta:meta])* $variant:ident),+ $(,)? }) => {
+        #[derive(
+            Clone,
+            Copy,
+            Debug,
+            Deserialize,
+            Eq,
+            MallocSizeOf,
+            PartialEq,
+            Serialize,
+            SpecifiedValueInfo,
+            ToComputedValue,
+            ToCss,
+            ToResolvedValue,
+            ToShmem,
+            ToTyped,
+        )]
+        #[repr(u8)]
+        $(#[$enum_meta])*
+        pub enum $name {
+            $($(#[$variant_meta])* $variant),+
+        }
+    };
+}
+
+define_svg_line_join_axis! {
+    /// How far a stroked corner extends beyond the path intersection.
+    SVGLineJoinExtension {
+        /// Extend only far enough to form a convex corner.
+        Crop,
+        /// Extend the outside edges with matching-curvature arcs.
+        Arcs,
+        /// Extend the outside edges until their tangents intersect.
+        Miter,
+    }
+}
+
+define_svg_line_join_axis! {
+    /// How an extended stroked corner is limited and capped.
+    SVGLineJoinLimit {
+        /// Crop the corner at the miter limit.
+        Bevel,
+        /// Append a tangent circular arc after cropping.
+        Round,
+        /// Fall back to `crop bevel` after exceeding the limit.
+        Fallback,
+    }
+}
+
+/// The two independent axes of the CSS Fill and Stroke `stroke-linejoin`
+/// grammar. Keeping them separate makes duplicate values on either axis
+/// unrepresentable after parsing.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    MallocSizeOf,
+    PartialEq,
+    Serialize,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(C, u8)]
+pub enum SVGLineJoin {
+    /// A value from the extension axis with the default limit behaviour.
+    Extension(SVGLineJoinExtension),
+    /// A value from the limiting axis with the default crop extension.
+    Limit(SVGLineJoinLimit),
+    /// One explicitly authored value from each grammar axis.
+    Both {
+        /// The explicitly authored extension behaviour.
+        extension: SVGLineJoinExtension,
+        /// The explicitly authored limiting behaviour.
+        limit: SVGLineJoinLimit,
+    },
+}
+
+impl SVGLineJoin {
+    /// The initial `miter` value.
+    pub const fn miter() -> Self {
+        Self::Extension(SVGLineJoinExtension::Miter)
+    }
+}
+
+impl Parse for SVGLineJoin {
+    fn parse<'i, 't>(
+        _context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        let mut extension = None;
+        let mut limit = None;
+        while !input.is_exhausted() {
+            let location = input.current_source_location();
+            let ident = input.expect_ident_cloned()?;
+            let duplicate = match_ignore_ascii_case! { &ident,
+                "crop" => extension.replace(SVGLineJoinExtension::Crop).is_some(),
+                "arcs" => extension.replace(SVGLineJoinExtension::Arcs).is_some(),
+                "miter" => extension.replace(SVGLineJoinExtension::Miter).is_some(),
+                "bevel" => limit.replace(SVGLineJoinLimit::Bevel).is_some(),
+                "round" => limit.replace(SVGLineJoinLimit::Round).is_some(),
+                "fallback" => limit.replace(SVGLineJoinLimit::Fallback).is_some(),
+                _ => return Err(location.new_unexpected_token_error(Token::Ident(ident))),
+            };
+            if duplicate {
+                return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+            }
+        }
+        if extension.is_none() && limit.is_none() {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+        Ok(match (extension, limit) {
+            (Some(extension), Some(limit)) => Self::Both { extension, limit },
+            (Some(extension), None) => Self::Extension(extension),
+            (None, Some(limit)) => Self::Limit(limit),
+            (None, None) => unreachable!("the empty grammar was rejected above"),
+        })
+    }
+}
+
+impl ToCss for SVGLineJoin {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        let extension = |extension| match extension {
+            SVGLineJoinExtension::Crop => "crop",
+            SVGLineJoinExtension::Arcs => "arcs",
+            SVGLineJoinExtension::Miter => "miter",
+        };
+        let limit = |limit| match limit {
+            SVGLineJoinLimit::Bevel => "bevel",
+            SVGLineJoinLimit::Round => "round",
+            SVGLineJoinLimit::Fallback => "fallback",
+        };
+        match *self {
+            Self::Extension(value) => dest.write_str(extension(value)),
+            Self::Limit(value) => dest.write_str(limit(value)),
+            Self::Both {
+                extension: extension_value,
+                limit: limit_value,
+            } => write!(
+                dest,
+                "{} {}",
+                extension(extension_value),
+                limit(limit_value)
+            ),
+        }
+    }
+}
 
 /// Whether the `context-value` value is enabled.
 #[cfg(feature = "gecko")]
@@ -442,5 +598,46 @@ impl VectorEffect {
     #[inline]
     pub fn none() -> Self {
         Self::NONE
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::context::QuirksMode;
+    use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
+    use cssparser::{Parser, ParserInput};
+    use style_traits::ParsingMode;
+
+    fn parse_line_join(css: &str) -> Result<String, ()> {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input = ParserInput::new(css);
+        let mut parser = Parser::new(&mut input);
+        parser
+            .parse_entirely(|input| SVGLineJoin::parse(&context, input))
+            .map(|value| value.to_css_string())
+            .map_err(|_| ())
+    }
+
+    #[test]
+    fn line_join_parses_both_closed_grammar_axes() {
+        for value in ["crop", "arcs", "miter", "bevel", "round", "fallback"] {
+            assert_eq!(parse_line_join(value).as_deref(), Ok(value));
+        }
+        assert_eq!(parse_line_join("round arcs").as_deref(), Ok("arcs round"));
+        assert_eq!(parse_line_join("crop bevel").as_deref(), Ok("crop bevel"));
+        assert!(parse_line_join("stupid").is_err());
+        assert!(parse_line_join("crop arcs").is_err());
+        assert!(parse_line_join("round bevel").is_err());
     }
 }

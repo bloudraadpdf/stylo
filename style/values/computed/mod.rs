@@ -266,7 +266,7 @@ pub use self::ruby_1::{RubyMerge, RubyOverhang};
 pub use self::sizing_4::MinIntrinsicSizing;
 pub use self::svg::{DProperty, MozContextProperties};
 pub use self::svg::{SVGLength, SVGOpacity, SVGPaint, SVGPaintKind};
-pub use self::svg::{SVGPaintOrder, SVGStrokeDashArray, SVGWidth, VectorEffect};
+pub use self::svg::{SVGLineJoin, SVGPaintOrder, SVGStrokeDashArray, SVGWidth, VectorEffect};
 pub use self::text::{
     HangingPunctuation, InitialLetter, LetterSpacing, LineBreak, TextCombineUpright, TextIndent,
     TextSizeAdjust,

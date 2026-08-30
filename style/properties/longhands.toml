@@ -8156,11 +8156,12 @@ affects = "layout"
 keyword = { values = ["butt", "round", "square"] }
 
 [stroke-linejoin]
+type = "SVGLineJoin"
+initial = "computed::SVGLineJoin::miter()"
 struct = "inherited_svg"
-spec = "https://svgwg.org/svg2-draft/painting.html#StrokeLinejoinProperty"
+spec = "https://drafts.csswg.org/fill-stroke-3/#propdef-stroke-linejoin"
 animation_type = "discrete"
 affects = "layout"
-keyword = { values = ["miter", "round", "bevel"] }
 
 [border-collapse]
 struct = "inherited_table"

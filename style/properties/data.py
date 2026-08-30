@@ -702,6 +702,7 @@ class Longhand(Property):
                 "RuleBreak",
                 "RuleOverlap",
                 "RuleVisibilityItems",
+                "SVGLineJoin",
                 "SVGPaintOrder",
                 "ScrollbarGutter",
                 "ScrollSnapAlign",
