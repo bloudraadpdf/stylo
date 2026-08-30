@@ -58,7 +58,35 @@ bitflags! {
 #[repr(C)]
 pub struct GenericColorMixItem<Color, Percentage> {
     pub color: Color,
-    pub percentage: Percentage,
+    pub percentage: GenericColorMixPercentage<Percentage>,
+}
+
+/// Whether a color-mix percentage was explicit or supplied by normalization.
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    ToAnimatedValue,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+)]
+#[repr(C, u8)]
+pub enum GenericColorMixPercentage<Percentage> {
+    /// An authored percentage.
+    Explicit(Percentage),
+    /// A percentage supplied for an omitted value.
+    Implied(Percentage),
+}
+
+impl<Percentage> GenericColorMixPercentage<Percentage> {
+    /// Return the effective percentage value.
+    pub fn value(&self) -> &Percentage {
+        match self {
+            Self::Explicit(value) | Self::Implied(value) => value,
+        }
+    }
 }
 
 /// A restricted version of the css `color-mix()` function, which only supports
@@ -120,9 +148,18 @@ impl<Color: ToCss, Percentage: ToCss + ToPercentage> ToCss for ColorMix<Color, P
             dest.write_str(", ")?;
         }
 
+        let has_explicit_calc = self.items.iter().any(|item| match &item.percentage {
+            GenericColorMixPercentage::Explicit(value) => value.is_calc(),
+            GenericColorMixPercentage::Implied(_) => false,
+        });
         let uniform_value = 1.0 / self.items.len() as f32;
         let omit_percentages = self.items.iter().all(|item| {
-            !item.percentage.is_calc() && item.percentage.to_percentage() == uniform_value
+            let effective = match &item.percentage {
+                GenericColorMixPercentage::Explicit(value) if !value.is_calc() => value,
+                GenericColorMixPercentage::Implied(value) if !has_explicit_calc => value,
+                _ => return false,
+            };
+            effective.to_percentage() == uniform_value
         });
 
         for (index, item) in self.items.iter().enumerate() {
@@ -132,9 +169,16 @@ impl<Color: ToCss, Percentage: ToCss + ToPercentage> ToCss for ColorMix<Color, P
 
             item.color.to_css(dest)?;
 
+            let percentage = match &item.percentage {
+                GenericColorMixPercentage::Explicit(value) => Some(value),
+                GenericColorMixPercentage::Implied(value) if !has_explicit_calc => Some(value),
+                GenericColorMixPercentage::Implied(_) => None,
+            };
             if !omit_percentages {
-                dest.write_char(' ')?;
-                item.percentage.to_css(dest)?;
+                if let Some(percentage) = percentage {
+                    dest.write_char(' ')?;
+                    percentage.to_css(dest)?;
+                }
             }
         }
 
@@ -155,7 +199,7 @@ impl<Percentage> ColorMix<GenericColor<Percentage>, Percentage> {
         for item in self.items.iter() {
             items.push(mix::ColorMixItem::new(
                 *item.color.as_absolute()?,
-                item.percentage.to_percentage(),
+                item.percentage.value().to_percentage(),
             ))
         }
 

@@ -2619,6 +2619,14 @@ mod tests {
                 "color-mix(in srgb, red 0%, green 0%, blue 0%)",
                 "color-mix(in srgb, red 0%, green 0%, blue 0%)",
             ),
+            (
+                "color-mix(in hsl, red calc(20%), blue)",
+                "color-mix(in hsl, red calc(20%), blue)",
+            ),
+            (
+                "color-mix(in srgb, red, blue calc(50%))",
+                "color-mix(in srgb, red, blue calc(50%))",
+            ),
         ] {
             assert_eq!(
                 color_declaration(&format!("p {{ color: {authored}; }}")).as_deref(),

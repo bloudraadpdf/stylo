@@ -12,8 +12,8 @@ use crate::media_queries::Device;
 use crate::parser::{Parse, ParserContext};
 use crate::values::computed::{Color as ComputedColor, Context, ToComputedValue};
 use crate::values::generics::color::{
-    ColorMixFlags, GenericCaretColor, GenericColorMix, GenericColorMixItem, GenericColorOrAuto,
-    GenericLightDark,
+    ColorMixFlags, GenericCaretColor, GenericColorMix, GenericColorMixItem,
+    GenericColorMixPercentage, GenericColorOrAuto, GenericLightDark,
 };
 use crate::values::specified::Percentage;
 use crate::values::{normalize, CustomIdent};
@@ -95,18 +95,18 @@ impl ColorMix {
                 m => Some(Percentage::new((1.0 - sum_specified.min(1.0)) / m as f32)),
             };
 
-            if let Some(default) = default_for_missing_items {
-                for (_, percentage) in items.iter_mut() {
-                    if percentage.is_none() {
-                        *percentage = Some(default.clone());
-                    }
-                }
-            }
-
             let finalized = items
                 .into_iter()
                 .map(|(color, percentage)| {
-                    let percentage = percentage.expect("percentage filled above");
+                    let percentage = match percentage {
+                        Some(value) => GenericColorMixPercentage::Explicit(value),
+                        None => GenericColorMixPercentage::Implied(
+                            default_for_missing_items
+                                .as_ref()
+                                .expect("an omitted percentage has a default")
+                                .clone(),
+                        ),
+                    };
                     GenericColorMixItem { color, percentage }
                 })
                 .collect::<ColorMixItemList<_>>();
@@ -824,7 +824,7 @@ impl Color {
                 for item in mix.items() {
                     items.push(mix::ColorMixItem::new(
                         item.color.resolve_to_absolute()?,
-                        item.percentage.resolve()?,
+                        item.percentage.value().resolve()?,
                     ))
                 }
 
@@ -1029,9 +1029,19 @@ impl Color {
 
                 let mut items = ColorMixItemList::with_capacity(mix.items().len());
                 for item in mix.items() {
-                    let percentage = match context {
-                        Some(context) => item.percentage.to_computed_value(context),
-                        None => Percentage(item.percentage.resolve()?),
+                    let compute_percentage = |percentage: &crate::values::specified::Percentage| {
+                        Some(match context {
+                            Some(context) => percentage.to_computed_value(context),
+                            None => Percentage(percentage.resolve()?),
+                        })
+                    };
+                    let percentage = match &item.percentage {
+                        GenericColorMixPercentage::Explicit(value) => {
+                            GenericColorMixPercentage::Explicit(compute_percentage(value)?)
+                        },
+                        GenericColorMixPercentage::Implied(value) => {
+                            GenericColorMixPercentage::Implied(compute_percentage(value)?)
+                        },
                     };
                     items.push(GenericColorMixItem {
                         color: item.color.to_computed_color(context)?,

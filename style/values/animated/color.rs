@@ -12,7 +12,7 @@ use crate::values::animated::{Animate, Procedure, ToAnimatedZero};
 use crate::values::computed::Percentage;
 use crate::values::distance::{ComputeSquaredDistance, SquaredDistance};
 use crate::values::generics::color::{
-    ColorMixFlags, GenericColor, GenericColorMix, GenericColorMixItem,
+    ColorMixFlags, GenericColor, GenericColorMix, GenericColorMixItem, GenericColorMixPercentage,
 };
 
 impl Animate for AbsoluteColor {
@@ -79,11 +79,15 @@ impl Animate for Color {
                 OwnedSlice::from_slice(&[
                     GenericColorMixItem {
                         color: self.clone(),
-                        percentage: Percentage(left_weight as f32),
+                        percentage: GenericColorMixPercentage::Explicit(Percentage(
+                            left_weight as f32,
+                        )),
                     },
                     GenericColorMixItem {
                         color: other.clone(),
-                        percentage: Percentage(right_weight as f32),
+                        percentage: GenericColorMixPercentage::Explicit(Percentage(
+                            right_weight as f32,
+                        )),
                     },
                 ]),
                 // See https://github.com/w3c/csswg-drafts/issues/7324

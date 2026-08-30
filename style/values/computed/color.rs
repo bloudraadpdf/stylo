@@ -82,7 +82,7 @@ impl Color {
                     mix.items().iter().map(|item| {
                         mix::ColorMixItem::new(
                             item.color.resolve_to_absolute(current_color),
-                            item.percentage.to_percentage(),
+                            item.percentage.value().to_percentage(),
                         )
                     }),
                     mix.flags,
