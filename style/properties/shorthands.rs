@@ -5371,7 +5371,7 @@ pub mod grid {
 
                 if let GenericGridTemplateComponent::TrackList(ref list) = *self.grid_template_rows
                 {
-                    if !list.is_explicit() {
+                    if list.has_auto_repeat() {
                         return Ok(());
                     }
                 }
@@ -5395,7 +5395,7 @@ pub mod grid {
             }
 
             if let GenericGridTemplateComponent::TrackList(ref list) = *self.grid_template_columns {
-                if !list.is_explicit() {
+                if list.has_auto_repeat() {
                     return Ok(());
                 }
             }

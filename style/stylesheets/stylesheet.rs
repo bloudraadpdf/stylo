@@ -640,6 +640,31 @@ mod tests {
         );
     }
 
+    fn assert_property_roundtrip(property: &str, value: &str) {
+        let stylesheet = parse_stylesheet(&format!("p {{ {property}: {value}; }}"));
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let CssRule::Style(rule) = &contents.rules(&guard)[0] else {
+            panic!("expected style rule");
+        };
+        let rule = rule.read_with(&guard);
+        let block = rule.block.read_with(&guard);
+        let property = crate::properties::PropertyId::parse_unchecked_for_testing(property)
+            .unwrap_or_else(|()| panic!("standard property must parse: {property}"));
+        let mut output = String::new();
+        block
+            .property_value_to_css(&property, &mut output)
+            .expect("valid declaration must be retained");
+        let mut declarations = String::new();
+        block
+            .to_css(&mut declarations)
+            .expect("declaration block must serialise");
+        assert!(
+            !output.is_empty(),
+            "valid declaration must serialise: {property:?}: {value}; block: {declarations}"
+        );
+    }
+
     fn parsed_declarations(
         css: &str,
         name_and_value: impl Fn(&PropertyDeclaration) -> (&'static str, String),
@@ -769,6 +794,13 @@ mod tests {
                 ("color", "currentcolor".to_string(), Importance::Normal),
             ]
         );
+    }
+
+    #[test]
+    fn servo_retains_grid_auto_flow_without_implicit_track_size() {
+        let _lock = pref_lock().lock().unwrap();
+        let _grid_pref = BoolPrefGuard::set("layout.grid.enabled", true);
+        assert_property_roundtrip("grid", "repeat(3, 80px) / auto-flow");
     }
 
     #[test]
