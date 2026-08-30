@@ -7,7 +7,7 @@
 #[cfg(feature = "gecko")]
 use crate::counter_style::{CounterStyle, CounterStyleParsingFlags};
 #[cfg(feature = "servo")]
-use crate::counter_style::{CounterStyle, CounterStyleParsingFlags, Symbol, Symbols, SymbolsType};
+use crate::counter_style::{CounterStyle, CounterStyleParsingFlags, Symbol, SymbolsType};
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
 use cssparser::{Parser, Token};
@@ -95,11 +95,27 @@ impl Parse for ListStyleType {
 #[derive(Clone, Debug, Eq, MallocSizeOf, PartialEq, ToComputedValue, ToResolvedValue, ToShmem)]
 pub struct AnonymousCounterStyle {
     system: SymbolsType,
-    symbols: Symbols,
+    symbols: NonEmptyAnonymousSymbols,
 }
 
 #[cfg(feature = "servo")]
 impl style_traits::SpecifiedValueInfo for AnonymousCounterStyle {}
+
+#[cfg(feature = "servo")]
+#[derive(Clone, Debug, Eq, MallocSizeOf, PartialEq, ToComputedValue, ToResolvedValue, ToShmem)]
+struct NonEmptyAnonymousSymbols(#[ignore_malloc_size_of = "Arc"] crate::ArcSlice<crate::OwnedStr>);
+
+#[cfg(feature = "servo")]
+impl NonEmptyAnonymousSymbols {
+    fn new(symbols: Vec<crate::OwnedStr>) -> Option<Self> {
+        let symbols = crate::ArcSlice::from_iter(symbols.into_iter());
+        (!symbols.is_empty()).then_some(Self(symbols))
+    }
+
+    fn iter(&self) -> impl Iterator<Item = &str> {
+        self.0.iter().map(|symbol| &**symbol)
+    }
+}
 
 #[cfg(feature = "servo")]
 impl AnonymousCounterStyle {
@@ -109,8 +125,8 @@ impl AnonymousCounterStyle {
     }
 
     /// The non-empty symbols sequence.
-    pub fn symbols(&self) -> impl Iterator<Item = &Symbol> {
-        self.symbols.0.iter()
+    pub fn symbols(&self) -> impl Iterator<Item = &str> {
+        self.symbols.iter()
     }
 }
 
@@ -121,10 +137,24 @@ impl Parse for AnonymousCounterStyle {
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
         match CounterStyle::parse(context, input, CounterStyleParsingFlags::empty())? {
-            CounterStyle::Symbols { ty, symbols } => Ok(Self {
-                system: ty,
-                symbols,
-            }),
+            CounterStyle::Symbols { ty, symbols } => {
+                let strings = symbols
+                    .0
+                    .iter()
+                    .map(|symbol| match symbol {
+                        Symbol::String(value) => Ok(value.clone()),
+                        Symbol::Ident(_) => {
+                            Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
+                        },
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                let symbols = NonEmptyAnonymousSymbols::new(strings)
+                    .ok_or_else(|| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))?;
+                Ok(Self {
+                    system: ty,
+                    symbols,
+                })
+            },
             _ => Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError)),
         }
     }
@@ -141,7 +171,12 @@ impl ToCss for AnonymousCounterStyle {
             self.system.to_css(dest)?;
             dest.write_char(' ')?;
         }
-        self.symbols.to_css(dest)?;
+        for (index, symbol) in self.symbols().enumerate() {
+            if index != 0 {
+                dest.write_char(' ')?;
+            }
+            cssparser::serialize_string(symbol, dest)?;
+        }
         dest.write_char(')')
     }
 }
