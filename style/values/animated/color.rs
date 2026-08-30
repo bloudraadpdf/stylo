@@ -73,21 +73,24 @@ impl Animate for Color {
             (Some(_), None) | (None, Some(_)) | (None, None) => ColorInterpolationMethod::srgb(),
         };
 
-        Ok(Self::from_color_mix(ColorMix {
-            interpolation,
-            items: OwnedSlice::from_slice(&[
-                GenericColorMixItem {
-                    color: self.clone(),
-                    percentage: Percentage(left_weight as f32),
-                },
-                GenericColorMixItem {
-                    color: other.clone(),
-                    percentage: Percentage(right_weight as f32),
-                },
-            ]),
-            // See https://github.com/w3c/csswg-drafts/issues/7324
-            flags: ColorMixFlags::empty(),
-        }))
+        Ok(Self::from_color_mix(
+            ColorMix::new(
+                interpolation,
+                OwnedSlice::from_slice(&[
+                    GenericColorMixItem {
+                        color: self.clone(),
+                        percentage: Percentage(left_weight as f32),
+                    },
+                    GenericColorMixItem {
+                        color: other.clone(),
+                        percentage: Percentage(right_weight as f32),
+                    },
+                ]),
+                // See https://github.com/w3c/csswg-drafts/issues/7324
+                ColorMixFlags::empty(),
+            )
+            .expect("an animated mix has two endpoints"),
+        ))
     }
 }
 

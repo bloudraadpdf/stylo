@@ -79,11 +79,31 @@ pub struct GenericColorMixItem<Color, Percentage> {
 #[repr(C)]
 pub struct GenericColorMix<Color, Percentage> {
     pub interpolation: ColorInterpolationMethod,
-    pub items: OwnedSlice<GenericColorMixItem<Color, Percentage>>,
+    items: OwnedSlice<GenericColorMixItem<Color, Percentage>>,
     pub flags: ColorMixFlags,
 }
 
 pub use self::GenericColorMix as ColorMix;
+
+impl<Color, Percentage> GenericColorMix<Color, Percentage> {
+    /// Construct a color mix with at least one item.
+    pub fn new(
+        interpolation: ColorInterpolationMethod,
+        items: OwnedSlice<GenericColorMixItem<Color, Percentage>>,
+        flags: ColorMixFlags,
+    ) -> Option<Self> {
+        (!items.is_empty()).then_some(Self {
+            interpolation,
+            items,
+            flags,
+        })
+    }
+
+    /// Return the non-empty list of mix items.
+    pub fn items(&self) -> &[GenericColorMixItem<Color, Percentage>] {
+        &self.items
+    }
+}
 
 impl<Color: ToCss, Percentage: ToCss + ToPercentage> ToCss for ColorMix<Color, Percentage> {
     fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
@@ -100,17 +120,10 @@ impl<Color: ToCss, Percentage: ToCss + ToPercentage> ToCss for ColorMix<Color, P
             dest.write_str(", ")?;
         }
 
-        let uniform = self
-            .items
-            .split_first()
-            .map(|(first, rest)| {
-                rest.iter()
-                    .all(|item| item.percentage.to_percentage() == first.percentage.to_percentage())
-            })
-            .unwrap_or(false);
         let uniform_value = 1.0 / self.items.len() as f32;
-
-        let is_pair = self.items.len() == 2;
+        let omit_percentages = self.items.iter().all(|item| {
+            !item.percentage.is_calc() && item.percentage.to_percentage() == uniform_value
+        });
 
         for (index, item) in self.items.iter().enumerate() {
             if index != 0 {
@@ -119,29 +132,7 @@ impl<Color: ToCss, Percentage: ToCss + ToPercentage> ToCss for ColorMix<Color, P
 
             item.color.to_css(dest)?;
 
-            let omit = if is_pair {
-                let can_omit = |a: &Percentage, b: &Percentage, is_left| {
-                    if a.is_calc() {
-                        return false;
-                    }
-                    if a.to_percentage() == 0.5 {
-                        return b.to_percentage() == 0.5;
-                    }
-                    if is_left {
-                        return false;
-                    }
-                    (1.0 - a.to_percentage() - b.to_percentage()).abs() <= f32::EPSILON
-                };
-
-                let other = &self.items[1 - index].percentage;
-                can_omit(&item.percentage, other, index == 0)
-            } else {
-                !item.percentage.is_calc()
-                    && uniform
-                    && item.percentage.to_percentage() == uniform_value
-            };
-
-            if !omit {
+            if !omit_percentages {
                 dest.write_char(' ')?;
                 item.percentage.to_css(dest)?;
             }

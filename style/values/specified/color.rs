@@ -76,16 +76,6 @@ impl ColorMix {
                 if input.try_parse(|i| i.expect_comma()).is_err() {
                     break;
                 }
-
-                if items.len() == 2
-                    && !static_prefs::pref!("layout.css.color-mix-multi-color.enabled")
-                {
-                    break;
-                }
-            }
-
-            if items.len() < 2 {
-                return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
             }
 
             // Normalize percentages per:
@@ -102,7 +92,7 @@ impl ColorMix {
             let default_for_missing_items = match missing {
                 0 => None,
                 m if m == items.len() => Some(Percentage::new(1.0 / items.len() as f32)),
-                m => Some(Percentage::new((1.0 - sum_specified) / m as f32)),
+                m => Some(Percentage::new((1.0 - sum_specified.min(1.0)) / m as f32)),
             };
 
             if let Some(default) = default_for_missing_items {
@@ -113,28 +103,23 @@ impl ColorMix {
                 }
             }
 
-            let mut total = 0.0;
             let finalized = items
                 .into_iter()
                 .map(|(color, percentage)| {
                     let percentage = percentage.expect("percentage filled above");
-                    total += percentage.resolve().unwrap();
                     GenericColorMixItem { color, percentage }
                 })
                 .collect::<ColorMixItemList<_>>();
 
-            if total <= 0.0 {
-                return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
-            }
-
             // Pass RESULT_IN_MODERN_SYNTAX here, because the result of the color-mix() function
             // should always be in the modern color syntax to allow for out of gamut results and
             // to preserve floating point precision.
-            Ok(ColorMix {
+            ColorMix::new(
                 interpolation,
-                items: OwnedSlice::from_slice(&finalized),
-                flags: ColorMixFlags::NORMALIZE_WEIGHTS | ColorMixFlags::RESULT_IN_MODERN_SYNTAX,
-            })
+                OwnedSlice::from_slice(&finalized),
+                ColorMixFlags::NORMALIZE_WEIGHTS | ColorMixFlags::RESULT_IN_MODERN_SYNTAX,
+            )
+            .ok_or_else(|| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
         })
     }
 }
@@ -796,7 +781,7 @@ impl Color {
                     && ld.dark.honored_in_forced_colors_mode(allow_transparent)
             },
             Self::ColorMix(ref mix) => mix
-                .items
+                .items()
                 .iter()
                 .all(|item| item.color.honored_in_forced_colors_mode(allow_transparent)),
             Self::ContrastColor(ref c) => c.honored_in_forced_colors_mode(allow_transparent),
@@ -835,8 +820,8 @@ impl Color {
             Self::ColorMix(ref mix) => {
                 use crate::color::mix;
 
-                let mut items = ColorMixItemList::with_capacity(mix.items.len());
-                for item in mix.items.iter() {
+                let mut items = ColorMixItemList::with_capacity(mix.items().len());
+                for item in mix.items() {
                     items.push(mix::ColorMixItem::new(
                         item.color.resolve_to_absolute()?,
                         item.percentage.resolve()?,
@@ -1042,8 +1027,8 @@ impl Color {
             Color::ColorMix(ref mix) => {
                 use crate::values::computed::percentage::Percentage;
 
-                let mut items = ColorMixItemList::with_capacity(mix.items.len());
-                for item in mix.items.iter() {
+                let mut items = ColorMixItemList::with_capacity(mix.items().len());
+                for item in mix.items() {
                     let percentage = match context {
                         Some(context) => item.percentage.to_computed_value(context),
                         None => Percentage(item.percentage.resolve()?),
@@ -1054,11 +1039,14 @@ impl Color {
                     });
                 }
 
-                ComputedColor::from_color_mix(GenericColorMix {
-                    interpolation: mix.interpolation,
-                    items: OwnedSlice::from_slice(items.as_slice()),
-                    flags: mix.flags,
-                })
+                ComputedColor::from_color_mix(
+                    GenericColorMix::new(
+                        mix.interpolation,
+                        OwnedSlice::from_slice(items.as_slice()),
+                        mix.flags,
+                    )
+                    .expect("a computed mix retains its source item"),
+                )
             },
             Color::ContrastColor(ref c) => {
                 ComputedColor::ContrastColor(Box::new(c.to_computed_color(context)?))

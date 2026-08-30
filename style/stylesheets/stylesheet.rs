@@ -2595,6 +2595,40 @@ mod tests {
     }
 
     #[test]
+    fn servo_serialises_colour_mix_percentages() {
+        for (authored, serialised) in [
+            (
+                "color-mix(in srgb, red 25%, blue)",
+                "color-mix(in srgb, red 25%, blue 75%)",
+            ),
+            (
+                "color-mix(in srgb, red 50%, blue)",
+                "color-mix(in srgb, red, blue)",
+            ),
+            ("color-mix(in srgb, red)", "color-mix(in srgb, red)"),
+            ("color-mix(in srgb, red 50%)", "color-mix(in srgb, red 50%)"),
+            (
+                "color-mix(in srgb, red, green, blue)",
+                "color-mix(in srgb, red, green, blue)",
+            ),
+            (
+                "color-mix(in srgb, red 50%, green, blue)",
+                "color-mix(in srgb, red 50%, green 25%, blue 25%)",
+            ),
+            (
+                "color-mix(in srgb, red 0%, green 0%, blue 0%)",
+                "color-mix(in srgb, red 0%, green 0%, blue 0%)",
+            ),
+        ] {
+            assert_eq!(
+                color_declaration(&format!("p {{ color: {authored}; }}")).as_deref(),
+                Some(serialised),
+                "{authored}"
+            );
+        }
+    }
+
+    #[test]
     fn servo_resolves_system_colors_to_print_defaults() {
         let canvas = parse_and_compute_color("Canvas");
         let canvastext = parse_and_compute_color("CanvasText");
@@ -4547,7 +4581,7 @@ mod tests {
         );
     }
 
-    fn bd_spot_color_declaration(css: &str) -> Option<String> {
+    fn color_declaration(css: &str) -> Option<String> {
         let stylesheet = parse_stylesheet(css);
         let guard = stylesheet.shared_lock.read();
         let contents = stylesheet.contents.read_with(&guard);
@@ -4574,7 +4608,7 @@ mod tests {
     // typed colour function preserved through the cascade.
     #[test]
     fn servo_preserves_bd_spot_colour_function() {
-        let serialised = bd_spot_color_declaration("p { color: -bd-spot(PANTONE-185); }")
+        let serialised = color_declaration("p { color: -bd-spot(PANTONE-185); }")
             .expect("expected color declaration");
         assert_eq!(
             serialised, "-bd-spot(PANTONE-185)",
@@ -4586,7 +4620,7 @@ mod tests {
     // with explicit tint preserved.
     #[test]
     fn servo_preserves_bd_spot_with_tint() {
-        let serialised = bd_spot_color_declaration("p { color: -bd-spot(PANTONE-185, 0.5); }")
+        let serialised = color_declaration("p { color: -bd-spot(PANTONE-185, 0.5); }")
             .expect("expected color declaration");
         assert_eq!(
             serialised, "-bd-spot(PANTONE-185, 0.5)",
@@ -4599,9 +4633,8 @@ mod tests {
     // round-trips.
     #[test]
     fn servo_preserves_bd_separation_colour_function() {
-        let serialised =
-            bd_spot_color_declaration("p { color: -bd-separation(PANTONE-185, 0.5); }")
-                .expect("expected color declaration");
+        let serialised = color_declaration("p { color: -bd-separation(PANTONE-185, 0.5); }")
+            .expect("expected color declaration");
         assert_eq!(
             serialised, "-bd-separation(PANTONE-185, 0.5)",
             "authored -bd-separation spelling preserved through OM round-trip"
@@ -4613,10 +4646,9 @@ mod tests {
     // colour preserved. Spec: CSS Color 5 §4.
     #[test]
     fn servo_preserves_device_n_colour_function() {
-        let serialised = bd_spot_color_declaration(
-            "p { color: device-n(MyCyan 0.5, MyMagenta 0.3, rgb(0, 0, 0)); }",
-        )
-        .expect("expected color declaration");
+        let serialised =
+            color_declaration("p { color: device-n(MyCyan 0.5, MyMagenta 0.3, rgb(0, 0, 0)); }")
+                .expect("expected color declaration");
         assert_eq!(
             serialised, "device-n(MyCyan 0.5, MyMagenta 0.3, rgb(0, 0, 0))",
             "device-n colorant pairs and fallback colour preserved through OM round-trip"
@@ -4629,9 +4661,8 @@ mod tests {
     // vendor-prefix-collapses-to-standard convention).
     #[test]
     fn servo_normalises_bd_devicen_alias_to_device_n() {
-        let serialised =
-            bd_spot_color_declaration("p { color: -bd-devicen(MyCyan 1, rgb(0, 0, 0)); }")
-                .expect("expected color declaration");
+        let serialised = color_declaration("p { color: -bd-devicen(MyCyan 1, rgb(0, 0, 0)); }")
+            .expect("expected color declaration");
         assert_eq!(
             serialised, "device-n(MyCyan 1, rgb(0, 0, 0))",
             "-bd-devicen alias normalises to canonical device-n spelling at serialise time"

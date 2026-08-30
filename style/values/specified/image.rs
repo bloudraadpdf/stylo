@@ -90,7 +90,9 @@ impl Color {
                 if mix.flags.contains(ColorMixFlags::RESULT_IN_MODERN_SYNTAX) {
                     true
                 } else {
-                    mix.items.iter().any(|item| item.color.has_modern_syntax())
+                    mix.items()
+                        .iter()
+                        .any(|item| item.color.has_modern_syntax())
                 }
             },
             Self::ColorFunction(function) => function.has_modern_syntax(),
