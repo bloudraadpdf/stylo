@@ -25,7 +25,7 @@ use crate::values::specified::length::{
 };
 use crate::values::specified::{self, Angle, Resolution, Time};
 use crate::values::{serialize_number, serialize_percentage, CSSFloat, DashedIdent};
-use cssparser::{match_ignore_ascii_case, CowRcStr, Parser, Token};
+use cssparser::{match_ignore_ascii_case, CowRcStr, Parser, SourceLocation, Token};
 use debug_unreachable::debug_unreachable;
 use smallvec::SmallVec;
 use std::cmp;
@@ -82,6 +82,54 @@ pub enum MathFunction {
     Sign,
     /// `progress()`: https://drafts.csswg.org/css-values-5/#funcdef-progress
     Progress,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TreeCountingFunction {
+    SiblingIndex,
+    SiblingCount,
+}
+
+impl TreeCountingFunction {
+    fn from_name(name: &str) -> Option<Self> {
+        if name.eq_ignore_ascii_case("sibling-index") {
+            Some(Self::SiblingIndex)
+        } else if name.eq_ignore_ascii_case("sibling-count") {
+            Some(Self::SiblingCount)
+        } else {
+            None
+        }
+    }
+
+    fn parse<'i, 't>(
+        self,
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+        location: SourceLocation,
+    ) -> Result<CalcNode, ParseError<'i>> {
+        if [
+            CssRuleType::FontFace,
+            CssRuleType::FontFeatureValues,
+            CssRuleType::FontPaletteValues,
+            CssRuleType::CounterStyle,
+            CssRuleType::Page,
+            CssRuleType::BdColour,
+            CssRuleType::ColorProfile,
+        ]
+        .into_iter()
+        .any(|rule_type| context.rule_types().contains(rule_type))
+        {
+            return Err(location.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+        input.parse_nested_block(|input| {
+            input.expect_exhausted()?;
+            Ok(())
+        })?;
+        Ok(CalcNode::Leaf(match self {
+            Self::SiblingIndex => Leaf::SiblingIndex,
+            Self::SiblingCount => Leaf::SiblingCount,
+        }))
+    }
 }
 
 /// A leaf node inside a `Calc` expression's AST.
@@ -801,37 +849,10 @@ impl CalcNode {
                     GenericAnchorSizeFunction::parse_in_calc(context, input)?;
                 Ok(CalcNode::AnchorSize(Box::new(anchor_size_function)))
             },
-            &Token::Function(ref name)
-                if name.eq_ignore_ascii_case("sibling-index")
-                    || name.eq_ignore_ascii_case("sibling-count") =>
-            {
-                let rule_types = context.rule_types();
-                if [
-                    CssRuleType::FontFace,
-                    CssRuleType::FontFeatureValues,
-                    CssRuleType::FontPaletteValues,
-                    CssRuleType::CounterStyle,
-                    CssRuleType::Page,
-                    CssRuleType::BdColour,
-                    CssRuleType::ColorProfile,
-                ]
-                .into_iter()
-                .any(|rule_type| rule_types.contains(rule_type))
-                {
-                    return Err(location.new_custom_error(StyleParseErrorKind::UnspecifiedError));
-                }
-                let leaf = if name.eq_ignore_ascii_case("sibling-index") {
-                    Leaf::SiblingIndex
-                } else {
-                    Leaf::SiblingCount
-                };
-                input.parse_nested_block(|input| {
-                    input.expect_exhausted()?;
-                    Ok(())
-                })?;
-                Ok(CalcNode::Leaf(leaf))
-            },
             &Token::Function(ref name) => {
+                if let Some(function) = TreeCountingFunction::from_name(name) {
+                    return function.parse(context, input, location);
+                }
                 let function = CalcNode::math_function(context, name, location)?;
                 CalcNode::parse(context, input, function, allowed)
             },
@@ -1510,6 +1531,20 @@ impl CalcNode {
         Ok(node)
     }
 
+    /// Parse a function which represents a `<number>`.
+    pub fn parse_number_function<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+        name: CowRcStr<'i>,
+        location: SourceLocation,
+    ) -> Result<Self, ParseError<'i>> {
+        if let Some(function) = TreeCountingFunction::from_name(&name) {
+            return function.parse(context, input, location);
+        }
+        let function = Self::math_function(context, &name, location)?;
+        Self::parse_number_node(context, input, function)
+    }
+
     fn resolve_contextual_leaves(&self, context: &Context) -> Self {
         self.map_leaves(|leaf| match *leaf {
             Leaf::Length(length) => Leaf::Length(NoCalcLength::from_px(
@@ -1773,19 +1808,24 @@ mod tree_counting_tests {
 
     #[test]
     fn numeric_values_retain_tree_counting_calculations() {
-        for css in ["calc(0.5 * sibling-index())", "calc(2 * sibling-count())"] {
+        for (css, serialised) in [
+            ("sibling-index()", "calc(sibling-index())"),
+            ("sibling-count()", "calc(sibling-count())"),
+            ("calc(0.5 * sibling-index())", "calc(0.5 * sibling-index())"),
+            ("calc(2 * sibling-count())", "calc(2 * sibling-count())"),
+        ] {
             let mut number_input = ParserInput::new(css);
             let number = Parser::new(&mut number_input)
                 .parse_entirely(|input| specified::Number::parse(&context(), input))
                 .expect("number calculations must survive until computed-value time");
-            assert_eq!(number.to_css_string(), css);
+            assert_eq!(number.to_css_string(), serialised);
             assert!(number.resolve().is_none());
 
             let mut integer_input = ParserInput::new(css);
             let integer = Parser::new(&mut integer_input)
                 .parse_entirely(|input| specified::Integer::parse(&context(), input))
                 .expect("integer calculations must survive until computed-value time");
-            assert_eq!(integer.to_css_string(), css);
+            assert_eq!(integer.to_css_string(), serialised);
             assert!(integer.resolve().is_none());
         }
     }
@@ -1817,8 +1857,13 @@ mod tree_counting_tests {
             CssRuleType::CounterStyle,
             CssRuleType::Page,
         ] {
-            let mut input = ParserInput::new("calc(10% * sibling-index())");
-            assert!(Parser::new(&mut input)
+            let mut number_input = ParserInput::new("sibling-index()");
+            assert!(Parser::new(&mut number_input)
+                .parse_entirely(|input| specified::Number::parse(&context_for(rule_type), input))
+                .is_err());
+
+            let mut percentage_input = ParserInput::new("calc(10% * sibling-index())");
+            assert!(Parser::new(&mut percentage_input)
                 .parse_entirely(|input| specified::Percentage::parse(
                     &context_for(rule_type),
                     input

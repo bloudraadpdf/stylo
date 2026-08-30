@@ -458,8 +458,8 @@ fn parse_number_with_clamping_mode<'i, 't>(
             })
         },
         Token::Function(ref name) => {
-            let function = CalcNode::math_function(context, name, location)?;
-            let node = CalcNode::parse_number_node(context, input, function)?;
+            let name = name.clone();
+            let node = CalcNode::parse_number_function(context, input, name, location)?;
             let value = node.resolve_number_without_context().ok();
             Ok(Number {
                 value: value.unwrap_or(f32::NAN),
@@ -1040,8 +1040,8 @@ impl Integer {
                 int_value: Some(v), ..
             } if clamping_mode.is_ok(context.parsing_mode, v as CSSFloat) => Ok(Integer::new(v)),
             Token::Function(ref name) => {
-                let function = CalcNode::math_function(context, name, location)?;
-                let node = CalcNode::parse_number_node(context, input, function)?;
+                let name = name.clone();
+                let node = CalcNode::parse_number_function(context, input, name, location)?;
                 Ok(match node.resolve_number_without_context() {
                     Ok(result) => Integer::from_calc(result, clamping_mode),
                     Err(()) => Integer(IntegerValue::ContextDependentCalc(

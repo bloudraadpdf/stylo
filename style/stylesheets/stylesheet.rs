@@ -803,6 +803,11 @@ mod tests {
     }
 
     #[test]
+    fn servo_retains_tree_counting_transform_numbers() {
+        assert_property_roundtrip("transform", "matrix(sibling-index(), 2, 3, 4, 5, 6)");
+    }
+
+    #[test]
     fn servo_row_rule_shorthand_expands_defaults_and_importance() {
         assert_eq!(
             parsed_row_rule_declarations("p { row-rule: dashed !important; }"),
