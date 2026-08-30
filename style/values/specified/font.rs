@@ -246,7 +246,8 @@ impl Parse for AbsoluteFontWeight {
             // We could add another AllowedNumericType value, but it doesn't
             // seem worth it just for a single property with such a weird range,
             // so we do the clamping here manually.
-            if matches!(number.resolve(), Some(value) if value < MIN_FONT_WEIGHT || value > MAX_FONT_WEIGHT)
+            if !number.was_calc()
+                && matches!(number.resolve(), Some(value) if value < MIN_FONT_WEIGHT || value > MAX_FONT_WEIGHT)
             {
                 return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
             }
@@ -2043,5 +2044,52 @@ bitflags! {
         const NEEDS_IC = 1 << 2;
         /// Does the caller need math scales to be retrieved?
         const NEEDS_MATH_SCALES = 1 << 3;
+    }
+}
+
+#[cfg(all(test, feature = "servo"))]
+mod tests {
+    use super::*;
+    use crate::context::QuirksMode;
+    use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
+    use cssparser::ParserInput;
+    use url::Url;
+
+    fn parse_absolute_font_weight(css: &str) -> Result<AbsoluteFontWeight, ()> {
+        let url_data = UrlExtraData::from(Url::parse("https://example.invalid/").unwrap());
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            style_traits::ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input = ParserInput::new(css);
+        let mut parser = Parser::new(&mut input);
+        parser
+            .parse_entirely(|input| AbsoluteFontWeight::parse(&context, input))
+            .map_err(|_| ())
+    }
+
+    #[test]
+    fn calculated_font_weight_defers_range_clamping() {
+        assert!(parse_absolute_font_weight("0").is_err());
+        assert!(parse_absolute_font_weight("-3.14").is_err());
+
+        for (css, computed) in [
+            ("calc(0)", 1.0),
+            ("calc(-3.14)", 1.0),
+            ("calc(1001)", 1000.0),
+        ] {
+            let parsed = parse_absolute_font_weight(css).expect("calculated weight must parse");
+            let AbsoluteFontWeight::Weight(weight) = &parsed else {
+                panic!("calculated weight must remain numeric");
+            };
+            assert!(weight.was_calc());
+            assert_eq!(parsed.compute().value(), computed);
+        }
     }
 }
