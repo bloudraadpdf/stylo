@@ -627,42 +627,41 @@ mod tests {
         }
     }
 
-    fn assert_parsed_declaration_count(css: &str, expected: usize) {
+    fn inspect_style_declaration_block<R>(
+        css: &str,
+        inspect: impl FnOnce(&PropertyDeclarationBlock) -> R,
+    ) -> R {
         let stylesheet = parse_stylesheet(css);
         let guard = stylesheet.shared_lock.read();
         let contents = stylesheet.contents.read_with(&guard);
         let CssRule::Style(rule) = &contents.rules(&guard)[0] else {
             panic!("expected style rule");
         };
-        assert_eq!(
-            rule.read_with(&guard).block.read_with(&guard).len(),
-            expected
-        );
+        let rule = rule.read_with(&guard);
+        inspect(rule.block.read_with(&guard))
+    }
+
+    fn assert_parsed_declaration_count(css: &str, expected: usize) {
+        inspect_style_declaration_block(css, |block| assert_eq!(block.len(), expected));
     }
 
     fn assert_property_roundtrip(property: &str, value: &str) {
-        let stylesheet = parse_stylesheet(&format!("p {{ {property}: {value}; }}"));
-        let guard = stylesheet.shared_lock.read();
-        let contents = stylesheet.contents.read_with(&guard);
-        let CssRule::Style(rule) = &contents.rules(&guard)[0] else {
-            panic!("expected style rule");
-        };
-        let rule = rule.read_with(&guard);
-        let block = rule.block.read_with(&guard);
-        let property = crate::properties::PropertyId::parse_unchecked_for_testing(property)
-            .unwrap_or_else(|()| panic!("standard property must parse: {property}"));
-        let mut output = String::new();
-        block
-            .property_value_to_css(&property, &mut output)
-            .expect("valid declaration must be retained");
-        let mut declarations = String::new();
-        block
-            .to_css(&mut declarations)
-            .expect("declaration block must serialise");
-        assert!(
-            !output.is_empty(),
-            "valid declaration must serialise: {property:?}: {value}; block: {declarations}"
-        );
+        inspect_style_declaration_block(&format!("p {{ {property}: {value}; }}"), |block| {
+            let property = crate::properties::PropertyId::parse_unchecked_for_testing(property)
+                .unwrap_or_else(|()| panic!("standard property must parse: {property}"));
+            let mut output = String::new();
+            block
+                .property_value_to_css(&property, &mut output)
+                .expect("valid declaration must be retained");
+            let mut declarations = String::new();
+            block
+                .to_css(&mut declarations)
+                .expect("declaration block must serialise");
+            assert!(
+                !output.is_empty(),
+                "valid declaration must serialise: {property:?}: {value}; block: {declarations}"
+            );
+        });
     }
 
     fn parsed_declarations(
