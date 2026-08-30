@@ -203,14 +203,14 @@ impl Parse for InitialLetter {
 }
 
 #[cfg(test)]
-mod initial_letter_tests {
+mod tests {
     use super::*;
     use crate::context::QuirksMode;
     use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
     use cssparser::{Parser, ParserInput};
     use style_traits::ParsingMode;
 
-    fn parse_initial_letter(css: &str) -> InitialLetter {
+    fn parse_value<T: Parse>(css: &str) -> Result<T, ()> {
         let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
         let context = ParserContext::new(
             Origin::Author,
@@ -225,8 +225,12 @@ mod initial_letter_tests {
         let mut input = ParserInput::new(css);
         let mut parser = Parser::new(&mut input);
         parser
-            .parse_entirely(|input| InitialLetter::parse(&context, input))
-            .expect("initial-letter value should parse")
+            .parse_entirely(|input| T::parse(&context, input))
+            .map_err(|_| ())
+    }
+
+    fn parse_initial_letter(css: &str) -> InitialLetter {
+        parse_value(css).expect("initial-letter value should parse")
     }
 
     #[test]
@@ -245,6 +249,20 @@ mod initial_letter_tests {
                 (expected_size, expected_sink)
             );
         }
+    }
+
+    #[test]
+    fn spelling_and_grammar_error_lines_are_exclusive_values() {
+        for (css, expected) in [
+            ("spelling-error", TextDecorationLine::SPELLING_ERROR),
+            ("grammar-error", TextDecorationLine::GRAMMAR_ERROR),
+        ] {
+            let value = parse_value::<TextDecorationLine>(css)
+                .expect("exclusive decoration line must parse");
+            assert_eq!(value, expected);
+            assert_eq!(value.to_css_string(), css);
+        }
+        assert!(parse_value::<TextDecorationLine>("spelling-error underline").is_err());
     }
 }
 
@@ -373,17 +391,10 @@ impl ToCss for TextOverflow {
     ToShmem,
     ToTyped,
 )]
-#[cfg_attr(
-    feature = "gecko",
-    css(bitflags(
-        single = "none,spelling-error,grammar-error",
-        mixed = "underline,overline,line-through,blink",
-    ))
-)]
-#[cfg_attr(
-    not(feature = "gecko"),
-    css(bitflags(single = "none", mixed = "underline,overline,line-through,blink",))
-)]
+#[css(bitflags(
+    single = "none,spelling-error,grammar-error",
+    mixed = "underline,overline,line-through,blink",
+))]
 #[repr(C)]
 /// Specified keyword values for the text-decoration-line property.
 pub struct TextDecorationLine(u8);
