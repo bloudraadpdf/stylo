@@ -45,16 +45,13 @@ pub struct ContainerRule {
 
 impl ContainerRule {
     /// Returns every comma-separated condition in source order.
-    pub fn conditions(&self) -> &[ContainerCondition] {
-        &self.conditions.0
+    pub fn conditions(&self) -> impl Iterator<Item = &ContainerCondition> {
+        self.conditions.iter()
     }
 
     /// Returns the sole condition used by the legacy CSSOM attributes.
     pub fn single_condition(&self) -> Option<&ContainerCondition> {
-        let [condition] = self.conditions() else {
-            return None;
-        };
-        Some(condition)
+        self.conditions.single()
     }
 
     /// Measure heap usage.
@@ -87,7 +84,10 @@ impl ToCssWithGuard for ContainerRule {
 
 /// A non-empty comma-separated list of container conditions.
 #[derive(Debug, ToShmem)]
-pub struct ContainerConditions(Box<[ContainerCondition]>);
+pub struct ContainerConditions {
+    first: ContainerCondition,
+    rest: Box<[ContainerCondition]>,
+}
 
 impl ContainerConditions {
     /// Parse one or more comma-separated conditions.
@@ -95,10 +95,25 @@ impl ContainerConditions {
         context: &ParserContext,
         input: &mut Parser<'a, '_>,
     ) -> Result<Self, ParseError<'a>> {
-        let conditions =
-            input.parse_comma_separated(|input| ContainerCondition::parse(context, input))?;
-        debug_assert!(!conditions.is_empty());
-        Ok(Self(conditions.into_boxed_slice()))
+        let mut conditions = input
+            .parse_comma_separated(|input| ContainerCondition::parse(context, input))?
+            .into_iter();
+        let first = conditions
+            .next()
+            .ok_or_else(|| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))?;
+        Ok(Self {
+            first,
+            rest: conditions.collect(),
+        })
+    }
+
+    /// Iterate over the non-empty list in source order.
+    pub fn iter(&self) -> impl Iterator<Item = &ContainerCondition> {
+        std::iter::once(&self.first).chain(self.rest.iter())
+    }
+
+    fn single(&self) -> Option<&ContainerCondition> {
+        self.rest.is_empty().then_some(&self.first)
     }
 
     /// Match when any listed condition matches its selected container.
@@ -112,7 +127,7 @@ impl ContainerConditions {
     where
         E: TElement,
     {
-        KleeneValue::any(self.0.iter(), |condition| {
+        KleeneValue::any(self.iter(), |condition| {
             condition.matches(
                 stylist,
                 element,
@@ -128,7 +143,7 @@ impl ToCss for ContainerConditions {
     where
         W: Write,
     {
-        for (index, condition) in self.0.iter().enumerate() {
+        for (index, condition) in self.iter().enumerate() {
             if index != 0 {
                 dest.write_str(", ")?;
             }
