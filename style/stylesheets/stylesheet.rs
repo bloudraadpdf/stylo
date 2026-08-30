@@ -2637,6 +2637,70 @@ mod tests {
     }
 
     #[test]
+    fn servo_serialises_relative_alpha_colours() {
+        for (authored, serialised) in [
+            ("alpha(from red / 0.5)", "alpha(from red / 0.5)"),
+            ("alpha(from red / 50%)", "alpha(from red / 50%)"),
+            ("alpha(from red / none)", "alpha(from red / none)"),
+            (
+                "alpha(from currentcolor / calc(alpha * 0.5))",
+                "alpha(from currentcolor / calc(0.5 * alpha))",
+            ),
+            (
+                "alpha(from hsl(120 50% 50%) / 0.5)",
+                "alpha(from rgb(64, 191, 64) / 0.5)",
+            ),
+            (
+                "alpha(from color(display-p3 1 0 0) / 0.5)",
+                "alpha(from color(display-p3 1 0 0) / 0.5)",
+            ),
+        ] {
+            assert_eq!(
+                color_declaration(&format!("p {{ color: {authored}; }}")).as_deref(),
+                Some(serialised),
+                "{authored}",
+            );
+        }
+
+        for invalid in [
+            "alpha(red / 0.5)",
+            "alpha(from red)",
+            "alpha(from red / r)",
+            "alpha(from red / calc(r * 0.5))",
+        ] {
+            assert_eq!(
+                color_declaration(&format!("p {{ color: {invalid}; }}")),
+                None,
+                "{invalid}",
+            );
+        }
+    }
+
+    #[test]
+    fn servo_resolves_relative_alpha_colours() {
+        for (authored, expected) in [
+            (
+                "alpha(from red / 0.5)",
+                AbsoluteColor::new(crate::color::ColorSpace::Srgb, 1.0, 0.0, 0.0, 0.5),
+            ),
+            (
+                "alpha(from red / 2)",
+                AbsoluteColor::new(crate::color::ColorSpace::Srgb, 1.0, 0.0, 0.0, 1.0),
+            ),
+            (
+                "alpha(from rgba(255, 0, 0, 0.8) / alpha)",
+                AbsoluteColor::new(crate::color::ColorSpace::Srgb, 1.0, 0.0, 0.0, 0.8),
+            ),
+        ] {
+            assert_eq!(
+                parse_and_compute_color(authored).resolve_to_absolute(&AbsoluteColor::BLACK),
+                expected,
+                "{authored}",
+            );
+        }
+    }
+
+    #[test]
     fn servo_resolves_system_colors_to_print_defaults() {
         let canvas = parse_and_compute_color("Canvas");
         let canvastext = parse_and_compute_color("CanvasText");

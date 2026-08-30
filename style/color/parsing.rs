@@ -7,7 +7,7 @@
 //! Parsing for CSS colors.
 
 use super::{
-    color_function::ColorFunction,
+    color_function::{ColorFunction, RelativeAlphaColor},
     component::{ColorComponent, ColorComponentType},
     AbsoluteColor, ColorSpace,
 };
@@ -131,6 +131,15 @@ fn parse_color_function<'i, 't>(
 
     let color = match_ignore_ascii_case! { &name,
         "rgb" | "rgba" => parse_rgb(context, arguments, origin_color),
+        "alpha" => {
+            let origin = origin_color
+                .ok_or_else(|| arguments.new_custom_error(StyleParseErrorKind::UnspecifiedError))?;
+            arguments.expect_delim('/')?;
+            let alpha = parse_number_or_percentage(context, arguments, true)?;
+            RelativeAlphaColor::new(origin, alpha)
+                .map(ColorFunction::Alpha)
+                .ok_or_else(|| arguments.new_custom_error(StyleParseErrorKind::UnspecifiedError))
+        },
         "hsl" | "hsla" => parse_hsl(context, arguments, origin_color),
         "hwb" => parse_hwb(context, arguments, origin_color),
         "lab" => parse_lab_like(context, arguments, origin_color, ColorFunction::Lab),
@@ -149,7 +158,9 @@ fn parse_color_function<'i, 't>(
         // Validate the channels and calc expressions by trying to resolve them against
         // transparent.
         // FIXME(emilio, bug 1925572): This could avoid cloning, or be done earlier.
-        let abs = color.map_origin_color(|_| Some(AbsoluteColor::TRANSPARENT_BLACK));
+        let Some(abs) = color.map_origin_color(|_| Some(AbsoluteColor::TRANSPARENT_BLACK)) else {
+            return Err(arguments.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        };
         if abs.resolve_to_absolute().is_err() {
             return Err(arguments.new_custom_error(StyleParseErrorKind::UnspecifiedError));
         }

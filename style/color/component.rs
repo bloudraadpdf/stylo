@@ -45,6 +45,24 @@ impl<ValueType> ColorComponent<ValueType> {
     pub fn is_none(&self) -> bool {
         matches!(self, Self::None)
     }
+
+    /// Return whether every colour-channel reference uses `allowed`.
+    pub fn uses_only_channel(&self, allowed: ChannelKeyword) -> bool {
+        match self {
+            Self::ChannelKeyword(channel) => *channel == allowed,
+            Self::Calc(node) => {
+                let mut valid = true;
+                let _ = node.map_leaves(|leaf| {
+                    if let Leaf::ColorComponent(channel) = leaf {
+                        valid &= *channel == allowed;
+                    }
+                    leaf.clone()
+                });
+                valid
+            },
+            Self::None | Self::Value(_) | Self::AlphaOmitted => true,
+        }
+    }
 }
 
 /// An utility trait that allows the construction of [ColorComponent]

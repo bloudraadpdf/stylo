@@ -47,10 +47,52 @@ pub struct BdDeviceNComponent {
     pub tint: ColorComponent<NumberOrPercentageComponent>,
 }
 
+/// A relative `alpha()` colour with its mandatory origin and alpha component.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToAnimatedValue, ToShmem)]
+#[repr(C)]
+pub struct RelativeAlphaColor<OriginColor> {
+    origin: OriginColor,
+    alpha: ColorComponent<NumberOrPercentageComponent>,
+}
+
+impl<OriginColor> RelativeAlphaColor<OriginColor> {
+    /// Construct a relative alpha colour when its component uses only `alpha`.
+    pub fn new(
+        origin: OriginColor,
+        alpha: ColorComponent<NumberOrPercentageComponent>,
+    ) -> Option<Self> {
+        if matches!(alpha, ColorComponent::AlphaOmitted)
+            || !alpha.uses_only_channel(super::parsing::ChannelKeyword::Alpha)
+        {
+            return None;
+        }
+        Some(Self { origin, alpha })
+    }
+
+    /// Return the origin colour.
+    pub fn origin(&self) -> &OriginColor {
+        &self.origin
+    }
+
+    /// Return the replacement alpha component.
+    pub fn alpha(&self) -> &ColorComponent<NumberOrPercentageComponent> {
+        &self.alpha
+    }
+
+    fn with_origin<MappedOrigin>(&self, origin: MappedOrigin) -> RelativeAlphaColor<MappedOrigin> {
+        RelativeAlphaColor {
+            origin,
+            alpha: self.alpha.clone(),
+        }
+    }
+}
+
 /// Represents a specified color function.
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, ToAnimatedValue, ToShmem)]
 #[repr(u8)]
 pub enum ColorFunction<OriginColor> {
+    /// <https://drafts.csswg.org/css-color-5/#relative-alpha>
+    Alpha(RelativeAlphaColor<OriginColor>),
     /// <https://drafts.csswg.org/css-color-4/#rgb-functions>
     Rgb(
         Optional<OriginColor>,                       // origin
@@ -196,6 +238,16 @@ impl ColorFunction<AbsoluteColor> {
         }
 
         Ok(match self {
+            ColorFunction::Alpha(relative) => {
+                let origin = relative.origin();
+                AbsoluteColor::new(
+                    origin.color_space,
+                    origin.c0(),
+                    origin.c1(),
+                    origin.c2(),
+                    alpha!(relative.alpha(), Some(origin)),
+                )
+            },
             ColorFunction::Rgb(origin_color, r, g, b, alpha) => {
                 // Use `color(srgb ...)` to serialize `rgb(...)` if an origin color is available;
                 // missing components also require the modern syntax because
@@ -519,6 +571,7 @@ impl ColorFunction<SpecifiedColor> {
     /// Return true if the color funciton has an origin color specified.
     pub fn has_origin_color(&self) -> bool {
         match self {
+            Self::Alpha(..) => true,
             Self::Rgb(origin_color, ..)
             | Self::Hsl(origin_color, ..)
             | Self::Hwb(origin_color, ..)
@@ -536,6 +589,7 @@ impl ColorFunction<SpecifiedColor> {
     /// Whether this function uses a modern colour syntax for interpolation.
     pub fn has_modern_syntax(&self) -> bool {
         match self {
+            Self::Alpha(..) => true,
             Self::Rgb(origin, red, green, blue, alpha) => {
                 origin.is_some()
                     || red.is_none()
@@ -583,6 +637,10 @@ impl ColorFunction<SpecifiedColor> {
         }
 
         match self {
+            Self::Alpha(relative) => Self::Alpha(RelativeAlphaColor {
+                origin: relative.origin.clone(),
+                alpha: relative.alpha.to_computed_value(context),
+            }),
             Self::Rgb(origin, c0, c1, c2, alpha) => {
                 compute!(Rgb, origin, c0, c1, c2, alpha)
             },
@@ -694,7 +752,9 @@ impl ColorFunction<SpecifiedColor> {
             },
             _ => {
                 // Map the color function to one with an absolute origin color.
-                let resolvable = self.map_origin_color(|o| o.resolve_to_absolute());
+                let resolvable = self
+                    .map_origin_color(|o| o.resolve_to_absolute())
+                    .ok_or(())?;
                 resolvable.resolve_to_absolute()
             },
         }
@@ -704,19 +764,29 @@ impl ColorFunction<SpecifiedColor> {
 impl<Color> ColorFunction<Color> {
     /// Map colour dependencies to another type. Return None from `f` if the
     /// conversion fails.
-    pub fn map_origin_color<U>(&self, mut f: impl FnMut(&Color) -> Option<U>) -> ColorFunction<U> {
+    pub fn map_origin_color<U>(
+        &self,
+        mut f: impl FnMut(&Color) -> Option<U>,
+    ) -> Option<ColorFunction<U>> {
         macro_rules! map {
             ($f:ident, $o:expr, $c0:expr, $c1:expr, $c2:expr, $alpha:expr) => {{
-                ColorFunction::$f(
-                    $o.as_ref().and_then(|value| f(value)).into(),
+                Some(ColorFunction::$f(
+                    match $o.as_ref() {
+                        Some(value) => Some(f(value)?),
+                        None => None,
+                    }
+                    .into(),
                     $c0.clone(),
                     $c1.clone(),
                     $c2.clone(),
                     $alpha.clone(),
-                )
+                ))
             }};
         }
         match self {
+            ColorFunction::Alpha(relative) => Some(ColorFunction::Alpha(
+                relative.with_origin(f(relative.origin())?),
+            )),
             ColorFunction::Rgb(o, c0, c1, c2, alpha) => map!(Rgb, o, c0, c1, c2, alpha),
             ColorFunction::Hsl(o, c0, c1, c2, alpha) => map!(Hsl, o, c0, c1, c2, alpha),
             ColorFunction::Hwb(o, c0, c1, c2, alpha) => map!(Hwb, o, c0, c1, c2, alpha),
@@ -724,35 +794,45 @@ impl<Color> ColorFunction<Color> {
             ColorFunction::Lch(o, c0, c1, c2, alpha) => map!(Lch, o, c0, c1, c2, alpha),
             ColorFunction::Oklab(o, c0, c1, c2, alpha) => map!(Oklab, o, c0, c1, c2, alpha),
             ColorFunction::Oklch(o, c0, c1, c2, alpha) => map!(Oklch, o, c0, c1, c2, alpha),
-            ColorFunction::Color(o, c0, c1, c2, alpha, color_space) => ColorFunction::Color(
-                o.as_ref().and_then(|value| f(value)).into(),
+            ColorFunction::Color(o, c0, c1, c2, alpha, color_space) => Some(ColorFunction::Color(
+                match o.as_ref() {
+                    Some(value) => Some(f(value)?),
+                    None => None,
+                }
+                .into(),
                 c0.clone(),
                 c1.clone(),
                 c2.clone(),
                 alpha.clone(),
                 color_space.clone(),
-            ),
-            ColorFunction::DeviceCmyk(c, m, y, k, alpha, fallback) => ColorFunction::DeviceCmyk(
-                c.clone(),
-                m.clone(),
-                y.clone(),
-                k.clone(),
-                alpha.clone(),
-                fallback
-                    .as_ref()
-                    .and_then(|value| f(value.as_ref()).map(Box::new))
+            )),
+            ColorFunction::DeviceCmyk(c, m, y, k, alpha, fallback) => {
+                Some(ColorFunction::DeviceCmyk(
+                    c.clone(),
+                    m.clone(),
+                    y.clone(),
+                    k.clone(),
+                    alpha.clone(),
+                    match fallback.as_ref() {
+                        Some(value) => Some(Box::new(f(value.as_ref())?)),
+                        None => None,
+                    }
                     .into(),
-            ),
-            ColorFunction::BdSpot(name, tint, is_separation) => {
-                ColorFunction::BdSpot(name.clone(), tint.clone(), *is_separation)
+                ))
             },
-            ColorFunction::BdDeviceN(pairs, fallback) => ColorFunction::BdDeviceN(
+            ColorFunction::BdSpot(name, tint, is_separation) => Some(ColorFunction::BdSpot(
+                name.clone(),
+                tint.clone(),
+                *is_separation,
+            )),
+            ColorFunction::BdDeviceN(pairs, fallback) => Some(ColorFunction::BdDeviceN(
                 pairs.clone(),
-                fallback
-                    .as_ref()
-                    .and_then(|value| f(value.as_ref()).map(Box::new))
-                    .into(),
-            ),
+                match fallback.as_ref() {
+                    Some(value) => Some(Box::new(f(value.as_ref())?)),
+                    None => None,
+                }
+                .into(),
+            )),
         }
     }
 }
@@ -761,7 +841,11 @@ impl ColorFunction<ComputedColor> {
     /// Resolve a computed color function to an absolute computed color.
     pub fn resolve_to_absolute(&self, current_color: &AbsoluteColor) -> AbsoluteColor {
         // Map the color function to one with an absolute origin color.
-        let resolvable = self.map_origin_color(|o| Some(o.resolve_to_absolute(current_color)));
+        let Some(resolvable) =
+            self.map_origin_color(|o| Some(o.resolve_to_absolute(current_color)))
+        else {
+            return AbsoluteColor::TRANSPARENT_BLACK;
+        };
         match resolvable.resolve_to_absolute() {
             Ok(color) => color,
             Err(..) => {
@@ -803,6 +887,14 @@ impl<C: style_traits::ToCss> style_traits::ToCss for ColorFunction<C> {
                 dest.write_str(", ")?;
                 fallback.to_css(dest)?;
             }
+            return dest.write_str(")");
+        }
+
+        if let Self::Alpha(relative) = self {
+            dest.write_str("alpha(from ")?;
+            relative.origin().to_css(dest)?;
+            dest.write_str(" / ")?;
+            relative.alpha().to_css(dest)?;
             return dest.write_str(")");
         }
 
@@ -855,6 +947,7 @@ impl<C: style_traits::ToCss> style_traits::ToCss for ColorFunction<C> {
         }
 
         let (origin_color, alpha) = match self {
+            Self::Alpha(..) => unreachable!("handled above"),
             Self::Rgb(origin_color, _, _, _, alpha) => {
                 dest.write_str("rgb(")?;
                 (origin_color, alpha)
@@ -928,6 +1021,7 @@ impl<C: style_traits::ToCss> style_traits::ToCss for ColorFunction<C> {
         }
 
         match self {
+            Self::Alpha(..) => unreachable!("handled above"),
             Self::Rgb(_, c0, c1, c2, alpha) => {
                 serialize_components!(c0, c1, c2);
                 serialize_alpha!(alpha);

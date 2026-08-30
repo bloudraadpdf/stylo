@@ -981,7 +981,7 @@ impl Color {
                     if fallback.is_none() {
                         let color_function = color_function.map_origin_color(|origin_color| {
                             origin_color.to_computed_color(context)
-                        });
+                        })?;
                         return Some(ComputedColor::ColorFunction(Box::new(color_function)));
                     }
                 }
@@ -996,7 +996,7 @@ impl Color {
                 // would be unrecoverable.
                 if matches!(&color_function, ColorFunction::BdSpot(..)) {
                     let color_function = color_function
-                        .map_origin_color(|origin_color| origin_color.to_computed_color(context));
+                        .map_origin_color(|origin_color| origin_color.to_computed_color(context))?;
                     return Some(ComputedColor::ColorFunction(Box::new(color_function)));
                 }
 
@@ -1010,7 +1010,7 @@ impl Color {
                 // unrecoverable.
                 if matches!(&color_function, ColorFunction::BdDeviceN(..)) {
                     let color_function = color_function
-                        .map_origin_color(|origin_color| origin_color.to_computed_color(context));
+                        .map_origin_color(|origin_color| origin_color.to_computed_color(context))?;
                     return Some(ComputedColor::ColorFunction(Box::new(color_function)));
                 }
 
@@ -1019,7 +1019,7 @@ impl Color {
                     ComputedColor::Absolute(absolute)
                 } else {
                     let color_function = color_function
-                        .map_origin_color(|origin_color| origin_color.to_computed_color(context));
+                        .map_origin_color(|origin_color| origin_color.to_computed_color(context))?;
                     ComputedColor::ColorFunction(Box::new(color_function))
                 }
             },
@@ -1087,8 +1087,9 @@ impl ToComputedValue for Color {
         match *computed {
             ComputedColor::Absolute(ref color) => Self::from_absolute_color(color.clone()),
             ComputedColor::ColorFunction(ref color_function) => {
-                let color_function =
-                    color_function.map_origin_color(|o| Some(Self::from_computed_value(o)));
+                let color_function = color_function
+                    .map_origin_color(|o| Some(Self::from_computed_value(o)))
+                    .expect("computed colour conversion is infallible");
                 Self::ColorFunction(Box::new(color_function))
             },
             ComputedColor::CurrentColor => Color::CurrentColor,
