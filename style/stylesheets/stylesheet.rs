@@ -4367,6 +4367,12 @@ mod tests {
     }
 
     #[test]
+    fn servo_parses_math_auto_as_an_exclusive_text_transform() {
+        assert_parsed_declaration_count(".target { text-transform: math-auto; }", 1);
+        assert_parsed_declaration_count(".target { text-transform: math-auto uppercase; }", 0);
+    }
+
+    #[test]
     fn servo_parses_standard_image_scaling_hints() {
         for value in ["auto", "smooth", "high-quality", "pixelated", "crisp-edges"] {
             assert_parsed_declaration_count(&format!(".target {{ image-rendering: {value}; }}"), 1);
