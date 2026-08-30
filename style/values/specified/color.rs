@@ -472,7 +472,8 @@ impl SystemColor {
             | Self::MozComboboxtext
             | Self::MozOddtreerow
             | Self::Marktext => foreground,
-            Self::Linktext => AbsoluteColor::srgb_legacy(0, 0, 238, 1.0),
+            // Keep the fixed print palette consistent with the Servo UA link colour.
+            Self::Linktext => AbsoluteColor::srgb_legacy(0, 0, 255, 1.0),
             Self::Visitedtext => AbsoluteColor::srgb_legacy(85, 26, 139, 1.0),
             Self::Activetext => AbsoluteColor::srgb_legacy(255, 0, 0, 1.0),
             Self::Accentcolor => accent,

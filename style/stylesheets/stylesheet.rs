@@ -2724,7 +2724,7 @@ mod tests {
         );
         assert_eq!(
             linktext.resolve_to_absolute(&AbsoluteColor::BLACK),
-            AbsoluteColor::srgb_legacy(0, 0, 238, 1.0)
+            AbsoluteColor::srgb_legacy(0, 0, 255, 1.0)
         );
     }
 
