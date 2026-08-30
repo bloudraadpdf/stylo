@@ -276,7 +276,7 @@ pub use self::text::{
     OverflowWrap, RubyPosition, TextOverflow, WordBreak, WordSpaceTransform, WordSpacing,
 };
 pub use self::text::{TextAlign, TextAlignLast, TextEmphasisPosition, TextEmphasisStyle};
-pub use self::text::{TextAutospace, TextUnderlinePosition};
+pub use self::text::{TextAutospace, TextUnderlinePosition, WhiteSpaceTrim};
 pub use self::text::{
     TextDecorationInset, TextDecorationLength, TextDecorationSkipInk, TextJustify,
     TextUnderlineOffset,

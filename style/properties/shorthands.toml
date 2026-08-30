@@ -790,7 +790,7 @@ sub_properties = ["text-wrap-mode", "text-wrap-style"]
 spec = "https://www.w3.org/TR/css-text-4/#text-wrap"
 
 [white-space]
-sub_properties = ["text-wrap-mode", "white-space-collapse"]
+sub_properties = ["text-wrap-mode", "white-space-collapse", "white-space-trim"]
 spec = "https://www.w3.org/TR/css-text-4/#white-space-property"
 derive_value_info = false
 

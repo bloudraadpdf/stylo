@@ -4215,6 +4215,37 @@ mod tests {
     }
 
     #[test]
+    fn servo_parses_closed_white_space_trim_sets() {
+        assert_standard_properties(&["white-space-trim"]);
+        for value in [
+            "none",
+            "discard-before",
+            "discard-after",
+            "discard-inner",
+            "discard-before discard-after",
+            "discard-before discard-inner",
+            "discard-after discard-inner",
+            "discard-before discard-after discard-inner",
+        ] {
+            assert_parsed_declaration_count(
+                &format!(".target {{ white-space-trim: {value}; }}"),
+                1,
+            );
+        }
+        for value in ["none discard-before", "discard-before discard-before"] {
+            assert_parsed_declaration_count(
+                &format!(".target {{ white-space-trim: {value}; }}"),
+                0,
+            );
+        }
+        assert_parsed_declaration_count(
+            ".target { white-space: preserve-spaces nowrap discard-before discard-inner; }",
+            3,
+        );
+        assert_parsed_declaration_count(".target { white-space: normal discard-before; }", 0);
+    }
+
+    #[test]
     fn servo_parses_standard_text_size_adjust_values() {
         assert_standard_properties(&["text-size-adjust"]);
         assert_parsed_declaration_count(".target { text-size-adjust: calc(0% + 0%); }", 1);

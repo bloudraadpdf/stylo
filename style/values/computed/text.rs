@@ -25,7 +25,7 @@ pub use crate::values::specified::text::{
     HangingPunctuation, HyphenateCharacter, LineBreak, MozControlCharacterVisibility, OverflowWrap,
     RubyPosition, TextAlignLast, TextAutospace, TextDecorationLine, TextDecorationSkipInk,
     TextEmphasisPosition, TextJustify, TextOverflow, TextTransform, TextUnderlinePosition,
-    WordBreak, WordSpaceTransform,
+    WhiteSpaceTrim, WordBreak, WordSpaceTransform,
 };
 
 /// A computed value for the `initial-letter` property.

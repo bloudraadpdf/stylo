@@ -8495,3 +8495,14 @@ servo_restyle_damage = "rebuild_box"
 # and margin boxes.
 rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 keyword = { values = ["collapse", "preserve", "preserve-breaks", "break-spaces"], extra_gecko_values = ["preserve-spaces"], extra_servo_values = ["discard", "preserve-spaces"], gecko_aliases = ["-moz-pre-space=preserve-spaces"] }
+
+[white-space-trim]
+type = "WhiteSpaceTrim"
+initial = "computed::WhiteSpaceTrim::NONE"
+initial_specified_value = "specified::text::WhiteSpaceTrim::NONE"
+struct = "text"
+engine = "servo"
+spec = "https://drafts.csswg.org/css-text-4/#propdef-white-space-trim"
+animation_type = "discrete"
+servo_restyle_damage = "rebuild_box"
+affects = "layout"

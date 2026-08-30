@@ -1033,6 +1033,38 @@ bitflags! {
     }
 }
 
+/// The independent boundary-trimming operations selected by `white-space-trim`.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    PartialEq,
+    Parse,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[css(bitflags(single = "none", mixed = "discard-before,discard-after,discard-inner"))]
+#[repr(C)]
+pub struct WhiteSpaceTrim(u8);
+bitflags! {
+    impl WhiteSpaceTrim: u8 {
+        /// Do not trim white space at any element boundary.
+        const NONE = 0;
+        /// Trim collapsible white space immediately before the element.
+        const DISCARD_BEFORE = 1 << 0;
+        /// Trim collapsible white space immediately after the element.
+        const DISCARD_AFTER = 1 << 1;
+        /// Trim the element's inner block or inline boundary white space.
+        const DISCARD_INNER = 1 << 2;
+    }
+}
+
 /// Values for the `text-justify` CSS property.
 #[repr(u8)]
 #[derive(

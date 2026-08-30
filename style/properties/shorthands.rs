@@ -1860,7 +1860,7 @@ pub mod white_space {
     pub use crate::properties::shorthands_generated::white_space::*;
 
     use super::*;
-    use crate::properties::longhands::{text_wrap_mode, white_space_collapse};
+    use crate::properties::longhands::{text_wrap_mode, white_space_collapse, white_space_trim};
 
     pub fn parse_value<'i, 't>(
         context: &ParserContext,
@@ -1881,6 +1881,7 @@ pub mod white_space {
             Ok(expanded! {
                 text_wrap_mode: mode,
                 white_space_collapse: collapse,
+                white_space_trim: white_space_trim::computed_value::T::NONE,
             })
         }
 
@@ -1890,6 +1891,7 @@ pub mod white_space {
 
         let mut wrap = None;
         let mut collapse = None;
+        let mut trim = None;
 
         loop {
             if wrap.is_none() {
@@ -1906,13 +1908,21 @@ pub mod white_space {
                     continue;
                 }
             }
+            if trim.is_none() {
+                if let Ok(value) = input.try_parse(|input| white_space_trim::parse(context, input))
+                {
+                    trim = Some(value);
+                    continue;
+                }
+            }
             break;
         }
 
-        if wrap.is_some() || collapse.is_some() {
+        if wrap.is_some() || collapse.is_some() || trim.is_some() {
             Ok(expanded! {
                 text_wrap_mode: unwrap_or_initial!(text_wrap_mode, wrap),
                 white_space_collapse: unwrap_or_initial!(white_space_collapse, collapse),
+                white_space_trim: unwrap_or_initial!(white_space_trim, trim),
             })
         } else {
             Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
@@ -1926,19 +1936,22 @@ pub mod white_space {
         {
             use text_wrap_mode::computed_value::T as Wrap;
             use white_space_collapse::computed_value::T as Collapse;
+            use white_space_trim::computed_value::T as Trim;
 
-            match *self.text_wrap_mode {
-                Wrap::Wrap => match *self.white_space_collapse {
-                    Collapse::Collapse => return dest.write_str("normal"),
-                    Collapse::Preserve => return dest.write_str("pre-wrap"),
-                    Collapse::PreserveBreaks => return dest.write_str("pre-line"),
-                    _ => (),
-                },
-                Wrap::Nowrap => {
-                    if let Collapse::Preserve = *self.white_space_collapse {
-                        return dest.write_str("pre");
-                    }
-                },
+            if *self.white_space_trim == Trim::NONE {
+                match *self.text_wrap_mode {
+                    Wrap::Wrap => match *self.white_space_collapse {
+                        Collapse::Collapse => return dest.write_str("normal"),
+                        Collapse::Preserve => return dest.write_str("pre-wrap"),
+                        Collapse::PreserveBreaks => return dest.write_str("pre-line"),
+                        _ => (),
+                    },
+                    Wrap::Nowrap => {
+                        if let Collapse::Preserve = *self.white_space_collapse {
+                            return dest.write_str("pre");
+                        }
+                    },
+                }
             }
 
             let mut has_value = false;
@@ -1952,6 +1965,14 @@ pub mod white_space {
                     dest.write_char(' ')?;
                 }
                 self.text_wrap_mode.to_css(dest)?;
+                has_value = true;
+            }
+
+            if *self.white_space_trim != Trim::NONE {
+                if has_value {
+                    dest.write_char(' ')?;
+                }
+                self.white_space_trim.to_css(dest)?;
             }
 
             Ok(())
@@ -1963,6 +1984,7 @@ pub mod white_space {
             // Collect keywords from our longhands.
             text_wrap_mode::SpecifiedValue::collect_completion_keywords(f);
             white_space_collapse::SpecifiedValue::collect_completion_keywords(f);
+            white_space_trim::SpecifiedValue::collect_completion_keywords(f);
 
             // Add the special values supported only by the shorthand
             // (see parse_special_shorthands() above).

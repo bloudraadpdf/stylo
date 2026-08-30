@@ -724,6 +724,7 @@ class Longhand(Property):
                 "VectorEffect",
                 "WordBreak",
                 "WordSpaceTransform",
+                "WhiteSpaceTrim",
                 "LineGrid",
                 "RegionFragment",
                 "TextDecorationSkipKind",
