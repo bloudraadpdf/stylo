@@ -269,6 +269,7 @@ pub use self::svg::{SVGLength, SVGOpacity, SVGPaint, SVGPaintKind};
 pub use self::svg::{SVGPaintOrder, SVGStrokeDashArray, SVGWidth, VectorEffect};
 pub use self::text::{
     HangingPunctuation, InitialLetter, LetterSpacing, LineBreak, TextCombineUpright, TextIndent,
+    TextSizeAdjust,
 };
 pub use self::text::{HyphenateCharacter, HyphenateLimitChars};
 pub use self::text::{

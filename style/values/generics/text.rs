@@ -36,6 +36,36 @@ pub enum NumberOrAuto<N> {
     Number(N),
 }
 
+/// A generic value for the `text-size-adjust` property.
+#[derive(
+    Animate,
+    Clone,
+    ComputeSquaredDistance,
+    Debug,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToAnimatedValue,
+    ToAnimatedZero,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(C, u8)]
+pub enum GenericTextSizeAdjust<Percentage> {
+    /// Use the renderer's default size adjustment.
+    #[animation(error)]
+    Auto,
+    /// Disable size adjustment.
+    #[animation(error)]
+    None,
+    /// Multiply the computed font size by this percentage.
+    Percentage(Percentage),
+}
+
 /// A generic value for the `hyphenate-limit-chars` property.
 #[derive(
     Animate,

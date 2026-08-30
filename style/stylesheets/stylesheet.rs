@@ -4171,6 +4171,13 @@ mod tests {
     }
 
     #[test]
+    fn servo_parses_standard_text_size_adjust_values() {
+        assert_standard_properties(&["text-size-adjust"]);
+        assert_parsed_declaration_count(".target { text-size-adjust: calc(0% + 0%); }", 1);
+        assert_parsed_declaration_count(".target { text-size-adjust: -1%; }", 0);
+    }
+
+    #[test]
     fn servo_exposes_text_underline_position() {
         assert!(
             crate::properties::PropertyId::parse_enabled_for_all_content("text-underline-position")

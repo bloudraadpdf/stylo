@@ -264,7 +264,7 @@ pub use self::svg_path::SVGPathData;
 pub use self::text::RubyPosition;
 pub use self::text::{
     HangingPunctuation, InitialLetter, LetterSpacing, LineBreak, TextAlign, TextCombineUpright,
-    TextIndent,
+    TextIndent, TextSizeAdjust,
 };
 pub use self::text::{HyphenateCharacter, HyphenateLimitChars};
 pub use self::text::{

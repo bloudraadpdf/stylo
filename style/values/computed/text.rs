@@ -10,12 +10,13 @@ use crate::values::computed::length::{Length, LengthPercentage};
 use crate::values::generics::length::GenericLengthPercentageOrAuto;
 use crate::values::generics::text::{
     GenericHyphenateLimitChars, GenericInitialLetter, GenericTextDecorationInset,
-    GenericTextDecorationLength, GenericTextIndent, GenericTextUnderlineOffset,
+    GenericTextDecorationLength, GenericTextIndent, GenericTextSizeAdjust,
+    GenericTextUnderlineOffset,
 };
 use crate::values::generics::NumberOrAuto;
 use crate::values::specified::text as specified;
 use crate::values::specified::text::{TextEmphasisFillMode, TextEmphasisShapeKeyword};
-use crate::values::{CSSFloat, CSSInteger};
+use crate::values::{computed::NonNegativePercentage, CSSFloat, CSSInteger};
 use crate::Zero;
 use std::fmt::{self, Write};
 use style_traits::{CssString, CssWriter, ToCss, ToTyped, TypedValue};
@@ -29,6 +30,9 @@ pub use crate::values::specified::text::{
 
 /// A computed value for the `initial-letter` property.
 pub type InitialLetter = GenericInitialLetter<CSSFloat, CSSInteger>;
+
+/// The computed value of `text-size-adjust`.
+pub type TextSizeAdjust = GenericTextSizeAdjust<NonNegativePercentage>;
 
 /// Implements type for `text-decoration-thickness` property.
 pub type TextDecorationLength = GenericTextDecorationLength<LengthPercentage>;

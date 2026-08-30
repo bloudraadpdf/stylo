@@ -12,11 +12,11 @@ use crate::values::computed::text::TextEmphasisStyle as ComputedTextEmphasisStyl
 use crate::values::computed::{Context, ToComputedValue};
 use crate::values::generics::text::{
     GenericHyphenateLimitChars, GenericInitialLetter, GenericTextDecorationInset,
-    GenericTextDecorationLength, GenericTextIndent,
+    GenericTextDecorationLength, GenericTextIndent, GenericTextSizeAdjust,
 };
 use crate::values::generics::NumberOrAuto;
 use crate::values::specified::length::{Length, LengthPercentage};
-use crate::values::specified::{AllowQuirks, Integer, Number};
+use crate::values::specified::{AllowQuirks, Integer, NonNegativePercentage, Number};
 use crate::Zero;
 use cssparser::{match_ignore_ascii_case, Parser};
 use icu_segmenter::GraphemeClusterSegmenter;
@@ -27,6 +27,9 @@ use style_traits::{KeywordsCollectFn, SpecifiedValueInfo};
 
 /// A specified type for the `initial-letter` property.
 pub type InitialLetter = GenericInitialLetter<Number, Integer>;
+
+/// The specified value of `text-size-adjust`.
+pub type TextSizeAdjust = GenericTextSizeAdjust<NonNegativePercentage>;
 
 /// A spacing value used by either the `letter-spacing` or `word-spacing` properties.
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]

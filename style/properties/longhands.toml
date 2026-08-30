@@ -8167,6 +8167,15 @@ affects = "layout"
 extra_prefixes = ["moz"]
 keyword = { values = ["manual", "none", "auto"] }
 
+[text-size-adjust]
+type = "TextSizeAdjust"
+initial = "computed::TextSizeAdjust::Auto"
+struct = "inherited_text"
+engine = "servo"
+spec = "https://drafts.csswg.org/css-size-adjust/#adjustment-control"
+affects = "layout"
+aliases = ["-webkit-text-size-adjust"]
+
 [-moz-text-size-adjust]
 struct = "inherited_text"
 engine = "gecko"
