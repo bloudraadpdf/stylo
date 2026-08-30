@@ -4204,6 +4204,17 @@ mod tests {
     }
 
     #[test]
+    fn servo_parses_level_four_white_space_keywords() {
+        for declaration in [
+            "white-space-collapse: discard",
+            "white-space-collapse: preserve-spaces",
+            "text-wrap-style: pretty",
+        ] {
+            assert_parsed_declaration_count(&format!(".target {{ {declaration}; }}"), 1);
+        }
+    }
+
+    #[test]
     fn servo_parses_standard_text_size_adjust_values() {
         assert_standard_properties(&["text-size-adjust"]);
         assert_parsed_declaration_count(".target { text-size-adjust: calc(0% + 0%); }", 1);

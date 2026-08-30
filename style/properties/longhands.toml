@@ -8253,7 +8253,7 @@ struct = "inherited_text"
 spec = "https://drafts.csswg.org/css-text-4/#text-wrap-style"
 animation_type = "discrete"
 affects = "layout"
-keyword = { values = ["auto", "stable", "balance"] }
+keyword = { values = ["auto", "stable", "balance"], extra_servo_values = ["pretty"] }
 
 [list-style-position]
 struct = "list"
@@ -8494,4 +8494,4 @@ servo_restyle_damage = "rebuild_box"
 # css-page-3 Appendix A: white-space longhand applicable inside @page
 # and margin boxes.
 rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
-keyword = { values = ["collapse", "preserve", "preserve-breaks", "break-spaces"], extra_gecko_values = ["preserve-spaces"], gecko_aliases = ["-moz-pre-space=preserve-spaces"] }
+keyword = { values = ["collapse", "preserve", "preserve-breaks", "break-spaces"], extra_gecko_values = ["preserve-spaces"], extra_servo_values = ["discard", "preserve-spaces"], gecko_aliases = ["-moz-pre-space=preserve-spaces"] }
