@@ -618,6 +618,28 @@ mod tests {
         )
     }
 
+    fn assert_standard_properties(properties: &[&str]) {
+        for property in properties {
+            assert!(
+                crate::properties::PropertyId::parse_enabled_for_all_content(property).is_ok(),
+                "standard property must enter the Servo parser: {property}",
+            );
+        }
+    }
+
+    fn assert_parsed_declaration_count(css: &str, expected: usize) {
+        let stylesheet = parse_stylesheet(css);
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let CssRule::Style(rule) = &contents.rules(&guard)[0] else {
+            panic!("expected style rule");
+        };
+        assert_eq!(
+            rule.read_with(&guard).block.read_with(&guard).len(),
+            expected
+        );
+    }
+
     fn parsed_declarations(
         css: &str,
         name_and_value: impl Fn(&PropertyDeclaration) -> (&'static str, String),
@@ -4078,31 +4100,21 @@ mod tests {
 
     #[test]
     fn servo_parses_scrollbar_properties() {
-        for property in ["scrollbar-width", "scrollbar-color", "scrollbar-gutter"] {
-            assert!(
-                crate::properties::PropertyId::parse_enabled_for_all_content(property).is_ok(),
-                "standard property must enter the Servo parser: {property}",
-            );
-        }
+        assert_standard_properties(&["scrollbar-width", "scrollbar-color", "scrollbar-gutter"]);
     }
 
     #[test]
     fn servo_parses_scroll_margin_and_padding_families() {
-        for property in [
+        assert_standard_properties(&[
             "scroll-margin",
             "scroll-margin-block",
             "scroll-margin-inline",
             "scroll-padding",
             "scroll-padding-block",
             "scroll-padding-inline",
-        ] {
-            assert!(
-                crate::properties::PropertyId::parse_enabled_for_all_content(property).is_ok(),
-                "standard property must enter the Servo parser: {property}",
-            );
-        }
+        ]);
 
-        let stylesheet = parse_stylesheet(
+        assert_parsed_declaration_count(
             ".target { \
              scroll-margin: 1px 2px 3px 4px; \
              scroll-margin-block: 5px 6px; \
@@ -4111,19 +4123,13 @@ mod tests {
              scroll-padding-block: 13px 14%; \
              scroll-padding-inline: auto 15px; \
              }",
+            16,
         );
-        let guard = stylesheet.shared_lock.read();
-        let contents = stylesheet.contents.read_with(&guard);
-        let CssRule::Style(rule) = &contents.rules(&guard)[0] else {
-            panic!("expected style rule");
-        };
-
-        assert_eq!(rule.read_with(&guard).block.read_with(&guard).len(), 16);
     }
 
     #[test]
     fn servo_parses_scroll_interaction_properties() {
-        for property in [
+        assert_standard_properties(&[
             "overflow-anchor",
             "overscroll-behavior",
             "overscroll-behavior-block",
@@ -4133,14 +4139,9 @@ mod tests {
             "scroll-snap-stop",
             "scroll-snap-type",
             "touch-action",
-        ] {
-            assert!(
-                crate::properties::PropertyId::parse_enabled_for_all_content(property).is_ok(),
-                "standard property must enter the Servo parser: {property}",
-            );
-        }
+        ]);
 
-        let stylesheet = parse_stylesheet(
+        assert_parsed_declaration_count(
             ".target { \
              overflow-anchor: none; \
              overscroll-behavior: contain none; \
@@ -4152,14 +4153,21 @@ mod tests {
              scroll-snap-type: inline mandatory; \
              touch-action: pan-x pan-down pinch-zoom; \
              }",
+            10,
         );
-        let guard = stylesheet.shared_lock.read();
-        let contents = stylesheet.contents.read_with(&guard);
-        let CssRule::Style(rule) = &contents.rules(&guard)[0] else {
-            panic!("expected style rule");
-        };
+    }
 
-        assert_eq!(rule.read_with(&guard).block.read_with(&guard).len(), 10);
+    #[test]
+    fn servo_parses_standard_ui_colour_and_selection_properties() {
+        assert_standard_properties(&["accent-color", "user-select"]);
+
+        assert_parsed_declaration_count(
+            ".target { \
+             accent-color: rebeccapurple; \
+             user-select: contain; \
+             }",
+            2,
+        );
     }
 
     #[test]

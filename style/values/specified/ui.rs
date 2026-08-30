@@ -167,6 +167,7 @@ pub enum UserSelect {
     Text,
     #[parse(aliases = "-moz-none")]
     None,
+    Contain,
     /// Force selection of all children.
     All,
 }
