@@ -156,20 +156,37 @@ impl ToCss for ContainerConditions {
 /// A container condition and filter, combined.
 #[derive(Debug, ToShmem)]
 pub struct ContainerCondition {
-    name: ContainerName,
-    condition: Option<QueryCondition>,
+    kind: ContainerConditionKind,
     flags: FeatureFlags,
+}
+
+#[derive(Debug, ToShmem)]
+enum ContainerConditionKind {
+    Name(ContainerName),
+    Query(QueryCondition),
+    NamedQuery {
+        name: ContainerName,
+        query: QueryCondition,
+    },
 }
 
 impl ContainerCondition {
     /// Returns the container name filter.
-    pub fn name(&self) -> &ContainerName {
-        &self.name
+    pub fn name(&self) -> Option<&ContainerName> {
+        match &self.kind {
+            ContainerConditionKind::Name(name)
+            | ContainerConditionKind::NamedQuery { name, .. } => Some(name),
+            ContainerConditionKind::Query(_) => None,
+        }
     }
 
     /// Returns the optional query after the name filter.
     pub fn query(&self) -> Option<&QueryCondition> {
-        self.condition.as_ref()
+        match &self.kind {
+            ContainerConditionKind::Query(query)
+            | ContainerConditionKind::NamedQuery { query, .. } => Some(query),
+            ContainerConditionKind::Name(_) => None,
+        }
     }
 }
 
@@ -178,16 +195,15 @@ impl ToCss for ContainerCondition {
     where
         W: Write,
     {
-        if !self.name.is_none() {
-            self.name.to_css(dest)?;
-            if self.condition.is_some() {
+        match &self.kind {
+            ContainerConditionKind::Name(name) => name.to_css(dest),
+            ContainerConditionKind::Query(query) => query.to_css(dest),
+            ContainerConditionKind::NamedQuery { name, query } => {
+                name.to_css(dest)?;
                 dest.write_char(' ')?;
-            }
+                query.to_css(dest)
+            },
         }
-        if let Some(condition) = self.condition.as_ref() {
-            condition.to_css(dest)?;
-        }
-        Ok(())
     }
 }
 
@@ -258,28 +274,24 @@ impl ContainerCondition {
     ) -> Result<Self, ParseError<'a>> {
         let name = input
             .try_parse(|input| ContainerName::parse_for_query(context, input))
-            .ok()
-            .unwrap_or_else(ContainerName::none);
-        let condition = if input.is_exhausted() {
-            if name.is_none() {
-                return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
-            }
-            None
+            .ok();
+        let kind = if input.is_exhausted() {
+            ContainerConditionKind::Name(
+                name.ok_or_else(|| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))?,
+            )
         } else {
-            Some(QueryCondition::parse(
-                context,
-                input,
-                FeatureType::Container,
-            )?)
+            let query = QueryCondition::parse(context, input, FeatureType::Container)?;
+            match name {
+                Some(name) => ContainerConditionKind::NamedQuery { name, query },
+                None => ContainerConditionKind::Query(query),
+            }
         };
-        let flags = condition
-            .as_ref()
-            .map_or_else(FeatureFlags::empty, QueryCondition::cumulative_flags);
-        Ok(Self {
-            name,
-            condition,
-            flags,
-        })
+        let flags = match &kind {
+            ContainerConditionKind::Name(_) => FeatureFlags::empty(),
+            ContainerConditionKind::Query(query)
+            | ContainerConditionKind::NamedQuery { query, .. } => query.cumulative_flags(),
+        };
+        Ok(Self { kind, flags })
     }
 
     fn valid_container_info<E>(
@@ -312,10 +324,12 @@ impl ContainerCondition {
         }
 
         // Filter by container-name.
-        let container_name = box_style.clone_container_name();
-        for filter_name in self.name.0.iter() {
-            if !container_name.0.contains(filter_name) {
-                return TraversalResult::InProgress;
+        if let Some(name) = self.name() {
+            let container_name = box_style.clone_container_name();
+            for filter_name in name.0.iter() {
+                if !container_name.0.contains(filter_name) {
+                    return TraversalResult::InProgress;
+                }
             }
         }
 
@@ -361,7 +375,7 @@ impl ContainerCondition {
         E: TElement,
     {
         let result = self.find_container(element, originating_element_style);
-        let Some(condition) = self.condition.as_ref() else {
+        let Some(condition) = self.query() else {
             return KleeneValue::from(result.is_some());
         };
         let (container, info) = match result {
