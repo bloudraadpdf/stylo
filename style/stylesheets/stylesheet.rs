@@ -4361,6 +4361,11 @@ mod tests {
         );
     }
 
+    #[test]
+    fn servo_parses_marker_shorthand_into_three_urls() {
+        assert_parsed_declaration_count("path { marker: url(#point); }", 3);
+    }
+
     // moegoe Family 14 — `-bd-attr(...)` and `-bd-attr-ancestor(...)`
     // are recognised function names inside `content:` and round-trip
     // back through serialisation. The standard `attr(name, ancestor)`
