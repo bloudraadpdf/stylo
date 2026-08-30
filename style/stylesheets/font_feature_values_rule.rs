@@ -214,7 +214,7 @@ where
             name: Atom::from(&*name),
             value,
         };
-        update_or_push(&mut self.declarations, new);
+        self.declarations.push(new);
         Ok(())
     }
 }
@@ -351,15 +351,6 @@ macro_rules! font_feature_values_blocks {
                 dest.write_str(" {\n")?;
                 self.value_to_css(&mut CssWriter::new(dest))?;
                 dest.write_char('}')
-            }
-        }
-
-        /// Updates with new value if same `ident` exists, otherwise pushes to the vector.
-        fn update_or_push<T>(vec: &mut Vec<FFVDeclaration<T>>, element: FFVDeclaration<T>) {
-            if let Some(item) = vec.iter_mut().find(|item| item.name == element.name) {
-                item.value = element.value;
-            } else {
-                vec.push(element);
             }
         }
 
