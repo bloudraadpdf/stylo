@@ -4253,6 +4253,13 @@ mod tests {
     }
 
     #[test]
+    fn servo_parses_standard_image_scaling_hints() {
+        for value in ["auto", "smooth", "high-quality", "pixelated", "crisp-edges"] {
+            assert_parsed_declaration_count(&format!(".target {{ image-rendering: {value}; }}"), 1);
+        }
+    }
+
+    #[test]
     fn servo_exposes_text_underline_position() {
         assert!(
             crate::properties::PropertyId::parse_enabled_for_all_content("text-underline-position")

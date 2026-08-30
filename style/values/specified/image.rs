@@ -1418,8 +1418,10 @@ impl PaintWorklet {
 #[repr(u8)]
 pub enum ImageRendering {
     Auto,
-    #[cfg(feature = "gecko")]
+    #[cfg(any(feature = "gecko", feature = "servo"))]
     Smooth,
+    #[cfg(feature = "servo")]
+    HighQuality,
     #[parse(aliases = "-moz-crisp-edges")]
     CrispEdges,
     Pixelated,
