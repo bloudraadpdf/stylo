@@ -4087,6 +4087,41 @@ mod tests {
     }
 
     #[test]
+    fn servo_parses_scroll_margin_and_padding_families() {
+        for property in [
+            "scroll-margin",
+            "scroll-margin-block",
+            "scroll-margin-inline",
+            "scroll-padding",
+            "scroll-padding-block",
+            "scroll-padding-inline",
+        ] {
+            assert!(
+                crate::properties::PropertyId::parse_enabled_for_all_content(property).is_ok(),
+                "standard property must enter the Servo parser: {property}",
+            );
+        }
+
+        let stylesheet = parse_stylesheet(
+            ".target { \
+             scroll-margin: 1px 2px 3px 4px; \
+             scroll-margin-block: 5px 6px; \
+             scroll-margin-inline: 7px 8px; \
+             scroll-padding: auto 10% 11px 12%; \
+             scroll-padding-block: 13px 14%; \
+             scroll-padding-inline: auto 15px; \
+             }",
+        );
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let CssRule::Style(rule) = &contents.rules(&guard)[0] else {
+            panic!("expected style rule");
+        };
+
+        assert_eq!(rule.read_with(&guard).block.read_with(&guard).len(), 16);
+    }
+
+    #[test]
     fn servo_exposes_text_underline_position() {
         assert!(
             crate::properties::PropertyId::parse_enabled_for_all_content("text-underline-position")
