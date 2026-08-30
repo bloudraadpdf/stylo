@@ -830,6 +830,19 @@ impl LogicalMappingData {
 }
 
 impl LonghandId {
+    /// Returns every longhand enabled for author content.
+    pub fn enabled_for_all_content() -> NonCustomPropertyIterator<Self> {
+        static LONGHANDS: [LonghandId; property_counts::LONGHANDS] = [
+            % for property in data.longhands:
+            LonghandId::${property.camel_case},
+            % endfor
+        ];
+        NonCustomPropertyIterator {
+            filter: true,
+            iter: LONGHANDS.iter(),
+        }
+    }
+
     /// Returns an iterator over all the shorthands that include this longhand.
     pub fn shorthands(self) -> NonCustomPropertyIterator<ShorthandId> {
         // first generate longhand to shorthands lookup map

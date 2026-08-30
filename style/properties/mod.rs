@@ -1674,7 +1674,18 @@ where
 
 #[cfg(all(test, feature = "servo"))]
 mod tests {
-    use super::{LonghandId, LonghandIdSet};
+    use super::{LonghandId, LonghandIdSet, NonCustomPropertyId};
+
+    #[test]
+    fn enabled_author_longhands_are_exposed_as_typed_identifiers() {
+        let names = LonghandId::enabled_for_all_content()
+            .map(|id| NonCustomPropertyId::from(id).name())
+            .collect::<Vec<_>>();
+
+        assert!(names.len() > 100);
+        assert!(names.contains(&"color"));
+        assert!(!names.contains(&"all"));
+    }
 
     #[test]
     fn row_rule_color_is_visited_dependent() {
