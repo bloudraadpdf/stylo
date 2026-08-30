@@ -6,10 +6,14 @@
 
 #[cfg(feature = "gecko")]
 use crate::counter_style::{CounterStyle, CounterStyleParsingFlags};
+#[cfg(feature = "servo")]
+use crate::counter_style::{CounterStyle, CounterStyleParsingFlags, Symbol, Symbols, SymbolsType};
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
 use cssparser::{Parser, Token};
-use style_traits::{ParseError, StyleParseErrorKind};
+#[cfg(feature = "servo")]
+use std::fmt::{self, Write};
+use style_traits::{CssWriter, ParseError, StyleParseErrorKind, ToCss};
 
 /// Specified and computed `list-style-type` property.
 #[cfg(feature = "gecko")]
@@ -86,6 +90,62 @@ impl Parse for ListStyleType {
     }
 }
 
+#[cfg(feature = "servo")]
+/// A type-safe anonymous counter style with a non-empty symbols sequence.
+#[derive(Clone, Debug, Eq, MallocSizeOf, PartialEq, ToComputedValue, ToResolvedValue, ToShmem)]
+pub struct AnonymousCounterStyle {
+    system: SymbolsType,
+    symbols: Symbols,
+}
+
+#[cfg(feature = "servo")]
+impl style_traits::SpecifiedValueInfo for AnonymousCounterStyle {}
+
+#[cfg(feature = "servo")]
+impl AnonymousCounterStyle {
+    /// The anonymous counter system.
+    pub fn system(&self) -> SymbolsType {
+        self.system
+    }
+
+    /// The non-empty symbols sequence.
+    pub fn symbols(&self) -> impl Iterator<Item = &Symbol> {
+        self.symbols.0.iter()
+    }
+}
+
+#[cfg(feature = "servo")]
+impl Parse for AnonymousCounterStyle {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        match CounterStyle::parse(context, input, CounterStyleParsingFlags::empty())? {
+            CounterStyle::Symbols { ty, symbols } => Ok(Self {
+                system: ty,
+                symbols,
+            }),
+            _ => Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError)),
+        }
+    }
+}
+
+#[cfg(feature = "servo")]
+impl ToCss for AnonymousCounterStyle {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: fmt::Write,
+    {
+        dest.write_str("symbols(")?;
+        if self.system != SymbolsType::Symbolic {
+            self.system.to_css(dest)?;
+            dest.write_char(' ')?;
+        }
+        self.symbols.to_css(dest)?;
+        dest.write_char(')')
+    }
+}
+
 /// Specified and computed `list-style-type` property.
 #[cfg(feature = "servo")]
 #[derive(
@@ -112,6 +172,8 @@ pub enum ListStyleType {
     /// The marker string is the specified string.
     /// <https://www.w3.org/TR/css-lists-3/#string-list-style-type>
     String(crate::OwnedStr),
+    /// An anonymous counter style defined by `symbols()`.
+    Anonymous(AnonymousCounterStyle),
     /// A hollow circle, similar to ◦ U+25E6 WHITE BULLET.
     /// <https://www.w3.org/TR/css-counter-styles-3/#circle>
     Circle,

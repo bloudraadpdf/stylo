@@ -4366,6 +4366,16 @@ mod tests {
         assert_parsed_declaration_count("path { marker: url(#point); }", 3);
     }
 
+    #[test]
+    fn servo_parses_anonymous_list_counter_styles() {
+        assert_parsed_declaration_count(
+            "li { list-style-type: symbols(symbolic \"*\" \"A\" \"B\" \"C\"); }",
+            1,
+        );
+        assert_parsed_declaration_count("li { list-style-type: symbols(numeric \"0\"); }", 0);
+        assert_parsed_declaration_count("li { list-style-type: symbols(ident); }", 0);
+    }
+
     // moegoe Family 14 — `-bd-attr(...)` and `-bd-attr-ancestor(...)`
     // are recognised function names inside `content:` and round-trip
     // back through serialisation. The standard `attr(name, ancestor)`
