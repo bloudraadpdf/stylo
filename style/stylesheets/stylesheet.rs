@@ -4188,6 +4188,14 @@ mod tests {
     }
 
     #[test]
+    fn servo_parses_standard_fill_color() {
+        assert_standard_properties(&["fill-color"]);
+        for value in ["currentcolor", "rebeccapurple", "transparent"] {
+            assert_parsed_declaration_count(&format!(".target {{ fill-color: {value}; }}"), 1);
+        }
+    }
+
+    #[test]
     fn servo_parses_standard_text_size_adjust_values() {
         assert_standard_properties(&["text-size-adjust"]);
         assert_parsed_declaration_count(".target { text-size-adjust: calc(0% + 0%); }", 1);

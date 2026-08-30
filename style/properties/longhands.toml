@@ -1221,6 +1221,17 @@ boxed = true
 spec = "https://svgwg.org/svg2-draft/painting.html#SpecifyingFillPaint"
 affects = "paint"
 
+[fill-color]
+type = "Color"
+initial = "computed_value::T::currentcolor()"
+initial_specified_value = "specified::Color::currentcolor()"
+struct = "inherited_svg"
+engine = "servo"
+ignored_when_colors_disabled = true
+spec = "https://drafts.csswg.org/fill-stroke-3/#propdef-fill-color"
+servo_restyle_damage = "repaint"
+affects = "paint"
+
 [fill-opacity]
 type = "SVGOpacity"
 initial = "Default::default()"
