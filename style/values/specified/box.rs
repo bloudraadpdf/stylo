@@ -1515,20 +1515,21 @@ impl Parse for WillChange {
     Debug,
     Eq,
     MallocSizeOf,
-    Parse,
     PartialEq,
     SpecifiedValueInfo,
     ToComputedValue,
-    ToCss,
     ToResolvedValue,
     ToShmem,
     ToTyped,
 )]
-#[css(bitflags(single = "none,auto,manipulation", mixed = "pan-x,pan-y,pinch-zoom"))]
+#[css(bitflags(
+    single = "none,auto,manipulation",
+    mixed = "pan-x,pan-left,pan-right,pan-y,pan-up,pan-down,pinch-zoom"
+))]
 #[repr(C)]
-pub struct TouchAction(u8);
+pub struct TouchAction(u16);
 bitflags! {
-    impl TouchAction: u8 {
+    impl TouchAction: u16 {
         /// `none` variant
         const NONE = 1 << 0;
         /// `auto` variant
@@ -1541,6 +1542,90 @@ bitflags! {
         const MANIPULATION = 1 << 4;
         /// `pinch-zoom` variant
         const PINCH_ZOOM = 1 << 5;
+        /// `pan-left` variant
+        const PAN_LEFT = 1 << 6;
+        /// `pan-right` variant
+        const PAN_RIGHT = 1 << 7;
+        /// `pan-up` variant
+        const PAN_UP = 1 << 8;
+        /// `pan-down` variant
+        const PAN_DOWN = 1 << 9;
+    }
+}
+
+impl Parse for TouchAction {
+    fn parse<'i>(
+        _context: &ParserContext,
+        input: &mut Parser<'i, '_>,
+    ) -> Result<Self, ParseError<'i>> {
+        let first = input.expect_ident_cloned()?;
+        let single = match_ignore_ascii_case! { &first,
+            "none" => Some(Self::NONE),
+            "auto" => Some(Self::AUTO),
+            "manipulation" => Some(Self::MANIPULATION),
+            _ => None,
+        };
+        if let Some(value) = single {
+            return Ok(value);
+        }
+
+        let mut value = Self::empty();
+        let mut horizontal = false;
+        let mut vertical = false;
+        let mut ident = first;
+        loop {
+            let component = match_ignore_ascii_case! { &ident,
+                "pan-x" if !horizontal => { horizontal = true; Self::PAN_X },
+                "pan-left" if !horizontal => { horizontal = true; Self::PAN_LEFT },
+                "pan-right" if !horizontal => { horizontal = true; Self::PAN_RIGHT },
+                "pan-y" if !vertical => { vertical = true; Self::PAN_Y },
+                "pan-up" if !vertical => { vertical = true; Self::PAN_UP },
+                "pan-down" if !vertical => { vertical = true; Self::PAN_DOWN },
+                "pinch-zoom" if !value.contains(Self::PINCH_ZOOM) => Self::PINCH_ZOOM,
+                _ => return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError)),
+            };
+            value.insert(component);
+            let Ok(next) = input.try_parse(Parser::expect_ident_cloned) else {
+                break;
+            };
+            ident = next;
+        }
+        Ok(value)
+    }
+}
+
+impl ToCss for TouchAction {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        for (single, name) in [
+            (Self::NONE, "none"),
+            (Self::AUTO, "auto"),
+            (Self::MANIPULATION, "manipulation"),
+        ] {
+            if *self == single {
+                return dest.write_str(name);
+            }
+        }
+
+        let mut separator = "";
+        for (component, name) in [
+            (Self::PAN_X, "pan-x"),
+            (Self::PAN_LEFT, "pan-left"),
+            (Self::PAN_RIGHT, "pan-right"),
+            (Self::PAN_Y, "pan-y"),
+            (Self::PAN_UP, "pan-up"),
+            (Self::PAN_DOWN, "pan-down"),
+            (Self::PINCH_ZOOM, "pinch-zoom"),
+        ] {
+            if self.contains(component) {
+                dest.write_str(separator)?;
+                dest.write_str(name)?;
+                separator = " ";
+            }
+        }
+        Ok(())
     }
 }
 
@@ -1549,6 +1634,57 @@ impl TouchAction {
     /// Get default `touch-action` as `auto`
     pub fn auto() -> TouchAction {
         TouchAction::AUTO
+    }
+}
+
+#[cfg(all(test, feature = "servo"))]
+mod touch_action_tests {
+    use super::*;
+
+    fn parse(css: &str) -> Result<TouchAction, ()> {
+        parse_box_test_value(css)
+    }
+
+    #[test]
+    fn directional_values_round_trip_without_losing_their_axis() {
+        for css in [
+            "auto",
+            "none",
+            "manipulation",
+            "pan-x",
+            "pan-left",
+            "pan-right",
+            "pan-y",
+            "pan-up",
+            "pan-down",
+            "pinch-zoom",
+        ] {
+            assert_eq!(
+                parse(css)
+                    .expect("the standards value must parse")
+                    .to_css_string(),
+                css
+            );
+        }
+    }
+
+    #[test]
+    fn compound_values_are_canonical_and_axis_exclusive() {
+        assert_eq!(
+            parse("pan-down pinch-zoom pan-right")
+                .expect("one value from each axis plus zoom must parse")
+                .to_css_string(),
+            "pan-right pan-down pinch-zoom"
+        );
+        for css in [
+            "",
+            "auto pan-x",
+            "pan-left pan-right",
+            "pan-up pan-down",
+            "pinch-zoom pinch-zoom",
+        ] {
+            assert!(parse(css).is_err(), "{css} must be rejected");
+        }
     }
 }
 

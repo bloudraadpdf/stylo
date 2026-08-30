@@ -253,7 +253,6 @@ sub_properties = ["overflow-clip-margin-inline-start", "overflow-clip-margin-inl
 spec = "https://drafts.csswg.org/css-overflow-4/#overflow-clip-margin-inline"
 
 [overscroll-behavior]
-engine = "gecko"
 sub_properties = ["overscroll-behavior-x", "overscroll-behavior-y"]
 spec = "https://wicg.github.io/overscroll-behavior/#overscroll-behavior-properties"
 kind = "two_properties"

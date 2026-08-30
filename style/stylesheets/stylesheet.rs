@@ -4122,6 +4122,47 @@ mod tests {
     }
 
     #[test]
+    fn servo_parses_scroll_interaction_properties() {
+        for property in [
+            "overflow-anchor",
+            "overscroll-behavior",
+            "overscroll-behavior-block",
+            "overscroll-behavior-inline",
+            "scroll-behavior",
+            "scroll-snap-align",
+            "scroll-snap-stop",
+            "scroll-snap-type",
+            "touch-action",
+        ] {
+            assert!(
+                crate::properties::PropertyId::parse_enabled_for_all_content(property).is_ok(),
+                "standard property must enter the Servo parser: {property}",
+            );
+        }
+
+        let stylesheet = parse_stylesheet(
+            ".target { \
+             overflow-anchor: none; \
+             overscroll-behavior: contain none; \
+             overscroll-behavior-block: auto; \
+             overscroll-behavior-inline: contain; \
+             scroll-behavior: smooth; \
+             scroll-snap-align: end start; \
+             scroll-snap-stop: always; \
+             scroll-snap-type: inline mandatory; \
+             touch-action: pan-x pan-down pinch-zoom; \
+             }",
+        );
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let CssRule::Style(rule) = &contents.rules(&guard)[0] else {
+            panic!("expected style rule");
+        };
+
+        assert_eq!(rule.read_with(&guard).block.read_with(&guard).len(), 10);
+    }
+
+    #[test]
     fn servo_exposes_text_underline_position() {
         assert!(
             crate::properties::PropertyId::parse_enabled_for_all_content("text-underline-position")
