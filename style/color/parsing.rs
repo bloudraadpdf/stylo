@@ -154,7 +154,7 @@ fn parse_color_function<'i, 't>(
         _ => return Err(arguments.new_unexpected_token_error(Token::Ident(name))),
     }?;
 
-    if has_origin_color {
+    if has_origin_color && !matches!(color, ColorFunction::Alpha(..)) {
         // Validate the channels and calc expressions by trying to resolve them against
         // transparent.
         // FIXME(emilio, bug 1925572): This could avoid cloning, or be done earlier.
@@ -818,7 +818,7 @@ impl ColorComponent<NumberOrPercentageComponent> {
     /// Also returns false if the node is invalid somehow.
     fn could_be_number(&self) -> bool {
         match self {
-            Self::None | Self::AlphaOmitted => true,
+            Self::None | Self::SiblingIndex | Self::SiblingCount | Self::AlphaOmitted => true,
             Self::Value(value) => matches!(value, NumberOrPercentageComponent::Number { .. }),
             Self::ChannelKeyword(_) => {
                 // Channel keywords always resolve to numbers.
@@ -839,6 +839,7 @@ impl ColorComponent<NumberOrPercentageComponent> {
     fn could_be_percentage(&self) -> bool {
         match self {
             Self::None | Self::AlphaOmitted => true,
+            Self::SiblingIndex | Self::SiblingCount => false,
             Self::Value(value) => matches!(value, NumberOrPercentageComponent::Percentage { .. }),
             Self::ChannelKeyword(_) => {
                 // Channel keywords always resolve to numbers.

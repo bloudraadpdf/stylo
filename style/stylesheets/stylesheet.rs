@@ -2654,6 +2654,14 @@ mod tests {
                 "alpha(from color(display-p3 1 0 0) / 0.5)",
                 "alpha(from color(display-p3 1 0 0) / 0.5)",
             ),
+            (
+                "alpha(from green / sibling-index())",
+                "alpha(from green / sibling-index())",
+            ),
+            (
+                "alpha(from green / calc(sibling-count() * 0.2))",
+                "alpha(from green / calc(0.2 * sibling-count()))",
+            ),
         ] {
             assert_eq!(
                 color_declaration(&format!("p {{ color: {authored}; }}")).as_deref(),

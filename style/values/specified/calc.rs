@@ -739,7 +739,7 @@ impl CalcNode {
     ///
     /// May return a "complex" `CalcNode`, in the presence of a parenthesized
     /// expression, for example.
-    fn parse_one<'i, 't>(
+    pub(crate) fn parse_one<'i, 't>(
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
         allowed: AllowParse,

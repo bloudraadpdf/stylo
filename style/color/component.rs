@@ -35,6 +35,10 @@ pub enum ColorComponent<ValueType> {
     ChannelKeyword(ChannelKeyword),
     /// A calc() value.
     Calc(Box<GenericCalcNode<Leaf>>),
+    /// The element's one-based sibling index.
+    SiblingIndex,
+    /// The element's sibling count.
+    SiblingCount,
     /// Used when alpha components are not specified.
     AlphaOmitted,
 }
@@ -60,7 +64,11 @@ impl<ValueType> ColorComponent<ValueType> {
                 });
                 valid
             },
-            Self::None | Self::Value(_) | Self::AlphaOmitted => true,
+            Self::None
+            | Self::Value(_)
+            | Self::SiblingIndex
+            | Self::SiblingCount
+            | Self::AlphaOmitted => true,
         }
     }
 }
@@ -86,6 +94,14 @@ pub trait ColorComponentType: Sized + Clone {
 }
 
 impl<ValueType: ColorComponentType> ColorComponent<ValueType> {
+    fn calc_allow() -> AllowParse {
+        AllowParse::new(if rcs_enabled() {
+            ValueType::units() | CalcUnits::COLOR_COMPONENT
+        } else {
+            ValueType::units()
+        })
+    }
+
     /// Parse a single [ColorComponent].
     pub fn parse<'i, 't>(
         context: &ParserContext,
@@ -93,6 +109,7 @@ impl<ValueType: ColorComponentType> ColorComponent<ValueType> {
         allow_none: bool,
     ) -> Result<Self, ParseError<'i>> {
         let location = input.current_source_location();
+        let start = input.state();
 
         match *input.next()? {
             Token::Ident(ref value) if allow_none && value.eq_ignore_ascii_case("none") => {
@@ -104,14 +121,22 @@ impl<ValueType: ColorComponentType> ColorComponent<ValueType> {
                 };
                 Ok(ColorComponent::ChannelKeyword(channel_keyword))
             },
+            Token::Function(ref name)
+                if name.eq_ignore_ascii_case("sibling-index")
+                    || name.eq_ignore_ascii_case("sibling-count") =>
+            {
+                input.reset(&start);
+                match GenericCalcNode::parse_one(context, input, Self::calc_allow())? {
+                    GenericCalcNode::Leaf(Leaf::SiblingIndex) => Ok(Self::SiblingIndex),
+                    GenericCalcNode::Leaf(Leaf::SiblingCount) => Ok(Self::SiblingCount),
+                    _ => Err(location
+                        .new_custom_error(style_traits::StyleParseErrorKind::UnspecifiedError)),
+                }
+            },
             Token::Function(ref name) => {
                 let function = GenericCalcNode::math_function(context, name, location)?;
-                let allow = AllowParse::new(if rcs_enabled() {
-                    ValueType::units() | CalcUnits::COLOR_COMPONENT
-                } else {
-                    ValueType::units()
-                });
-                let mut node = GenericCalcNode::parse(context, input, function, allow)?;
+                let mut node =
+                    GenericCalcNode::parse(context, input, function, Self::calc_allow())?;
 
                 // TODO(tlouw): We only have to simplify the node when we have to store it, but we
                 //              only know if we have to store it much later when the whole color
@@ -158,6 +183,7 @@ impl<ValueType: ColorComponentType> ColorComponent<ValueType> {
 
                 Some(ValueType::try_from_leaf(&resolved_leaf)?)
             },
+            ColorComponent::SiblingIndex | ColorComponent::SiblingCount => return Err(()),
             ColorComponent::AlphaOmitted => {
                 if let Some(origin_color) = origin_color {
                     // <https://drafts.csswg.org/css-color-5/#rcs-intro>
@@ -174,8 +200,15 @@ impl<ValueType: ColorComponentType> ColorComponent<ValueType> {
 
     /// Resolve element-dependent calculation leaves at computed-value time.
     pub fn to_computed_value(&self, context: &computed::Context) -> Self {
-        let Self::Calc(node) = self else {
-            return self.clone();
+        let node = match self {
+            Self::SiblingIndex => {
+                return Self::Value(ValueType::from_value(context.sibling_index()))
+            },
+            Self::SiblingCount => {
+                return Self::Value(ValueType::from_value(context.sibling_count()))
+            },
+            Self::Calc(node) => node,
+            _ => return self.clone(),
         };
 
         let computed = node.map_leaves(|leaf| match leaf {
@@ -208,6 +241,8 @@ impl<ValueType: ToCss> ToCss for ColorComponent<ValueType> {
                 // <https://github.com/web-platform-tests/wpt/issues/47921>
                 node.to_css(dest)?;
             },
+            ColorComponent::SiblingIndex => dest.write_str("sibling-index()")?,
+            ColorComponent::SiblingCount => dest.write_str("sibling-count()")?,
             ColorComponent::AlphaOmitted => {
                 debug_assert!(false, "can't serialize an omitted alpha component");
             },
