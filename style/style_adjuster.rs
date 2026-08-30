@@ -804,7 +804,6 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
     /// to comply with:
     ///
     /// <https://drafts.csswg.org/css-align/#valdef-justify-items-legacy>
-    #[cfg(feature = "gecko")]
     fn adjust_for_justify_items(&mut self) {
         use crate::values::specified::align;
         let justify_items = self.style.get_position().clone_justify_items();
@@ -822,9 +821,16 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
             return;
         }
 
+        #[cfg(feature = "gecko")]
         self.style
             .mutate_position()
             .set_computed_justify_items(parent_justify_items.computed);
+        #[cfg(feature = "servo")]
+        {
+            let mut resolved = justify_items;
+            resolved.computed = parent_justify_items.computed;
+            self.style.mutate_position().set_justify_items(resolved);
+        }
     }
 
     /// If '-webkit-appearance' is 'menulist' on a <select> element then
@@ -1133,11 +1139,11 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
         self.adjust_for_webkit_line_clamp();
         self.adjust_for_position();
         self.adjust_for_overflow();
+        self.adjust_for_justify_items();
         #[cfg(feature = "gecko")]
         {
             self.adjust_for_contain();
             self.adjust_for_contain_intrinsic_size();
-            self.adjust_for_justify_items();
         }
         self.adjust_for_table_text_align();
         self.adjust_for_writing_mode(layout_parent_style);
