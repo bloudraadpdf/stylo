@@ -16,7 +16,7 @@ servo = ["string_cache"]
 
 [dependencies]
 app_units = "0.7"
-cssparser = "0.36"
+cssparser = { workspace = true }
 euclid = "0.22"
 selectors = { workspace = true }
 servo_arc = { workspace = true }

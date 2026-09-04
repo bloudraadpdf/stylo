@@ -17,13 +17,11 @@ members = [
 ]
 default-members = ["style"]
 
-[patch.crates-io]
-cssparser = { git = "https://github.com/jacquesg/rust-cssparser.git", rev = "958478606c3af872c1d9dfd43cc6d2b2fae07dee" }
-
 [workspace.package]
 version = "0.12.0"
 
 [workspace.dependencies]
+cssparser = { git = "ssh://git@github.com/bloudraadpdf/rust-cssparser.git", rev = "958478606c3af872c1d9dfd43cc6d2b2fae07dee", version = "0.36" }
 # in-repo dependencies (separately versioned)
 servo_arc       = { version = "0.4.3",  path = "./servo_arc" }
 selectors       = { version = "0.35.0", path = "./selectors" }
