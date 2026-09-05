@@ -232,6 +232,18 @@ impl ToCss for NonCustomPropertyId {
 }
 
 impl NonCustomPropertyId {
+    /// Iterates enabled longhands, shorthands and aliases in native identifier order.
+    pub fn all_enabled_for_content() -> impl Iterator<Item = Self> {
+        (0..property_counts::NON_CUSTOM)
+            .map(|index| {
+                Self(
+                    u16::try_from(index)
+                        .expect("property identifiers fit their u16 representation"),
+                )
+            })
+            .filter(|id| id.enabled_for_all_content())
+    }
+
     /// Returns the underlying index, used for use counter.
     pub fn bit(self) -> usize {
         self.0 as usize
@@ -1684,7 +1696,34 @@ where
 
 #[cfg(all(test, feature = "servo"))]
 mod tests {
-    use super::{LonghandId, LonghandIdSet, NonCustomPropertyId};
+    use super::{LonghandId, LonghandIdSet, NonCustomPropertyId, PropertyId};
+
+    #[test]
+    fn enabled_author_properties_preserve_native_names_and_aliases() {
+        let properties = NonCustomPropertyId::all_enabled_for_content().collect::<Vec<_>>();
+        let names = properties.iter().map(|id| id.name()).collect::<Vec<_>>();
+        for expected in [
+            "color",
+            "margin",
+            "all",
+            "-webkit-transform",
+            "-webkit-flex",
+        ] {
+            assert!(
+                names.contains(&expected),
+                "missing enabled property: {expected}"
+            );
+        }
+        assert!(properties.windows(2).all(|ids| ids[0].bit() < ids[1].bit()));
+        for id in properties {
+            assert_eq!(
+                PropertyId::parse_enabled_for_all_content(id.name()),
+                Ok(id.to_property_id()),
+                "native CSS name must retain its exact identifier: {}",
+                id.name()
+            );
+        }
+    }
 
     #[test]
     fn enabled_author_longhands_are_exposed_as_typed_identifiers() {
