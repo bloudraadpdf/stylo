@@ -1447,6 +1447,16 @@ pub type ShorthandsWithPropertyReferencesCache =
     FxHashMap<(ShorthandId, LonghandId), PropertyDeclaration>;
 
 impl UnparsedValue {
+    /// The retained token stream and its original URL context.
+    pub fn variable_value(&self) -> &custom_properties::VariableValue {
+        &self.variable_value
+    }
+
+    /// The shorthand whose expansion is pending substitution.
+    pub fn from_shorthand(&self) -> Option<ShorthandId> {
+        self.from_shorthand
+    }
+
     fn substitute_variables<'cache>(
         &self,
         longhand_id: LonghandId,
