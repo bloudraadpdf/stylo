@@ -217,8 +217,8 @@ trait PrivateMatchMethods: TElement {
                 context.shared,
                 replacements,
                 &AnimationDeclarations {
-                    transitions: self.transition_rule(&context.shared),
-                    animations: self.animation_rule(&context.shared),
+                    transitions: self.transition_rule(context.shared),
+                    animations: self.animation_rule(context.shared),
                 },
                 primary_rules,
             );
