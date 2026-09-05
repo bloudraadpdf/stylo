@@ -116,7 +116,8 @@ impl UrlRequestModifiers {
         self.referrer_policy
     }
 
-    fn parse<'i, 't>(input: &mut Parser<'i, 't>) -> Result<Self, ParseError<'i>> {
+    /// Parse the request modifiers after a URL string.
+    pub fn parse<'i, 't>(input: &mut Parser<'i, 't>) -> Result<Self, ParseError<'i>> {
         let mut modifiers = Self::default();
         while !input.is_exhausted() {
             let name = input.expect_function()?.clone();

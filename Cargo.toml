@@ -3,6 +3,8 @@ resolver = "2"
 members = [
     "stylo_atoms",
     "stylo_dom",
+    "stylo_cssom_model",
+    "stylo_cssom",
     "malloc_size_of",
     "rustfmt.toml",
     "selectors",

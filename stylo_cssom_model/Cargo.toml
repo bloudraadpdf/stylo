@@ -1,0 +1,11 @@
+[package]
+name = "stylo_cssom_model"
+version.workspace = true
+edition = "2024"
+publish = false
+license = "LicenseRef-Proprietary"
+description = "CSSOM property values and stylesheet identity model"
+
+[dependencies]
+encoding_rs = "0.8"
+thiserror = "2"

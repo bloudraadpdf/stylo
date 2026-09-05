@@ -1,0 +1,19 @@
+[package]
+name = "stylo_cssom"
+version.workspace = true
+edition = "2024"
+publish = false
+license = "LicenseRef-Proprietary"
+description = "Stylo CSSOM parsing, serialisation and vendor syntax admission"
+
+[dependencies]
+stylo = { workspace = true, features = ["servo"] }
+stylo_cssom_model = { path = "../stylo_cssom_model" }
+stylo_atoms = { workspace = true }
+stylo_config = { path = "../stylo_config" }
+style_traits = { workspace = true }
+servo_arc = { workspace = true }
+selectors = { workspace = true }
+cssparser = { workspace = true }
+url = "2.5"
+encoding_rs = "0.8"
