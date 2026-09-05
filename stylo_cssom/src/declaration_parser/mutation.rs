@@ -1,6 +1,28 @@
+use std::collections::HashSet;
+
 use stylo_cssom_model::{Importance, SpecifiedDeclaration, SpecifiedPropertyName};
 
-use super::compatibility::{CanonicalProperty, properties_match, shorthand_members};
+use super::compatibility::{properties_match, shorthand_members, CanonicalProperty};
+
+#[derive(Eq, Hash, PartialEq)]
+enum DeclarationKey<'a> {
+    Standard(CanonicalProperty),
+    Custom(&'a str),
+}
+
+impl<'a> From<&'a SpecifiedPropertyName> for DeclarationKey<'a> {
+    fn from(property: &'a SpecifiedPropertyName) -> Self {
+        match property {
+            SpecifiedPropertyName::Standard(property) => {
+                Self::Standard(CanonicalProperty::Native(*property))
+            },
+            SpecifiedPropertyName::Compatibility(property) => {
+                Self::Standard(CanonicalProperty::from_compatibility(*property))
+            },
+            SpecifiedPropertyName::Custom(name) => Self::Custom(name),
+        }
+    }
+}
 
 pub fn apply_updates(
     declarations: &mut Vec<SpecifiedDeclaration>,
@@ -9,11 +31,12 @@ pub fn apply_updates(
 ) {
     let updates = updates.into_iter().collect::<Vec<_>>();
     if replace_important {
-        declarations.retain(|existing| {
-            !updates
-                .iter()
-                .any(|update| properties_match(&existing.property, &update.property))
-        });
+        let replaced = updates
+            .iter()
+            .map(|update| DeclarationKey::from(&update.property))
+            .collect::<HashSet<_>>();
+        declarations
+            .retain(|existing| !replaced.contains(&DeclarationKey::from(&existing.property)));
         declarations.extend(updates);
         return;
     }
