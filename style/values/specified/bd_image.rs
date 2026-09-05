@@ -400,23 +400,9 @@ impl Parse for BdImageOrientation {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::context::QuirksMode;
-    use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
     use cssparser::{Parser, ParserInput};
-    use style_traits::ParsingMode;
 
     fn parse_resampling(css: &str) -> BdImageResampling {
-        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
-        let context = ParserContext::new(
-            Origin::Author,
-            &url_data,
-            Some(CssRuleType::Style),
-            ParsingMode::DEFAULT,
-            QuirksMode::NoQuirks,
-            Default::default(),
-            None,
-            None,
-        );
         let mut input = ParserInput::new(css);
         let mut parser = Parser::new(&mut input);
         parser

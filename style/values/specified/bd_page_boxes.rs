@@ -425,23 +425,10 @@ type _PageSize2D = Size2D<NonNegativeLength>;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::context::QuirksMode;
-    use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
     use cssparser::{Parser, ParserInput};
-    use style_traits::{ParsingMode, ToCss};
+    use style_traits::ToCss;
 
     fn parse_clip(css: &str) -> BdPdfPageClip {
-        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
-        let context = ParserContext::new(
-            Origin::Author,
-            &url_data,
-            Some(CssRuleType::Page),
-            ParsingMode::DEFAULT,
-            QuirksMode::NoQuirks,
-            Default::default(),
-            None,
-            None,
-        );
         let mut input = ParserInput::new(css);
         let mut parser = Parser::new(&mut input);
         parser

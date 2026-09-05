@@ -464,17 +464,6 @@ mod tests {
     use style_traits::{ParsingMode, ToCss};
 
     fn parse_text_rendering(css: &str) -> BdPdfTextRendering {
-        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
-        let context = ParserContext::new(
-            Origin::Author,
-            &url_data,
-            Some(CssRuleType::Style),
-            ParsingMode::DEFAULT,
-            QuirksMode::NoQuirks,
-            Default::default(),
-            None,
-            None,
-        );
         let mut input = ParserInput::new(css);
         let mut parser = Parser::new(&mut input);
         parser

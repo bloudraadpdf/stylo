@@ -586,7 +586,7 @@ mod tests {
     use cssparser::{Parser, ParserInput};
     use style_traits::{ParsingMode, ToCss};
 
-    fn make_context(url_data: &UrlExtraData) -> ParserContext {
+    fn make_context(url_data: &UrlExtraData) -> ParserContext<'_> {
         ParserContext::new(
             Origin::Author,
             url_data,
