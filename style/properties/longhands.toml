@@ -5988,6 +5988,42 @@ spec = "https://drafts.csswg.org/css-view-transitions-1/#view-transition-name-pr
 affects = ""
 enabled_in = "ua"
 
+[view-transition-scope]
+struct = "ui"
+engine = "servo"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-view-transitions-2/#view-transition-scope-prop"
+affects = ""
+keyword = { values = ["none", "all"] }
+
+[view-transition-group]
+type = "animation::ViewTransitionGroup"
+initial = "computed::animation::ViewTransitionGroup::Normal"
+struct = "ui"
+engine = "servo"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-view-transitions-2/#view-transition-group-prop"
+affects = ""
+
+[grid-lanes-direction]
+type = "position::GridLanesDirection"
+initial = "computed::position::GridLanesDirection::Normal"
+struct = "position"
+engine = "servo"
+animation_type = "discrete"
+spec = "Experimental (https://github.com/w3c/csswg-drafts/issues/12803)"
+affects = "layout"
+servo_restyle_damage = "rebuild_box"
+
+[-webkit-box-orient]
+struct = "box"
+engine = "servo"
+animation_type = "discrete"
+spec = "Nonstandard (legacy -webkit-box compatibility)"
+affects = "layout"
+servo_restyle_damage = "rebuild_box"
+keyword = { values = ["horizontal", "vertical", "inline-axis", "block-axis"] }
+
 [vector-effect]
 type = "VectorEffect"
 initial = "computed::VectorEffect::none()"

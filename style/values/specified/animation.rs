@@ -745,6 +745,34 @@ impl ToCss for ViewTransitionName {
     }
 }
 
+/// A view-transition group's ancestor selection.
+#[derive(
+    Clone,
+    Debug,
+    Eq,
+    Hash,
+    PartialEq,
+    MallocSizeOf,
+    Parse,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(C, u8)]
+pub enum ViewTransitionGroup {
+    /// The default ancestor group.
+    Normal,
+    /// Establishes a group for descendant captures.
+    Contain,
+    /// The nearest ancestor capture group.
+    Nearest,
+    /// A named ancestor capture group.
+    Ident(CustomIdent),
+}
+
 /// The view-transition-class: `none | <custom-ident>+`.
 ///
 /// https://drafts.csswg.org/css-view-transitions-2/#view-transition-class-prop

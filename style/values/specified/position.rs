@@ -1728,6 +1728,113 @@ impl Parse for MasonryAutoFlow {
     }
 }
 
+/// The grid-lanes extension's explicit track axis.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    PartialEq,
+    MallocSizeOf,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(u8)]
+pub enum GridLanesDirectionAxis {
+    /// Row tracks.
+    Row,
+    /// Column tracks.
+    Column,
+}
+
+/// The supported grid-lanes direction extension; normal has no reversals.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    PartialEq,
+    MallocSizeOf,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(C, u8)]
+pub enum GridLanesDirection {
+    /// The default orientation.
+    Normal,
+    /// An explicit axis with independent placement and track ordering.
+    #[value_info(other_values = "fill-reverse,track-reverse")]
+    Oriented {
+        /// Track orientation.
+        axis: GridLanesDirectionAxis,
+        /// Reverse the filling order.
+        fill_reverse: bool,
+        /// Reverse the track order.
+        track_reverse: bool,
+    },
+}
+
+impl Parse for GridLanesDirection {
+    fn parse<'i, 't>(
+        _: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        let ident = input.expect_ident_cloned()?;
+        let axis = match_ignore_ascii_case! { &ident,
+            "normal" => return Ok(Self::Normal),
+            "row" => GridLanesDirectionAxis::Row,
+            "column" => GridLanesDirectionAxis::Column,
+            _ => return Err(input.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(ident))),
+        };
+        let mut fill_reverse = false;
+        let mut track_reverse = false;
+        while !input.is_exhausted() {
+            let ident = input.expect_ident_cloned()?;
+            match_ignore_ascii_case! { &ident,
+                "fill-reverse" if !fill_reverse => fill_reverse = true,
+                "track-reverse" if !track_reverse => track_reverse = true,
+                _ => return Err(input.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(ident))),
+            }
+        }
+        Ok(Self::Oriented {
+            axis,
+            fill_reverse,
+            track_reverse,
+        })
+    }
+}
+
+impl ToCss for GridLanesDirection {
+    fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        match self {
+            Self::Normal => dest.write_str("normal"),
+            Self::Oriented {
+                axis,
+                fill_reverse,
+                track_reverse,
+            } => {
+                axis.to_css(dest)?;
+                if *fill_reverse {
+                    dest.write_str(" fill-reverse")?;
+                }
+                if *track_reverse {
+                    dest.write_str(" track-reverse")?;
+                }
+                Ok(())
+            },
+        }
+    }
+}
+
 /// Specified value of `masonry-slack` (CSS Grid 3 §3.8).
 ///
 /// The longhand bounds how much wall-height differential the masonry

@@ -21,10 +21,11 @@ use crate::values::generics::position::{
     PositionOrAuto as GenericPositionOrAuto, ZIndex as GenericZIndex,
 };
 pub use crate::values::specified::position::{
-    AnchorName, AnchorScope, DashedIdentAndOrTryTactic, GridAutoFlow, GridTemplateAreas,
-    MasonryAutoFlow, PositionAnchor, PositionArea, PositionAreaAxis, PositionAreaKeyword,
-    PositionAreaType, PositionTryFallbacks, PositionTryFallbacksTryTactic,
-    PositionTryFallbacksTryTacticKeyword, PositionTryOrder, PositionVisibility,
+    AnchorName, AnchorScope, DashedIdentAndOrTryTactic, GridAutoFlow, GridLanesDirection,
+    GridLanesDirectionAxis, GridTemplateAreas, MasonryAutoFlow, PositionAnchor, PositionArea,
+    PositionAreaAxis, PositionAreaKeyword, PositionAreaType, PositionTryFallbacks,
+    PositionTryFallbacksTryTactic, PositionTryFallbacksTryTacticKeyword, PositionTryOrder,
+    PositionVisibility,
 };
 use crate::Zero;
 use std::fmt::{self, Write};

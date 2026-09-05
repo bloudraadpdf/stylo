@@ -662,6 +662,7 @@ class Longhand(Property):
                 "FontVariantLigatures",
                 "FontVariantNumeric",
                 "GridAutoFlow",
+                "position::GridLanesDirection",
                 "HangingPunctuation",
                 "ImageRendering",
                 "Inert",

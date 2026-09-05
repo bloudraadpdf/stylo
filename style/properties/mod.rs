@@ -1695,6 +1695,9 @@ where
 }
 
 #[cfg(all(test, feature = "servo"))]
+mod native_common_property_tests;
+
+#[cfg(all(test, feature = "servo"))]
 mod tests {
     use super::{LonghandId, LonghandIdSet, NonCustomPropertyId, PropertyId};
 
