@@ -733,7 +733,6 @@ derive_serialize = true
 [-bd-change-bar]
 sub_properties = ["-bd-change-bar-colour", "-bd-change-bar-align", "-bd-change-bar-offset", "-bd-change-bar-width", "-bd-change-bar-name"]
 spec = "Nonstandard (moegoe -bd-* fork extension; Family 16 change-bar shorthand)"
-derive_serialize = true
 
 [font]
 sub_properties = [

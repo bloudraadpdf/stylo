@@ -4372,6 +4372,52 @@ pub mod _bd_change_bar {
         _bd_change_bar_width,
     };
 
+    #[cfg(all(test, feature = "servo"))]
+    #[test]
+    fn native_extension_serialization_preserves_change_bar_members() {
+        use crate::properties::declaration_block::parse_style_attribute;
+        use crate::stylesheets::{CssRuleType, UrlExtraData};
+        use selectors::context::QuirksMode;
+
+        let url = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let parse = |css: &str| {
+            parse_style_attribute(css, &url, None, QuirksMode::NoQuirks, CssRuleType::Style)
+        };
+        for reserved in [
+            "initial",
+            "inherit",
+            "unset",
+            "revert",
+            "revert-layer",
+            "default",
+        ] {
+            assert!(
+                parse(&format!("-bd-change-bar: auto / {reserved}"))
+                    .declarations()
+                    .is_empty(),
+                "reserved custom identifier: {reserved}"
+            );
+        }
+        for value in [
+            "auto",
+            "red start 10px 4px / edits",
+            "auto start 25% 3px / none",
+            r"auto / \31 change",
+        ] {
+            let source = parse(&format!("-bd-change-bar: {value}"));
+            assert_eq!(source.declarations().len(), 5, "{value}");
+            let serialized = LonghandsToSerialize::from_iter(source.declarations().iter())
+                .unwrap()
+                .to_css_string();
+            let reparsed = parse(&format!("-bd-change-bar: {serialized}"));
+            assert_eq!(
+                reparsed.declarations(),
+                source.declarations(),
+                "{serialized}"
+            );
+        }
+    }
+
     pub fn parse_value<'i, 't>(
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
@@ -4409,6 +4455,40 @@ pub mod _bd_change_bar {
             _bd_change_bar_width: unwrap_or_initial!(_bd_change_bar_width, width),
             _bd_change_bar_name: unwrap_or_initial!(_bd_change_bar_name, name),
         })
+    }
+
+    impl ToCss for LonghandsToSerialize<'_> {
+        fn to_css<W: fmt::Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+            let has_align =
+                *self._bd_change_bar_align != _bd_change_bar_align::get_initial_specified_value();
+            let has_width =
+                *self._bd_change_bar_width != _bd_change_bar_width::get_initial_specified_value();
+            let has_offset = has_width
+                || *self._bd_change_bar_offset
+                    != _bd_change_bar_offset::get_initial_specified_value();
+            let has_color =
+                *self._bd_change_bar_colour != _bd_change_bar_colour::get_initial_specified_value();
+            {
+                let mut writer = SequenceWriter::new(dest, " ");
+                if has_color || (!has_align && !has_offset) {
+                    writer.item(self._bd_change_bar_colour)?;
+                }
+                if has_align {
+                    writer.item(self._bd_change_bar_align)?;
+                }
+                if has_offset {
+                    writer.item(self._bd_change_bar_offset)?;
+                }
+                if has_width {
+                    writer.item(self._bd_change_bar_width)?;
+                }
+            }
+            if *self._bd_change_bar_name != _bd_change_bar_name::get_initial_specified_value() {
+                dest.write_str(" / ")?;
+                self._bd_change_bar_name.to_css(dest)?;
+            }
+            Ok(())
+        }
     }
 }
 

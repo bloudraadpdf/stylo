@@ -20,7 +20,7 @@ use crate::values::computed::Percentage;
 use crate::values::specified::border::LineWidth;
 use crate::values::specified::color::Color;
 use crate::values::specified::length::LengthPercentage;
-use crate::OwnedStr;
+use crate::values::CustomIdent;
 use cssparser::Parser;
 use style_traits::{CssWriter, ParseError, ToCss};
 
@@ -295,7 +295,7 @@ pub enum BdChangeBarName {
     /// `none` — the element does not contribute to any change-bar group.
     None,
     /// `<custom-ident>` — group identifier.
-    Ident(OwnedStr),
+    Ident(CustomIdent),
 }
 
 impl Default for BdChangeBarName {
@@ -321,8 +321,7 @@ impl crate::parser::Parse for BdChangeBarName {
         if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
-        let ident = input.expect_ident()?;
-        Ok(Self::Ident(ident.as_ref().to_owned().into()))
+        Ok(Self::Ident(CustomIdent::parse(input, &["none"])?))
     }
 }
 

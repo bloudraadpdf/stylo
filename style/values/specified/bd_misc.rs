@@ -14,10 +14,10 @@
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
 use crate::values::computed::{
-    Context as ComputedContext, ToComputedValue as ToComputedValueTrait,
+    Context as ComputedContext, Percentage as ComputedPercentage,
+    ToComputedValue as ToComputedValueTrait,
 };
 use crate::values::specified::{Integer, Percentage};
-use crate::values::CSSFloat;
 use crate::{OwnedSlice, OwnedStr};
 use cssparser::Parser;
 use std::fmt::{self, Write};
@@ -400,10 +400,6 @@ impl Parse for BdScaleContent {
 }
 
 /// Computed value of `-bd-scale-content`.
-///
-/// The percentage is computed to a plain `CSSFloat` factor (e.g.
-/// `0.5` for `50%`) so downstream consumers can multiply directly
-/// without re-deriving the unit base.
 #[derive(
     Clone,
     Debug,
@@ -417,8 +413,8 @@ impl Parse for BdScaleContent {
 )]
 #[repr(C, u8)]
 pub enum ComputedBdScaleContent {
-    /// `<percentage>` — resolved to a multiplicative factor.
-    Percentage(CSSFloat),
+    /// `<percentage>` — retains its computed unit.
+    Percentage(ComputedPercentage),
     /// `fit-page` — per-page shrink-to-fit.
     FitPage,
 }
@@ -427,7 +423,7 @@ impl ComputedBdScaleContent {
     /// Initial computed value (`100%` → factor `1.0`).
     #[inline]
     pub fn initial() -> Self {
-        Self::Percentage(1.0)
+        Self::Percentage(ComputedPercentage::hundred())
     }
 }
 
@@ -437,7 +433,7 @@ impl ToComputedValueTrait for BdScaleContent {
     fn to_computed_value(&self, context: &ComputedContext) -> ComputedBdScaleContent {
         match *self {
             Self::Percentage(ref p) => {
-                ComputedBdScaleContent::Percentage(p.to_computed_value(context).0)
+                ComputedBdScaleContent::Percentage(p.to_computed_value(context))
             },
             Self::FitPage => ComputedBdScaleContent::FitPage,
         }
@@ -445,7 +441,9 @@ impl ToComputedValueTrait for BdScaleContent {
 
     fn from_computed_value(computed: &ComputedBdScaleContent) -> Self {
         match *computed {
-            ComputedBdScaleContent::Percentage(f) => Self::Percentage(Percentage::new(f)),
+            ComputedBdScaleContent::Percentage(p) => {
+                Self::Percentage(Percentage::from_computed_value(&p))
+            },
             ComputedBdScaleContent::FitPage => Self::FitPage,
         }
     }
@@ -801,6 +799,28 @@ mod tests {
     use super::*;
     use cssparser::{Parser, ParserInput};
     use style_traits::ToCss;
+
+    #[test]
+    fn native_extension_serialization_preserves_computed_percentage_units() {
+        for (value, expected) in [
+            (ComputedBdScaleContent::initial(), "100%"),
+            (
+                ComputedBdScaleContent::Percentage(ComputedPercentage(0.5)),
+                "50%",
+            ),
+            (
+                ComputedBdScaleContent::Percentage(ComputedPercentage(0.0)),
+                "0%",
+            ),
+            (ComputedBdScaleContent::FitPage, "fit-page"),
+        ] {
+            assert_eq!(value.to_css_string(), expected);
+            assert_eq!(
+                BdScaleContent::from_computed_value(&value).to_css_string(),
+                expected
+            );
+        }
+    }
 
     fn parse_column_clip(css: &str) -> Result<BdColumnClip, ()> {
         let mut input = ParserInput::new(css);
