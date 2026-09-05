@@ -932,7 +932,9 @@ impl DeepCloneWithLock for CssRule {
             },
             CssRule::NestedDeclarations(ref arc) => {
                 let decls = arc.read_with(guard);
-                CssRule::NestedDeclarations(Arc::new(lock.wrap(decls.clone())))
+                CssRule::NestedDeclarations(Arc::new(
+                    lock.wrap(decls.deep_clone_with_lock(lock, guard)),
+                ))
             },
         }
     }
