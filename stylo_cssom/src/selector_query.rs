@@ -16,6 +16,21 @@ pub fn parse_selector(selector: &str) -> Result<ParsedSelectorList, String> {
         .map_err(|error| format!("{error:?}"))
 }
 
+fn targets_element(selector: &selectors::parser::Selector<SelectorImpl>) -> bool {
+    !selector.has_pseudo_element() && !selector.is_part() && !selector.is_slotted()
+}
+
+pub fn parse_dom_selector(selector: &str) -> Result<ParsedSelectorList, String> {
+    let list = parse_selector(selector)?;
+    let elements = list
+        .slice()
+        .iter()
+        .filter(|selector| targets_element(selector))
+        .cloned()
+        .collect::<Vec<_>>();
+    Ok(SelectorList::from_iter(elements.into_iter()))
+}
+
 pub fn selector_specificity(selector: &str) -> Result<u32, String> {
     let list = parse_selector(selector)?;
     let [selector] = list.slice() else {
@@ -75,6 +90,45 @@ pub fn selector_targets_pseudo_element(source: &str) -> bool {
     parse_selector(source).is_ok_and(|list| {
         list.slice()
             .iter()
-            .any(|selector| selector.pseudo_element().is_some())
+            .any(|selector| !targets_element(selector))
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{parse_dom_selector, selector_targets_pseudo_element};
+
+    #[test]
+    fn dom_selector_lists_retain_only_element_targets() {
+        for selector in [
+            "::part(test):is(:focus)",
+            "::slotted(button)",
+            "button::before",
+        ] {
+            assert!(
+                parse_dom_selector(selector).unwrap().slice().is_empty(),
+                "{selector}"
+            );
+        }
+        assert_eq!(
+            parse_dom_selector("button, ::part(test):is(:focus)")
+                .unwrap()
+                .slice()
+                .len(),
+            1
+        );
+        assert!(parse_dom_selector("button,").is_err());
+    }
+
+    #[test]
+    fn shadow_pseudo_elements_retain_their_target_classification() {
+        for selector in [
+            "::part(test):is(:focus)",
+            "::slotted(button)",
+            "button::before",
+        ] {
+            assert!(selector_targets_pseudo_element(selector), "{selector}");
+        }
+        assert!(!selector_targets_pseudo_element("button:is(:focus)"));
+    }
 }
