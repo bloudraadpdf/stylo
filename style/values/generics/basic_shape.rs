@@ -903,10 +903,7 @@ where
         let fill = matching_fill_rule(self.fill, other.fill)?;
         let commands =
             lists::by_computed_value::animate(&self.commands, &other.commands, procedure)?;
-        Ok(Self {
-            fill,
-            commands,
-        })
+        Ok(Self { fill, commands })
     }
 }
 
