@@ -19,6 +19,8 @@ use crate::properties::ComputedValues;
 use crate::properties::PropertyId;
 use crate::rule_cache::RuleCache;
 use crate::rule_tree::StrongRuleNode;
+#[cfg(feature = "servo")]
+use crate::selector_parser::PseudoElement;
 use crate::selector_parser::{SnapshotMap, EAGER_PSEUDO_COUNT};
 use crate::shared_lock::StylesheetGuards;
 use crate::sharing::StyleSharingCache;
@@ -243,6 +245,18 @@ impl EagerPseudoCascadeInputs {
     /// Returns the list of rules, if they exist.
     pub fn into_array(self) -> Option<[Option<CascadeInputs>; EAGER_PSEUDO_COUNT]> {
         self.0
+    }
+
+    /// Iterate over the retained cascade inputs with their pseudo-element identity.
+    #[cfg(feature = "servo")]
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = (PseudoElement, &mut CascadeInputs)> {
+        self.0.iter_mut().flat_map(|inputs| {
+            inputs.iter_mut().enumerate().filter_map(|(index, inputs)| {
+                inputs
+                    .as_mut()
+                    .map(|inputs| (PseudoElement::from_eager_index(index), inputs))
+            })
+        })
     }
 }
 

@@ -17,6 +17,7 @@ use crate::dom::TElement;
 #[cfg(feature = "servo")]
 use crate::dom::TNode;
 use crate::invalidation::element::restyle_hints::RestyleHint;
+use crate::properties::declaration_block::AnimationDeclarations;
 use crate::properties::longhands::display::computed_value::T as Display;
 use crate::properties::ComputedValues;
 use crate::properties::PropertyDeclarationBlock;
@@ -89,6 +90,36 @@ enum CascadeVisitedMode {
 }
 
 trait PrivateMatchMethods: TElement {
+    fn replace_sampled_effect_rules(
+        context: &SharedStyleContext,
+        replacements: RestyleHint,
+        declarations: &AnimationDeclarations,
+        rules: &mut StrongRuleNode,
+    ) {
+        for (hint, level, block) in [
+            (
+                RestyleHint::RESTYLE_CSS_TRANSITIONS,
+                CascadeLevel::Transitions,
+                &declarations.transitions,
+            ),
+            (
+                RestyleHint::RESTYLE_CSS_ANIMATIONS,
+                CascadeLevel::Animations,
+                &declarations.animations,
+            ),
+        ] {
+            if replacements.contains(hint) {
+                Self::replace_single_rule_node(
+                    context,
+                    level,
+                    LayerOrder::root(),
+                    block.as_ref().map(|block| block.borrow_arc()),
+                    rules,
+                );
+            }
+        }
+    }
+
     fn replace_single_rule_node(
         context: &SharedStyleContext,
         level: CascadeLevel,
@@ -182,29 +213,15 @@ trait PrivateMatchMethods: TElement {
                 );
             }
 
-            if replacements.contains(RestyleHint::RESTYLE_CSS_TRANSITIONS) {
-                Self::replace_single_rule_node(
-                    context.shared,
-                    CascadeLevel::Transitions,
-                    LayerOrder::root(),
-                    self.transition_rule(&context.shared)
-                        .as_ref()
-                        .map(|a| a.borrow_arc()),
-                    primary_rules,
-                );
-            }
-
-            if replacements.contains(RestyleHint::RESTYLE_CSS_ANIMATIONS) {
-                Self::replace_single_rule_node(
-                    context.shared,
-                    CascadeLevel::Animations,
-                    LayerOrder::root(),
-                    self.animation_rule(&context.shared)
-                        .as_ref()
-                        .map(|a| a.borrow_arc()),
-                    primary_rules,
-                );
-            }
+            Self::replace_sampled_effect_rules(
+                context.shared,
+                replacements,
+                &AnimationDeclarations {
+                    transitions: self.transition_rule(&context.shared),
+                    animations: self.animation_rule(&context.shared),
+                },
+                primary_rules,
+            );
         }
 
         false
@@ -1174,6 +1191,35 @@ pub trait MatchMethods: TElement {
             CascadeVisitedMode::Visited,
             cascade_inputs,
         );
+        #[cfg(feature = "servo")]
+        if context.shared.traversal_flags.for_animation_only()
+            && replacements.intersects(RestyleHint::for_animations())
+        {
+            use crate::dom::TDocument;
+
+            for (pseudo, inputs) in cascade_inputs.pseudos.iter_mut() {
+                let key = crate::animation::AnimationSetKey::new_for_pseudo(
+                    self.as_node().opaque(),
+                    pseudo,
+                );
+                let declarations = context.shared.animations.get_all_declarations(
+                    &key,
+                    context.shared.current_time_for_animations,
+                    self.as_node().owner_doc().shared_lock(),
+                );
+                for rules in [&mut inputs.rules, &mut inputs.visited_rules]
+                    .into_iter()
+                    .flatten()
+                {
+                    Self::replace_sampled_effect_rules(
+                        context.shared,
+                        replacements,
+                        &declarations,
+                        rules,
+                    );
+                }
+            }
+        }
         result
     }
 
