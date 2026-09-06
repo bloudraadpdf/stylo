@@ -747,16 +747,6 @@ pub enum CalcLengthPercentageLeaf {
     Number(f32),
 }
 
-impl CalcLengthPercentageLeaf {
-    fn is_zero_length(&self) -> bool {
-        match *self {
-            Self::Length(ref l) => l.is_zero(),
-            Self::Percentage(..) => false,
-            Self::Number(..) => false,
-        }
-    }
-}
-
 impl calc::CalcNodeLeaf for CalcLengthPercentageLeaf {
     fn unit(&self) -> CalcUnits {
         match self {
@@ -825,36 +815,17 @@ impl calc::CalcNodeLeaf for CalcLengthPercentageLeaf {
     fn try_sum_in_place(&mut self, other: &Self) -> Result<(), ()> {
         use self::CalcLengthPercentageLeaf::*;
 
-        // 0px plus anything else is equal to the right hand side.
-        if self.is_zero_length() {
-            *self = other.clone();
-            return Ok(());
-        }
-
-        if other.is_zero_length() {
-            return Ok(());
-        }
-
-        if std::mem::discriminant(self) != std::mem::discriminant(other) {
-            return Err(());
-        }
-
         match (self, other) {
-            (&mut Length(ref mut one), &Length(ref other)) => {
+            (Length(one), Length(other)) => {
                 *one += *other;
             },
-            (&mut Percentage(ref mut one), &Percentage(ref other)) => {
+            (Percentage(one), Percentage(other)) => {
                 one.0 += other.0;
             },
-            (&mut Number(ref mut one), &Number(ref other)) => {
+            (Number(one), Number(other)) => {
                 *one += *other;
             },
-            _ => unsafe {
-                match *other {
-                    Length(..) | Percentage(..) | Number(..) => {},
-                }
-                debug_unreachable!("Forgot to handle unit in try_sum_in_place()")
-            },
+            _ => return Err(()),
         }
 
         Ok(())
@@ -1572,6 +1543,29 @@ impl TryTacticAdjustment for CalcNode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn computed_sums_preserve_zero_terms_with_different_units() {
+        for (length, percentage) in [(0.0, 1.0), (20.0, 0.0), (0.0, 0.0)] {
+            for reverse in [false, true] {
+                let mut terms = vec![
+                    CalcNode::Leaf(CalcLengthPercentageLeaf::Length(Length::new(length))),
+                    CalcNode::Leaf(CalcLengthPercentageLeaf::Percentage(Percentage(percentage))),
+                ];
+                if reverse {
+                    terms.reverse();
+                }
+                let value = LengthPercentage::new_calc(
+                    CalcNode::Sum(terms.into()),
+                    AllowedNumericType::All,
+                );
+                assert!(
+                    matches!(value.unpack(), Unpacked::Calc(_)),
+                    "{length}px + {percentage}%"
+                );
+            }
+        }
+    }
 
     #[test]
     fn mixed_length_percentage_interpolation_preserves_the_exact_end_value() {
