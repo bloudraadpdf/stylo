@@ -17,6 +17,52 @@ const TEXT_ALIGN: &[u8] = b"text-align";
 type CompatibilityReplacement = (std::ops::Range<usize>, String);
 type DeclarationReplacement = (Option<CompatibilityReplacement>, usize);
 
+pub fn used_flex_direction(
+    computed: &style::properties::ComputedValues,
+) -> style::computed_values::flex_direction::T {
+    use style::computed_values::flex_direction::T as Direction;
+    use style::logical_geometry::PhysicalSide;
+    use style::properties::longhands::_webkit_box_orient::computed_value::T as Orientation;
+
+    let properties = computed.custom_properties();
+    let name = style::Atom::from("moegoe-webkit-box-display");
+    let legacy = properties
+        .inherited
+        .get(&name)
+        .or_else(|| properties.non_inherited.get(&name))
+        .is_some_and(|value| {
+            matches!(
+                value.to_variable_value().css.trim(),
+                "-webkit-box" | "-webkit-inline-box"
+            )
+        });
+    if !legacy {
+        return computed.get_position().flex_direction;
+    }
+    let writing_mode = computed.writing_mode;
+    let start = match computed.clone__webkit_box_orient() {
+        Orientation::Horizontal => {
+            if writing_mode.is_bidi_ltr() {
+                PhysicalSide::Left
+            } else {
+                PhysicalSide::Right
+            }
+        },
+        Orientation::Vertical => PhysicalSide::Top,
+        Orientation::InlineAxis => writing_mode.inline_start_physical_side(),
+        Orientation::BlockAxis => writing_mode.block_start_physical_side(),
+    };
+    if start == writing_mode.inline_start_physical_side() {
+        Direction::Row
+    } else if start == writing_mode.inline_end_physical_side() {
+        Direction::RowReverse
+    } else if start == writing_mode.block_start_physical_side() {
+        Direction::Column
+    } else {
+        Direction::ColumnReverse
+    }
+}
+
 fn declaration_value_start(bytes: &[u8], property_end: usize) -> Option<usize> {
     let mut colon = property_end;
     while colon < bytes.len() && is_css_whitespace(bytes[colon]) {
