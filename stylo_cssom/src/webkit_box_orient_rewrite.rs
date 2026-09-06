@@ -24,19 +24,7 @@ pub fn used_flex_direction(
     use style::logical_geometry::PhysicalSide;
     use style::properties::longhands::_webkit_box_orient::computed_value::T as Orientation;
 
-    let properties = computed.custom_properties();
-    let name = style::Atom::from("moegoe-webkit-box-display");
-    let legacy = properties
-        .inherited
-        .get(&name)
-        .or_else(|| properties.non_inherited.get(&name))
-        .is_some_and(|value| {
-            matches!(
-                value.to_variable_value().css.trim(),
-                "-webkit-box" | "-webkit-inline-box"
-            )
-        });
-    if !legacy {
+    if !is_legacy_box(computed) {
         return computed.get_position().flex_direction;
     }
     let writing_mode = computed.writing_mode;
@@ -61,6 +49,31 @@ pub fn used_flex_direction(
     } else {
         Direction::ColumnReverse
     }
+}
+
+pub fn used_flex_wrap(
+    computed: &style::properties::ComputedValues,
+) -> style::computed_values::flex_wrap::T {
+    if is_legacy_box(computed) {
+        style::computed_values::flex_wrap::T::Nowrap
+    } else {
+        computed.get_position().flex_wrap
+    }
+}
+
+fn is_legacy_box(computed: &style::properties::ComputedValues) -> bool {
+    let properties = computed.custom_properties();
+    let name = style::Atom::from("moegoe-webkit-box-display");
+    properties
+        .inherited
+        .get(&name)
+        .or_else(|| properties.non_inherited.get(&name))
+        .is_some_and(|value| {
+            matches!(
+                value.to_variable_value().css.trim(),
+                "-webkit-box" | "-webkit-inline-box"
+            )
+        })
 }
 
 fn declaration_value_start(bytes: &[u8], property_end: usize) -> Option<usize> {
