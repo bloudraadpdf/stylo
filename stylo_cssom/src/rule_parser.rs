@@ -2598,6 +2598,9 @@ mod tests {
             PropertyDeclaration::EmptyCells(value) => PropertyDeclaration::EmptyCells(*value),
             PropertyDeclaration::FlexDirection(value) => PropertyDeclaration::FlexDirection(*value),
             PropertyDeclaration::FlexWrap(value) => PropertyDeclaration::FlexWrap(*value),
+            PropertyDeclaration::FlexLineCount(value) => {
+                PropertyDeclaration::FlexLineCount(value.clone())
+            },
             PropertyDeclaration::FloatDefer(value) => PropertyDeclaration::FloatDefer(*value),
             PropertyDeclaration::FloatReference(value) => {
                 PropertyDeclaration::FloatReference(*value)
