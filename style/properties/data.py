@@ -637,6 +637,7 @@ class Longhand(Property):
                 "MarginBreak",
                 "MarginTrim",
                 "BackgroundClip",
+                "FlexWrap",
                 "BackgroundRepeat",
                 "BorderImageRepeat",
                 "BorderStyle",

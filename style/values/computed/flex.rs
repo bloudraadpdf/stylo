@@ -6,6 +6,7 @@
 
 use crate::values::computed::Size;
 use crate::values::generics::flex::FlexBasis as GenericFlexBasis;
+pub use crate::values::specified::flex::FlexWrap;
 
 /// A computed value for the `flex-basis` property.
 pub type FlexBasis = GenericFlexBasis<Size>;

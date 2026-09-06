@@ -8318,13 +8318,23 @@ servo_restyle_damage = "rebuild_box"
 keyword = { values = ["row", "row-reverse", "column", "column-reverse"] }
 
 [flex-wrap]
+type = "FlexWrap"
+initial = "computed::FlexWrap::Nowrap"
+initial_specified_value = "specified::FlexWrap::Nowrap"
 struct = "position"
-spec = "https://drafts.csswg.org/css-flexbox/#flex-wrap-property"
+spec = "https://drafts.csswg.org/css-flexbox-2/#flex-wrap-property"
 animation_type = "discrete"
 affects = "layout"
 extra_prefixes = ["webkit"]
 servo_restyle_damage = "rebuild_box"
-keyword = { values = ["nowrap", "wrap", "wrap-reverse"] }
+
+[flex-line-count]
+type = "PositiveInteger"
+initial = "From::from(1)"
+struct = "position"
+spec = "https://drafts.csswg.org/css-flexbox-2/#flex-line-count-property"
+servo_restyle_damage = "rebuild_box"
+affects = "layout"
 
 [box-sizing]
 struct = "position"

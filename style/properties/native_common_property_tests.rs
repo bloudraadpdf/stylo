@@ -23,6 +23,27 @@ fn block(css: &str) -> super::PropertyDeclarationBlock {
 #[test]
 fn native_common_properties_validate_and_serialize_their_grammars() {
     for (name, input, expected) in [
+        ("flex-wrap", "balance", Some("balance")),
+        ("flex-wrap", "wrap balance", Some("balance")),
+        ("flex-wrap", "balance wrap", Some("balance")),
+        (
+            "flex-wrap",
+            "wrap-reverse balance",
+            Some("wrap-reverse balance"),
+        ),
+        (
+            "flex-wrap",
+            "balance wrap-reverse",
+            Some("wrap-reverse balance"),
+        ),
+        ("flex-wrap", "nowrap balance", None),
+        ("flex-wrap", "balance balance", None),
+        ("flex-wrap", "wrap wrap-reverse", None),
+        ("flex-line-count", "1", Some("1")),
+        ("flex-line-count", "2", Some("2")),
+        ("flex-line-count", "0", None),
+        ("flex-line-count", "-1", None),
+        ("flex-line-count", "1.5", None),
         ("view-transition-scope", "ALL", Some("all")),
         ("view-transition-scope", "none", Some("none")),
         ("view-transition-scope", "nearest", None),

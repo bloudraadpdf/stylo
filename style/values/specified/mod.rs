@@ -201,7 +201,7 @@ pub use self::display_4::ReadingFlow;
 pub use self::easing::TimingFunction;
 pub use self::effects::{BoxShadow, Filter, SimpleShadow};
 pub use self::exclusions_1::{WrapFlow, WrapThrough};
-pub use self::flex::FlexBasis;
+pub use self::flex::{FlexBasis, FlexWrap};
 pub use self::font::{FontFamily, FontLanguageOverride, FontPalette, FontStyle};
 pub use self::font::{FontFeatureSettings, FontVariantLigatures, FontVariantNumeric};
 pub use self::font::{
