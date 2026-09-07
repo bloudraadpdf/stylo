@@ -187,7 +187,8 @@ pub fn forgiving_rule_sources(css: &str) -> Vec<ScannedRuleSource> {
             Ok(_) => input.reset(&start),
         }
         consume_rule(&mut input);
-        let rule = css[source_start.byte_index()..input.position().byte_index()].trim();
+        let rule = css[source_start.byte_index()..input.position().byte_index()]
+            .trim_start_matches([' ', '\t', '\n', '\r', '\u{c}']);
         if !rule.is_empty() {
             rules.push(ScannedRuleSource {
                 text: rule.to_owned(),

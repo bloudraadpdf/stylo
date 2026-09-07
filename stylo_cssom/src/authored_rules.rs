@@ -1851,7 +1851,7 @@ mod tests {
                 .map(|source| source.text.as_str())
                 .collect::<Vec<_>>()
                 .join("\n"),
-            css.trim_end()
+            css
         );
         let native = crate::rule_parser::ParsedCssRule::parse_stylesheet(css);
         assert_eq!(sources.len(), native.len());
@@ -1864,11 +1864,23 @@ mod tests {
                 .map(stylo_cssom_model::RuleNode::projection_serialization)
                 .collect::<Vec<_>>()
                 .join("\n"),
-            css.trim_end()
+            css
         );
         let materialised = parsed.materialise_imports(|_| None);
 
         assert_eq!(materialised.rule_nodes(), parsed.rule_nodes());
+    }
+
+    #[test]
+    fn recovered_stylesheet_projection_preserves_string_token_boundaries() {
+        for value in ["var(--a, \"\n", "var(--a, url(\"\n", "var(--a, \"\r\n"] {
+            let source = format!("p {{ color: green; --a: red; color: {value}");
+            let sheet = ParsedStylesheet::parse(&source).expect("stylesheet must recover");
+            let [rule] = sheet.rule_nodes() else {
+                panic!("recovery must retain the style rule");
+            };
+            assert_eq!(rule.projection_serialization(), source);
+        }
     }
 
     #[test]
