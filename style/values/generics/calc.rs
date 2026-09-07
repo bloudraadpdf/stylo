@@ -506,6 +506,9 @@ pub trait CalcNodeLeaf: Clone + Sized + PartialEq + ToCss + ToTyped {
     where
         O: Fn(f32, f32) -> f32;
 
+    /// Whether a scalar can be folded into this leaf before substitution.
+    fn can_scale(&self) -> bool;
+
     /// Map the value of this node with the given operation.
     fn map(&mut self, op: impl FnMut(f32) -> f32) -> Result<(), ()>;
 
@@ -563,7 +566,7 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
     #[inline]
     pub fn is_product_distributive(&self) -> bool {
         match self {
-            Self::Leaf(l) => l.unit() != CalcUnits::COLOR_COMPONENT,
+            Self::Leaf(l) => l.can_scale(),
             Self::Sum(children) => children.iter().all(|c| c.is_product_distributive()),
             _ => false,
         }

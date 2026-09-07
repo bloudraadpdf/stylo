@@ -2845,6 +2845,28 @@ mod calc_size_tests {
     }
 
     #[test]
+    fn calc_size_preserves_symbolic_terms_during_numeric_scaling() {
+        for basis in ["auto", "min-content", "max-content"] {
+            for expression in [
+                "size / 2",
+                "(size + 10px) / 2",
+                "(10px + size) / 2",
+                "min(size, 100px) / 2",
+                "clamp(10px, size, 100px) / 2",
+                "size * 0.5",
+                "(size + 10px) * 0.5",
+                "(10px + size) * 0.5",
+            ] {
+                let css = format!("calc-size({basis}, {expression})");
+                assert!(
+                    matches!(parse_size(&css), GenericSize::CalcSize(_)),
+                    "{css}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn calc_size_retains_the_basis_and_size_math_leaf() {
         let GenericSize::CalcSize(value) = parse_size("calc-size(auto, min(size, 100px))") else {
             panic!("calc-size() must have a distinct specified representation");

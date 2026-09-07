@@ -673,6 +673,13 @@ impl generic::CalcNodeLeaf for Leaf {
         }
     }
 
+    fn can_scale(&self) -> bool {
+        !matches!(
+            self,
+            Self::Size | Self::ColorComponent(..) | Self::SiblingIndex | Self::SiblingCount
+        )
+    }
+
     fn map(&mut self, mut op: impl FnMut(f32) -> f32) -> Result<(), ()> {
         Ok(match self {
             Leaf::Size => return Err(()),

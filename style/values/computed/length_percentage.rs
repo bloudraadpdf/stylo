@@ -882,6 +882,10 @@ impl calc::CalcNodeLeaf for CalcLengthPercentageLeaf {
         })
     }
 
+    fn can_scale(&self) -> bool {
+        true
+    }
+
     fn map(&mut self, mut op: impl FnMut(f32) -> f32) -> Result<(), ()> {
         Ok(match self {
             Self::Length(value) => {
