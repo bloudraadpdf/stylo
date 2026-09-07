@@ -617,11 +617,9 @@ where
 {
     // We need to return elements in document order, and reordering them
     // afterwards is kinda silly.
-    if selector_list.len() > 1 {
+    let [selector] = selector_list.slice() else {
         return Err(());
-    }
-
-    let selector = &selector_list.slice()[0];
+    };
     let class_and_id_case_sensitivity = matching_context.classes_and_ids_case_sensitivity();
     // Let's just care about the easy cases for now.
     if selector.len() == 1 {
