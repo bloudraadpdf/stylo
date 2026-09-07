@@ -1615,6 +1615,9 @@ pub struct ComputedValuesInner {
     /// A set of flags we use to store misc information regarding this style.
     pub flags: ComputedValueFlags,
 
+    /// Box facts from winning author declarations for this element.
+    pub authored_control_style: super::authored_control_style::AuthoredControlStyle,
+
     /// The writing mode of this computed values struct.
     pub writing_mode: WritingMode,
 
@@ -1860,6 +1863,7 @@ impl ComputedValues {
         writing_mode: WritingMode,
         effective_zoom: computed::Zoom,
         flags: ComputedValueFlags,
+        authored_control_style: super::authored_control_style::AuthoredControlStyle,
         rules: Option<StrongRuleNode>,
         visited_style: Option<Arc<ComputedValues>>,
         % for style_struct in data.active_style_structs():
@@ -1875,6 +1879,7 @@ impl ComputedValues {
                 visited_style,
                 effective_zoom,
                 flags,
+                authored_control_style,
             % for style_struct in data.active_style_structs():
                 ${style_struct.ident},
             % endfor
@@ -1915,6 +1920,7 @@ impl ComputedValues {
                 visited_style: None,
                 effective_zoom: crate::values::computed::Zoom::ONE,
                 flags: ComputedValueFlags::empty(),
+                authored_control_style: Default::default(),
             },
             pseudo: None,
         })
@@ -2310,6 +2316,10 @@ pub struct StyleBuilder<'a> {
     /// Flags for the computed value.
     pub flags: Cell<ComputedValueFlags>,
 
+    /// Box facts from winning author declarations for this element.
+    #[cfg(feature = "servo")]
+    pub authored_control_style: super::authored_control_style::AuthoredControlStyle,
+
     /// The element's style if visited, only computed if there's a relevant link
     /// for this element.  A element's "relevant link" is the element being
     /// matched if it is a link or the nearest ancestor link.
@@ -2350,6 +2360,8 @@ impl<'a> StyleBuilder<'a> {
             effective_zoom_for_inheritance: computed::Zoom::ONE,
             color_scheme: inherited_style.get_inherited_ui().color_scheme_bits(),
             flags: Cell::new(flags),
+            #[cfg(feature = "servo")]
+            authored_control_style: Default::default(),
             visited_style: None,
             % for style_struct in data.active_style_structs():
             % if style_struct.inherited:
@@ -2392,6 +2404,8 @@ impl<'a> StyleBuilder<'a> {
             effective_zoom_for_inheritance: Self::zoom_for_inheritance(style_to_derive_from.get_box().clone_zoom(), inherited_style),
             color_scheme: style_to_derive_from.get_inherited_ui().color_scheme_bits(),
             flags: Cell::new(style_to_derive_from.flags),
+            #[cfg(feature = "servo")]
+            authored_control_style: style_to_derive_from.authored_control_style,
             visited_style: None,
             % for style_struct in data.active_style_structs():
             ${style_struct.ident}: StyleStructRef::Borrowed(
@@ -2403,6 +2417,12 @@ impl<'a> StyleBuilder<'a> {
 
     /// Copy the reset properties from `style`.
     pub fn copy_reset_from(&mut self, style: &'a ComputedValues) {
+        #[cfg(feature = "servo")]
+        {
+            let text_align = self.authored_control_style.text_align;
+            self.authored_control_style = style.authored_control_style;
+            self.authored_control_style.text_align = text_align;
+        }
         % for style_struct in data.active_style_structs():
         % if not style_struct.inherited:
         self.${style_struct.ident} =
@@ -2637,6 +2657,8 @@ impl<'a> StyleBuilder<'a> {
             self.writing_mode,
             self.effective_zoom,
             self.flags.get(),
+            #[cfg(feature = "servo")]
+            self.authored_control_style,
             self.rules,
             self.visited_style,
             % for style_struct in data.active_style_structs():
@@ -2845,7 +2867,7 @@ macro_rules! longhand_properties_idents {
 #[cfg(feature = "gecko")]
 size_of_test!(ComputedValues, 256);
 #[cfg(feature = "servo")]
-size_of_test!(ComputedValues, 240);
+size_of_test!(ComputedValues, 248);
 
 // FFI relies on this.
 size_of_test!(Option<Arc<ComputedValues>>, 8);

@@ -4,6 +4,8 @@
 
 //! Supported CSS properties and the cascade.
 
+#[cfg(feature = "servo")]
+pub mod authored_control_style;
 pub mod cascade;
 pub mod declaration_block;
 pub mod shorthands;

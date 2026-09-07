@@ -137,6 +137,7 @@ fn augmented_restyle_damage_rebuild_box(old: &ComputedValues, new: &ComputedValu
     let old_box = old.get_box();
     let new_box = new.get_box();
     restyle_damage_rebuild_box(old, new)
+        || old.authored_control_style != new.authored_control_style
         || old_box.original_display != new_box.original_display
         || old_box.has_transform_or_perspective() != new_box.has_transform_or_perspective()
         || old.get_effects().filter.0.is_empty() != new.get_effects().filter.0.is_empty()
@@ -169,6 +170,21 @@ fn compute_damage(old: &ComputedValues, new: &ComputedValues) -> ServoRestyleDam
     }
 
     damage
+}
+
+#[cfg(test)]
+mod authored_control_provenance_tests {
+    use super::*;
+
+    #[test]
+    fn provenance_changes_require_layout_even_when_property_values_are_equal() {
+        let old = ComputedValues::initial_values_with_font_override(
+            style_structs::Font::initial_values(),
+        );
+        let mut new = (*old).clone();
+        new.authored_control_style.margin = true;
+        assert!(compute_damage(&old, &new).contains(ServoRestyleDamage::RELAYOUT));
+    }
 }
 
 impl ComputedValues {

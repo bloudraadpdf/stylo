@@ -426,7 +426,7 @@ where
         context.builder.attribute_references = Some(attribute_tracker.finalize());
     }
 
-    cascade.finished_applying_properties(&mut context.builder);
+    cascade.finished_applying_properties(&mut context.builder, using_cached_reset_properties);
 
     std::mem::drop(cascade);
 
@@ -1366,7 +1366,23 @@ impl<'b> Cascade<'b> {
         context.builder.visited_style = Some(style);
     }
 
-    fn finished_applying_properties(&self, builder: &mut StyleBuilder) {
+    fn finished_applying_properties(
+        &self,
+        builder: &mut StyleBuilder,
+        _using_cached_reset_properties: bool,
+    ) {
+        #[cfg(feature = "servo")]
+        {
+            if !_using_cached_reset_properties {
+                builder.authored_control_style =
+                    super::authored_control_style::AuthoredControlStyle::from_cascade(
+                        &self.author_specified,
+                        builder,
+                    );
+            }
+            builder.authored_control_style.text_align =
+                self.author_specified.contains(LonghandId::TextAlignAll);
+        }
         #[cfg(feature = "gecko")]
         {
             if let Some(bg) = builder.get_background_if_mutated() {
