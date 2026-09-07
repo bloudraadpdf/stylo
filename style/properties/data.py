@@ -556,7 +556,9 @@ class Longhand(Property):
             "TextDecorationInset",
             "TextIndent",
             "Transform",
+            "Translate",
             "WordSpacing",
+            "basic_shape::ShapeOutside",
         }
 
     def is_inherited_zoom_dependent_property(self):
