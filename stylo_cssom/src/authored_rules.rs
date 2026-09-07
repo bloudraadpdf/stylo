@@ -1301,9 +1301,23 @@ pub fn rewrite_css_urls(css: &str, resolve: &impl Fn(&str) -> Option<String>) ->
     let mut input = ParserInput::new(css);
     let mut parser = Parser::new(&mut input);
     let mut last_flushed: usize = 0;
-    rewrite_tokens_recursive(css, &mut parser, resolve, &mut out, &mut last_flushed);
+    rewrite_tokens_recursive(
+        css,
+        &mut parser,
+        resolve,
+        &mut out,
+        &mut last_flushed,
+        UrlRewriteContext::RuleStart,
+    );
     out.push_str(&css[last_flushed..]);
     out
+}
+
+#[derive(Clone, Copy)]
+enum UrlRewriteContext {
+    RuleStart,
+    RulePrelude,
+    ComponentValue,
 }
 
 fn rewrite_tokens_recursive(
@@ -1312,6 +1326,7 @@ fn rewrite_tokens_recursive(
     resolve: &impl Fn(&str) -> Option<String>,
     out: &mut String,
     last_flushed: &mut usize,
+    mut context: UrlRewriteContext,
 ) {
     loop {
         let token_start = parser.position();
@@ -1320,6 +1335,23 @@ fn rewrite_tokens_recursive(
             Ok(tok) => tok.clone(),
             Err(_) => break,
         };
+        if matches!(context, UrlRewriteContext::RuleStart)
+            && matches!(&token, Token::AtKeyword(name) if name.eq_ignore_ascii_case("namespace"))
+        {
+            while let Ok(token) = parser.next_including_whitespace_and_comments() {
+                if matches!(token, Token::Semicolon | Token::CurlyBracketBlock) {
+                    break;
+                }
+            }
+            continue;
+        }
+        if !matches!(context, UrlRewriteContext::ComponentValue) {
+            context = match token {
+                Token::WhiteSpace(_) | Token::Comment(_) => context,
+                Token::Semicolon | Token::CurlyBracketBlock => UrlRewriteContext::RuleStart,
+                _ => UrlRewriteContext::RulePrelude,
+            };
+        }
         match token {
             Token::UnquotedUrl(raw) => {
                 let token_end = parser.position();
@@ -1350,7 +1382,14 @@ fn rewrite_tokens_recursive(
             | Token::CurlyBracketBlock => {
                 let _ = parser.parse_nested_block(
                     |inner| -> Result<(), cssparser::ParseError<'_, ()>> {
-                        rewrite_tokens_recursive(css, inner, resolve, out, last_flushed);
+                        rewrite_tokens_recursive(
+                            css,
+                            inner,
+                            resolve,
+                            out,
+                            last_flushed,
+                            UrlRewriteContext::ComponentValue,
+                        );
                         Ok(())
                     },
                 );
@@ -1429,6 +1468,40 @@ fn should_skip_css_url_rewrite(raw_url: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn url_rewrite_preserves_namespace_identifiers() {
+        for declaration in [
+            "@namespace url(test-a);",
+            "@namespace x url('test-a');",
+            "@namespace x url(\"test-a\");",
+            "@namespace x 'test-a';",
+            "@namespace x u\\00072l(test-a);",
+            "@name\\73pace/**/x/**/url(test-a);",
+        ] {
+            let source = format!("{declaration} a {{ background: url(image.png) }}");
+            assert_eq!(
+                rewrite_css_url_tokens(&source, "https://example.test/style.css"),
+                format!(
+                    "{declaration} a {{ background: url(\"https://example.test/image.png\") }}"
+                ),
+            );
+        }
+    }
+
+    #[test]
+    fn url_rewrite_does_not_treat_namespace_tokens_in_values_as_rules() {
+        for source in [
+            "--value: @namespace url(image.png);",
+            "a { --value: @namespace url(image.png); }",
+            "a { --value: function(@namespace url(image.png)); }",
+        ] {
+            assert_eq!(
+                rewrite_css_url_tokens(source, "https://example.test/style.css"),
+                source.replace("url(image.png)", "url(\"https://example.test/image.png\")"),
+            );
+        }
+    }
 
     #[test]
     fn parsed_stylesheets_preserve_nested_blocks_and_import_statements() {
