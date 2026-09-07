@@ -3088,14 +3088,13 @@ impl Overflow {
     pub fn is_scrollable(&self) -> bool {
         matches!(*self, Self::Hidden | Self::Scroll | Self::Auto)
     }
-    /// Convert the value to a scrollable value if it's not already scrollable.
-    /// This maps `visible` to `auto` and `clip` to `hidden`.
+    /// Compute this axis against the opposite axis's specified overflow.
     #[inline]
-    pub fn to_scrollable(&self) -> Self {
-        match *self {
-            Self::Hidden | Self::Scroll | Self::Auto => *self,
-            Self::Visible => Self::Auto,
-            Self::Clip => Self::Hidden,
+    pub fn computed_with_opposite_axis(self, opposite: Self) -> Self {
+        if self == Self::Visible && opposite.is_scrollable() {
+            Self::Auto
+        } else {
+            self
         }
     }
 }
@@ -3193,6 +3192,29 @@ impl Parse for PositionProperty {
             Ok(Self::Sticky)
         } else {
             Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
+        }
+    }
+}
+
+#[cfg(test)]
+mod overflow_computation_tests {
+    use super::Overflow;
+
+    #[test]
+    fn clip_preserves_single_axis_scrolling() {
+        use Overflow::{Auto, Clip, Hidden, Scroll, Visible};
+        let values = [Visible, Clip, Hidden, Auto, Scroll];
+        let expected = [
+            [Visible, Visible, Auto, Auto, Auto],
+            [Clip; 5],
+            [Hidden; 5],
+            [Auto; 5],
+            [Scroll; 5],
+        ];
+        for (axis, row) in values.into_iter().zip(expected) {
+            for (opposite, computed) in values.into_iter().zip(row) {
+                assert_eq!(axis.computed_with_opposite_axis(opposite), computed);
+            }
         }
     }
 }

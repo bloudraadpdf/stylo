@@ -465,22 +465,15 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
         }
     }
 
-    /// CSS overflow-x and overflow-y require some fixup as well in some cases.
-    /// https://drafts.csswg.org/css-overflow-3/#overflow-properties
-    /// "Computed value: as specified, except with `visible`/`clip` computing to
-    /// `auto`/`hidden` (respectively) if one of `overflow-x` or `overflow-y` is
-    /// neither `visible` nor `clip`."
     fn adjust_for_overflow(&mut self) {
         let overflow_x = self.style.get_box().clone_overflow_x();
         let overflow_y = self.style.get_box().clone_overflow_y();
-        if overflow_x == overflow_y {
-            return; // optimization for the common case
-        }
-
-        if overflow_x.is_scrollable() != overflow_y.is_scrollable() {
+        let computed_x = overflow_x.computed_with_opposite_axis(overflow_y);
+        let computed_y = overflow_y.computed_with_opposite_axis(overflow_x);
+        if computed_x != overflow_x || computed_y != overflow_y {
             let box_style = self.style.mutate_box();
-            box_style.set_overflow_x(overflow_x.to_scrollable());
-            box_style.set_overflow_y(overflow_y.to_scrollable());
+            box_style.set_overflow_x(computed_x);
+            box_style.set_overflow_y(computed_y);
         }
     }
 
