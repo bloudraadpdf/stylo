@@ -5,6 +5,36 @@ use std::collections::HashSet;
 use std::sync::LazyLock;
 use style::stylesheets::UrlExtraData;
 
+pub fn project_inline_style_declaration_with_compat(
+    declaration: &stylo_cssom_model::SpecifiedDeclaration,
+    compat: crate::compat::CompatMode,
+    url_data: &UrlExtraData,
+) -> Vec<stylo_cssom_model::RuleDeclaration> {
+    let stylo_cssom_model::SpecifiedPropertyName::Vendor(property) = &declaration.property else {
+        return project_inline_style_declaration(declaration, url_data);
+    };
+    if crate::compat::translate::required_compat_for(property) != Some(compat) {
+        return Vec::new();
+    }
+    crate::compat::translate::inline_vendor_declarations(
+        property,
+        &projected_specified_style_value_text(&declaration.value),
+        match declaration.importance {
+            stylo_cssom_model::Importance::Normal => {
+                crate::declaration_parser::CssomDeclarationPriority::Normal
+            },
+            stylo_cssom_model::Importance::Important => {
+                crate::declaration_parser::CssomDeclarationPriority::Important
+            },
+        },
+        &std::sync::Arc::from(url_data.as_str()),
+    )
+    .into_iter()
+    .flatten()
+    .flat_map(|declaration| project_inline_style_declaration(&declaration, url_data))
+    .collect()
+}
+
 pub fn project_inline_style_declaration(
     declaration: &stylo_cssom_model::SpecifiedDeclaration,
     url_data: &UrlExtraData,
@@ -166,6 +196,7 @@ fn project_inline_compatibility_declaration(
         },
         Property::Standard(property) => one(property.schema().name, value),
         Property::Custom(property) => one(property, value),
+        Property::Vendor(_) => Vec::new(),
     }
 }
 
@@ -840,7 +871,8 @@ pub fn serialize_specified_declarations(
                 stylo_cssom_model::SpecifiedPropertyName::Standard(property) => {
                     css.push_str(property.schema().name)
                 },
-                stylo_cssom_model::SpecifiedPropertyName::Custom(property) => {
+                stylo_cssom_model::SpecifiedPropertyName::Custom(property)
+                | stylo_cssom_model::SpecifiedPropertyName::Vendor(property) => {
                     cssparser::serialize_identifier(property, &mut css)
                         .expect("writing CSS to a string is infallible");
                 },
@@ -1125,6 +1157,11 @@ pub fn projected_specified_property_value(
     declarations: &[stylo_cssom_model::SpecifiedDeclaration],
     property_name: &str,
 ) -> Option<String> {
+    if let Some(declaration) = declarations.iter().rev().find(|declaration| {
+        matches!(&declaration.property, stylo_cssom_model::SpecifiedPropertyName::Vendor(name) if name.eq_ignore_ascii_case(property_name))
+    }) {
+        return Some(projected_specified_style_value_text(&declaration.value));
+    }
     if property_name.starts_with("--") {
         let property = stylo_cssom_model::SpecifiedPropertyName::Custom(property_name.into());
         let declaration = declarations
@@ -1166,6 +1203,11 @@ pub fn projected_specified_property_importance(
     declarations: &[stylo_cssom_model::SpecifiedDeclaration],
     property: &str,
 ) -> Option<stylo_cssom_model::Importance> {
+    if let Some(declaration) = declarations.iter().rev().find(|declaration| {
+        matches!(&declaration.property, stylo_cssom_model::SpecifiedPropertyName::Vendor(name) if name.eq_ignore_ascii_case(property))
+    }) {
+        return Some(declaration.importance);
+    }
     if property.starts_with("--") {
         return declarations.iter().rev().find_map(|declaration| {
             matches!(&declaration.property, stylo_cssom_model::SpecifiedPropertyName::Custom(name) if name.as_ref() == property)

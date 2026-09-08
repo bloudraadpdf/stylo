@@ -611,6 +611,28 @@ pub fn parse_inline_compatibility_declaration(
     importance: stylo_cssom_model::Importance,
     base_url: &Arc<str>,
 ) -> Option<stylo_cssom_model::SpecifiedDeclaration> {
+    let vendor = authored_property.to_ascii_lowercase();
+    if crate::compat::translate::required_compat_for(&vendor).is_some() {
+        crate::compat::translate::inline_vendor_declarations(
+            &vendor,
+            value,
+            match importance {
+                stylo_cssom_model::Importance::Normal => CssomDeclarationPriority::Normal,
+                stylo_cssom_model::Importance::Important => CssomDeclarationPriority::Important,
+            },
+            base_url,
+        )?;
+        return Some(stylo_cssom_model::SpecifiedDeclaration {
+            property: stylo_cssom_model::SpecifiedPropertyName::Vendor(vendor.into()),
+            value: specified_style_value_from_components(parse_specified_component_values(
+                value, base_url,
+            )?),
+            importance,
+            shorthand_source: None,
+            shorthand_value: None,
+            typed_om_representation: None,
+        });
+    }
     let property = compatibility_declaration_property(authored_property, value)?;
     let url_data = url::Url::parse(base_url).ok()?.into();
     let namespaces = Namespaces::default();
@@ -1676,6 +1698,87 @@ mod tests {
     }
 
     #[test]
+    fn inline_vendor_declarations_preserve_source_page() {
+        let declarations =
+            parse_inline_style_declarations("-ro-source-page: 2 !important", "about:blank".into());
+        assert_eq!(declarations.len(), 1);
+        assert_eq!(
+            declarations[0].importance,
+            stylo_cssom_model::Importance::Important
+        );
+        assert_eq!(
+            crate::specified::projected_specified_property_value(&declarations, "-ro-source-page"),
+            Some("2".to_owned()),
+        );
+    }
+
+    #[test]
+    fn inline_vendor_declarations_project_only_for_the_selected_profile() {
+        use crate::compat::CompatMode;
+        let declarations =
+            parse_inline_style_declarations("-ro-source-page: 2 !important", "about:blank".into());
+        let url_data = crate::context::ABOUT_BLANK.clone().into();
+        for mode in [CompatMode::None, CompatMode::Prince, CompatMode::PdfReactor] {
+            let projected = crate::specified::project_inline_style_declaration_with_compat(
+                &declarations[0],
+                mode,
+                &url_data,
+            );
+            if mode == CompatMode::PdfReactor {
+                assert_eq!(projected.len(), 1);
+                assert_eq!(projected[0].name(), "-bd-source-page");
+                assert_eq!(projected[0].value(), "2");
+                assert!(projected[0].important());
+            } else {
+                assert!(projected.is_empty());
+            }
+        }
+    }
+
+    #[test]
+    fn inline_vendor_declarations_validate_and_mutate_authored_properties() {
+        let base_url = Arc::from("about:blank");
+        for value in ["", "nonsense", "2; color:red", "2 !important"] {
+            assert!(
+                parse_inline_style_property_declarations(
+                    "-ro-source-page",
+                    value,
+                    CssomDeclarationPriority::Normal,
+                    &base_url,
+                )
+                .is_none(),
+                "{value}"
+            );
+        }
+        let mut declarations = parse_inline_style_declarations(
+            "height:1px;-ro-height:2px!important;height:3px;-ro-height:4px",
+            base_url.clone(),
+        )
+        .to_vec();
+        assert_eq!(
+            crate::specified::serialize_specified_declarations(&declarations),
+            "-ro-height: 2px !important; height: 3px;",
+        );
+        let updates = parse_inline_style_property_declarations(
+            "-RO-HEIGHT",
+            "5px",
+            CssomDeclarationPriority::Normal,
+            &base_url,
+        )
+        .unwrap();
+        mutation::apply_updates(&mut declarations, updates, true);
+        assert_eq!(
+            crate::specified::projected_specified_property_value(&declarations, "-RO-HEIGHT"),
+            Some("5px".to_owned()),
+        );
+        mutation::remove_property(&mut declarations, "-RO-HEIGHT");
+        assert_eq!(
+            crate::specified::serialize_specified_declarations(&declarations),
+            "height: 3px;"
+        );
+    }
+
+    #[test]
     fn inline_compatibility_declarations_remain_typed_and_authored() {
         use stylo_cssom_model::{
             InlineCompatibilityProperty as Compat, SpecifiedPropertyName as Property,
@@ -1694,7 +1797,7 @@ mod tests {
             .iter()
             .filter_map(|declaration| match &declaration.property {
                 Property::Compatibility(property) => Some((*property, declaration.importance)),
-                Property::Standard(_) | Property::Custom(_) => None,
+                Property::Standard(_) | Property::Custom(_) | Property::Vendor(_) => None,
             })
             .collect::<Vec<_>>();
         assert_eq!(
@@ -1819,7 +1922,8 @@ mod tests {
                         Property::Compatibility(Compat::FlowTolerance) => Some("flow-tolerance"),
                         Property::Standard(_)
                         | Property::Custom(_)
-                        | Property::Compatibility(_) => None,
+                        | Property::Compatibility(_)
+                        | Property::Vendor(_) => None,
                     }?;
                     Some((
                         name,

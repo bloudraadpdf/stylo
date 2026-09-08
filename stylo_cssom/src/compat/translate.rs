@@ -4239,6 +4239,37 @@ fn resolve_pdfreactor_oversize_paper_name(value: &str) -> String {
     format!("{width}mm {height}mm")
 }
 
+pub(crate) fn inline_vendor_declarations(
+    property: &str,
+    value: &str,
+    priority: crate::declaration_parser::CssomDeclarationPriority,
+    base_url: &std::sync::Arc<str>,
+) -> Option<Vec<stylo_cssom_model::SpecifiedDeclaration>> {
+    required_compat_for(property)?;
+    let pairs = match translate_property(property, value) {
+        Translated::Native {
+            native_property,
+            native_value,
+        } => {
+            vec![(native_property, native_value)]
+        },
+        Translated::Natives(pairs) => pairs,
+        Translated::Satisfied | Translated::ValueDropped | Translated::PropertyDropped => {
+            return None;
+        },
+    };
+    let declarations = pairs
+        .into_iter()
+        .map(|(property, value)| {
+            crate::declaration_parser::parse_inline_style_property_declarations(
+                property, &value, priority, base_url,
+            )
+        })
+        .collect::<Option<Vec<_>>>()?;
+    let declarations = declarations.into_iter().flatten().collect::<Vec<_>>();
+    (!declarations.is_empty()).then_some(declarations)
+}
+
 fn translate_property(lower_property: &str, raw_value: &str) -> Translated {
     match lower_property {
         "-ro-height" => Translated::Native {
@@ -6059,7 +6090,7 @@ fn is_known_foreign(lower_property: &str) -> bool {
     required_compat_for(lower_property).is_some()
 }
 
-fn required_compat_for(lower_property: &str) -> Option<CompatMode> {
+pub(crate) fn required_compat_for(lower_property: &str) -> Option<CompatMode> {
     match lower_property {
         "-ro-pdf-conformance"
         | "-ro-pdf-format"

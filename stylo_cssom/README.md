@@ -5,6 +5,11 @@ This crate exposes CSSOM rules, declarations, selectors, registrations and
 Typed OM values, using Stylo's native property and value grammars.
 Vendor syntax translation is part of the same boundary.
 
+Inline declarations retain admitted vendor names, values and priorities.
+CSSOM mutations use the authored names. Rendering projects these declarations
+through the stylesheet translation rules for the selected compatibility mode.
+Other modes ignore them.
+
 ```text
 CSS text -> stylo_cssom -> typed CSS values -> DOM bindings and rendering
                  |

@@ -26,7 +26,7 @@ impl CanonicalProperty {
             SpecifiedPropertyName::Compatibility(property) => {
                 Some(Self::from_compatibility(*property))
             },
-            SpecifiedPropertyName::Custom(_) => None,
+            SpecifiedPropertyName::Custom(_) | SpecifiedPropertyName::Vendor(_) => None,
         }
     }
 
@@ -161,7 +161,8 @@ pub const fn css_wide_keyword_text(keyword: stylo_cssom_model::CssWideKeyword) -
 }
 
 pub fn properties_match(first: &SpecifiedPropertyName, second: &SpecifiedPropertyName) -> bool {
-    if let (SpecifiedPropertyName::Custom(first), SpecifiedPropertyName::Custom(second)) =
+    if let (SpecifiedPropertyName::Custom(first), SpecifiedPropertyName::Custom(second))
+    | (SpecifiedPropertyName::Vendor(first), SpecifiedPropertyName::Vendor(second)) =
         (first, second)
     {
         Arc::ptr_eq(first, second) || first == second

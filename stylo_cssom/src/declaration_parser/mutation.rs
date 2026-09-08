@@ -2,12 +2,13 @@ use std::collections::HashSet;
 
 use stylo_cssom_model::{Importance, SpecifiedDeclaration, SpecifiedPropertyName};
 
-use super::compatibility::{properties_match, shorthand_members, CanonicalProperty};
+use super::compatibility::{CanonicalProperty, properties_match, shorthand_members};
 
 #[derive(Eq, Hash, PartialEq)]
 enum DeclarationKey<'a> {
     Standard(CanonicalProperty),
     Custom(&'a str),
+    Vendor(&'a str),
 }
 
 impl<'a> From<&'a SpecifiedPropertyName> for DeclarationKey<'a> {
@@ -20,6 +21,7 @@ impl<'a> From<&'a SpecifiedPropertyName> for DeclarationKey<'a> {
                 Self::Standard(CanonicalProperty::from_compatibility(*property))
             },
             SpecifiedPropertyName::Custom(name) => Self::Custom(name),
+            SpecifiedPropertyName::Vendor(name) => Self::Vendor(name),
         }
     }
 }
@@ -62,6 +64,9 @@ pub fn apply_updates(
 }
 
 pub fn remove_property(declarations: &mut Vec<SpecifiedDeclaration>, property: &str) {
+    declarations.retain(|declaration| {
+        !matches!(&declaration.property, SpecifiedPropertyName::Vendor(candidate) if candidate.eq_ignore_ascii_case(property))
+    });
     if property.starts_with("--") {
         declarations.retain(|declaration| {
             !matches!(&declaration.property, SpecifiedPropertyName::Custom(candidate) if candidate.as_ref() == property)

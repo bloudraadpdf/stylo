@@ -572,6 +572,7 @@ pub enum TypedOmDeclaredValueRepresentation {
 pub enum SpecifiedPropertyName {
     Standard(StandardPropertyId),
     Custom(Arc<str>),
+    Vendor(Arc<str>),
     Compatibility(InlineCompatibilityProperty),
 }
 
