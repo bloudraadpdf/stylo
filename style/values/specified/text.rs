@@ -264,6 +264,31 @@ mod tests {
         }
         assert!(parse_value::<TextDecorationLine>("spelling-error underline").is_err());
     }
+
+    #[test]
+    fn text_combine_digits_defaults_to_two_without_accepting_invalid_counts() {
+        for (css, count) in [
+            ("digits", 2),
+            ("digits 2", 2),
+            ("digits 3", 3),
+            ("digits 4", 4),
+        ] {
+            assert_eq!(
+                parse_value::<TextCombineUpright>(css).unwrap(),
+                TextCombineUpright::Digits(Integer::new(count)),
+                "{css}",
+            );
+        }
+        for css in [
+            "digits 1",
+            "digits 5",
+            "digits 2.0",
+            "digits invalid",
+            "digits 2 3",
+        ] {
+            assert!(parse_value::<TextCombineUpright>(css).is_err(), "{css}");
+        }
+    }
 }
 
 /// A generic value for the `text-overflow` property.
@@ -1161,7 +1186,7 @@ pub enum TextCombineUpright {
     None,
     /// `all`
     All,
-    /// `digits <integer [2,4]>`
+    /// `digits <integer [2,4]>?`
     Digits(Integer),
 }
 
@@ -1176,8 +1201,12 @@ impl Parse for TextCombineUpright {
             "none" => Ok(Self::None),
             "all" => Ok(Self::All),
             "digits" => {
-                let digits = Integer::parse(context, input)?;
-                if !(2..=4).contains(&digits.value()) {
+                let digits = if input.is_exhausted() {
+                    Integer::new(2)
+                } else {
+                    Integer::parse(context, input)?
+                };
+                if !digits.was_calc() && !(2..=4).contains(&digits.value()) {
                     return Err(location.new_custom_error(StyleParseErrorKind::UnspecifiedError));
                 }
                 Ok(Self::Digits(digits))
@@ -1210,9 +1239,9 @@ impl ToComputedValue for TextCombineUpright {
         match self {
             Self::None => computed::text::TextCombineUpright::None,
             Self::All => computed::text::TextCombineUpright::All,
-            Self::Digits(digits) => {
-                computed::text::TextCombineUpright::Digits(digits.to_computed_value(context))
-            },
+            Self::Digits(digits) => computed::text::TextCombineUpright::Digits(
+                digits.to_computed_value(context).clamp(2, 4),
+            ),
         }
     }
 

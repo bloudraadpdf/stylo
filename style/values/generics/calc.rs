@@ -443,6 +443,11 @@ pub trait CalcNodeLeaf: Clone + Sized + PartialEq + ToCss + ToTyped {
     /// Returns the unit of the leaf.
     fn unit(&self) -> CalcUnits;
 
+    /// Whether the leaf is a standalone function.
+    fn is_function(&self) -> bool {
+        false
+    }
+
     /// Returns the unitless value of this leaf if one is available.
     fn unitless_value(&self) -> Option<f32>;
 
@@ -2017,6 +2022,7 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                     true
                 },
             },
+            Self::Leaf(ref leaf) if leaf.is_function() => false,
             Self::Leaf(_) | Self::Anchor(_) | Self::AnchorSize(_) => match level {
                 ArgumentLevel::CalculationRoot => {
                     dest.write_str("calc(")?;

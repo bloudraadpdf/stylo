@@ -378,6 +378,10 @@ impl AllowParse {
 }
 
 impl generic::CalcNodeLeaf for Leaf {
+    fn is_function(&self) -> bool {
+        matches!(self, Self::SiblingIndex | Self::SiblingCount)
+    }
+
     fn unit(&self) -> CalcUnits {
         match self {
             Leaf::Size => CalcUnits::LENGTH,
@@ -1974,8 +1978,10 @@ mod tree_counting_tests {
     #[test]
     fn numeric_values_retain_tree_counting_calculations() {
         for (css, serialised) in [
-            ("sibling-index()", "calc(sibling-index())"),
-            ("sibling-count()", "calc(sibling-count())"),
+            ("sibling-index()", "sibling-index()"),
+            ("sibling-count()", "sibling-count()"),
+            ("calc(sibling-index())", "sibling-index()"),
+            ("calc(sibling-count())", "sibling-count()"),
             ("calc(0.5 * sibling-index())", "calc(0.5 * sibling-index())"),
             ("calc(2 * sibling-count())", "calc(2 * sibling-count())"),
         ] {
@@ -1992,6 +1998,32 @@ mod tree_counting_tests {
                 .expect("integer calculations must survive until computed-value time");
             assert_eq!(integer.to_css_string(), serialised);
             assert!(integer.resolve().is_none());
+        }
+    }
+
+    #[test]
+    fn text_combine_digit_calculations_round_and_clamp_when_computed() {
+        for (css, count) in [
+            ("digits calc(0 + 1)", 2),
+            ("digits calc(2 + 3)", 4),
+            ("digits calc(3 * 1.0)", 3),
+            ("digits calc(2e0 * 2e+0)", 4),
+            ("digits calc(2.5)", 3),
+            ("digits calc(infinity)", 4),
+            ("digits calc(-infinity)", 2),
+            ("digits calc(NaN)", 2),
+            ("digits calc(3 * sign(1em - 1px))", 3),
+        ] {
+            let mut input = ParserInput::new(css);
+            let value = Parser::new(&mut input)
+                .parse_entirely(|input| specified::TextCombineUpright::parse(&context(), input))
+                .unwrap_or_else(|_| panic!("{css} must parse"));
+            let computed = with_computed_context(|context| value.to_computed_value(context));
+            assert_eq!(
+                computed,
+                crate::values::computed::TextCombineUpright::Digits(count),
+                "{css}"
+            );
         }
     }
 

@@ -1003,6 +1003,11 @@ impl Integer {
         self.resolve().unwrap_or(0)
     }
 
+    /// Whether this integer was specified as a calculation.
+    pub fn was_calc(&self) -> bool {
+        !matches!(self.0, IntegerValue::Literal(_))
+    }
+
     /// Returns the rounded value when it can be resolved without element
     /// context, or `None` for a tree-dependent calculation.
     pub fn resolve(&self) -> Option<CSSInteger> {
