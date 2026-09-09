@@ -1768,6 +1768,25 @@ mod tree_counting_tests {
     }
 
     #[test]
+    fn nan_comparisons_retain_unresolved_units_in_specified_values() {
+        for (css, expected) in [
+            (
+                "calc(1 * min(NaN * 2px, NaN * 4em))",
+                "calc(1 * min(NaN * 1px, NaN * 1em))",
+            ),
+            (
+                "calc(1 * clamp(NaN * 2em, NaN * 4px, NaN * 8pt))",
+                "calc(1 * clamp(NaN * 1em, NaN * 1px, NaN * 1px))",
+            ),
+        ] {
+            assert_eq!(
+                parse_length_percentage(css).unwrap().to_css_string(),
+                expected
+            );
+        }
+    }
+
+    #[test]
     fn percentage_progress_resolves_contextual_lengths_before_multiplication() {
         assert_eq!(
             compute_percentage("calc(progress(10rem, 20px, 100px) * 180%)"),

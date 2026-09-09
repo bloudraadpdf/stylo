@@ -1265,23 +1265,16 @@ impl PartialEq for CalcLengthPercentage {
 impl specified::CalcLengthPercentage {
     fn to_computed_float_offset_value(&self, context: &Context) -> LengthPercentage {
         use crate::values::specified::calc::Leaf;
-        use crate::values::specified::length::NoCalcLength;
 
         let node = self.node.map_leaves(|leaf| match *leaf {
             Leaf::Size => unreachable!("size is only valid inside calc-size()"),
             Leaf::Percentage(value) => CalcLengthPercentageLeaf::Percentage(Percentage(value)),
             Leaf::Length(value) => {
-                let computed = match value {
-                    NoCalcLength::Absolute(absolute) if !absolute.to_px().is_finite() => {
-                        Length::new(absolute.to_px()).zoom(context.builder.effective_zoom)
-                    },
-                    _ => value.to_computed_value_with_base_size(
-                        context,
-                        FontBaseSize::CurrentStyle,
-                        LineHeightBase::CurrentStyle,
-                    ),
-                };
-                CalcLengthPercentageLeaf::Length(computed)
+                CalcLengthPercentageLeaf::Length(value.to_computed_value_in_calc(
+                    context,
+                    FontBaseSize::CurrentStyle,
+                    LineHeightBase::CurrentStyle,
+                ))
             },
             Leaf::Number(value) => CalcLengthPercentageLeaf::Number(value),
             Leaf::SiblingIndex => CalcLengthPercentageLeaf::Number(context.sibling_index()),
@@ -1314,8 +1307,7 @@ impl specified::CalcLengthPercentage {
             Leaf::Size => unreachable!("size is only valid inside calc-size()"),
             Leaf::Percentage(p) => CalcLengthPercentageLeaf::Percentage(Percentage(p)),
             Leaf::Length(l) => CalcLengthPercentageLeaf::Length({
-                let result =
-                    l.to_computed_value_with_base_size(context, base_size, line_height_base);
+                let result = l.to_computed_value_in_calc(context, base_size, line_height_base);
                 if l.should_zoom_text() {
                     zoom_fn(result)
                 } else {

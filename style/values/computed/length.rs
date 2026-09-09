@@ -55,6 +55,20 @@ impl ToComputedValue for specified::NoCalcLength {
 }
 
 impl specified::NoCalcLength {
+    pub(crate) fn to_computed_value_in_calc(
+        &self,
+        context: &Context,
+        base_size: FontBaseSize,
+        line_height_base: LineHeightBase,
+    ) -> Length {
+        match *self {
+            Self::Absolute(length) => {
+                Length::new(length.to_px()).zoom(context.builder.effective_zoom)
+            },
+            _ => self.to_computed_value_with_base_size(context, base_size, line_height_base),
+        }
+    }
+
     /// Computes a length with a given font-relative base size.
     pub fn to_computed_value_with_base_size(
         &self,

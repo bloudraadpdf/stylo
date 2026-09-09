@@ -816,10 +816,6 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
     pub fn try_product_in_place(&mut self, other: &mut Self) -> bool {
         if let Ok(resolved) = other.resolve() {
             if let Some(number) = resolved.as_number() {
-                if number == 1.0 {
-                    return true;
-                }
-
                 if self.is_product_distributive() {
                     if self.map(|v| v * number).is_err() {
                         return false;
@@ -831,11 +827,6 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
 
         if let Ok(resolved) = self.resolve() {
             if let Some(number) = resolved.as_number() {
-                if number == 1.0 {
-                    std::mem::swap(self, other);
-                    return true;
-                }
-
                 if other.is_product_distributive() {
                     if other.map(|v| v * number).is_err() {
                         return false;
@@ -1685,6 +1676,13 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 replace_self_with!(&mut result);
             },
             Self::MinMax(ref mut children, op) => {
+                let unit = value_or_stop!(children[0].as_leaf().ok_or(())).sort_key();
+                if children
+                    .iter()
+                    .any(|child| child.as_leaf().is_none_or(|leaf| leaf.sort_key() != unit))
+                {
+                    return;
+                }
                 let winning_order = match op {
                     MinMaxOp::Min => cmp::Ordering::Less,
                     MinMaxOp::Max => cmp::Ordering::Greater,
