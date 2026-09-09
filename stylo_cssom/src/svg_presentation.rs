@@ -364,7 +364,9 @@ fn parse_svg_transform_angle(arg: &str) -> Option<f64> {
     {
         return Some(f64::from(n));
     }
-    let degrees = crate::values::parse_value::<style::values::specified::Angle>(trimmed)?.degrees();
+    let degrees = crate::values::parse_value::<style::values::specified::Angle>(trimmed)?
+        .degrees_without_context()
+        .ok()?;
     Some(f64::from(degrees))
 }
 

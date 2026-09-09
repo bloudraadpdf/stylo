@@ -8,7 +8,7 @@ use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
 use crate::values::computed::time::Time as ComputedTime;
 use crate::values::computed::{Context, ToComputedValue};
-use crate::values::specified::calc::CalcNode;
+use crate::values::specified::calc::{CalcNode, Leaf};
 use crate::values::CSSFloat;
 use crate::Zero;
 use cssparser::{match_ignore_ascii_case, Parser, Token};
@@ -16,76 +16,92 @@ use std::fmt::{self, Write};
 use style_traits::values::specified::AllowedNumericType;
 use style_traits::{CssWriter, ParseError, SpecifiedValueInfo, StyleParseErrorKind, ToCss};
 
-/// A time value according to CSS-VALUES § 6.2.
+/// A literal time dimension.
 #[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, ToShmem)]
-pub struct Time {
+pub struct TimeDimension {
     seconds: CSSFloat,
     unit: TimeUnit,
-    calc_clamping_mode: Option<AllowedNumericType>,
 }
 
 /// A time unit.
 #[derive(Clone, Copy, Debug, Eq, MallocSizeOf, PartialEq, ToShmem)]
 pub enum TimeUnit {
-    /// `s`
+    /// Seconds.
     Second,
-    /// `ms`
+    /// Milliseconds.
     Millisecond,
 }
 
-impl Time {
-    /// Returns a time value that represents `seconds` seconds.
-    pub fn from_seconds_with_calc_clamping_mode(
-        seconds: CSSFloat,
-        calc_clamping_mode: Option<AllowedNumericType>,
-    ) -> Self {
-        Time {
+impl TimeDimension {
+    /// Creates a time dimension in seconds.
+    pub fn from_seconds(seconds: CSSFloat) -> Self {
+        Self {
             seconds,
             unit: TimeUnit::Second,
-            calc_clamping_mode,
         }
     }
 
-    /// Returns a time value that represents `seconds` seconds.
-    pub fn from_seconds(seconds: CSSFloat) -> Self {
-        Self::from_seconds_with_calc_clamping_mode(seconds, None)
-    }
-
-    /// Returns the time in fractional seconds.
+    /// Returns the time in seconds.
     pub fn seconds(self) -> CSSFloat {
         self.seconds
     }
 
-    /// Returns the unit of the time.
-    #[inline]
-    pub fn unit(&self) -> &'static str {
-        match self.unit {
-            TimeUnit::Second => "s",
-            TimeUnit::Millisecond => "ms",
-        }
-    }
-
-    #[inline]
-    fn unitless_value(&self) -> CSSFloat {
-        match self.unit {
-            TimeUnit::Second => self.seconds,
-            TimeUnit::Millisecond => self.seconds * 1000.,
-        }
-    }
-
-    /// Parses a time according to CSS-VALUES § 6.2.
-    pub fn parse_dimension(value: CSSFloat, unit: &str) -> Result<Time, ()> {
+    /// Parses a literal time dimension.
+    pub fn parse_dimension(value: CSSFloat, unit: &str) -> Result<Self, ()> {
         let (seconds, unit) = match_ignore_ascii_case! { unit,
             "s" => (value, TimeUnit::Second),
             "ms" => (value / 1000.0, TimeUnit::Millisecond),
             _ => return Err(())
         };
+        Ok(Self { seconds, unit })
+    }
+}
 
-        Ok(Time {
-            seconds,
-            unit,
-            calc_clamping_mode: None,
-        })
+impl ToCss for TimeDimension {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        let (value, unit) = match self.unit {
+            TimeUnit::Second => (self.seconds, "s"),
+            TimeUnit::Millisecond => (self.seconds * 1000.0, "ms"),
+        };
+        crate::values::serialize_specified_dimension(value, unit, false, dest)
+    }
+}
+
+/// A specified time, retained until its calculation context is available.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
+pub struct Time(TimeValue);
+
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
+enum TimeValue {
+    Dimension(TimeDimension),
+    Calc(Box<CalcNode>, AllowedNumericType),
+}
+
+impl Time {
+    /// Creates a literal time in seconds.
+    pub fn from_seconds(seconds: CSSFloat) -> Self {
+        Self(TimeValue::Dimension(TimeDimension::from_seconds(seconds)))
+    }
+
+    /// Creates a time with its calculation range.
+    pub fn from_seconds_with_calc_clamping_mode(
+        seconds: CSSFloat,
+        clamping_mode: Option<AllowedNumericType>,
+    ) -> Self {
+        match clamping_mode {
+            None => Self::from_seconds(seconds),
+            Some(mode) => Self::from_calc_node(
+                CalcNode::Leaf(Leaf::Time(TimeDimension::from_seconds(seconds))),
+                mode,
+            ),
+        }
+    }
+
+    pub(crate) fn from_calc_node(node: CalcNode, mode: AllowedNumericType) -> Self {
+        Self(TimeValue::Calc(Box::new(node), mode))
     }
 
     fn parse_with_clamping_mode<'i, 't>(
@@ -97,22 +113,18 @@ impl Time {
 
         let location = input.current_source_location();
         match *input.next()? {
-            // Note that we generally pass ParserContext to is_ok() to check
-            // that the ParserMode of the ParserContext allows all numeric
-            // values for SMIL regardless of clamping_mode, but in this Time
-            // value case, the value does not animate for SMIL at all, so we use
-            // ParsingMode::DEFAULT directly.
             Token::Dimension {
                 value, ref unit, ..
             } if clamping_mode.is_ok(ParsingMode::DEFAULT, value) => {
-                Time::parse_dimension(value, unit)
+                TimeDimension::parse_dimension(value, unit)
+                    .map(|value| Self(TimeValue::Dimension(value)))
                     .map_err(|()| location.new_custom_error(StyleParseErrorKind::UnspecifiedError))
             },
             Token::Function(ref name) => {
                 let function = CalcNode::math_function(context, name, location)?;
                 CalcNode::parse_time(context, input, clamping_mode, function)
             },
-            ref t => return Err(location.new_unexpected_token_error(t.clone())),
+            ref token => Err(location.new_unexpected_token_error(token.clone())),
         }
     }
 
@@ -126,35 +138,36 @@ impl Time {
 }
 
 impl Zero for Time {
-    #[inline]
     fn zero() -> Self {
         Self::from_seconds(0.0)
     }
 
-    #[inline]
     fn is_zero(&self) -> bool {
-        // The unit doesn't matter, i.e. `s` and `ms` are the same for zero.
-        self.seconds == 0.0 && self.calc_clamping_mode.is_none()
+        matches!(self.0, TimeValue::Dimension(value) if value.seconds() == 0.0)
     }
 }
 
 impl ToComputedValue for Time {
     type ComputedValue = ComputedTime;
 
-    fn to_computed_value(&self, _context: &Context) -> Self::ComputedValue {
-        let seconds = self
-            .calc_clamping_mode
-            .map_or(self.seconds(), |mode| mode.clamp(self.seconds()));
-
-        ComputedTime::from_seconds(crate::values::normalize(seconds))
+    fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
+        let seconds = match &self.0 {
+            TimeValue::Dimension(value) => value.seconds(),
+            TimeValue::Calc(node, mode) => mode.clamp(
+                node.resolve_time(context)
+                    .expect("a validated time calculation must resolve in its element context"),
+            ),
+        };
+        let seconds = if seconds == 0.0 {
+            0.0
+        } else {
+            crate::values::normalize(seconds).clamp(f32::MIN, f32::MAX)
+        };
+        ComputedTime::from_seconds(seconds)
     }
 
     fn from_computed_value(computed: &Self::ComputedValue) -> Self {
-        Time {
-            seconds: computed.seconds(),
-            unit: TimeUnit::Second,
-            calc_clamping_mode: None,
-        }
+        Self::from_seconds(computed.seconds())
     }
 }
 
@@ -172,12 +185,10 @@ impl ToCss for Time {
     where
         W: Write,
     {
-        crate::values::serialize_specified_dimension(
-            self.unitless_value(),
-            self.unit(),
-            self.calc_clamping_mode.is_some(),
-            dest,
-        )
+        match &self.0 {
+            TimeValue::Dimension(value) => value.to_css(dest),
+            TimeValue::Calc(node, _) => node.to_css(dest),
+        }
     }
 }
 

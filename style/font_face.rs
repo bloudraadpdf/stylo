@@ -495,13 +495,16 @@ impl ToCss for FontStyle {
 
 impl FontStyle {
     /// Returns a computed font-style descriptor.
-    pub fn compute(&self) -> ComputedFontStyleDescriptor {
+    pub fn compute(
+        &self,
+        context: &crate::values::computed::Context,
+    ) -> ComputedFontStyleDescriptor {
         match *self {
             FontStyle::Italic => ComputedFontStyleDescriptor::Italic,
             FontStyle::Oblique(ref first, ref second) => {
                 let (min, max) = sort_range(
-                    SpecifiedFontStyle::compute_angle_degrees(first),
-                    SpecifiedFontStyle::compute_angle_degrees(second),
+                    SpecifiedFontStyle::compute_angle_degrees(first, context),
+                    SpecifiedFontStyle::compute_angle_degrees(second, context),
                 );
                 ComputedFontStyleDescriptor::Oblique(min, max)
             },

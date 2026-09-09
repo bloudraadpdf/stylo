@@ -19,10 +19,13 @@ use crate::values::generics::length::GenericAnchorSizeFunction;
 use crate::values::generics::position::{
     AnchorSideKeyword, GenericAnchorFunction, GenericAnchorSide, TreeScoped,
 };
+use crate::values::specified::angle::AngleDimension;
 use crate::values::specified::length::{AbsoluteLength, FontRelativeLength, NoCalcLength};
 use crate::values::specified::length::{
     ContainerRelativeLength, PageRelativeLength, ViewportPercentageLength,
 };
+use crate::values::specified::length::{FontBaseSize, LineHeightBase};
+use crate::values::specified::time::TimeDimension;
 use crate::values::specified::{self, Angle, Resolution, Time};
 use crate::values::{serialize_number, serialize_percentage, CSSFloat, DashedIdent};
 use cssparser::{match_ignore_ascii_case, CowRcStr, Parser, SourceLocation, Token};
@@ -141,9 +144,9 @@ pub enum Leaf {
     /// `<length>`
     Length(NoCalcLength),
     /// `<angle>`
-    Angle(Angle),
+    Angle(AngleDimension),
     /// `<time>`
-    Time(Time),
+    Time(TimeDimension),
     /// `<resolution>`
     Resolution(Resolution),
     /// A component of a color.
@@ -184,7 +187,9 @@ impl ToCss for Leaf {
                 /* was_calc = */ false,
                 dest,
             ),
-            Self::Time(ref t) => t.to_css(dest),
+            Self::Time(ref t) => {
+                crate::values::serialize_specified_dimension(t.seconds(), "s", false, dest)
+            },
             Self::ColorComponent(ref s) => s.to_css(dest),
             Self::SiblingIndex => dest.write_str("sibling-index()"),
             Self::SiblingCount => dest.write_str("sibling-count()"),
@@ -221,7 +226,7 @@ pub struct CalcLengthPercentage {
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToShmem)]
 pub struct CalcAnglePercentage {
     percentage: CSSFloat,
-    angle: Angle,
+    angle: AngleDimension,
 }
 
 impl CalcAnglePercentage {
@@ -272,7 +277,7 @@ impl ToComputedValue for CalcAnglePercentage {
     fn from_computed_value(computed: &Self::ComputedValue) -> Self {
         Self {
             percentage: computed.percentage().0,
-            angle: Angle::from_computed_value(&computed.angle()),
+            angle: AngleDimension::Deg(computed.angle().degrees()),
         }
     }
 }
@@ -563,10 +568,10 @@ impl generic::CalcNodeLeaf for Leaf {
                 *one += *other;
             },
             (&mut Angle(ref mut one), &Angle(ref other)) => {
-                *one = specified::Angle::from_calc(one.degrees() + other.degrees());
+                *one = AngleDimension::Deg(one.degrees() + other.degrees());
             },
             (&mut Time(ref mut one), &Time(ref other)) => {
-                *one = specified::Time::from_seconds(one.seconds() + other.seconds());
+                *one = TimeDimension::from_seconds(one.seconds() + other.seconds());
             },
             (&mut Resolution(ref mut one), &Resolution(ref other)) => {
                 *one = specified::Resolution::from_dppx(one.dppx() + other.dppx());
@@ -640,7 +645,7 @@ impl generic::CalcNodeLeaf for Leaf {
                 return Ok(Leaf::Percentage(op(one, other)));
             },
             (&Angle(ref one), &Angle(ref other)) => {
-                return Ok(Leaf::Angle(specified::Angle::from_calc(op(
+                return Ok(Leaf::Angle(AngleDimension::Deg(op(
                     one.degrees(),
                     other.degrees(),
                 ))));
@@ -652,7 +657,7 @@ impl generic::CalcNodeLeaf for Leaf {
                 ))));
             },
             (&Time(ref one), &Time(ref other)) => {
-                return Ok(Leaf::Time(specified::Time::from_seconds(op(
+                return Ok(Leaf::Time(TimeDimension::from_seconds(op(
                     one.seconds(),
                     other.seconds(),
                 ))));
@@ -684,8 +689,8 @@ impl generic::CalcNodeLeaf for Leaf {
         Ok(match self {
             Leaf::Size => return Err(()),
             Leaf::Length(one) => *one = one.map(op),
-            Leaf::Angle(one) => *one = specified::Angle::from_calc(op(one.degrees())),
-            Leaf::Time(one) => *one = specified::Time::from_seconds(op(one.seconds())),
+            Leaf::Angle(one) => *one = AngleDimension::Deg(op(one.degrees())),
+            Leaf::Time(one) => *one = TimeDimension::from_seconds(op(one.seconds())),
             Leaf::Resolution(one) => *one = specified::Resolution::from_dppx(op(one.dppx())),
             Leaf::Percentage(one) => *one = op(*one),
             Leaf::Number(one) => *one = op(*one),
@@ -811,12 +816,12 @@ impl CalcNode {
                     }
                 }
                 if allowed.includes(CalcUnits::ANGLE) {
-                    if let Ok(a) = Angle::parse_dimension(value, unit, /* from_calc = */ true) {
+                    if let Ok(a) = AngleDimension::parse(value, unit) {
                         return Ok(CalcNode::Leaf(Leaf::Angle(a)));
                     }
                 }
                 if allowed.includes(CalcUnits::TIME) {
-                    if let Ok(t) = Time::parse_dimension(value, unit) {
+                    if let Ok(t) = TimeDimension::parse_dimension(value, unit) {
                         return Ok(CalcNode::Leaf(Leaf::Time(t)));
                     }
                 }
@@ -1016,7 +1021,7 @@ impl CalcNode {
                         },
                     };
 
-                    Ok(Self::Leaf(Leaf::Angle(Angle::from_radians(radians))))
+                    Ok(Self::Leaf(Leaf::Angle(AngleDimension::Rad(radians))))
                 },
                 MathFunction::Atan2 => {
                     let allow_all = allowed.new_including(CalcUnits::ALL);
@@ -1035,8 +1040,8 @@ impl CalcNode {
                             return Ok(a.atan2(b));
                         }
 
-                        if let Ok(a) = a.to_time(None) {
-                            let b = b.to_time(None)?;
+                        if let Ok(a) = a.to_time() {
+                            let b = b.to_time()?;
                             return Ok(a.seconds().atan2(b.seconds()));
                         }
 
@@ -1057,7 +1062,7 @@ impl CalcNode {
                         Ok(a.atan2(b))
                     })?;
 
-                    Ok(Self::Leaf(Leaf::Angle(Angle::from_radians(radians))))
+                    Ok(Self::Leaf(Leaf::Angle(AngleDimension::Rad(radians))))
                 },
                 MathFunction::Pow => {
                     let a = Self::parse_number_argument(context, input)?;
@@ -1344,18 +1349,12 @@ impl CalcNode {
         }
     }
 
-    /// Tries to simplify this expression into a `<time>` value.
-    fn to_time(&self, clamping_mode: Option<AllowedNumericType>) -> Result<Time, ()> {
-        let seconds = if let Leaf::Time(time) = self.resolve()? {
-            time.seconds()
-        } else {
-            return Err(());
-        };
-
-        Ok(Time::from_seconds_with_calc_clamping_mode(
-            seconds,
-            clamping_mode,
-        ))
+    /// Tries to simplify this expression into a time dimension.
+    fn to_time(&self) -> Result<TimeDimension, ()> {
+        match self.resolve()? {
+            Leaf::Time(time) => Ok(time),
+            _ => Err(()),
+        }
     }
 
     /// Tries to simplify the expression into a `<resolution>` value.
@@ -1369,16 +1368,12 @@ impl CalcNode {
         Ok(Resolution::from_dppx_calc(dppx))
     }
 
-    /// Tries to simplify this expression into an `Angle` value.
-    fn to_angle(&self) -> Result<Angle, ()> {
-        let degrees = if let Leaf::Angle(angle) = self.resolve()? {
-            angle.degrees()
-        } else {
-            return Err(());
-        };
-
-        let result = Angle::from_calc(degrees);
-        Ok(result)
+    /// Tries to simplify this expression into an angle dimension.
+    fn to_angle(&self) -> Result<AngleDimension, ()> {
+        match self.resolve()? {
+            Leaf::Angle(angle) => Ok(angle),
+            _ => Err(()),
+        }
     }
 
     /// Tries to simplify this expression into a `<number>` value.
@@ -1522,20 +1517,7 @@ impl CalcNode {
         input: &mut Parser<'i, 't>,
         function: MathFunction,
     ) -> Result<Self, ParseError<'i>> {
-        let node = Self::parse(
-            context,
-            input,
-            function,
-            AllowParse::new(CalcUnits::empty()),
-        )?;
-        if !node
-            .unit()
-            .map_err(|()| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))?
-            .is_empty()
-        {
-            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
-        }
-        Ok(node)
+        Self::parse_typed_node(context, input, function, CalcUnits::empty())
     }
 
     /// Parse a function which represents a `<number>`.
@@ -1553,14 +1535,52 @@ impl CalcNode {
     }
 
     fn resolve_contextual_leaves(&self, context: &Context) -> Self {
+        self.resolve_contextual_leaves_with_base_size(
+            context,
+            FontBaseSize::CurrentStyle,
+            LineHeightBase::CurrentStyle,
+        )
+    }
+
+    fn resolve_contextual_leaves_with_base_size(
+        &self,
+        context: &Context,
+        base_size: FontBaseSize,
+        line_height_base: LineHeightBase,
+    ) -> Self {
         self.map_leaves(|leaf| match *leaf {
             Leaf::Length(length) => Leaf::Length(NoCalcLength::from_px(
-                length.to_computed_value(context).px(),
+                length
+                    .to_computed_value_in_calc(context, base_size, line_height_base)
+                    .px(),
             )),
             Leaf::SiblingIndex => Leaf::Number(context.sibling_index()),
             Leaf::SiblingCount => Leaf::Number(context.sibling_count()),
             _ => leaf.clone(),
         })
+    }
+
+    /// Resolves an angle calculation in its element context.
+    pub(crate) fn resolve_angle(
+        &self,
+        context: &Context,
+        base_size: FontBaseSize,
+        line_height_base: LineHeightBase,
+    ) -> Result<CSSFloat, ()> {
+        self.resolve_contextual_leaves_with_base_size(context, base_size, line_height_base)
+            .resolve_angle_without_context()
+    }
+
+    /// Resolves an angle calculation without element context.
+    pub fn resolve_angle_without_context(&self) -> Result<CSSFloat, ()> {
+        self.to_angle().map(|angle| angle.degrees())
+    }
+
+    /// Resolves a time calculation in its element context.
+    pub fn resolve_time(&self, context: &Context) -> Result<CSSFloat, ()> {
+        self.resolve_contextual_leaves(context)
+            .to_time()
+            .map(|time| time.seconds())
     }
 
     /// Resolve a `<number>` calculation after converting context-dependent
@@ -1621,15 +1641,27 @@ impl CalcNode {
             .map_err(|()| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
     }
 
+    fn parse_typed_node<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+        function: MathFunction,
+        unit: CalcUnits,
+    ) -> Result<Self, ParseError<'i>> {
+        let node = Self::parse(context, input, function, AllowParse::new(unit))?;
+        if node.unit() != Ok(unit) {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+        Ok(node)
+    }
+
     /// Convenience parsing function for `<angle>`.
     pub fn parse_angle<'i, 't>(
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
         function: MathFunction,
     ) -> Result<Angle, ParseError<'i>> {
-        Self::parse(context, input, function, AllowParse::new(CalcUnits::ANGLE))?
-            .to_angle()
-            .map_err(|()| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
+        Self::parse_typed_node(context, input, function, CalcUnits::ANGLE)
+            .map(Angle::from_calc_node)
     }
 
     /// Convenience parsing function for a mixed `<angle-percentage>`.
@@ -1655,9 +1687,8 @@ impl CalcNode {
         clamping_mode: AllowedNumericType,
         function: MathFunction,
     ) -> Result<Time, ParseError<'i>> {
-        Self::parse(context, input, function, AllowParse::new(CalcUnits::TIME))?
-            .to_time(Some(clamping_mode))
-            .map_err(|()| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
+        Self::parse_typed_node(context, input, function, CalcUnits::TIME)
+            .map(|node| Time::from_calc_node(node, clamping_mode))
     }
 
     /// Convenience parsing function for `<resolution>`.
@@ -1744,6 +1775,10 @@ mod tree_counting_tests {
         let specified = Parser::new(&mut input)
             .parse_entirely(|input| specified::Percentage::parse(&context(), input))
             .expect("the percentage calculation must parse");
+        with_computed_context(|context| specified.to_computed_value(context).0)
+    }
+
+    fn with_computed_context<R>(evaluate: impl FnOnce(&Context) -> R) -> R {
         let initial_values =
             ComputedValues::initial_values_with_font_override(Font::initial_values());
         let device = Device::new(
@@ -1758,13 +1793,117 @@ mod tree_counting_tests {
         crate::values::computed::Context::for_media_query_evaluation(
             &device,
             QuirksMode::NoQuirks,
-            |context| specified.to_computed_value(context).0,
+            evaluate,
         )
     }
 
     #[test]
     fn percentage_sign_resolves_contextual_lengths_before_multiplication() {
         assert_eq!(compute_percentage("calc(sign(20rem - 20px) * 180%)"), 1.8,);
+    }
+
+    #[test]
+    fn contextual_time_and_angle_values_retain_their_calculations() {
+        for (css, expected, time) in [
+            (
+                "calc(1s / sign(1em - 20px))",
+                "calc(1s / sign(1em - 20px))",
+                true,
+            ),
+            (
+                "calc(1deg / sign(1em - 20px))",
+                "calc(1deg / sign(1em - 20px))",
+                false,
+            ),
+            ("calc(1000ms)", "calc(1s)", true),
+            ("calc(1turn)", "calc(360deg)", false),
+            ("1000ms", "1000ms", true),
+            ("1turn", "1turn", false),
+        ] {
+            let mut input = ParserInput::new(css);
+            let mut input = Parser::new(&mut input);
+            let serialised = if time {
+                Time::parse(&context(), &mut input).unwrap().to_css_string()
+            } else {
+                Angle::parse(&context(), &mut input)
+                    .unwrap()
+                    .to_css_string()
+            };
+            assert_eq!(serialised, expected);
+            input.expect_exhausted().unwrap();
+        }
+    }
+
+    #[test]
+    fn contextual_dimensions_resolve_before_top_level_range_clamping() {
+        with_computed_context(|computed_context| {
+            for (expression, seconds, degrees) in [
+                ("sign(10000px - 1em)", 1.0, 1.0_f32),
+                ("sign(1em - 10000px)", -1.0, -1.0),
+                ("1 / sign(1em - 1em)", f32::MAX, 0.0),
+                ("-1 / sign(1em - 1em)", f32::MIN, 0.0),
+                ("infinity - infinity", 0.0, 0.0),
+                ("-0", 0.0, 0.0),
+            ] {
+                let css = format!("calc(1s * ({expression}))");
+                let mut input = ParserInput::new(&css);
+                let time = Time::parse(&context(), &mut Parser::new(&mut input)).unwrap();
+                assert_eq!(
+                    time.to_computed_value(computed_context).seconds().to_bits(),
+                    seconds.to_bits(),
+                    "{css}"
+                );
+
+                let css = format!("calc(1deg * ({expression}))");
+                let mut input = ParserInput::new(&css);
+                let angle = Angle::parse(&context(), &mut Parser::new(&mut input)).unwrap();
+                assert_eq!(
+                    angle
+                        .to_computed_value(computed_context)
+                        .degrees()
+                        .to_bits(),
+                    degrees.to_bits(),
+                    "{css}"
+                );
+            }
+
+            let mut input = ParserInput::new("calc(1s * sign(1em - 10000px))");
+            let duration =
+                Time::parse_non_negative(&context(), &mut Parser::new(&mut input)).unwrap();
+            assert_eq!(duration.to_computed_value(computed_context).seconds(), 0.0);
+
+            let mut input = ParserInput::new("oblique calc(10deg / sign(1em - 10000px))");
+            let descriptor = crate::font_face::FontStyle::parse(
+                &context_for(CssRuleType::FontFace),
+                &mut Parser::new(&mut input),
+            )
+            .unwrap();
+            assert!(matches!(
+                descriptor.compute(computed_context),
+                crate::font_face::ComputedFontStyleDescriptor::Oblique(-10.0, -10.0)
+            ));
+        });
+    }
+
+    #[test]
+    fn deferred_dimensions_reject_incompatible_result_types() {
+        for css in [
+            "calc(1s + 1deg)",
+            "calc(1em)",
+            "calc(1px * 1px)",
+            "calc(sign(1em))",
+        ] {
+            let mut input = ParserInput::new(css);
+            assert!(
+                Time::parse(&context(), &mut Parser::new(&mut input)).is_err(),
+                "{css}"
+            );
+            let mut input = ParserInput::new(css);
+            assert!(
+                Angle::parse(&context(), &mut Parser::new(&mut input)).is_err(),
+                "{css}"
+            );
+        }
     }
 
     #[test]

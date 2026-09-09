@@ -435,27 +435,27 @@ pub trait ToMatrix {
 /// A little helper to deal with both specified and computed angles.
 pub trait ToRadians {
     /// Return the radians value as a 64-bit floating point value.
-    fn radians64(&self) -> f64;
+    fn radians64(&self) -> Result<f64, ()>;
 }
 
 impl ToRadians for computed::angle::Angle {
     #[inline]
-    fn radians64(&self) -> f64 {
-        computed::angle::Angle::radians64(self)
+    fn radians64(&self) -> Result<f64, ()> {
+        Ok(computed::angle::Angle::radians64(self))
     }
 }
 
 impl ToRadians for SpecifiedAngle {
     #[inline]
-    fn radians64(&self) -> f64 {
-        computed::angle::Angle::from_degrees(self.degrees()).radians64()
+    fn radians64(&self) -> Result<f64, ()> {
+        Ok(self.to_computed_value_without_context()?.radians64())
     }
 }
 
 impl<Angle, Number, Length, Integer, LoP> ToMatrix
     for TransformOperation<Angle, Number, Length, Integer, LoP>
 where
-    Angle: Zero + ToRadians + Copy,
+    Angle: Zero + ToRadians,
     Number: PartialEq + Copy + Into<f32> + Into<f64>,
     Length: ToAbsoluteLength,
     LoP: Zero + ToAbsoluteLength + ZeroNoPercent,
@@ -484,8 +484,8 @@ where
         let reference_width = reference_box.map(|v| v.size.width);
         let reference_height = reference_box.map(|v| v.size.height);
         let matrix = match *self {
-            Rotate3D(ax, ay, az, theta) => {
-                let theta = theta.radians64();
+            Rotate3D(ax, ay, az, ref theta) => {
+                let theta = theta.radians64()?;
                 let (ax, ay, az, theta) =
                     get_normalized_vector_and_angle(ax.into(), ay.into(), az.into(), theta);
                 Transform3D::rotation(
@@ -495,16 +495,16 @@ where
                     euclid::Angle::radians(theta),
                 )
             },
-            RotateX(theta) => {
-                let theta = euclid::Angle::radians(theta.radians64());
+            RotateX(ref theta) => {
+                let theta = euclid::Angle::radians(theta.radians64()?);
                 Transform3D::rotation(1., 0., 0., theta)
             },
-            RotateY(theta) => {
-                let theta = euclid::Angle::radians(theta.radians64());
+            RotateY(ref theta) => {
+                let theta = euclid::Angle::radians(theta.radians64()?);
                 Transform3D::rotation(0., 1., 0., theta)
             },
-            RotateZ(theta) | Rotate(theta) => {
-                let theta = euclid::Angle::radians(theta.radians64());
+            RotateZ(ref theta) | Rotate(ref theta) => {
+                let theta = euclid::Angle::radians(theta.radians64()?);
                 Transform3D::rotation(0., 0., 1., theta)
             },
             Perspective(ref p) => {
@@ -538,17 +538,17 @@ where
                 Transform3D::translation(0., t, 0.)
             },
             TranslateZ(ref z) => Transform3D::translation(0., 0., z.to_pixel_length(None)? as f64),
-            Skew(theta_x, theta_y) => Transform3D::skew(
-                euclid::Angle::radians(theta_x.radians64()),
-                euclid::Angle::radians(theta_y.radians64()),
+            Skew(ref theta_x, ref theta_y) => Transform3D::skew(
+                euclid::Angle::radians(theta_x.radians64()?),
+                euclid::Angle::radians(theta_y.radians64()?),
             ),
-            SkewX(theta) => Transform3D::skew(
-                euclid::Angle::radians(theta.radians64()),
+            SkewX(ref theta) => Transform3D::skew(
+                euclid::Angle::radians(theta.radians64()?),
                 euclid::Angle::radians(0.),
             ),
-            SkewY(theta) => Transform3D::skew(
+            SkewY(ref theta) => Transform3D::skew(
                 euclid::Angle::radians(0.),
-                euclid::Angle::radians(theta.radians64()),
+                euclid::Angle::radians(theta.radians64()?),
             ),
             Matrix3D(m) => m.into(),
             Matrix(m) => m.into(),
@@ -711,7 +711,7 @@ pub trait IsParallelTo {
 impl<Number, Angle> ToCss for Rotate<Number, Angle>
 where
     Number: Clone + PartialOrd + ToCss + Zero,
-    Angle: Copy + Neg<Output = Angle> + ToCss + Zero,
+    Angle: Clone + Neg<Output = Angle> + ToCss + Zero,
     (Number, Number, Number): IsParallelTo,
 {
     fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
@@ -722,7 +722,8 @@ where
         match *self {
             Rotate::None => dest.write_str("none"),
             Rotate::Rotate(ref angle) => angle.to_css(dest),
-            Rotate::Rotate3D(ref x, ref y, ref z, angle) => {
+            Rotate::Rotate3D(ref x, ref y, ref z, ref angle) => {
+                let angle = angle.clone();
                 // If the axis is parallel with the x or y axes, it must serialize as the
                 // appropriate keyword. If a rotation about the z axis (that is, in 2D) is
                 // specified, the property must serialize as just an <angle>.

@@ -8,7 +8,6 @@ use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
 use crate::values::computed::effects::BoxShadow as ComputedBoxShadow;
 use crate::values::computed::effects::SimpleShadow as ComputedSimpleShadow;
-use crate::values::computed::Angle as ComputedAngle;
 use crate::values::computed::CSSPixelLength as ComputedCSSPixelLength;
 use crate::values::computed::Filter as ComputedFilter;
 use crate::values::computed::NonNegativeLength as ComputedNonNegativeLength;
@@ -216,7 +215,7 @@ impl Filter {
                 ComputedZeroToOneNumber::from(factor.0.to_number().resolve().ok_or(())?),
             )),
             Filter::HueRotate(ref angle) => Ok(ComputedFilter::HueRotate(
-                ComputedAngle::from_degrees(angle.degrees()),
+                angle.to_computed_value_without_context()?,
             )),
             Filter::Invert(ref factor) => Ok(ComputedFilter::Invert(
                 ComputedZeroToOneNumber::from(factor.0.to_number().resolve().ok_or(())?),

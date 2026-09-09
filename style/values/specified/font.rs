@@ -311,10 +311,18 @@ impl Parse for SpecifiedFontStyle {
 impl ToComputedValue for SpecifiedFontStyle {
     type ComputedValue = computed::FontStyle;
 
-    fn to_computed_value(&self, _: &Context) -> Self::ComputedValue {
+    fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
         match self {
             Self::Italic => computed::FontStyle::ITALIC,
-            Self::Oblique(ref angle) => computed::FontStyle::oblique(angle.degrees()),
+            Self::Oblique(ref angle) => computed::FontStyle::oblique(
+                angle
+                    .to_computed_value_with_base_size(
+                        context,
+                        FontBaseSize::InheritedStyle,
+                        LineHeightBase::InheritedStyle,
+                    )
+                    .degrees(),
+            ),
         }
     }
 
@@ -340,8 +348,9 @@ pub const FONT_STYLE_OBLIQUE_MIN_ANGLE_DEGREES: f32 = -90.;
 
 impl SpecifiedFontStyle {
     /// Gets a clamped angle in degrees from a specified Angle.
-    pub fn compute_angle_degrees(angle: &Angle) -> f32 {
+    pub fn compute_angle_degrees(angle: &Angle, context: &Context) -> f32 {
         angle
+            .to_computed_value(context)
             .degrees()
             .max(FONT_STYLE_OBLIQUE_MIN_ANGLE_DEGREES)
             .min(FONT_STYLE_OBLIQUE_MAX_ANGLE_DEGREES)
@@ -357,7 +366,9 @@ impl SpecifiedFontStyle {
             return Ok(angle);
         }
 
-        let degrees = angle.degrees();
+        let degrees = angle
+            .degrees_without_context()
+            .expect("a literal angle cannot require element context");
         if degrees < FONT_STYLE_OBLIQUE_MIN_ANGLE_DEGREES
             || degrees > FONT_STYLE_OBLIQUE_MAX_ANGLE_DEGREES
         {
@@ -377,7 +388,7 @@ impl SpecifiedFontStyle {
 
 /// The specified value of the `font-style` property.
 #[derive(
-    Clone, Copy, Debug, MallocSizeOf, Parse, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped,
+    Clone, Debug, MallocSizeOf, Parse, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped,
 )]
 #[allow(missing_docs)]
 pub enum FontStyle {

@@ -2612,7 +2612,7 @@ mod tests {
             PropertyDeclaration::FontOpticalSizing(value) => {
                 PropertyDeclaration::FontOpticalSizing(*value)
             },
-            PropertyDeclaration::FontStyle(value) => PropertyDeclaration::FontStyle(*value),
+            PropertyDeclaration::FontStyle(value) => PropertyDeclaration::FontStyle(value.clone()),
             PropertyDeclaration::FontSynthesisStyle(value) => {
                 PropertyDeclaration::FontSynthesisStyle(*value)
             },
@@ -2680,7 +2680,9 @@ mod tests {
             },
             PropertyDeclaration::MixBlendMode(value) => PropertyDeclaration::MixBlendMode(*value),
             PropertyDeclaration::ObjectFit(value) => PropertyDeclaration::ObjectFit(*value),
-            PropertyDeclaration::OffsetRotate(value) => PropertyDeclaration::OffsetRotate(*value),
+            PropertyDeclaration::OffsetRotate(value) => {
+                PropertyDeclaration::OffsetRotate(value.clone())
+            },
             PropertyDeclaration::OutlineStyle(value) => PropertyDeclaration::OutlineStyle(*value),
             PropertyDeclaration::OverflowAnchor(value) => {
                 PropertyDeclaration::OverflowAnchor(*value)
