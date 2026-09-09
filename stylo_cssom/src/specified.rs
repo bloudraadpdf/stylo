@@ -1028,7 +1028,7 @@ fn synthesised_independent_shorthands(
     let block = LazyLock::new(|| standard_inline_style_block(declarations));
     let mut shorthands = Vec::new();
 
-    for schema in (0..).map_while(stylo_cssom_model::property_schema_at) {
+    for schema in stylo_cssom_model::STANDARD_PROPERTIES {
         if schema.kind != stylo_cssom_model::PropertyKind::Shorthand
             || schema.shorthand_expansion.len() < 2
         {

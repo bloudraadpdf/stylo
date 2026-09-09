@@ -1265,8 +1265,8 @@ pub fn cssom_declaration_set_property(
 pub fn declaration_block_shorthand_values(
     block: &style::properties::declaration_block::PropertyDeclarationBlock,
 ) -> Vec<stylo_cssom_model::RuleDeclaration> {
-    (0..)
-        .map_while(stylo_cssom_model::property_schema_at)
+    stylo_cssom_model::STANDARD_PROPERTIES
+        .iter()
         .filter(|schema| schema.kind == stylo_cssom_model::PropertyKind::Shorthand)
         .filter_map(|schema| {
             let value = declaration_block_get_property_value(block, schema.name)?;

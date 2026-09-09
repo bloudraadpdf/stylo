@@ -4,7 +4,7 @@ use stylo_cssom_model::PropertySchemaRow;
 pub fn property_schema_for_id(property: &PropertyId) -> Option<&'static PropertySchemaRow> {
     match property {
         PropertyId::NonCustom(property) => {
-            stylo_cssom_model::property_schema_at(property.unaliased().bit())
+            stylo_cssom_model::property_schema(property.unaliased().name())
         },
         PropertyId::Custom(_) => None,
     }
@@ -29,7 +29,7 @@ fn typed_declaration_adapter_has_exhaustive_native_ownership() {
 }
 
 #[test]
-fn schema_indices_follow_the_native_property_ids() {
+fn native_properties_resolve_their_matching_schema() {
     use style::properties::property_counts;
     use stylo_cssom_model::STANDARD_PROPERTIES;
 
@@ -38,7 +38,8 @@ fn schema_indices_follow_the_native_property_ids() {
         property_counts::LONGHANDS_AND_SHORTHANDS + 2
     );
     for row in &STANDARD_PROPERTIES[..property_counts::LONGHANDS_AND_SHORTHANDS] {
-        let property = PropertyId::parse_unchecked_for_testing(row.name).expect("native property ID");
+        let property =
+            PropertyId::parse_unchecked_for_testing(row.name).expect("native property ID");
         let resolved = property_schema_for_id(&property).expect("native property has a schema");
         assert_eq!(resolved.name, row.name);
         assert_eq!(resolved.id, row.id);

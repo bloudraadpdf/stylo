@@ -21,7 +21,7 @@ pub use stylesheet_input::{CssEncoding, StylesheetEnvironmentEncoding, Styleshee
 use std::{
     collections::HashMap,
     sync::{
-        Arc, Mutex, Weak,
+        Arc, LazyLock, Mutex, Weak,
         atomic::{AtomicU64, Ordering},
     },
 };
@@ -358,12 +358,14 @@ impl StandardPropertyId {
 
 #[must_use]
 pub fn property_schema(name: &str) -> Option<&'static PropertySchemaRow> {
-    STANDARD_PROPERTIES.iter().find(|row| row.name == name)
-}
-
-#[must_use]
-pub fn property_schema_at(index: usize) -> Option<&'static PropertySchemaRow> {
-    STANDARD_PROPERTIES.get(index)
+    static BY_NAME: LazyLock<HashMap<&'static str, &'static PropertySchemaRow>> =
+        LazyLock::new(|| {
+            STANDARD_PROPERTIES
+                .iter()
+                .map(|row| (row.name, row))
+                .collect()
+        });
+    BY_NAME.get(name).copied()
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
