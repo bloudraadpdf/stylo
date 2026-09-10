@@ -1651,10 +1651,11 @@ impl CalcNode {
         function: MathFunction,
         unit: CalcUnits,
     ) -> Result<Self, ParseError<'i>> {
-        let node = Self::parse(context, input, function, AllowParse::new(unit))?;
+        let mut node = Self::parse(context, input, function, AllowParse::new(unit))?;
         if node.unit() != Ok(unit) {
             return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
         }
+        node.simplify_and_sort();
         Ok(node)
     }
 
@@ -1823,6 +1824,16 @@ mod tree_counting_tests {
             ("calc(1turn)", "calc(360deg)", false),
             ("1000ms", "1000ms", true),
             ("1turn", "1turn", false),
+            (
+                "calc(sibling-index() * 2rad * pi)",
+                "calc(360deg * sibling-index())",
+                false,
+            ),
+            (
+                "calc(sibling-count() * 1s)",
+                "calc(1s * sibling-count())",
+                true,
+            ),
         ] {
             let mut input = ParserInput::new(css);
             let mut input = Parser::new(&mut input);
