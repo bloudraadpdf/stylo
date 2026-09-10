@@ -1364,6 +1364,32 @@ mod tests {
     }
 
     #[test]
+    fn font_palette_overrides_expose_typed_indices_and_absolute_colours() {
+        let stylesheet = parse_stylesheet(
+            "@font-palette-values --Test { font-family: Example; override-colors: 3 red, 3 color(display-p3 0 1 0 / .5); }",
+        );
+        let guard = stylesheet.shared_lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rule = contents
+            .rules(&guard)
+            .iter()
+            .find_map(|rule| match rule {
+                CssRule::FontPaletteValues(rule) => Some(rule.as_ref()),
+                _ => None,
+            })
+            .expect("the palette rule parses");
+        assert_eq!(rule.override_colors.len(), 2);
+        assert_eq!(rule.override_colors[0].index().0.value(), 3);
+        assert_eq!(rule.override_colors[1].index().0.value(), 3);
+        let colour = rule.override_colors[1]
+            .color()
+            .resolve_to_absolute()
+            .expect("the override is absolute");
+        assert_eq!(colour.color_space, crate::color::ColorSpace::DisplayP3);
+        assert_eq!(colour.alpha(), Some(0.5));
+    }
+
+    #[test]
     fn servo_recovers_css2_malformed_urls_at_stylesheet_boundaries() {
         fn background_colors(css: &str, selector: &str) -> Vec<String> {
             use cssparser::ToCss;

@@ -39,6 +39,18 @@ pub struct FontPaletteOverrideColor {
     color: SpecifiedColor,
 }
 
+impl FontPaletteOverrideColor {
+    /// The palette entry to replace.
+    pub fn index(&self) -> &NonNegativeInteger {
+        &self.index
+    }
+
+    /// The specified absolute colour for this entry.
+    pub fn color(&self) -> &SpecifiedColor {
+        &self.color
+    }
+}
+
 impl Parse for FontPaletteOverrideColor {
     fn parse<'i, 't>(
         context: &ParserContext,
