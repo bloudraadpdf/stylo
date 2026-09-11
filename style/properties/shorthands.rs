@@ -5409,6 +5409,129 @@ pub mod mask_position {
     }
 }
 
+#[cfg(feature = "servo")]
+pub mod grid_lanes {
+    pub use crate::properties::shorthands_generated::grid_lanes::*;
+
+    use super::*;
+    use crate::values::specified::position::{
+        GridLanesDirection, GridLanesDirectionAxis, GridLanesReversals, GridTemplateAreas,
+        TemplateAreasArc, TemplateAreasParser,
+    };
+    use crate::values::specified::GridTemplateComponent;
+    use servo_arc::Arc;
+
+    pub fn parse_value<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Longhands, ParseError<'i>> {
+        let mut areas = None;
+        let mut tracks = None;
+        let mut direction = None;
+        if input.is_exhausted() {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+        while !input.is_exhausted() {
+            if areas.is_none() {
+                let mut parser = TemplateAreasParser::default();
+                if parser.try_parse_string(input).is_ok() {
+                    areas = Some(parser.finish().map_err(|()| {
+                        input.new_custom_error(StyleParseErrorKind::UnspecifiedError)
+                    })?);
+                    continue;
+                }
+            }
+            if tracks.is_none() {
+                if let Ok(value) =
+                    input.try_parse(|input| GridTemplateComponent::parse(context, input))
+                {
+                    tracks = Some(value);
+                    continue;
+                }
+            }
+            if direction.is_none() {
+                if let Ok(value) =
+                    input.try_parse(|input| GridLanesDirection::parse(context, input))
+                {
+                    direction = Some(value);
+                    continue;
+                }
+            }
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+        let direction = direction.unwrap_or(GridLanesDirection::Oriented {
+            axis: GridLanesDirectionAxis::Column,
+            reversals: GridLanesReversals::None,
+        });
+        let row_tracks = matches!(
+            direction,
+            GridLanesDirection::Oriented {
+                axis: GridLanesDirectionAxis::Row,
+                ..
+            }
+        );
+        let areas = areas.map_or(GridTemplateAreas::None, |areas| {
+            let areas = if row_tracks { areas.transpose() } else { areas };
+            GridTemplateAreas::Areas(TemplateAreasArc(Arc::new(areas)))
+        });
+        let tracks = tracks.unwrap_or_default();
+        let (rows, columns) = if row_tracks {
+            (tracks, GridTemplateComponent::default())
+        } else {
+            (GridTemplateComponent::default(), tracks)
+        };
+        Ok(expanded! {
+            grid_template_rows: rows,
+            grid_template_columns: columns,
+            grid_template_areas: areas,
+            grid_lanes_direction: direction,
+        })
+    }
+
+    impl<'a> ToCss for LonghandsToSerialize<'a> {
+        fn to_css<W: fmt::Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+            let row_tracks = matches!(
+                self.grid_lanes_direction,
+                GridLanesDirection::Oriented {
+                    axis: GridLanesDirectionAxis::Row,
+                    ..
+                }
+            );
+            if let GridTemplateAreas::Areas(areas) = self.grid_template_areas {
+                if row_tracks {
+                    if areas.0.width != 1 {
+                        return Ok(());
+                    }
+                    let names = areas
+                        .0
+                        .strings
+                        .iter()
+                        .map(|row| row.as_ref())
+                        .collect::<Vec<&str>>()
+                        .join(" ");
+                    cssparser::serialize_string(&names, dest)?;
+                } else {
+                    let [row] = areas.0.strings.as_ref() else {
+                        return Ok(());
+                    };
+                    row.to_css(dest)?;
+                }
+                dest.write_char(' ')?;
+            }
+            let tracks = if row_tracks {
+                self.grid_template_rows
+            } else {
+                self.grid_template_columns
+            };
+            if !tracks.is_initial() {
+                tracks.to_css(dest)?;
+                dest.write_char(' ')?;
+            }
+            self.grid_lanes_direction.to_css(dest)
+        }
+    }
+}
+
 pub mod grid_template {
     pub use crate::properties::shorthands_generated::grid_template::*;
 

@@ -1010,6 +1010,19 @@ impl Integer {
         !matches!(self.0, IntegerValue::Literal(_))
     }
 
+    /// Clamp the computed integer to at least one, retaining its specified calculation.
+    pub(crate) fn into_positive(self) -> Self {
+        match self.0 {
+            IntegerValue::Literal(value) => Self::new(value.max(1)),
+            IntegerValue::Calc(value)
+            | IntegerValue::NonNegativeCalc(value)
+            | IntegerValue::PositiveCalc(value) => Self(IntegerValue::PositiveCalc(value)),
+            IntegerValue::ContextDependentCalc(node, _) => Self(
+                IntegerValue::ContextDependentCalc(node, AllowedNumericType::AtLeastOne),
+            ),
+        }
+    }
+
     /// Returns the rounded value when it can be resolved without element
     /// context, or `None` for a tree-dependent calculation.
     pub fn resolve(&self) -> Option<CSSInteger> {

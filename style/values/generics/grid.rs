@@ -7,6 +7,7 @@
 
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
+use crate::values::computed::{Context, ToComputedValue};
 use crate::values::specified;
 use crate::values::{CSSFloat, CustomIdent};
 use crate::{One, Zero};
@@ -17,7 +18,7 @@ use style_traits::{CssWriter, ParseError, StyleParseErrorKind, ToCss};
 
 /// These are the limits that we choose to clamp grid line numbers to.
 /// http://drafts.csswg.org/css-grid/#overlarge-grids
-/// line_num is clamped to this range at parse time.
+/// Literals are clamped at parse time, calculations at computed-value time.
 pub const MIN_GRID_LINE: i32 = -10000;
 /// See above.
 pub const MAX_GRID_LINE: i32 = 10000;
@@ -32,7 +33,6 @@ pub const MAX_GRID_LINE: i32 = 10000;
     MallocSizeOf,
     PartialEq,
     SpecifiedValueInfo,
-    ToComputedValue,
     ToResolvedValue,
     ToShmem,
     ToTyped,
@@ -46,16 +46,35 @@ pub struct GenericGridLine<Integer> {
     /// Denotes the nth grid line from grid item's placement.
     ///
     /// This is clamped by MIN_GRID_LINE and MAX_GRID_LINE.
-    ///
-    /// NOTE(emilio): If we ever allow animating these we need to either do
-    /// something more complicated for the clamping, or do this clamping at
-    /// used-value time.
     pub line_num: Integer,
     /// Flag to check whether it's a `span` keyword.
     pub is_span: bool,
 }
 
 pub use self::GenericGridLine as GridLine;
+
+impl ToComputedValue for GridLine<specified::Integer> {
+    type ComputedValue = GridLine<i32>;
+
+    fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
+        GridLine {
+            ident: self.ident.clone(),
+            line_num: self
+                .line_num
+                .to_computed_value(context)
+                .clamp(MIN_GRID_LINE, MAX_GRID_LINE),
+            is_span: self.is_span,
+        }
+    }
+
+    fn from_computed_value(value: &Self::ComputedValue) -> Self {
+        Self {
+            ident: value.ident.clone(),
+            line_num: specified::Integer::new(value.line_num),
+            is_span: value.is_span,
+        }
+    }
+}
 
 impl<Integer> GridLine<Integer>
 where
@@ -120,7 +139,7 @@ where
             // 1. we don't specify it, or
             // 2. it is the default value, i.e. 1.0, and the ident is specified.
             // https://drafts.csswg.org/css-grid/#grid-placement-span-int
-            if !self.line_num.is_zero() && !(self.line_num.is_one() && has_ident) {
+            if !(self.line_num.is_zero() || self.line_num == Integer::one() && has_ident) {
                 dest.write_char(' ')?;
                 self.line_num.to_css(dest)?;
             }
@@ -158,6 +177,7 @@ impl Parse for GridLine<specified::Integer> {
         // [ span? && [ <custom-ident> || <integer> ] ]
         // And, for some magical reason, "span" should be the first or last value and not in-between.
         let mut val_before_span = false;
+        let mut has_integer = false;
 
         for _ in 0..3 {
             // Maximum possible entities for <grid-line>
@@ -167,24 +187,25 @@ impl Parse for GridLine<specified::Integer> {
                     return Err(location.new_custom_error(StyleParseErrorKind::UnspecifiedError));
                 }
 
-                if !grid_line.line_num.is_zero() || grid_line.ident.0 != atom!("") {
+                if has_integer || grid_line.ident.0 != atom!("") {
                     val_before_span = true;
                 }
 
                 grid_line.is_span = true;
             } else if let Ok(i) = input.try_parse(|i| specified::Integer::parse(context, i)) {
-                if matches!(i.resolve(), Some(0))
+                if (!i.was_calc() && matches!(i.resolve(), Some(0)))
                     || val_before_span
-                    || !grid_line.line_num.is_zero()
+                    || has_integer
                 {
                     return Err(location.new_custom_error(StyleParseErrorKind::UnspecifiedError));
                 }
 
-                grid_line.line_num = match i.resolve() {
-                    Some(value) => {
+                has_integer = true;
+                grid_line.line_num = match (i.was_calc(), i.resolve()) {
+                    (false, Some(value)) => {
                         specified::Integer::new(value.clamp(MIN_GRID_LINE, MAX_GRID_LINE))
                     },
-                    None => i,
+                    _ => i,
                 };
             } else if let Ok(name) = input.try_parse(|i| CustomIdent::parse(i, &["auto"])) {
                 if val_before_span || grid_line.ident.0 != atom!("") {
@@ -203,11 +224,14 @@ impl Parse for GridLine<specified::Integer> {
         }
 
         if grid_line.is_span {
-            if !grid_line.line_num.is_zero() {
-                if matches!(grid_line.line_num.resolve(), Some(value) if value <= 0) {
+            if has_integer {
+                if !grid_line.line_num.was_calc()
+                    && matches!(grid_line.line_num.resolve(), Some(value) if value <= 0)
+                {
                     // disallow negative integers for grid spans
                     return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
                 }
+                grid_line.line_num = grid_line.line_num.into_positive();
             } else if grid_line.ident.0 == atom!("") {
                 // integer could be omitted
                 return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));

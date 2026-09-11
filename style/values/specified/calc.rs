@@ -2050,6 +2050,40 @@ mod tree_counting_tests {
     }
 
     #[test]
+    fn grid_calculations_clamp_only_the_computed_line_number() {
+        for (css, expected) in [
+            ("span calc(-2)", "span 1"),
+            ("span calc(0)", "span 1"),
+            ("span calc(-2) i", "span i"),
+            ("span calc(2.5)", "span 3"),
+            ("span calc(20000)", "span 10000"),
+            ("calc(-20000)", "-10000"),
+        ] {
+            let mut input = ParserInput::new(css);
+            let value = Parser::new(&mut input)
+                .parse_entirely(|input| specified::GridLine::parse(&context(), input))
+                .unwrap_or_else(|_| panic!("{css} must parse"));
+            assert_eq!(value.to_css_string(), css);
+            let computed = with_computed_context(|context| value.to_computed_value(context));
+            assert_eq!(computed.to_css_string(), expected, "{css}");
+        }
+    }
+
+    #[test]
+    fn grid_lanes_reversal_order_is_canonical_only_after_computation() {
+        let css = "row track-reverse fill-reverse";
+        let mut input = ParserInput::new(css);
+        let value = Parser::new(&mut input)
+            .parse_entirely(|input| {
+                specified::position::GridLanesDirection::parse(&context(), input)
+            })
+            .unwrap();
+        assert_eq!(value.to_css_string(), css);
+        let computed = with_computed_context(|context| value.to_computed_value(context));
+        assert_eq!(computed.to_css_string(), "row fill-reverse track-reverse");
+    }
+
+    #[test]
     fn text_combine_digit_calculations_round_and_clamp_when_computed() {
         for (css, count) in [
             ("digits calc(0 + 1)", 2),

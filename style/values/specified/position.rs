@@ -1841,7 +1841,7 @@ pub enum GridLanesDirectionAxis {
     Column,
 }
 
-/// The supported grid-lanes direction extension; normal has no reversals.
+/// The specified order of grid-lanes reversals.
 #[derive(
     Clone,
     Copy,
@@ -1856,6 +1856,58 @@ pub enum GridLanesDirectionAxis {
     ToShmem,
     ToTyped,
 )]
+#[repr(u8)]
+pub enum GridLanesReversals {
+    /// No reversal.
+    None,
+    /// Reverse filling only.
+    Fill,
+    /// Reverse tracks only.
+    Track,
+    /// Reverse filling, then tracks.
+    FillTrack,
+    /// Reverse tracks, then filling.
+    TrackFill,
+}
+
+impl GridLanesReversals {
+    /// Whether filling is reversed.
+    pub fn fill_reverse(self) -> bool {
+        matches!(self, Self::Fill | Self::FillTrack | Self::TrackFill)
+    }
+
+    /// Whether tracks are reversed.
+    pub fn track_reverse(self) -> bool {
+        matches!(self, Self::Track | Self::FillTrack | Self::TrackFill)
+    }
+}
+
+impl ToCss for GridLanesReversals {
+    fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        dest.write_str(match self {
+            Self::None => "",
+            Self::Fill => "fill-reverse",
+            Self::Track => "track-reverse",
+            Self::FillTrack => "fill-reverse track-reverse",
+            Self::TrackFill => "track-reverse fill-reverse",
+        })
+    }
+}
+
+/// The supported grid-lanes direction extension; normal has no reversals.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    PartialEq,
+    MallocSizeOf,
+    SpecifiedValueInfo,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
 #[repr(C, u8)]
 pub enum GridLanesDirection {
     /// The default orientation.
@@ -1865,10 +1917,8 @@ pub enum GridLanesDirection {
     Oriented {
         /// Track orientation.
         axis: GridLanesDirectionAxis,
-        /// Reverse the filling order.
-        fill_reverse: bool,
-        /// Reverse the track order.
-        track_reverse: bool,
+        /// Reversals in their specified order.
+        reversals: GridLanesReversals,
     },
 }
 
@@ -1884,21 +1934,48 @@ impl Parse for GridLanesDirection {
             "column" => GridLanesDirectionAxis::Column,
             _ => return Err(input.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(ident))),
         };
-        let mut fill_reverse = false;
-        let mut track_reverse = false;
-        while !input.is_exhausted() {
+        let mut reversals = GridLanesReversals::None;
+        while let Ok(reverse) = input.try_parse(|input| -> Result<_, ParseError<'i>> {
             let ident = input.expect_ident_cloned()?;
             match_ignore_ascii_case! { &ident,
-                "fill-reverse" if !fill_reverse => fill_reverse = true,
-                "track-reverse" if !track_reverse => track_reverse = true,
-                _ => return Err(input.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(ident))),
+                "fill-reverse" => Ok(GridLanesReversals::Fill),
+                "track-reverse" => Ok(GridLanesReversals::Track),
+                _ => Err(input.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(ident))),
             }
+        }) {
+            reversals = match (reversals, reverse) {
+                (GridLanesReversals::None, reverse) => reverse,
+                (GridLanesReversals::Fill, GridLanesReversals::Track) => {
+                    GridLanesReversals::FillTrack
+                },
+                (GridLanesReversals::Track, GridLanesReversals::Fill) => {
+                    GridLanesReversals::TrackFill
+                },
+                _ => return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError)),
+            };
         }
-        Ok(Self::Oriented {
-            axis,
-            fill_reverse,
-            track_reverse,
-        })
+        Ok(Self::Oriented { axis, reversals })
+    }
+}
+
+impl ToComputedValue for GridLanesDirection {
+    type ComputedValue = Self;
+
+    fn to_computed_value(&self, _: &Context) -> Self {
+        match *self {
+            Self::Oriented {
+                axis,
+                reversals: GridLanesReversals::TrackFill,
+            } => Self::Oriented {
+                axis,
+                reversals: GridLanesReversals::FillTrack,
+            },
+            value => value,
+        }
+    }
+
+    fn from_computed_value(value: &Self) -> Self {
+        *value
     }
 }
 
@@ -1906,17 +1983,11 @@ impl ToCss for GridLanesDirection {
     fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
         match self {
             Self::Normal => dest.write_str("normal"),
-            Self::Oriented {
-                axis,
-                fill_reverse,
-                track_reverse,
-            } => {
+            Self::Oriented { axis, reversals } => {
                 axis.to_css(dest)?;
-                if *fill_reverse {
-                    dest.write_str(" fill-reverse")?;
-                }
-                if *track_reverse {
-                    dest.write_str(" track-reverse")?;
+                if *reversals != GridLanesReversals::None {
+                    dest.write_char(' ')?;
+                    reversals.to_css(dest)?;
                 }
                 Ok(())
             },
@@ -2150,6 +2221,30 @@ impl TemplateAreasParser {
 }
 
 impl TemplateAreas {
+    /// Exchange the row and column axes of a parsed area template.
+    pub(crate) fn transpose(mut self) -> Self {
+        let rows: Vec<Vec<&str>> = self
+            .strings
+            .iter()
+            .map(|row| row.split(' ').collect())
+            .collect();
+        let strings = (0..self.width as usize)
+            .map(|column| {
+                rows.iter()
+                    .map(|row| row[column])
+                    .collect::<Vec<_>>()
+                    .join(" ")
+                    .into()
+            })
+            .collect::<Vec<_>>();
+        self.width = self.strings.len() as u32;
+        self.strings = strings.into();
+        for area in self.areas.iter_mut() {
+            std::mem::swap(&mut area.rows, &mut area.columns);
+        }
+        self
+    }
+
     fn parse_internal(input: &mut Parser) -> Result<Self, ()> {
         let mut parser = TemplateAreasParser::default();
         while parser.try_parse_string(input).is_ok() {}

@@ -20,11 +20,16 @@ fn block(css: &str) -> super::PropertyDeclarationBlock {
     )
 }
 
-fn assert_serialization(name: &str, input: &str, expected: Option<&str>) {
-    let block = block(&format!("{name}:{input}"));
+fn serialized_value(block: &super::PropertyDeclarationBlock, name: &str) -> String {
     let id = PropertyId::parse_enabled_for_all_content(name).unwrap();
     let mut serialized = String::new();
     block.property_value_to_css(&id, &mut serialized).unwrap();
+    serialized
+}
+
+fn assert_serialization(name: &str, input: &str, expected: Option<&str>) {
+    let block = block(&format!("{name}:{input}"));
+    let serialized = serialized_value(&block, name);
     assert_eq!(
         (!block.is_empty()).then_some(serialized.as_str()),
         expected,
@@ -44,6 +49,97 @@ fn webkit_text_orientation_is_a_native_alias() {
 #[test]
 fn text_orientation_accepts_the_legacy_sideways_right_keyword() {
     assert_serialization("text-orientation", "sideways-right", Some("sideways"));
+}
+
+#[test]
+fn grid_lanes_shorthand_expands_tracks_in_the_selected_axis() {
+    let _preferences = crate::test_support::pref_lock().lock().unwrap();
+    let _grid = crate::test_support::BoolPrefGuard::set("layout.grid.enabled", true);
+    let block = block("grid-lanes: row fill-reverse 20% 40% \"b a\"");
+    assert_eq!(block.len(), 4);
+    for (name, expected) in [
+        ("grid-template-rows", "20% 40%"),
+        ("grid-template-columns", "none"),
+        ("grid-template-areas", "\"b\" \"a\""),
+        ("grid-lanes-direction", "row fill-reverse"),
+        ("grid-lanes", "\"b a\" 20% 40% row fill-reverse"),
+    ] {
+        assert_eq!(serialized_value(&block, name), expected, "{name}");
+    }
+}
+
+#[test]
+fn grid_lanes_shorthand_validates_and_serializes_each_component() {
+    let _preferences = crate::test_support::pref_lock().lock().unwrap();
+    let _grid = crate::test_support::BoolPrefGuard::set("layout.grid.enabled", true);
+    for (css, expected) in [
+        ("none", "column"),
+        ("normal", "normal"),
+        ("10px 20px", "10px 20px column"),
+        (
+            "column fill-reverse \"a\" calc(10px)",
+            "\"a\" calc(10px) column fill-reverse",
+        ),
+        ("\"b b a\" 1fr 2fr 3fr row", "\"b b a\" 1fr 2fr 3fr row"),
+        (
+            "row track-reverse fill-reverse repeat(2, auto)",
+            "repeat(2, auto) row track-reverse fill-reverse",
+        ),
+        (
+            "column \"a b\" [line1] 1fr [line2] 2fr",
+            "\"a b\" [line1] 1fr [line2] 2fr column",
+        ),
+    ] {
+        assert_serialization("grid-lanes", css, Some(expected));
+    }
+    for css in [
+        "row normal \"a a\" 1fr",
+        "\"a\" \"b\" row",
+        "fit-content(-10px)",
+        "[] normal",
+        "[one] 10px [two] [three]",
+        "[auto] 1px",
+        "20% 40% column, reverse",
+        "none auto",
+        "row-reverse 10px",
+        "normal fill-reverse",
+        "row row",
+        "\"a b a\" 1fr",
+    ] {
+        assert_serialization("grid-lanes", css, None);
+    }
+}
+
+#[test]
+fn grid_lanes_direction_retains_specified_reversal_order() {
+    for value in [
+        "row track-reverse fill-reverse",
+        "column fill-reverse track-reverse",
+    ] {
+        assert_serialization("grid-lanes-direction", value, Some(value));
+    }
+}
+
+#[test]
+fn grid_spans_preserve_calculations_until_computed_value_clamping() {
+    let _preferences = crate::test_support::pref_lock().lock().unwrap();
+    let _grid = crate::test_support::BoolPrefGuard::set("layout.grid.enabled", true);
+    for (value, expected) in [
+        ("span calc(-2)", "span calc(-2)"),
+        ("span min(-1, 6)", "span calc(-1)"),
+        ("span calc(0)", "span calc(0)"),
+        ("span calc(-2) i", "span calc(-2) i"),
+        ("calc(-2) span", "span calc(-2)"),
+        (
+            "span calc(sibling-index() - 2)",
+            "span calc(-2 + sibling-index())",
+        ),
+    ] {
+        assert_serialization("grid-column-start", value, Some(expected));
+    }
+    for value in ["span -2", "span 0", "span calc(0) 2", "calc(-2) span 3"] {
+        assert_serialization("grid-column-start", value, None);
+    }
 }
 
 #[test]
@@ -176,7 +272,7 @@ fn native_common_properties_validate_and_serialize_their_grammars() {
         (
             "grid-lanes-direction",
             "column track-reverse fill-reverse",
-            Some("column fill-reverse track-reverse"),
+            Some("column track-reverse fill-reverse"),
         ),
         ("grid-lanes-direction", "normal fill-reverse", None),
         (

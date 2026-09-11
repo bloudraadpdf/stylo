@@ -392,6 +392,12 @@ sub_properties = ["grid-template-rows", "grid-template-columns", "grid-template-
 spec = "https://drafts.csswg.org/css-grid/#propdef-grid"
 servo_pref = "layout.grid.enabled"
 
+[grid-lanes]
+sub_properties = ["grid-template-rows", "grid-template-columns", "grid-template-areas", "grid-lanes-direction"]
+spec = "https://drafts.csswg.org/css-grid-3/#propdef-grid-lanes"
+engine = "servo"
+servo_pref = "layout.grid.enabled"
+
 [place-content]
 sub_properties = ["align-content", "justify-content"]
 spec = "https://drafts.csswg.org/css-align/#propdef-place-content"
