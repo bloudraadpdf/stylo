@@ -298,6 +298,31 @@ mod tests {
     }
 
     #[test]
+    fn word_space_transform_retains_phrase_control_in_either_order() {
+        for css in [
+            "space auto-phrase",
+            "ideographic-space auto-phrase",
+            "auto-phrase space",
+            "auto-phrase ideographic-space",
+        ] {
+            assert_eq!(
+                parse_value::<WordSpaceTransform>(css)
+                    .expect(css)
+                    .to_css_string(),
+                css
+            );
+        }
+        for css in [
+            "none auto-phrase",
+            "auto-phrase",
+            "auto-phrase space auto-phrase",
+            "space ideographic-space",
+        ] {
+            assert!(parse_value::<WordSpaceTransform>(css).is_err(), "{css}");
+        }
+    }
+
+    #[test]
     fn drop_and_raise_keywords_compute_the_sink_in_either_order() {
         for (css, expected_size, expected_sink) in [
             ("3 drop", 3.0, 3),
@@ -1120,7 +1145,31 @@ pub enum WordBreak {
 }
 
 /// Values for the `word-space-transform` property.
-#[repr(u8)]
+#[repr(C, u8)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    PartialEq,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[allow(missing_docs)]
+pub enum WordSpaceTransform {
+    None,
+    Space,
+    IdeographicSpace,
+    AutoPhrase {
+        separator: WordSpaceSeparator,
+        order: AutoPhraseOrder,
+    },
+}
+
+/// Separator inserted by word-space transformation.
 #[derive(
     Clone,
     Copy,
@@ -1136,11 +1185,84 @@ pub enum WordBreak {
     ToShmem,
     ToTyped,
 )]
-#[allow(missing_docs)]
-pub enum WordSpaceTransform {
-    None,
+#[repr(u8)]
+pub enum WordSpaceSeparator {
+    /// U+0020 SPACE.
     Space,
+    /// U+3000 IDEOGRAPHIC SPACE.
     IdeographicSpace,
+}
+
+/// Authored order of the phrase keyword relative to the separator.
+#[derive(
+    Clone, Copy, Debug, Eq, MallocSizeOf, PartialEq, ToComputedValue, ToResolvedValue, ToShmem,
+)]
+#[repr(u8)]
+pub enum AutoPhraseOrder {
+    /// Before the separator keyword.
+    Before,
+    /// After the separator keyword.
+    After,
+}
+
+impl Parse for WordSpaceTransform {
+    fn parse<'i, 't>(
+        _: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if input
+            .try_parse(|input| input.expect_ident_matching("none"))
+            .is_ok()
+        {
+            return Ok(Self::None);
+        }
+        let before = input
+            .try_parse(|input| input.expect_ident_matching("auto-phrase"))
+            .is_ok();
+        let separator = WordSpaceSeparator::parse(input)?;
+        let order = if before {
+            AutoPhraseOrder::Before
+        } else if input
+            .try_parse(|input| input.expect_ident_matching("auto-phrase"))
+            .is_ok()
+        {
+            AutoPhraseOrder::After
+        } else {
+            return Ok(match separator {
+                WordSpaceSeparator::Space => Self::Space,
+                WordSpaceSeparator::IdeographicSpace => Self::IdeographicSpace,
+            });
+        };
+        Ok(Self::AutoPhrase { separator, order })
+    }
+}
+
+impl ToCss for WordSpaceTransform {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: fmt::Write,
+    {
+        let (separator, order) = match self {
+            Self::None => return dest.write_str("none"),
+            Self::Space => return dest.write_str("space"),
+            Self::IdeographicSpace => return dest.write_str("ideographic-space"),
+            Self::AutoPhrase { separator, order } => (separator, order),
+        };
+        if *order == AutoPhraseOrder::Before {
+            dest.write_str("auto-phrase ")?;
+        }
+        separator.to_css(dest)?;
+        if *order == AutoPhraseOrder::After {
+            dest.write_str(" auto-phrase")?;
+        }
+        Ok(())
+    }
+}
+
+impl SpecifiedValueInfo for WordSpaceTransform {
+    fn collect_completion_keywords(f: KeywordsCollectFn) {
+        f(&["none", "space", "ideographic-space", "auto-phrase"]);
+    }
 }
 
 /// Values for the `hanging-punctuation` property.
