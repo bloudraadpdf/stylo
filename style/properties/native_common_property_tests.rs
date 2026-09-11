@@ -33,6 +33,20 @@ fn assert_serialization(name: &str, input: &str, expected: Option<&str>) {
 }
 
 #[test]
+fn webkit_text_orientation_is_a_native_alias() {
+    for name in ["text-orientation", "-webkit-text-orientation"] {
+        for value in ["mixed", "upright", "sideways"] {
+            assert_serialization(name, value, Some(value));
+        }
+    }
+}
+
+#[test]
+fn text_orientation_accepts_the_legacy_sideways_right_keyword() {
+    assert_serialization("text-orientation", "sideways-right", Some("sideways"));
+}
+
+#[test]
 fn text_group_alignment_has_a_closed_keyword_grammar() {
     for value in ["none", "start", "end", "left", "right", "center"] {
         assert_serialization("text-group-align", value, Some(value));
