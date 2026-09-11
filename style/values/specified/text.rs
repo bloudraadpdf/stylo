@@ -12,11 +12,12 @@ use crate::values::computed::text::TextEmphasisStyle as ComputedTextEmphasisStyl
 use crate::values::computed::{Context, ToComputedValue};
 use crate::values::generics::text::{
     GenericHyphenateLimitChars, GenericInitialLetter, GenericTextDecorationInset,
-    GenericTextDecorationLength, GenericTextIndent, GenericTextSizeAdjust,
+    GenericTextDecorationLength, GenericTextFit, GenericTextIndent, GenericTextSizeAdjust,
+    TextFitLines, TextFitMode,
 };
 use crate::values::generics::NumberOrAuto;
 use crate::values::specified::length::LengthPercentage;
-use crate::values::specified::{AllowQuirks, Integer, NonNegativePercentage, Number};
+use crate::values::specified::{AllowQuirks, Integer, NonNegativePercentage, Number, Percentage};
 use crate::Zero;
 use cssparser::{match_ignore_ascii_case, Parser};
 use icu_segmenter::GraphemeClusterSegmenter;
@@ -30,6 +31,46 @@ pub type InitialLetter = GenericInitialLetter<Number, Integer>;
 
 /// The specified value of `text-size-adjust`.
 pub type TextSizeAdjust = GenericTextSizeAdjust<NonNegativePercentage>;
+
+/// Specified text fitting policy.
+pub type TextFit = GenericTextFit<Percentage>;
+
+impl Parse for TextFit {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        Ok(Self {
+            mode: TextFitMode::parse(input)?,
+            lines: input.try_parse(TextFitLines::parse).ok(),
+            limit: input
+                .try_parse(|input| Percentage::parse(context, input))
+                .ok(),
+        })
+    }
+}
+
+impl ToComputedValue for TextFit {
+    type ComputedValue = computed::TextFit;
+
+    fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
+        Self::ComputedValue {
+            mode: self.mode,
+            lines: self
+                .lines
+                .filter(|lines| *lines != TextFitLines::Consistent),
+            limit: self.limit.to_computed_value(context),
+        }
+    }
+
+    fn from_computed_value(value: &Self::ComputedValue) -> Self {
+        Self {
+            mode: value.mode,
+            lines: value.lines,
+            limit: ToComputedValue::from_computed_value(&value.limit),
+        }
+    }
+}
 
 /// A spacing value used by either the `letter-spacing` or `word-spacing` properties.
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]

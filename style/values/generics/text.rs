@@ -66,6 +66,91 @@ pub enum GenericTextSizeAdjust<Percentage> {
     Percentage(Percentage),
 }
 
+/// Direction of text fitting.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(u8)]
+pub enum TextFitMode {
+    /// Leave text at its computed size.
+    None,
+    /// Increase text size to fill the line.
+    Grow,
+    /// Reduce text size to fit the line.
+    Shrink,
+}
+
+/// Lines that share a text fitting scale.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(u8)]
+pub enum TextFitLines {
+    /// Use one scale across the block.
+    Consistent,
+    /// Scale each line, except final and forced-break lines.
+    PerLine,
+    /// Scale every line independently.
+    PerLineAll,
+}
+
+/// Text fitting with an optional line policy and percentage limit.
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(C)]
+pub struct GenericTextFit<Percentage> {
+    /// Permitted direction of scaling.
+    pub mode: TextFitMode,
+    /// Explicit line policy; omission means consistent scaling.
+    pub lines: Option<TextFitLines>,
+    /// Authored scaling limit.
+    pub limit: Option<Percentage>,
+}
+
+impl<Percentage> GenericTextFit<Percentage> {
+    /// Initial value.
+    pub const fn none() -> Self {
+        Self {
+            mode: TextFitMode::None,
+            lines: None,
+            limit: None,
+        }
+    }
+}
+
 /// A generic value for the `hyphenate-limit-chars` property.
 #[derive(
     Animate,

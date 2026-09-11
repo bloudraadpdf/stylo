@@ -6645,6 +6645,23 @@ servo_restyle_damage = "rebuild_box"
 affects = "layout"
 keyword = { values = ["normal", "space-all", "space-first", "trim-start", "trim-both", "trim-all", "auto"] }
 
+[text-group-align]
+struct = "text"
+spec = "https://drafts.csswg.org/css-text-4/#text-group-align-property"
+animation_type = "discrete"
+servo_restyle_damage = "rebuild_box"
+affects = "layout"
+keyword = { values = ["none", "start", "end", "left", "right", "center"] }
+
+[text-fit]
+type = "TextFit"
+initial = "computed::TextFit::none()"
+struct = "inherited_text"
+spec = "https://drafts.csswg.org/css-text-5/#text-fit-property"
+animation_type = "discrete"
+servo_restyle_damage = "rebuild_box"
+affects = "layout"
+
 [text-decoration-skip-ink]
 type = "TextDecorationSkipInk"
 initial = "computed::TextDecorationSkipInk::Auto"

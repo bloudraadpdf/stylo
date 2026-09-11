@@ -268,8 +268,8 @@ pub use self::svg::{DProperty, MozContextProperties};
 pub use self::svg::{SVGLength, SVGOpacity, SVGPaint, SVGPaintKind};
 pub use self::svg::{SVGLineJoin, SVGPaintOrder, SVGStrokeDashArray, SVGWidth, VectorEffect};
 pub use self::text::{
-    HangingPunctuation, InitialLetter, LetterSpacing, LineBreak, TextCombineUpright, TextIndent,
-    TextSizeAdjust,
+    HangingPunctuation, InitialLetter, LetterSpacing, LineBreak, TextCombineUpright, TextFit,
+    TextIndent, TextSizeAdjust,
 };
 pub use self::text::{HyphenateCharacter, HyphenateLimitChars};
 pub use self::text::{
@@ -281,7 +281,9 @@ pub use self::text::{
     TextDecorationInset, TextDecorationLength, TextDecorationSkipInk, TextJustify,
     TextUnderlineOffset,
 };
-pub use self::text_decor_4::{TextDecorationSkipKind, TextDecorationSkipSpaces, TextDecorationTrim, TextEmphasisSkip};
+pub use self::text_decor_4::{
+    TextDecorationSkipKind, TextDecorationSkipSpaces, TextDecorationTrim, TextEmphasisSkip,
+};
 pub use self::time::Time;
 pub use self::transform::{Rotate, Scale, Transform, TransformBox, TransformOperation};
 pub use self::transform::{TransformOrigin, TransformStyle, Translate};

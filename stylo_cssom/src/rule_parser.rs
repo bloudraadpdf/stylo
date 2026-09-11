@@ -2778,6 +2778,10 @@ mod tests {
             PropertyDeclaration::TextSpacingTrim(value) => {
                 PropertyDeclaration::TextSpacingTrim(*value)
             },
+            PropertyDeclaration::TextGroupAlign(value) => {
+                PropertyDeclaration::TextGroupAlign(*value)
+            },
+            PropertyDeclaration::TextFit(value) => PropertyDeclaration::TextFit(value.clone()),
             PropertyDeclaration::TextTransform(value) => PropertyDeclaration::TextTransform(*value),
             PropertyDeclaration::TextUnderlinePosition(value) => {
                 PropertyDeclaration::TextUnderlinePosition(*value)

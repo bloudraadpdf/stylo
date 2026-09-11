@@ -33,6 +33,52 @@ fn assert_serialization(name: &str, input: &str, expected: Option<&str>) {
 }
 
 #[test]
+fn text_group_alignment_has_a_closed_keyword_grammar() {
+    for value in ["none", "start", "end", "left", "right", "center"] {
+        assert_serialization("text-group-align", value, Some(value));
+    }
+    for value in [
+        "auto",
+        "match-parent",
+        "justify",
+        "left right",
+        "none center",
+        "5px",
+    ] {
+        assert_serialization("text-group-align", value, None);
+    }
+}
+
+#[test]
+fn text_fitting_retains_optional_line_policy_and_scale_limit() {
+    for value in [
+        "none",
+        "grow",
+        "shrink",
+        "grow consistent",
+        "grow per-line",
+        "grow per-line-all",
+        "grow per-line 132%",
+        "grow consistent 300%",
+        "shrink per-line 4%",
+        "shrink consistent 50%",
+        "none 120%",
+        "grow -10%",
+    ] {
+        assert_serialization("text-fit", value, Some(value));
+    }
+    for value in [
+        "larger",
+        "stretch per-line",
+        "grow 150% consistent",
+        "consistent 100%",
+        "grow consistent 1.0",
+    ] {
+        assert_serialization("text-fit", value, None);
+    }
+}
+
+#[test]
 fn native_common_properties_validate_and_serialize_their_grammars() {
     for (name, input, expected) in [
         ("align-content", "flow-start", Some("flow-start")),

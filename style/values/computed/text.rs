@@ -10,7 +10,7 @@ use crate::values::computed::length::LengthPercentage;
 use crate::values::generics::length::GenericLengthPercentageOrAuto;
 use crate::values::generics::text::{
     GenericHyphenateLimitChars, GenericInitialLetter, GenericTextDecorationInset,
-    GenericTextDecorationLength, GenericTextIndent, GenericTextSizeAdjust,
+    GenericTextDecorationLength, GenericTextFit, GenericTextIndent, GenericTextSizeAdjust,
     GenericTextUnderlineOffset,
 };
 use crate::values::generics::NumberOrAuto;
@@ -73,6 +73,9 @@ pub type InitialLetter = GenericInitialLetter<CSSFloat, CSSInteger>;
 
 /// The computed value of `text-size-adjust`.
 pub type TextSizeAdjust = GenericTextSizeAdjust<NonNegativePercentage>;
+
+/// Computed text fitting policy.
+pub type TextFit = GenericTextFit<crate::values::computed::Percentage>;
 
 /// Implements type for `text-decoration-thickness` property.
 pub type TextDecorationLength = GenericTextDecorationLength<LengthPercentage>;

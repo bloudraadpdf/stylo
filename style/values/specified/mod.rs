@@ -265,7 +265,7 @@ pub use self::text::RubyPosition;
 pub use self::text::WhiteSpaceTrim;
 pub use self::text::{
     HangingPunctuation, InitialLetter, LetterSpacing, LineBreak, TextAlign, TextCombineUpright,
-    TextIndent, TextSizeAdjust,
+    TextFit, TextIndent, TextSizeAdjust,
 };
 pub use self::text::{HyphenateCharacter, HyphenateLimitChars};
 pub use self::text::{
@@ -277,7 +277,9 @@ pub use self::text::{
     TextDecorationInset, TextDecorationLength, TextDecorationSkipInk, TextJustify, TextTransform,
     TextUnderlineOffset,
 };
-pub use self::text_decor_4::{TextDecorationSkipKind, TextDecorationSkipSpaces, TextDecorationTrim, TextEmphasisSkip};
+pub use self::text_decor_4::{
+    TextDecorationSkipKind, TextDecorationSkipSpaces, TextDecorationTrim, TextEmphasisSkip,
+};
 pub use self::time::Time;
 pub use self::transform::{Rotate, Scale, Transform};
 pub use self::transform::{TransformBox, TransformOrigin, TransformStyle, Translate};
