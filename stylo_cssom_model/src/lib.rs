@@ -2969,7 +2969,7 @@ mod tests {
     fn resolved_cssom_values_serialise_at_the_observable_boundary() {
         assert_eq!(ResolvedCssomValue::css_pixel(12.0).to_css_string(), "12px");
         assert_eq!(
-            ResolvedCssomValue::css_pixel(20.700_000_762_939_453_f32).to_css_string(),
+            ResolvedCssomValue::css_pixel(20.7_f32).to_css_string(),
             "20.7px"
         );
         assert_eq!(ResolvedCssomValue::keyword("auto").to_css_string(), "auto");
