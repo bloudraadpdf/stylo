@@ -2,79 +2,105 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! CSS Backgrounds and Borders Module Level 4 §5.5 `corner-shape`
-//! property values.
-//!
-//! `corner-shape` controls the geometric profile of each corner whose
-//! size is set by `border-radius`. The default `round` reproduces the
-//! existing CSS Backgrounds 3 quarter-ellipse curve; the other
-//! keywords cut, scoop, notch, or square off the corner using the
-//! same radius extents.
-//!
-//! The keyword family is:
-//!
-//! | Keyword           | Corner geometry                                   |
-//! | ----------------- | ------------------------------------------------- |
-//! | `round`           | Quarter-ellipse curve (default).                  |
-//! | `bevel`           | Straight diagonal between the two radius extents. |
-//! | `scoop`           | Quarter-ellipse curving *into* the box.           |
-//! | `notch`           | Two right-angle segments meeting at the corner.   |
-//! | `square`          | No corner shaping — square corner.                |
-//! | `superellipse(k)` | CSS superellipse with curvature `k` (`k = 1` ⇒ `round`). |
-//!
-//! `superellipse(<number>)` carries the CSS superellipse curvature K.
-//! CSS Borders 4 defines `K = 1` as `round`, `K = 0` as `bevel`,
-//! `K = -1` as `scoop`, and the two signed infinities as `square` and
-//! `notch`, respectively. Every finite value, including zero and negative
-//! values, remains distinct.
+//! CSS Borders and Box Decorations Level 4 corner shapes.
 
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
+use crate::values::computed::{Context, ToComputedValue};
+use crate::values::generics::rect::Rect;
 use crate::values::specified::Number;
 use crate::values::CSSFloat;
 use cssparser::{match_ignore_ascii_case, Parser};
 use std::fmt::{self, Write};
 use style_traits::{CssWriter, ParseError, StyleParseErrorKind, ToCss};
 
-/// CSS Backgrounds 4 §5.5 `corner-shape` per-corner value.
-///
-/// Stored in computed form. The closed [`SuperellipseCurvature`] type keeps
-/// NaN out of geometry while preserving every finite value and both signed
-/// infinities.
-///
-/// The `Default` impl returns `Round`, matching the CSS Backgrounds 3
-/// behaviour of the existing `border-radius` longhands.
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    MallocSizeOf,
-    PartialEq,
-    SpecifiedValueInfo,
-    ToComputedValue,
-    ToResolvedValue,
-    ToShmem,
-    ToTyped,
-)]
+/// A specified corner shape, retaining numeric expressions until computation.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToShmem, ToTyped)]
 #[repr(C, u8)]
 pub enum CornerShape {
-    /// `round` — quarter-ellipse (default; identical to CSS
-    /// Backgrounds 3 corner geometry).
+    /// `round`, equivalent to `superellipse(1)`.
     Round,
     /// `bevel` — straight diagonal between the two radius extents.
     Bevel,
     /// `scoop` — quarter-ellipse curving inward (concave).
     Scoop,
-    /// `notch` — two right-angle segments meeting at the radius
-    /// crossing point, forming an inward V.
+    /// `notch`, equivalent to `superellipse(-infinity)`.
     Notch,
-    /// `square` — no corner shaping; the corner is sharp even when
-    /// `border-radius` is non-zero (the radius extents are still
-    /// reserved by the paint surface so that adjacent corners and
-    /// border ring geometry stay aligned).
+    /// `square`, equivalent to `superellipse(infinity)`.
     Square,
+    /// `squircle`, equivalent to `superellipse(2)`.
+    Squircle,
     /// `superellipse(<number>)` with its complete curvature domain.
-    Superellipse(SuperellipseCurvature),
+    Superellipse(SpecifiedSuperellipseCurvature),
+}
+
+impl ToComputedValue for CornerShape {
+    type ComputedValue = crate::values::computed::CornerShape;
+
+    fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
+        let curvature = match self {
+            Self::Round => SuperellipseCurvature::from_css_number(1.0),
+            Self::Bevel => SuperellipseCurvature::from_css_number(0.0),
+            Self::Scoop => SuperellipseCurvature::from_css_number(-1.0),
+            Self::Squircle => SuperellipseCurvature::from_css_number(2.0),
+            Self::Notch => SuperellipseCurvature::NegativeInfinity,
+            Self::Square => SuperellipseCurvature::PositiveInfinity,
+            Self::Superellipse(curvature) => curvature.to_computed_value(context),
+        };
+        Self::ComputedValue::from_curvature(curvature)
+    }
+
+    fn from_computed_value(value: &Self::ComputedValue) -> Self {
+        Self::Superellipse(SpecifiedSuperellipseCurvature::from_computed_value(
+            &value.curvature(),
+        ))
+    }
+}
+
+/// The specified argument of `superellipse()`.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToShmem, ToTyped)]
+#[repr(C, u8)]
+pub enum SpecifiedSuperellipseCurvature {
+    /// A number or numeric expression.
+    Number(Number),
+    /// The explicit `infinity` keyword.
+    PositiveInfinity,
+    /// The explicit `-infinity` keyword.
+    NegativeInfinity,
+}
+
+impl ToComputedValue for SpecifiedSuperellipseCurvature {
+    type ComputedValue = SuperellipseCurvature;
+
+    fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
+        match self {
+            Self::Number(number) => SuperellipseCurvature::from_css_number(
+                number
+                    .resolve_unclamped()
+                    .unwrap_or_else(|| number.to_computed_value(context)),
+            ),
+            Self::PositiveInfinity => SuperellipseCurvature::PositiveInfinity,
+            Self::NegativeInfinity => SuperellipseCurvature::NegativeInfinity,
+        }
+    }
+
+    fn from_computed_value(value: &Self::ComputedValue) -> Self {
+        match value {
+            SuperellipseCurvature::Finite(number) => Self::Number(Number::new(number.value())),
+            SuperellipseCurvature::PositiveInfinity => Self::PositiveInfinity,
+            SuperellipseCurvature::NegativeInfinity => Self::NegativeInfinity,
+        }
+    }
+}
+
+impl ToCss for SpecifiedSuperellipseCurvature {
+    fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        match self {
+            Self::Number(number) => number.to_css(dest),
+            Self::PositiveInfinity => dest.write_str("infinity"),
+            Self::NegativeInfinity => dest.write_str("-infinity"),
+        }
+    }
 }
 
 /// A valid CSS `superellipse()` curvature.
@@ -117,7 +143,7 @@ pub enum SuperellipseCurvature {
 pub struct FiniteSuperellipseCurvature(CSSFloat);
 
 impl SuperellipseCurvature {
-    fn from_css_number(value: CSSFloat) -> Self {
+    pub(crate) fn from_css_number(value: CSSFloat) -> Self {
         if value.is_nan() {
             // CSS Values 4 censors a top-level NaN numeric value to zero.
             return Self::Finite(FiniteSuperellipseCurvature(0.0));
@@ -142,7 +168,6 @@ impl FiniteSuperellipseCurvature {
 }
 
 impl Default for CornerShape {
-    /// The CSS Backgrounds 4 §5.5 initial value is `round`.
     fn default() -> Self {
         Self::Round
     }
@@ -156,15 +181,15 @@ impl CornerShape {
     }
 
     /// Whether this shape is the default `round` profile (either the
-    /// bare keyword or `superellipse(2)`). The two spellings are
+    /// bare keyword or `superellipse(1)`). The two spellings are
     /// observationally identical and the paint surface treats them
     /// interchangeably.
     #[inline]
     pub fn is_round(&self) -> bool {
         match self {
             Self::Round => true,
-            Self::Superellipse(SuperellipseCurvature::Finite(k)) => {
-                (k.value() - 1.0).abs() <= CSSFloat::EPSILON
+            Self::Superellipse(SpecifiedSuperellipseCurvature::Number(number)) => {
+                number.resolve_unclamped().is_some_and(|value| value == 1.0)
             },
             _ => false,
         }
@@ -182,6 +207,7 @@ impl ToCss for CornerShape {
             Self::Scoop => dest.write_str("scoop"),
             Self::Notch => dest.write_str("notch"),
             Self::Square => dest.write_str("square"),
+            Self::Squircle => dest.write_str("squircle"),
             Self::Superellipse(k) => {
                 dest.write_str("superellipse(")?;
                 k.to_css(dest)?;
@@ -207,23 +233,18 @@ impl ToCss for SuperellipseCurvature {
 fn parse_superellipse_curvature<'i, 't>(
     context: &ParserContext,
     input: &mut Parser<'i, 't>,
-) -> Result<SuperellipseCurvature, ParseError<'i>> {
+) -> Result<SpecifiedSuperellipseCurvature, ParseError<'i>> {
     if let Ok(ident) = input.try_parse(|i| i.expect_ident_cloned()) {
         return match_ignore_ascii_case! { &ident,
-            "infinity" => Ok(SuperellipseCurvature::PositiveInfinity),
-            "-infinity" => Ok(SuperellipseCurvature::NegativeInfinity),
-            "nan" => Ok(SuperellipseCurvature::from_css_number(CSSFloat::NAN)),
+            "infinity" => Ok(SpecifiedSuperellipseCurvature::PositiveInfinity),
+            "-infinity" => Ok(SpecifiedSuperellipseCurvature::NegativeInfinity),
             _ => Err(input.new_custom_error::<_, StyleParseErrorKind>(
                 StyleParseErrorKind::UnspecifiedError,
             )),
         };
     }
 
-    let number = Number::parse(context, input)?;
-    let value = number
-        .resolve_unclamped()
-        .ok_or_else(|| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))?;
-    Ok(SuperellipseCurvature::from_css_number(value))
+    Number::parse(context, input).map(SpecifiedSuperellipseCurvature::Number)
 }
 
 impl Parse for CornerShape {
@@ -231,8 +252,6 @@ impl Parse for CornerShape {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        // `superellipse(<number>)` — functional notation with one
-        // numeric argument carrying the Lamé exponent.
         if let Ok(value) = input.try_parse(|i| {
             let location = i.current_source_location();
             let function = i.expect_function()?.clone();
@@ -248,7 +267,6 @@ impl Parse for CornerShape {
             return Ok(value);
         }
 
-        // Bare keywords: round | bevel | scoop | notch | square.
         let ident = input.expect_ident()?;
         match_ignore_ascii_case! { ident,
             "round" => Ok(Self::Round),
@@ -256,6 +274,7 @@ impl Parse for CornerShape {
             "scoop" => Ok(Self::Scoop),
             "notch" => Ok(Self::Notch),
             "square" => Ok(Self::Square),
+            "squircle" => Ok(Self::Squircle),
             _ => Err(input.new_custom_error::<_, StyleParseErrorKind>(
                 StyleParseErrorKind::UnspecifiedError,
             )),
@@ -263,14 +282,8 @@ impl Parse for CornerShape {
     }
 }
 
-/// The four per-corner `corner-shape` longhand values, packed for
-/// shorthand serialisation.
-///
-/// Stored as physical corners in declaration order (TL, TR, BR, BL),
-/// matching the CSS Backgrounds 3 §5.1 convention used by
-/// `border-radius` so the corresponding longhand pairs always
-/// project onto the same corner.
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// The four physical corner shapes in declaration order.
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct CornerShapeRect {
     /// `corner-top-left-shape`.
     pub top_left: CornerShape,
@@ -295,86 +308,33 @@ impl CornerShapeRect {
 }
 
 impl Parse for CornerShapeRect {
-    /// CSS Backgrounds 4 §5.5 — shorthand grammar mirrors
-    /// `border-radius`'s four-value tile (1 ⇒ all four; 2 ⇒
-    /// TL+BR / TR+BL; 3 ⇒ TL / TR+BL / BR; 4 ⇒ TL TR BR BL).
     fn parse<'i, 't>(
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        let a = CornerShape::parse(context, input)?;
-        let b = match input.try_parse(|i| CornerShape::parse(context, i)) {
-            Ok(b) => b,
-            Err(_) => {
-                return Ok(Self {
-                    top_left: a,
-                    top_right: a,
-                    bottom_right: a,
-                    bottom_left: a,
-                });
-            },
-        };
-        let c = match input.try_parse(|i| CornerShape::parse(context, i)) {
-            Ok(c) => c,
-            Err(_) => {
-                return Ok(Self {
-                    top_left: a,
-                    top_right: b,
-                    bottom_right: a,
-                    bottom_left: b,
-                });
-            },
-        };
-        let d = match input.try_parse(|i| CornerShape::parse(context, i)) {
-            Ok(d) => d,
-            Err(_) => {
-                return Ok(Self {
-                    top_left: a,
-                    top_right: b,
-                    bottom_right: c,
-                    bottom_left: b,
-                });
-            },
-        };
+        let Rect(top_left, top_right, bottom_right, bottom_left) =
+            Rect::parse_with(context, input, CornerShape::parse)?;
         Ok(Self {
-            top_left: a,
-            top_right: b,
-            bottom_right: c,
-            bottom_left: d,
+            top_left,
+            top_right,
+            bottom_right,
+            bottom_left,
         })
     }
 }
 
 impl ToCss for CornerShapeRect {
-    /// Serialise using the same compaction rules as `border-radius`:
-    /// emit the shortest equivalent tile (1, 2, 3, or 4 values).
     fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
     where
         W: Write,
     {
-        let tl = self.top_left;
-        let tr = self.top_right;
-        let br = self.bottom_right;
-        let bl = self.bottom_left;
-        tl.to_css(dest)?;
-        let four_distinct = tr != bl || tl != br || tr != tl;
-        let three_distinct = tr != bl || tl != br;
-        let two_distinct = tl != tr;
-        if !two_distinct && !three_distinct && !four_distinct {
-            return Ok(());
-        }
-        dest.write_char(' ')?;
-        tr.to_css(dest)?;
-        if !three_distinct && !four_distinct {
-            return Ok(());
-        }
-        dest.write_char(' ')?;
-        br.to_css(dest)?;
-        if !four_distinct {
-            return Ok(());
-        }
-        dest.write_char(' ')?;
-        bl.to_css(dest)
+        Rect(
+            &self.top_left,
+            &self.top_right,
+            &self.bottom_right,
+            &self.bottom_left,
+        )
+        .to_css(dest)
     }
 }
 
@@ -407,34 +367,36 @@ mod tests {
 
     #[test]
     fn superellipse_retains_finite_negative_curvature() {
-        let CornerShape::Superellipse(SuperellipseCurvature::Finite(curvature)) =
-            parse_corner_shape("superellipse(-100)")
-        else {
-            panic!("finite negative curvature must retain its closed state");
-        };
-        assert_eq!(curvature.value(), -100.0);
+        assert_eq!(
+            parse_corner_shape("superellipse(-100)"),
+            CornerShape::Superellipse(SpecifiedSuperellipseCurvature::Number(Number::new(-100.0)))
+        );
     }
 
     #[test]
     fn superellipse_retains_both_signed_infinities() {
         assert_eq!(
             parse_corner_shape("superellipse(infinity)"),
-            CornerShape::Superellipse(SuperellipseCurvature::PositiveInfinity)
+            CornerShape::Superellipse(SpecifiedSuperellipseCurvature::PositiveInfinity)
         );
         assert_eq!(
             parse_corner_shape("superellipse(-infinity)"),
-            CornerShape::Superellipse(SuperellipseCurvature::NegativeInfinity)
+            CornerShape::Superellipse(SpecifiedSuperellipseCurvature::NegativeInfinity)
         );
         assert_eq!(
-            parse_corner_shape("superellipse(calc(-infinity))"),
-            CornerShape::Superellipse(SuperellipseCurvature::NegativeInfinity)
+            parse_corner_shape("superellipse(calc(-infinity))").to_css_string(),
+            "superellipse(calc(-infinity))"
         );
     }
 
     #[test]
     fn superellipse_censors_nan_to_finite_zero() {
         let shape = parse_corner_shape("superellipse(calc(NaN))");
-        assert_eq!(shape.to_css_string(), "superellipse(0)");
+        assert_eq!(shape.to_css_string(), "superellipse(calc(NaN))");
+        assert_eq!(
+            SuperellipseCurvature::from_css_number(CSSFloat::NAN).to_css_string(),
+            "0"
+        );
     }
 
     #[test]

@@ -701,11 +701,7 @@ fn parse_compatibility_declaration(
     if components.is_empty() {
         return None;
     }
-    let value = if inline_compatibility_value_is_valid(property, &components) {
-        specified_style_value_from_components(components)
-    } else {
-        return None;
-    };
+    let value = specified_style_value_from_components(components);
     Some(stylo_cssom_model::SpecifiedDeclaration {
         property: stylo_cssom_model::SpecifiedPropertyName::Compatibility(property),
         value,
@@ -781,77 +777,11 @@ fn inline_shorthand_serializes(schema: &stylo_cssom_model::PropertySchemaRow) ->
         )
 }
 
-fn inline_compatibility_value_is_valid(
-    property: stylo_cssom_model::InlineCompatibilityProperty,
-    value: &[stylo_cssom_model::SpecifiedComponentValue],
-) -> bool {
-    use stylo_cssom_model::{
-        InlineCompatibilityProperty as Property, SpecifiedComponentValue as Component,
-    };
-
-    let positive_integer = |value: f32| value >= 1.0 && value.fract() == 0.0;
-    match (property, value) {
-        (Property::Continue, [Component::Ident(value)]) => matches!(
-            value.to_ascii_lowercase().as_str(),
-            "auto"
-                | "collapse"
-                | "discard"
-                | "inherit"
-                | "initial"
-                | "revert"
-                | "revert-layer"
-                | "unset"
-        ),
-        (Property::LineClamp, [Component::Ident(value)]) => {
-            matches!(value.to_ascii_lowercase().as_str(), "none" | "auto")
-        },
-        (Property::LineClamp, [Component::Ident(value), Component::Ident(ellipsis)]) => {
-            value.eq_ignore_ascii_case("auto") && ellipsis.eq_ignore_ascii_case("no-ellipsis")
-        },
-        (Property::LineClamp, [Component::String(_)]) => true,
-        (Property::LineClamp, [Component::Number { value: lines, .. }]) => positive_integer(*lines),
-        (
-            Property::LineClamp,
-            [
-                Component::Number { value: lines, .. },
-                Component::Ident(ellipsis),
-            ],
-        ) => {
-            positive_integer(*lines)
-                && matches!(
-                    ellipsis.to_ascii_lowercase().as_str(),
-                    "none" | "auto" | "no-ellipsis"
-                )
-        },
-        (Property::LineClamp, [Component::Number { value: lines, .. }, Component::String(_)]) => {
-            positive_integer(*lines)
-        },
-        (Property::WebkitLineClamp, [Component::Ident(value)]) => {
-            value.eq_ignore_ascii_case("none")
-        },
-        (Property::WebkitLineClamp, [Component::Number { value: lines, .. }]) => {
-            positive_integer(*lines)
-        },
-        (Property::FlowTolerance, _)
-        | (Property::GridLanesPack, _)
-        | (Property::LegacyTextAlign, _)
-        | (Property::WebkitBoxDisplay, _) => true,
-        _ => false,
-    }
-}
-
 pub fn inline_compatibility_properties()
 -> impl Iterator<Item = stylo_cssom_model::InlineCompatibilityProperty> {
     use stylo_cssom_model::InlineCompatibilityProperty as Property;
 
-    [
-        Property::FlowTolerance,
-        Property::GridLanesPack,
-        Property::Continue,
-        Property::LineClamp,
-        Property::WebkitLineClamp,
-    ]
-    .into_iter()
+    [Property::FlowTolerance, Property::GridLanesPack].into_iter()
 }
 
 pub fn inline_compatibility_property(
@@ -1038,7 +968,6 @@ pub fn inline_style_cssom_backing_property(property: &str) -> &str {
     match property.to_ascii_lowercase().as_str() {
         "flow-tolerance" => "masonry-slack",
         "grid-gap" => "gap",
-        "text-box-trim" => "leading-trim",
         "word-wrap" => "overflow-wrap",
         _ => property,
     }
@@ -1059,22 +988,6 @@ pub fn inline_style_cssom_property_schema(
 pub fn inline_style_cssom_backing_value<'a>(property: &str, value: &'a str) -> Option<&'a str> {
     if !crate::css_scan::named_function_is_closed(value, b"progress") {
         return None;
-    }
-    if property.eq_ignore_ascii_case("text-box-trim") {
-        let mut input = ParserInput::new(value);
-        let mut parser = Parser::new(&mut input);
-        let keyword = parser.expect_ident_cloned().ok();
-        if parser.expect_exhausted().is_ok()
-            && keyword.is_some_and(|keyword| {
-                matches!(
-                    keyword.to_ascii_lowercase().as_str(),
-                    "both" | "end" | "normal" | "start"
-                )
-            })
-        {
-            return None;
-        }
-        return Some(value);
     }
     if !property.eq_ignore_ascii_case("flow-tolerance") {
         return Some(value);
@@ -1097,10 +1010,6 @@ pub fn inline_style_cssom_authored_value(property: &str, value: Option<String>) 
         let keyword = match (property.to_ascii_lowercase().as_str(), value.as_str()) {
             ("flow-tolerance", "infinite") => Some("normal"),
             ("flow-tolerance", "auto") => Some("infinite"),
-            ("text-box-trim", "normal") => Some("none"),
-            ("text-box-trim", "start") => Some("trim-start"),
-            ("text-box-trim", "end") => Some("trim-end"),
-            ("text-box-trim", "both") => Some("trim-both"),
             _ => None,
         };
         match keyword {
@@ -1654,7 +1563,11 @@ mod tests {
     fn inline_style_backing_values_preserve_authored_property_grammar() {
         for value in ["both", "end", "normal", "start"] {
             assert_eq!(
-                inline_style_cssom_backing_value("text-box-trim", value),
+                inline_style_get_property_value(
+                    &parse_inline_style_block(&format!("text-box-trim:{value}")),
+                    "text-box-trim"
+                )
+                .as_deref(),
                 None
             );
         }

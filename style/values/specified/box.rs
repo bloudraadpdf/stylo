@@ -11,11 +11,11 @@ use crate::properties::{LonghandId, PropertyDeclarationId, PropertyId};
 use crate::values::computed::{Context, ToComputedValue};
 use crate::values::generics::box_::{
     BaselineShiftKeyword, GenericBaselineShift, GenericContainIntrinsicSize, GenericFloat,
-    GenericLineClamp, GenericOverflowClipMargin, GenericPerspective, GenericSnapBlock,
-    GenericSnapInline, OverflowClipMarginBox, SnapBlockAlignment, SnapInlineAlignment,
+    GenericOverflowClipMargin, GenericPerspective, GenericSnapBlock, GenericSnapInline,
+    OverflowClipMarginBox, SnapBlockAlignment, SnapInlineAlignment,
 };
 use crate::values::specified::length::{Length, LengthPercentage, NonNegativeLength};
-use crate::values::specified::{AllowQuirks, Integer, NonNegativeNumberOrPercentage};
+use crate::values::specified::{AllowQuirks, NonNegativeNumberOrPercentage};
 use crate::values::CustomIdent;
 use cssparser::{match_ignore_ascii_case, Parser};
 use num_traits::FromPrimitive;
@@ -33,11 +33,92 @@ fn grid_enabled() -> bool {
     style_config::get_bool("layout.grid.enabled")
 }
 
+/// How replaced content fits its content box.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+)]
+#[repr(u8)]
+pub enum ObjectFit {
+    /// Fill the content box.
+    Fill,
+    /// Fit within the content box, preserving the aspect ratio.
+    Contain,
+    /// Cover the content box, preserving the aspect ratio.
+    Cover,
+    /// Use the natural size.
+    None,
+    /// The smaller of contain and the natural size.
+    ScaleDown,
+    /// The smaller of cover and the natural size.
+    #[css(keyword = "cover scale-down")]
+    CoverScaleDown,
+}
+
+impl style_traits::ToTyped for ObjectFit {
+    fn to_typed(&self) -> Option<style_traits::TypedValue> {
+        match self {
+            Self::CoverScaleDown => None,
+            _ => Some(style_traits::TypedValue::Keyword(self.to_css_cssstring())),
+        }
+    }
+}
+
+impl Parse for ObjectFit {
+    fn parse<'i, 't>(
+        _context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        let location = input.current_source_location();
+        let ident = input.expect_ident()?;
+        let fit = cssparser::match_ignore_ascii_case! { ident,
+            "fill" => Self::Fill,
+            "none" => Self::None,
+            "contain" => Self::Contain,
+            "cover" => Self::Cover,
+            "scale-down" => Self::ScaleDown,
+            _ => return Err(location.new_unexpected_token_error(cssparser::Token::Ident(ident.clone())))
+        };
+        Ok(match fit {
+            Self::Contain | Self::Cover
+                if input
+                    .try_parse(|input| input.expect_ident_matching("scale-down"))
+                    .is_ok() =>
+            {
+                if fit == Self::Cover {
+                    Self::CoverScaleDown
+                } else {
+                    Self::ScaleDown
+                }
+            },
+            Self::ScaleDown => {
+                if input
+                    .try_parse(|input| input.expect_ident_matching("cover"))
+                    .is_ok()
+                {
+                    Self::CoverScaleDown
+                } else {
+                    let _ = input.try_parse(|input| input.expect_ident_matching("contain"));
+                    Self::ScaleDown
+                }
+            },
+            _ => fit,
+        })
+    }
+}
+
 /// The specified value of `overflow-clip-margin`.
-pub type OverflowClipMargin = GenericOverflowClipMargin<NonNegativeLength>;
+pub type OverflowClipMargin = GenericOverflowClipMargin<Length>;
 
 impl Parse for OverflowClipMargin {
-    // <visual-box> || <length [0,∞]>
     fn parse<'i>(
         context: &ParserContext,
         input: &mut Parser<'i, '_>,
@@ -47,9 +128,7 @@ impl Parse for OverflowClipMargin {
         let mut visual_box = None;
         loop {
             if offset.is_none() {
-                offset = input
-                    .try_parse(|i| NonNegativeLength::parse(context, i))
-                    .ok();
+                offset = input.try_parse(|i| Length::parse(context, i)).ok();
             }
             if visual_box.is_none() {
                 visual_box = input.try_parse(OverflowClipMarginBox::parse).ok();
@@ -63,7 +142,7 @@ impl Parse for OverflowClipMargin {
             return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
         }
         Ok(Self {
-            offset: offset.unwrap_or_else(NonNegativeLength::zero),
+            offset: offset.unwrap_or_else(Length::zero),
             visual_box: visual_box.unwrap_or(OverflowClipMarginBox::PaddingBox),
         })
     }
@@ -821,9 +900,6 @@ impl SpecifiedValueInfo for Display {
 
 /// A specified value for the `contain-intrinsic-size` property.
 pub type ContainIntrinsicSize = GenericContainIntrinsicSize<NonNegativeLength>;
-
-/// A specified value for the `line-clamp` property.
-pub type LineClamp = GenericLineClamp<Integer>;
 
 /// A specified value for the `baseline-shift` property.
 pub type BaselineShift = GenericBaselineShift<LengthPercentage>;
@@ -1866,22 +1942,6 @@ impl Parse for ContainIntrinsicSize {
 
         input.expect_ident_matching("none")?;
         Ok(Self::None)
-    }
-}
-
-impl Parse for LineClamp {
-    /// none | <positive-integer>
-    fn parse<'i, 't>(
-        context: &ParserContext,
-        input: &mut Parser<'i, 't>,
-    ) -> Result<Self, ParseError<'i>> {
-        if let Ok(i) =
-            input.try_parse(|i| crate::values::specified::PositiveInteger::parse(context, i))
-        {
-            return Ok(Self::from_positive(i));
-        }
-        input.expect_ident_matching("none")?;
-        Ok(Self::none())
     }
 }
 

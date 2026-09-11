@@ -181,7 +181,7 @@ pub use self::box_::{
     AlignmentBaseline, Appearance, BaselineShift, BaselineSource, BookmarkLevel, BookmarkState,
     BreakBetween, BreakWithin, Clear, Contain, ContainIntrinsicSize, ContainerName, ContainerType,
     ContentVisibility, Display, Float, FloatDefer, FloatOffset, FloatReference, FootnoteDisplay,
-    FootnotePolicy, LineClamp, MarginBreak, MarginTrim, Overflow, OverflowAnchor,
+    FootnotePolicy, MarginBreak, MarginTrim, ObjectFit, Overflow, OverflowAnchor,
     OverflowClipMargin, OverscrollBehavior, Perspective, PositionProperty, Resize,
     ScrollMarkerGroup, ScrollMarkerGroupMode, ScrollMarkerGroupPosition, ScrollSnapAlign,
     ScrollSnapAxis, ScrollSnapStop, ScrollSnapStrictness, ScrollSnapType, ScrollbarGutter,
@@ -277,7 +277,7 @@ pub use self::text::{
     TextDecorationInset, TextDecorationLength, TextDecorationSkipInk, TextJustify, TextTransform,
     TextUnderlineOffset,
 };
-pub use self::text_decor_4::{TextDecorationSkipKind, TextDecorationTrim, TextEmphasisSkip};
+pub use self::text_decor_4::{TextDecorationSkipKind, TextDecorationSkipSpaces, TextDecorationTrim, TextEmphasisSkip};
 pub use self::time::Time;
 pub use self::transform::{Rotate, Scale, Transform};
 pub use self::transform::{TransformBox, TransformOrigin, TransformStyle, Translate};

@@ -126,23 +126,34 @@ where
     where
         W: Write,
     {
+        self.to_css_with_separator(dest, " ")
+    }
+}
+
+impl<T: PartialEq + ToCss> Rect<T> {
+    /// Serializes the shortest equivalent rectangle with the given separator.
+    pub fn to_css_with_separator<W: Write>(
+        &self,
+        dest: &mut CssWriter<W>,
+        separator: &str,
+    ) -> fmt::Result {
         self.0.to_css(dest)?;
         let same_vertical = self.0 == self.2;
         let same_horizontal = self.1 == self.3;
         if same_vertical && same_horizontal && self.0 == self.1 {
             return Ok(());
         }
-        dest.write_char(' ')?;
+        dest.write_str(separator)?;
         self.1.to_css(dest)?;
         if same_vertical && same_horizontal {
             return Ok(());
         }
-        dest.write_char(' ')?;
+        dest.write_str(separator)?;
         self.2.to_css(dest)?;
         if same_horizontal {
             return Ok(());
         }
-        dest.write_char(' ')?;
+        dest.write_str(separator)?;
         self.3.to_css(dest)
     }
 }

@@ -675,12 +675,43 @@ pub mod ${property.ident} {
         % if shorthand.kind == "two_properties":
         ${self.two_properties_shorthand(shorthand)}
         % endif
+        % if shorthand.kind == "single_value":
+        ${self.single_value_shorthand(shorthand)}
+        % endif
         % if shorthand.kind == "four_sides":
         ${self.four_sides_shorthand(shorthand)}
         % endif
         % if shorthand.kind == "single_border":
         ${self.single_border_shorthand(shorthand)}
         % endif
+    }
+</%def>
+
+<%def name="single_value_shorthand(shorthand)">
+    type Single = crate::properties::longhands::${shorthand.sub_properties[0].ident}::SpecifiedValue;
+
+    pub fn parse_value<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Longhands, ParseError<'i>> {
+        let value = <Single as crate::parser::Parse>::parse(context, input)?;
+        Ok(expanded! {
+            % for property in shorthand.sub_properties:
+            ${property.ident}: value.clone(),
+            % endfor
+        })
+    }
+
+    impl<'a> ToCss for LonghandsToSerialize<'a> {
+        fn to_css<W: fmt::Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+            let value = self.${shorthand.sub_properties[0].ident};
+            % for property in shorthand.sub_properties[1:]:
+            if self.${property.ident} != value {
+                return Ok(());
+            }
+            % endfor
+            value.to_css(dest)
+        }
     }
 </%def>
 

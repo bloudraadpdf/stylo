@@ -15,7 +15,7 @@ use crate::values::computed::{Context, ToComputedValue};
 use crate::values::specified::text_decor_4 as specified;
 use to_shmem::ToShmem;
 
-pub use specified::{TextDecorationSkipKind, TextEmphasisSkip};
+pub use specified::{TextDecorationSkipKind, TextDecorationSkipSpaces, TextEmphasisSkip};
 
 /// Computed value of `text-decoration-trim`.
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, ToCss, ToResolvedValue, ToTyped)]

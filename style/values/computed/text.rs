@@ -6,7 +6,7 @@
 
 use crate::derives::*;
 use crate::values::animated::{Animate, Procedure};
-use crate::values::computed::length::{Length, LengthPercentage};
+use crate::values::computed::length::LengthPercentage;
 use crate::values::generics::length::GenericLengthPercentageOrAuto;
 use crate::values::generics::text::{
     GenericHyphenateLimitChars, GenericInitialLetter, GenericTextDecorationInset,
@@ -23,10 +23,50 @@ use style_traits::{CssString, CssWriter, ToCss, ToTyped, TypedValue};
 
 pub use crate::values::specified::text::{
     HangingPunctuation, HyphenateCharacter, LineBreak, MozControlCharacterVisibility, OverflowWrap,
-    RubyPosition, TextAlignLast, TextAutospace, TextDecorationLine, TextDecorationSkipInk,
-    TextEmphasisPosition, TextJustify, TextOverflow, TextTransform, TextUnderlinePosition,
-    WhiteSpaceTrim, WordBreak, WordSpaceTransform,
+    RubyPosition, TextAutospace, TextDecorationLine, TextDecorationSkipInk, TextEmphasisPosition,
+    TextJustify, TextOverflow, TextTransform, TextUnderlinePosition, WhiteSpaceTrim, WordBreak,
+    WordSpaceTransform,
 };
+
+/// Last-line alignment, retaining the CSSOM match-parent keyword.
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, MallocSizeOf, PartialEq, ToResolvedValue, ToShmem, ToTyped,
+)]
+#[repr(C)]
+pub struct TextAlignLast {
+    keyword: specified::TextAlignLastKeyword,
+    match_parent: bool,
+}
+
+impl TextAlignLast {
+    /// Creates the computed alignment and its CSSOM representation.
+    pub const fn new(keyword: specified::TextAlignLastKeyword, match_parent: bool) -> Self {
+        Self {
+            keyword,
+            match_parent,
+        }
+    }
+
+    /// Initial last-line alignment.
+    pub const fn auto() -> Self {
+        Self::new(specified::TextAlignLastKeyword::Auto, false)
+    }
+
+    /// Resolved alignment consumed by layout.
+    pub fn keyword(self) -> specified::TextAlignLastKeyword {
+        self.keyword
+    }
+}
+
+impl ToCss for TextAlignLast {
+    fn to_css<W: fmt::Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        if self.match_parent {
+            dest.write_str("match-parent")
+        } else {
+            self.keyword.to_css(dest)
+        }
+    }
+}
 
 /// A computed value for the `initial-letter` property.
 pub type InitialLetter = GenericInitialLetter<CSSFloat, CSSInteger>;
@@ -82,7 +122,7 @@ impl Animate for TextUnderlineOffset {
 #[cfg(test)]
 mod text_decoration_animation_tests {
     use super::*;
-    use crate::values::computed::Percentage;
+    use crate::values::computed::{Length, Percentage};
 
     #[test]
     fn mixed_text_decoration_thickness_retains_calculated_endpoint() {
@@ -116,7 +156,7 @@ mod text_decoration_animation_tests {
 }
 
 /// Implements type for `text-decoration-inset` property.
-pub type TextDecorationInset = GenericTextDecorationInset<Length>;
+pub type TextDecorationInset = GenericTextDecorationInset<LengthPercentage>;
 
 /// The computed value of `text-align`.
 pub type TextAlign = specified::TextAlignKeyword;

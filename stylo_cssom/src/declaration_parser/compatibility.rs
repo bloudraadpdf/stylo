@@ -36,10 +36,7 @@ impl CanonicalProperty {
         let native = match property {
             Property::FlowTolerance => "masonry-slack",
             Property::GridLanesPack => "grid-auto-flow",
-            Property::Continue => "continue",
             Property::LegacyTextAlign => "text-align",
-            Property::LineClamp => "line-clamp",
-            Property::WebkitLineClamp => "-webkit-line-clamp",
             Property::WebkitBoxDisplay => "display",
         };
         Self::Native(
@@ -105,9 +102,6 @@ pub fn expand_declaration(
     mutation: bool,
 ) -> Vec<SpecifiedDeclaration> {
     let shorthand = match &declaration.property {
-        SpecifiedPropertyName::Compatibility(InlineCompatibilityProperty::LineClamp) => {
-            "line-clamp"
-        },
         SpecifiedPropertyName::Compatibility(InlineCompatibilityProperty::LegacyTextAlign) => {
             "text-align"
         },
@@ -115,19 +109,6 @@ pub fn expand_declaration(
     };
     let url_data = crate::context::ABOUT_BLANK.clone().into();
     let projected = crate::specified::project_inline_style_declaration(&declaration, &url_data);
-    let continuation = projected
-        .iter()
-        .find(|member| {
-            member.name() == crate::webkit_box_orient_rewrite::INTERNAL_CONTINUE_PROPERTY
-        })
-        .and_then(|member| {
-            super::parse_inline_compatibility_declaration(
-                "continue",
-                member.value(),
-                declaration.importance,
-                base_url,
-            )
-        });
     let block = super::stylo_inline_style_block(projected, &url_data);
     let mut members =
         super::specified_declarations_from_inline_style_block(&block, base_url.clone())
@@ -135,13 +116,6 @@ pub fn expand_declaration(
             .filter(|member| matches!(member.property, SpecifiedPropertyName::Standard(_)))
             .cloned()
             .collect::<Vec<_>>();
-    if let Some(continuation) = continuation {
-        for member in &mut members {
-            if properties_match(&member.property, &continuation.property) {
-                *member = continuation.clone();
-            }
-        }
-    }
     let schema = super::inline_style_cssom_property_schema(shorthand)
         .expect("a native compatibility shorthand has a canonical schema");
     assign_shorthand_source(&mut members, schema.id, &declaration.value, mutation);

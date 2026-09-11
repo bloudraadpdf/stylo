@@ -198,7 +198,9 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
         use crate::properties::longhands::_moz_box_orient::computed_value::T as BoxOrient;
         use crate::values::specified::box_::{DisplayInside, DisplayOutside};
         let box_style = self.style.get_box();
-        if box_style.clone__webkit_line_clamp().is_none() {
+        if box_style.clone_continue_() != crate::values::computed::Continue::WebkitLegacy
+            || box_style.clone_max_lines().lines().is_none()
+        {
             return;
         }
         let disp = box_style.clone_display();

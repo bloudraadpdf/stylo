@@ -1056,7 +1056,7 @@ impl<'b> Cascade<'b> {
 
         // Compute the rest of the first-available-font-affecting properties.
         apply!(FontWeight);
-        apply!(FontStretch);
+        apply!(FontWidth);
         apply!(FontStyle);
         apply!(FontSizeAdjust);
 

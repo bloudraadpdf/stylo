@@ -472,7 +472,7 @@ impl FontStretch {
         FontStretch::Keyword(FontStretchKeyword::Normal)
     }
 
-    system_font_methods!(FontStretch, font_stretch);
+    system_font_methods!(FontStretch, font_width);
 }
 
 impl ToComputedValue for FontStretch {

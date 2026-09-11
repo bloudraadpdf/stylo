@@ -5,12 +5,12 @@
 //! Computed types for box properties.
 
 use crate::derives::*;
-use crate::values::animated::{Animate, Procedure, ToAnimatedValue};
-use crate::values::computed::length::{FiniteLength, LengthPercentage, NonNegativeLength};
-use crate::values::computed::{Context, Integer, Number, ToComputedValue};
+use crate::values::animated::ToAnimatedValue;
+use crate::values::computed::length::{FiniteLength, Length, LengthPercentage, NonNegativeLength};
+use crate::values::computed::{Context, Number, ToComputedValue};
 use crate::values::generics::box_::{
-    GenericBaselineShift, GenericContainIntrinsicSize, GenericFloat, GenericLineClamp,
-    GenericOverflowClipMargin, GenericPerspective, GenericSnapBlock, GenericSnapInline,
+    GenericBaselineShift, GenericContainIntrinsicSize, GenericFloat, GenericOverflowClipMargin,
+    GenericPerspective, GenericSnapBlock, GenericSnapInline,
 };
 use crate::values::specified::box_ as specified;
 use std::fmt;
@@ -20,10 +20,10 @@ pub use crate::values::generics::box_::{SnapBlockAlignment, SnapInlineAlignment}
 pub use crate::values::specified::box_::{
     AlignmentBaseline, Appearance, BaselineSource, BookmarkLevel, BookmarkState, BreakBetween,
     BreakWithin, Clear, Contain, ContainerName, ContainerType, ContentVisibility, Display,
-    FloatDefer, FloatReference, FootnoteDisplay, FootnotePolicy, MarginBreak, MarginTrim, Overflow,
-    OverflowAnchor, OverscrollBehavior, PositionProperty, ScrollMarkerGroup, ScrollMarkerGroupMode,
-    ScrollMarkerGroupPosition, ScrollSnapAlign, ScrollSnapAxis, ScrollSnapStop,
-    ScrollSnapStrictness, ScrollSnapType, ScrollbarGutter, TouchAction, WillChange,
+    FloatDefer, FloatReference, FootnoteDisplay, FootnotePolicy, MarginBreak, MarginTrim,
+    ObjectFit, Overflow, OverflowAnchor, OverscrollBehavior, PositionProperty, ScrollMarkerGroup,
+    ScrollMarkerGroupMode, ScrollMarkerGroupPosition, ScrollSnapAlign, ScrollSnapAxis,
+    ScrollSnapStop, ScrollSnapStrictness, ScrollSnapType, ScrollbarGutter, TouchAction, WillChange,
     WritingModeProperty,
 };
 
@@ -217,7 +217,7 @@ pub type SnapInline = GenericSnapInline<FiniteLength>;
 pub type BaselineShift = GenericBaselineShift<LengthPercentage>;
 
 /// A computed value for the `overflow-clip-margin` property.
-pub type OverflowClipMargin = GenericOverflowClipMargin<NonNegativeLength>;
+pub type OverflowClipMargin = GenericOverflowClipMargin<Length>;
 
 /// A computed value for the `contain-intrinsic-size` property.
 pub type ContainIntrinsicSize = GenericContainIntrinsicSize<NonNegativeLength>;
@@ -230,39 +230,6 @@ impl ContainIntrinsicSize {
             Self::Length(ref l) => Self::AutoLength(*l),
             Self::AutoNone | Self::AutoLength(..) => return None,
         })
-    }
-}
-
-/// A computed value for the `line-clamp` property.
-pub type LineClamp = GenericLineClamp<Integer>;
-
-impl LineClamp {
-    /// Returns the line count when this value is not `none`.
-    ///
-    /// The returned type cannot represent zero or a negative count.
-    #[inline]
-    pub fn lines(self) -> Option<crate::values::computed::overflow_4::PositiveLineCount> {
-        if self.is_none() {
-            None
-        } else {
-            Some(crate::values::computed::overflow_4::PositiveLineCount::from_legacy(&self))
-        }
-    }
-}
-
-impl Animate for LineClamp {
-    #[inline]
-    fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
-        if self.is_none() != other.is_none() {
-            return Err(());
-        }
-        if self.is_none() {
-            return Ok(Self::none());
-        }
-        let value = self.value().animate(other.value(), procedure)?.max(1);
-        Ok(Self::from_positive(
-            crate::values::generics::GreaterThanOrEqualToOne(value),
-        ))
     }
 }
 

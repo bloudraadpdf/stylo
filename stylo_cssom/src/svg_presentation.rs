@@ -64,7 +64,7 @@ const SVG_LONGHAND_NORMALISERS: &[SvgLonghandNormaliser] = &[
         normalise: |v, _, _| normalise_svg_font_style_value(v),
     },
     SvgLonghandNormaliser {
-        longhand: LonghandId::FontStretch,
+        longhand: LonghandId::FontWidth,
         normalise: |v, _, _| normalise_svg_font_stretch_value(v),
     },
     SvgLonghandNormaliser {

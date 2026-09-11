@@ -830,16 +830,18 @@ impl LogicalMappingData {
 }
 
 impl LonghandId {
+    /// Every longhand in declaration order.
+    pub const ALL: [Self; property_counts::LONGHANDS] = [
+        % for property in data.longhands:
+        Self::${property.camel_case},
+        % endfor
+    ];
+
     /// Returns every longhand enabled for author content.
     pub fn enabled_for_all_content() -> NonCustomPropertyIterator<Self> {
-        static LONGHANDS: [LonghandId; property_counts::LONGHANDS] = [
-            % for property in data.longhands:
-            LonghandId::${property.camel_case},
-            % endfor
-        ];
         NonCustomPropertyIterator {
             filter: true,
-            iter: LONGHANDS.iter(),
+            iter: Self::ALL.iter(),
         }
     }
 
@@ -980,6 +982,13 @@ pub enum ShorthandId {
 }
 
 impl ShorthandId {
+    /// Every shorthand in declaration order.
+    pub const ALL: [Self; property_counts::SHORTHANDS] = [
+        % for property in data.shorthands:
+        Self::${property.camel_case},
+        % endfor
+    ];
+
     /// Get the longhand ids that form this shorthand.
     pub fn longhands(self) -> NonCustomPropertyIterator<LonghandId> {
         static MAP: [&'static [LonghandId]; property_counts::SHORTHANDS] = [
@@ -1424,7 +1433,7 @@ pub mod style_structs {
                 pub fn compute_font_hash(&mut self) {
                     let mut hasher: FxHasher = Default::default();
                     self.font_weight.hash(&mut hasher);
-                    self.font_stretch.hash(&mut hasher);
+                    self.font_width.hash(&mut hasher);
                     self.font_style.hash(&mut hasher);
                     self.font_family.hash(&mut hasher);
                     self.hash = hasher.finish()

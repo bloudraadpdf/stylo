@@ -96,36 +96,29 @@ enabled_in = "ua"
 spec = "Nonstandard (Internal-only)"
 affects = "layout"
 
-[-webkit-line-clamp]
-type = "LineClamp"
-initial = "computed::LineClamp::none()"
-struct = "box"
-spec = "https://drafts.csswg.org/css-overflow-3/#line-clamp"
-affects = "layout"
-
 [block-ellipsis]
 type = "BlockEllipsis"
-initial = "computed::BlockEllipsis::None"
+initial = "computed::BlockEllipsis::NoEllipsis"
 struct = "inherited_text"
-initial_specified_value = "specified::BlockEllipsis::None"
+initial_specified_value = "specified::BlockEllipsis::NoEllipsis"
 spec = "https://drafts.csswg.org/css-overflow-4/#block-ellipsis"
 animation_type = "discrete"
 affects = "layout"
 
 [max-lines]
 type = "MaxLines"
-initial = "computed::MaxLines::None"
+initial = "computed::MaxLines::Auto"
 struct = "box"
-initial_specified_value = "specified::MaxLines::None"
+initial_specified_value = "specified::MaxLines::Auto"
 spec = "https://drafts.csswg.org/css-overflow-4/#max-lines"
 animation_type = "discrete"
 affects = "layout"
 
 [continue]
 type = "Continue"
-initial = "computed::Continue::Auto"
+initial = "computed::Continue::Normal"
 struct = "box"
-initial_specified_value = "specified::Continue::Auto"
+initial_specified_value = "specified::Continue::Normal"
 spec = "https://drafts.csswg.org/css-overflow-4/#continue"
 animation_type = "discrete"
 affects = "layout"
@@ -466,13 +459,12 @@ affects = "layout"
 rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 
 # CSS Inline 3 §6 — first/last line half-leading trim.
-[leading-trim]
+[text-box-trim]
 type = "LeadingTrim"
 initial = "computed::LeadingTrim::Normal"
 struct = "text"
 initial_specified_value = "specified::LeadingTrim::Normal"
 spec = "https://drafts.csswg.org/css-inline-3/#text-box-trim"
-aliases = ["text-box-trim"]
 animation_type = "discrete"
 affects = "layout"
 
@@ -1374,13 +1366,14 @@ spec = "https://drafts.csswg.org/css-fonts/#propdef-font-size-adjust"
 gecko_ffi_name = "mFont.sizeAdjust"
 affects = "layout"
 
-[font-stretch]
+[font-width]
 type = "FontStretch"
+aliases = ["font-stretch"]
 initial = "computed::FontStretch::hundred()"
 struct = "font"
 initial_specified_value = "specified::FontStretch::normal()"
 gecko_ffi_name = "mFont.stretch"
-spec = "https://drafts.csswg.org/css-fonts/#propdef-font-stretch"
+spec = "https://drafts.csswg.org/css-fonts/#propdef-font-width"
 rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
@@ -3824,6 +3817,7 @@ affects = "paint"
 # the moegoe fork carries an explicit longhand here because it
 # is otherwise Gecko-gated.
 [image-resolution]
+boxed = true
 type = "BdImageResolution"
 initial = "computed::BdImageResolution::one_dppx()"
 struct = "counters"
@@ -3833,6 +3827,7 @@ animation_type = "none"
 affects = "paint"
 
 [-bd-image-resolution]
+boxed = true
 type = "BdImageResolution"
 initial = "computed::BdImageResolution::one_dppx()"
 struct = "counters"
@@ -5667,7 +5662,7 @@ affects = "layout"
 
 [text-align-last]
 type = "TextAlignLast"
-initial = "computed::text::TextAlignLast::Auto"
+initial = "computed::text::TextAlignLast::auto()"
 struct = "inherited_text"
 animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-text/#propdef-text-align-last"
@@ -6634,7 +6629,7 @@ affects = "layout"
 
 [text-autospace]
 type = "TextAutospace"
-initial = "computed::text::TextAutospace::NO_AUTOSPACE"
+initial = "computed::text::TextAutospace::NORMAL"
 struct = "inherited_text"
 animation_type = "discrete"
 gecko_pref = "layout.css.text-autospace.enabled"
@@ -6690,10 +6685,10 @@ animation_type = "discrete"
 affects = "overflow"
 
 [text-decoration-skip-spaces]
-type = "TextDecorationSkipKind"
-initial = "computed::TextDecorationSkipKind::start_end()"
+type = "TextDecorationSkipSpaces"
+initial = "computed::TextDecorationSkipSpaces::START | computed::TextDecorationSkipSpaces::END"
 struct = "inherited_text"
-initial_specified_value = "specified::TextDecorationSkipKind::start_end()"
+initial_specified_value = "specified::TextDecorationSkipSpaces::START | specified::TextDecorationSkipSpaces::END"
 spec = "https://drafts.csswg.org/css-text-decor-4/#text-decoration-skip-property"
 animation_type = "discrete"
 affects = "overflow"
@@ -6880,7 +6875,6 @@ affects = "paint"
 type = "TextDecorationInset"
 initial = "computed::text::TextDecorationInset::get_initial_value()"
 struct = "text"
-engine = "gecko"
 initial_specified_value = "specified::text::TextDecorationInset::get_initial_value()"
 boxed = true
 gecko_pref = "layout.css.text-decoration-inset.enabled"
@@ -7467,49 +7461,95 @@ logical_group = "border-radius"
 logical = true
 affects = "paint"
 
-# CSS Backgrounds 4 §5.5 — `corner-shape` per-corner longhands. Each
-# longhand pairs with the matching `border-*-radius` slot and selects
-# the geometric profile of that corner (round | bevel | scoop | notch
-# | square | superellipse(<number>)). Initial value `round` reproduces
-# the existing CSS Backgrounds 3 quarter-ellipse behaviour.
-#
-# CSS Backgrounds 4 §5.5 (2025-09-25 ED) does not (yet) define
-# logical corner-shape longhands (`corner-start-start-shape` etc.) —
-# only the four physical corners. They therefore do NOT share a
-# Stylo logical_group; Stylo's group-balance invariant requires every
-# logical_group to have a 1:1 physical/logical pairing (see
-# `properties/data.py::PropertiesData.__init__`), which would
-# otherwise fail at build time. Add `logical_group = "corner-shape"`
-# back when the spec adds the logical longhand quartet.
 [corner-top-left-shape]
 type = "CornerShape"
-initial = "computed::CornerShape::Round"
+boxed = true
+initial = "computed::CornerShape::round()"
+initial_specified_value = "specified::CornerShape::Round"
 struct = "border"
-spec = "https://drafts.csswg.org/css-backgrounds-4/#corner-top-left-shape"
+spec = "https://drafts.csswg.org/css-borders-4/#corner-shaping"
+logical_group = "corner-shape"
 animation_type = "none"
 affects = "paint"
 
 [corner-top-right-shape]
 type = "CornerShape"
-initial = "computed::CornerShape::Round"
+boxed = true
+initial = "computed::CornerShape::round()"
+initial_specified_value = "specified::CornerShape::Round"
 struct = "border"
-spec = "https://drafts.csswg.org/css-backgrounds-4/#corner-top-right-shape"
+spec = "https://drafts.csswg.org/css-borders-4/#corner-shaping"
+logical_group = "corner-shape"
 animation_type = "none"
 affects = "paint"
 
 [corner-bottom-right-shape]
 type = "CornerShape"
-initial = "computed::CornerShape::Round"
+boxed = true
+initial = "computed::CornerShape::round()"
+initial_specified_value = "specified::CornerShape::Round"
 struct = "border"
-spec = "https://drafts.csswg.org/css-backgrounds-4/#corner-bottom-right-shape"
+spec = "https://drafts.csswg.org/css-borders-4/#corner-shaping"
+logical_group = "corner-shape"
 animation_type = "none"
 affects = "paint"
 
 [corner-bottom-left-shape]
 type = "CornerShape"
-initial = "computed::CornerShape::Round"
+boxed = true
+initial = "computed::CornerShape::round()"
+initial_specified_value = "specified::CornerShape::Round"
 struct = "border"
-spec = "https://drafts.csswg.org/css-backgrounds-4/#corner-bottom-left-shape"
+spec = "https://drafts.csswg.org/css-borders-4/#corner-shaping"
+logical_group = "corner-shape"
+animation_type = "none"
+affects = "paint"
+
+[corner-start-start-shape]
+type = "CornerShape"
+boxed = true
+initial = "computed::CornerShape::round()"
+initial_specified_value = "specified::CornerShape::Round"
+struct = "border"
+spec = "https://drafts.csswg.org/css-borders-4/#corner-shaping"
+logical_group = "corner-shape"
+logical = true
+animation_type = "none"
+affects = "paint"
+
+[corner-start-end-shape]
+type = "CornerShape"
+boxed = true
+initial = "computed::CornerShape::round()"
+initial_specified_value = "specified::CornerShape::Round"
+struct = "border"
+spec = "https://drafts.csswg.org/css-borders-4/#corner-shaping"
+logical_group = "corner-shape"
+logical = true
+animation_type = "none"
+affects = "paint"
+
+[corner-end-start-shape]
+type = "CornerShape"
+boxed = true
+initial = "computed::CornerShape::round()"
+initial_specified_value = "specified::CornerShape::Round"
+struct = "border"
+spec = "https://drafts.csswg.org/css-borders-4/#corner-shaping"
+logical_group = "corner-shape"
+logical = true
+animation_type = "none"
+affects = "paint"
+
+[corner-end-end-shape]
+type = "CornerShape"
+boxed = true
+initial = "computed::CornerShape::round()"
+initial_specified_value = "specified::CornerShape::Round"
+struct = "border"
+spec = "https://drafts.csswg.org/css-borders-4/#corner-shaping"
+logical_group = "corner-shape"
+logical = true
 animation_type = "none"
 affects = "paint"
 
@@ -7971,6 +8011,20 @@ animation_type = "discrete"
 affects = ""
 keyword = { values = ["auto", "smooth"] }
 
+[scroll-axis-lock]
+struct = "box"
+spec = "https://drafts.csswg.org/css-overflow-5/#scroll-axis-lock"
+animation_type = "discrete"
+affects = ""
+keyword = { values = ["auto", "none"] }
+
+[scroll-target-group]
+struct = "box"
+spec = "https://drafts.csswg.org/css-overflow-5/#scroll-target-group"
+animation_type = "discrete"
+affects = ""
+keyword = { values = ["none", "auto"] }
+
 [isolation]
 struct = "box"
 spec = "https://drafts.fxtf.org/compositing/#isolation"
@@ -8346,11 +8400,13 @@ servo_restyle_damage = "rebuild_box"
 keyword = { values = ["content-box", "border-box"] }
 
 [object-fit]
+type = "ObjectFit"
+initial = "computed::ObjectFit::Fill"
+initial_specified_value = "specified::ObjectFit::Fill"
 struct = "position"
 spec = "https://drafts.csswg.org/css-images/#propdef-object-fit"
 animation_type = "discrete"
 affects = "layout"
-keyword = { values = ["fill", "contain", "cover", "none", "scale-down"] }
 
 [mask-type]
 struct = "svg"

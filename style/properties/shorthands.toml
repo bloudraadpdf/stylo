@@ -226,29 +226,23 @@ sub_properties = ["max-lines", "continue", "block-ellipsis"]
 spec = "https://www.w3.org/TR/css-overflow-4/#propdef-line-clamp"
 derive_value_info = false
 
-# CSS Overflow 4 §3.4 — `overflow-clip-margin` shorthand. Spec syntax
-# `<visual-box> || <length [0,∞]>{1,4}`: an optional reference-box
-# keyword that applies uniformly across all four sides, plus 1–4
-# length values distributed per the standard 4-side pattern
-# (1 -> all; 2 -> v/h; 3 -> top/h/bottom; 4 -> top/right/bottom/left).
-# Custom expander lives in shorthands.rs.
+[-webkit-line-clamp]
+sub_properties = ["max-lines", "continue", "block-ellipsis"]
+spec = "https://drafts.csswg.org/css-overflow-4/#webkit-line-clamp"
+derive_value_info = false
+
 [overflow-clip-margin]
+kind = "single_value"
 sub_properties = ["overflow-clip-margin-top", "overflow-clip-margin-right", "overflow-clip-margin-bottom", "overflow-clip-margin-left"]
 spec = "https://drafts.csswg.org/css-overflow-4/#overflow-clip-margin-shorthand"
 
-# CSS Overflow 4 §3.4 — `overflow-clip-margin-block` shorthand. Spec
-# syntax `<visual-box> || <length [0,∞]>{1,2}`. One length applies to
-# both block-start and block-end; two lengths set start / end. The
-# optional reference-box keyword is shared across both sides.
 [overflow-clip-margin-block]
+kind = "single_value"
 sub_properties = ["overflow-clip-margin-block-start", "overflow-clip-margin-block-end"]
 spec = "https://drafts.csswg.org/css-overflow-4/#overflow-clip-margin-block"
 
-# CSS Overflow 4 §3.4 — `overflow-clip-margin-inline` shorthand. Spec
-# syntax `<visual-box> || <length [0,∞]>{1,2}`. One length applies to
-# both inline-start and inline-end; two lengths set start / end. The
-# optional reference-box keyword is shared across both sides.
 [overflow-clip-margin-inline]
+kind = "single_value"
 sub_properties = ["overflow-clip-margin-inline-start", "overflow-clip-margin-inline-end"]
 spec = "https://drafts.csswg.org/css-overflow-4/#overflow-clip-margin-inline"
 
@@ -282,21 +276,20 @@ flags = "IS_LEGACY_SHORTHAND"
 sub_properties = ["break-inside"]
 spec = "https://drafts.csswg.org/css-break-3/#page-break-properties"
 
-# CSS Text 4 §8.1 — `text-align` is a shorthand for `text-align-all`
-# and `text-align-last`.
-#   Value: <text-align-all> || <text-align-last>
-# When given a single value, set text-align-all to that value and reset
-# text-align-last to `auto`. When given two values, the first sets
-# text-align-all and the second sets text-align-last.
 [text-align]
 sub_properties = ["text-align-all", "text-align-last"]
 spec = "https://drafts.csswg.org/css-text-4/#text-align-property"
 rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 
 [text-box]
-sub_properties = ["leading-trim", "text-box-edge"]
+sub_properties = ["text-box-trim", "text-box-edge"]
 spec = "https://drafts.csswg.org/css-inline-3/#text-box-shorthand"
 rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+
+[text-spacing]
+sub_properties = ["text-spacing-trim", "text-autospace"]
+spec = "https://drafts.csswg.org/css-text-4/#text-spacing-property"
+derive_value_info = false
 
 [offset]
 servo_pref = "layout.unimplemented"
@@ -475,15 +468,106 @@ spec = "https://drafts.csswg.org/css-backgrounds/#border-radius"
 extra_prefixes = ["webkit"]
 rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
-# CSS Backgrounds 4 §5.5 — `corner-shape` shorthand sets all four
-# per-corner shape longhands at once. Grammar mirrors `border-radius`
-# (1, 2, 3, or 4 values applying TL TR BR BL with the canonical tile).
+[corner-top-shape]
+sub_properties = ["corner-top-left-shape", "corner-top-right-shape"]
+spec = "https://drafts.csswg.org/css-borders-4/#corner-shaping-side-shorthands"
+
+[corner-right-shape]
+sub_properties = ["corner-top-right-shape", "corner-bottom-right-shape"]
+spec = "https://drafts.csswg.org/css-borders-4/#corner-shaping-side-shorthands"
+
+[corner-bottom-shape]
+sub_properties = ["corner-bottom-left-shape", "corner-bottom-right-shape"]
+spec = "https://drafts.csswg.org/css-borders-4/#corner-shaping-side-shorthands"
+
+[corner-left-shape]
+sub_properties = ["corner-top-left-shape", "corner-bottom-left-shape"]
+spec = "https://drafts.csswg.org/css-borders-4/#corner-shaping-side-shorthands"
+
+[corner-block-start-shape]
+sub_properties = ["corner-start-start-shape", "corner-start-end-shape"]
+spec = "https://drafts.csswg.org/css-borders-4/#corner-shaping-side-shorthands"
+
+[corner-block-end-shape]
+sub_properties = ["corner-end-start-shape", "corner-end-end-shape"]
+spec = "https://drafts.csswg.org/css-borders-4/#corner-shaping-side-shorthands"
+
+[corner-inline-start-shape]
+sub_properties = ["corner-start-start-shape", "corner-end-start-shape"]
+spec = "https://drafts.csswg.org/css-borders-4/#corner-shaping-side-shorthands"
+
+[corner-inline-end-shape]
+sub_properties = ["corner-start-end-shape", "corner-end-end-shape"]
+spec = "https://drafts.csswg.org/css-borders-4/#corner-shaping-side-shorthands"
+
 [corner-shape]
 sub_properties = ["corner-top-left-shape", "corner-top-right-shape", "corner-bottom-right-shape", "corner-bottom-left-shape"]
-spec = "https://drafts.csswg.org/css-backgrounds-4/#corner-shape"
+spec = "https://drafts.csswg.org/css-borders-4/#corner-shaping-shorthand"
 
-# CSS Borders 4 §3.4 — `corner` pairs each physical corner's radius and
-# shape. Slash separators select the TL, TR, BR, BL corners in order.
+[corner-top-left]
+sub_properties = ["border-top-left-radius", "corner-top-left-shape"]
+spec = "https://drafts.csswg.org/css-borders-4/#single-corner-shorthands"
+
+[corner-top-right]
+sub_properties = ["border-top-right-radius", "corner-top-right-shape"]
+spec = "https://drafts.csswg.org/css-borders-4/#single-corner-shorthands"
+
+[corner-bottom-right]
+sub_properties = ["border-bottom-right-radius", "corner-bottom-right-shape"]
+spec = "https://drafts.csswg.org/css-borders-4/#single-corner-shorthands"
+
+[corner-bottom-left]
+sub_properties = ["border-bottom-left-radius", "corner-bottom-left-shape"]
+spec = "https://drafts.csswg.org/css-borders-4/#single-corner-shorthands"
+
+[corner-start-start]
+sub_properties = ["border-start-start-radius", "corner-start-start-shape"]
+spec = "https://drafts.csswg.org/css-borders-4/#single-corner-shorthands"
+
+[corner-start-end]
+sub_properties = ["border-start-end-radius", "corner-start-end-shape"]
+spec = "https://drafts.csswg.org/css-borders-4/#single-corner-shorthands"
+
+[corner-end-start]
+sub_properties = ["border-end-start-radius", "corner-end-start-shape"]
+spec = "https://drafts.csswg.org/css-borders-4/#single-corner-shorthands"
+
+[corner-end-end]
+sub_properties = ["border-end-end-radius", "corner-end-end-shape"]
+spec = "https://drafts.csswg.org/css-borders-4/#single-corner-shorthands"
+
+[corner-top]
+sub_properties = ["border-top-left-radius", "border-top-right-radius", "corner-top-left-shape", "corner-top-right-shape"]
+spec = "https://drafts.csswg.org/css-borders-4/#corner-side-shorthands"
+
+[corner-right]
+sub_properties = ["border-top-right-radius", "border-bottom-right-radius", "corner-top-right-shape", "corner-bottom-right-shape"]
+spec = "https://drafts.csswg.org/css-borders-4/#corner-side-shorthands"
+
+[corner-bottom]
+sub_properties = ["border-bottom-left-radius", "border-bottom-right-radius", "corner-bottom-left-shape", "corner-bottom-right-shape"]
+spec = "https://drafts.csswg.org/css-borders-4/#corner-side-shorthands"
+
+[corner-left]
+sub_properties = ["border-top-left-radius", "border-bottom-left-radius", "corner-top-left-shape", "corner-bottom-left-shape"]
+spec = "https://drafts.csswg.org/css-borders-4/#corner-side-shorthands"
+
+[corner-block-start]
+sub_properties = ["border-start-start-radius", "border-start-end-radius", "corner-start-start-shape", "corner-start-end-shape"]
+spec = "https://drafts.csswg.org/css-borders-4/#corner-side-shorthands"
+
+[corner-block-end]
+sub_properties = ["border-end-start-radius", "border-end-end-radius", "corner-end-start-shape", "corner-end-end-shape"]
+spec = "https://drafts.csswg.org/css-borders-4/#corner-side-shorthands"
+
+[corner-inline-start]
+sub_properties = ["border-start-start-radius", "border-end-start-radius", "corner-start-start-shape", "corner-end-start-shape"]
+spec = "https://drafts.csswg.org/css-borders-4/#corner-side-shorthands"
+
+[corner-inline-end]
+sub_properties = ["border-start-end-radius", "border-end-end-radius", "corner-start-end-shape", "corner-end-end-shape"]
+spec = "https://drafts.csswg.org/css-borders-4/#corner-side-shorthands"
+
 [corner]
 sub_properties = [
   "border-top-left-radius",
@@ -739,7 +823,7 @@ sub_properties = [
   "font-style",
   "font-variant-caps",
   "font-weight",
-  "font-stretch",
+  "font-width",
   "font-size",
   "line-height",
   "font-family",

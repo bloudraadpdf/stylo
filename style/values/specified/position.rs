@@ -8,7 +8,7 @@
 //! [position]: https://drafts.csswg.org/css-backgrounds-3/#position
 
 use crate::derives::*;
-use crate::logical_geometry::{LogicalAxis, LogicalSide, PhysicalSide, WritingMode};
+use crate::logical_geometry::{LogicalAxis, LogicalSide, PhysicalAxis, PhysicalSide, WritingMode};
 use crate::parser::{Parse, ParserContext};
 use crate::selector_map::PrecomputedHashMap;
 use crate::str::HTML_SPACE_CHARACTERS;
@@ -46,10 +46,76 @@ pub type Position = GenericPosition<HorizontalPosition, VerticalPosition>;
 pub type PositionOrAuto = GenericPositionOrAuto<Position>;
 
 /// The specified value of a horizontal position.
-pub type HorizontalPosition = PositionComponent<HorizontalPositionKeyword>;
+pub type HorizontalPosition = PositionComponent<PositionKeyword<HorizontalPositionKeyword>>;
 
 /// The specified value of a vertical position.
-pub type VerticalPosition = PositionComponent<VerticalPositionKeyword>;
+pub type VerticalPosition = PositionComponent<PositionKeyword<VerticalPositionKeyword>>;
+
+/// A physical or flow-relative edge on a fixed position axis.
+#[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToShmem)]
+pub enum PositionKeyword<S> {
+    /// A physical edge.
+    Physical(S),
+    /// The flow-relative start of the axis.
+    Start,
+    /// The flow-relative end of the axis.
+    End,
+}
+
+impl<S: Side + Parse> Parse for PositionKeyword<S> {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if let Ok(side) = input.try_parse(|input| S::parse(context, input)) {
+            return Ok(Self::Physical(side));
+        }
+        let location = input.current_source_location();
+        let ident = input.expect_ident()?;
+        if ident.eq_ignore_ascii_case(S::START_KEYWORD) {
+            Ok(Self::Start)
+        } else if ident.eq_ignore_ascii_case(S::END_KEYWORD) {
+            Ok(Self::End)
+        } else {
+            Err(location.new_unexpected_token_error(cssparser::Token::Ident(ident.clone())))
+        }
+    }
+}
+
+impl<S: Side + ToCss> ToCss for PositionKeyword<S> {
+    fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        match self {
+            Self::Physical(side) => side.to_css(dest),
+            Self::Start => dest.write_str(S::START_KEYWORD),
+            Self::End => dest.write_str(S::END_KEYWORD),
+        }
+    }
+}
+
+impl<S: Side> PositionKeyword<S> {
+    /// Whether this edge resolves to the physical top or left edge.
+    pub fn is_start_in(&self, writing_mode: WritingMode) -> bool {
+        if let Self::Physical(side) = self {
+            return side.is_start();
+        }
+        let side = if writing_mode.is_vertical() == (S::AXIS == PhysicalAxis::Vertical) {
+            writing_mode.inline_start_physical_side()
+        } else {
+            writing_mode.block_start_physical_side()
+        };
+        matches!(side, PhysicalSide::Top | PhysicalSide::Left) == matches!(self, Self::Start)
+    }
+
+    fn is_start(&self, context: &Context) -> bool {
+        if !matches!(self, Self::Physical(_)) {
+            context
+                .rule_cache_conditions
+                .borrow_mut()
+                .set_writing_mode_dependency(context.builder.writing_mode);
+        }
+        self.is_start_in(context.builder.writing_mode)
+    }
+}
 
 /// The specified value of a component of a CSS `<position>`.
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem)]
@@ -150,7 +216,9 @@ impl Position {
                     let y_pos = PositionComponent::Center;
                     return Ok(Self::new(x_pos, y_pos));
                 }
-                if let Ok(y_keyword) = input.try_parse(VerticalPositionKeyword::parse) {
+                if let Ok(y_keyword) = input.try_parse(|input| {
+                    PositionKeyword::<VerticalPositionKeyword>::parse(context, input)
+                }) {
                     let y_lp = input
                         .try_parse(|i| LengthPercentage::parse_quirky(context, i, allow_quirks))
                         .ok();
@@ -163,7 +231,9 @@ impl Position {
                 return Ok(Self::new(x_pos, y_pos));
             },
             Ok(x_pos @ PositionComponent::Length(_)) => {
-                if let Ok(y_keyword) = input.try_parse(VerticalPositionKeyword::parse) {
+                if let Ok(y_keyword) = input.try_parse(|input| {
+                    PositionKeyword::<VerticalPositionKeyword>::parse(context, input)
+                }) {
                     let y_pos = PositionComponent::Side(y_keyword, None);
                     return Ok(Self::new(x_pos, y_pos));
                 }
@@ -179,12 +249,14 @@ impl Position {
             },
             Err(_) => {},
         }
-        let y_keyword = VerticalPositionKeyword::parse(input)?;
+        let y_keyword = PositionKeyword::<VerticalPositionKeyword>::parse(context, input)?;
         let lp_and_x_pos: Result<_, ParseError> = input.try_parse(|i| {
             let y_lp = i
                 .try_parse(|i| LengthPercentage::parse_quirky(context, i, allow_quirks))
                 .ok();
-            if let Ok(x_keyword) = i.try_parse(HorizontalPositionKeyword::parse) {
+            if let Ok(x_keyword) = i.try_parse(|input| {
+                PositionKeyword::<HorizontalPositionKeyword>::parse(context, input)
+            }) {
                 let x_lp = i
                     .try_parse(|i| LengthPercentage::parse_quirky(context, i, allow_quirks))
                     .ok();
@@ -317,17 +389,19 @@ impl<S> PositionComponent<S> {
     }
 }
 
-impl<S: Side> ToComputedValue for PositionComponent<S> {
+impl<S: Side> ToComputedValue for PositionComponent<PositionKeyword<S>> {
     type ComputedValue = ComputedLengthPercentage;
 
     fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
         match *self {
             PositionComponent::Center => ComputedLengthPercentage::new_percent(Percentage(0.5)),
             PositionComponent::Side(ref keyword, None) => {
-                let p = Percentage(if keyword.is_start() { 0. } else { 1. });
+                let p = Percentage(if keyword.is_start(context) { 0. } else { 1. });
                 ComputedLengthPercentage::new_percent(p)
             },
-            PositionComponent::Side(ref keyword, Some(ref length)) if !keyword.is_start() => {
+            PositionComponent::Side(ref keyword, Some(ref length))
+                if !keyword.is_start(context) =>
+            {
                 let length = length.to_computed_value(context);
                 // We represent `<end-side> <length>` as `calc(100% - <length>)`.
                 ComputedLengthPercentage::hundred_percent_minus(length, AllowedNumericType::All)
@@ -342,10 +416,10 @@ impl<S: Side> ToComputedValue for PositionComponent<S> {
     }
 }
 
-impl<S: Side> PositionComponent<S> {
+impl<S: Side> PositionComponent<PositionKeyword<S>> {
     /// The initial specified value of a position component, i.e. the start side.
     pub fn initial_specified_value() -> Self {
-        PositionComponent::Side(S::start(), None)
+        PositionComponent::Side(PositionKeyword::Physical(S::start()), None)
     }
 }
 
@@ -1488,6 +1562,13 @@ impl Parse for PositionArea {
 
 /// Represents a side, either horizontal or vertical, of a CSS position.
 pub trait Side {
+    /// The physical axis of this side.
+    const AXIS: PhysicalAxis;
+    /// The flow-relative start keyword on this axis.
+    const START_KEYWORD: &'static str;
+    /// The flow-relative end keyword on this axis.
+    const END_KEYWORD: &'static str;
+
     /// Returns the start side.
     fn start() -> Self;
 
@@ -1496,6 +1577,10 @@ pub trait Side {
 }
 
 impl Side for HorizontalPositionKeyword {
+    const AXIS: PhysicalAxis = PhysicalAxis::Horizontal;
+    const START_KEYWORD: &'static str = "x-start";
+    const END_KEYWORD: &'static str = "x-end";
+
     #[inline]
     fn start() -> Self {
         HorizontalPositionKeyword::Left
@@ -1508,6 +1593,10 @@ impl Side for HorizontalPositionKeyword {
 }
 
 impl Side for VerticalPositionKeyword {
+    const AXIS: PhysicalAxis = PhysicalAxis::Vertical;
+    const START_KEYWORD: &'static str = "y-start";
+    const END_KEYWORD: &'static str = "y-end";
+
     #[inline]
     fn start() -> Self {
         VerticalPositionKeyword::Top

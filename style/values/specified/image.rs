@@ -20,7 +20,7 @@ use crate::values::generics::image::{GradientFlags, PaintWorklet};
 use crate::values::generics::position::Position as GenericPosition;
 use crate::values::generics::NonNegative;
 use crate::values::specified::position::{HorizontalPositionKeyword, VerticalPositionKeyword};
-use crate::values::specified::position::{Position, PositionComponent, Side};
+use crate::values::specified::position::{Position, PositionComponent, PositionKeyword, Side};
 use crate::values::specified::url::SpecifiedUrl;
 use crate::values::specified::{
     Angle, AngleOrPercentage, Color, Length, LengthPercentage, NonNegativeLength,
@@ -696,8 +696,8 @@ impl Gradient {
             }
         }
 
-        impl<S: Side> Into<PositionComponent<S>> for Component<S> {
-            fn into(self) -> PositionComponent<S> {
+        impl<S: Side> Into<PositionComponent<PositionKeyword<S>>> for Component<S> {
+            fn into(self) -> PositionComponent<PositionKeyword<S>> {
                 match self {
                     Component::Center => PositionComponent::Center,
                     Component::Number(NumberOrPercentage::Number(number)) => {
@@ -706,7 +706,9 @@ impl Gradient {
                     Component::Number(NumberOrPercentage::Percentage(p)) => {
                         PositionComponent::Length(p.into())
                     },
-                    Component::Side(side) => PositionComponent::Side(side, None),
+                    Component::Side(side) => {
+                        PositionComponent::Side(PositionKeyword::Physical(side), None)
+                    },
                 }
             }
         }

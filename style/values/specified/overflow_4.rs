@@ -2,33 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! CSS Overflow Module Level 4 longhands and CSS Inline 3 §6.
-//!
-//! Implements the `block-ellipsis`, `max-lines`, and `continue`
-//! longhands of the `line-clamp` shorthand (Overflow 4 §5), plus
-//! `text-box-trim` (Inline 3 §6, with the earlier `leading-trim` spelling):
-//!
-//! - <https://drafts.csswg.org/css-overflow-4/#line-clamp>
-//! - <https://drafts.csswg.org/css-overflow-4/#block-ellipsis>
-//! - <https://drafts.csswg.org/css-overflow-4/#max-lines>
-//! - <https://drafts.csswg.org/css-overflow-4/#continue>
-//! - <https://drafts.csswg.org/css-inline-3/#text-box-trim>
-//!
-//! These cap block-container line content (`line-clamp` shorthand triplet —
-//! `block-ellipsis`, `max-lines`, `continue`) and trim the first/last line
-//! leading respectively. Only `block-ellipsis` is inherited; `max-lines` and
-//! `continue` are reset properties, as required by their definitions.
-//!
-//! The shorthand parser lives in `crate::properties::shorthands::line_clamp`.
-//! There is deliberately no specified or computed `line-clamp` value:
-//! successful parsing immediately produces the three typed longhands, so an
-//! independent shorthand value cannot disagree with the cascade result.
-//!
-//! `MaxLines` stores a private [`PositiveLineCount`] rather than an unrefined
-//! `specified::Integer`. Consequently, once parsing succeeds, later stages
-//! cannot construct a non-positive line limit. Its computed-side counterpart
-//! is declared in `crate::values::computed::overflow_4`, with a manual
-//! `ToComputedValue` implementation preserving that proof.
+//! Typed line-clamp longhands and CSS Inline 3 text box edges.
 
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
@@ -41,8 +15,8 @@ use style_traits::{CssWriter, ParseError, ToCss};
 /// Specified value of the `block-ellipsis` property
 /// (<https://drafts.csswg.org/css-overflow-4/#block-ellipsis>).
 ///
-/// Grammar: `none | auto | <string>`. Selects the ellipsis glyph
-/// inserted at the truncation boundary. `auto` defers to the UA's
+/// Grammar: `no-ellipsis | ellipsis | <string>`. Selects the ellipsis glyph
+/// inserted at the truncation boundary. `ellipsis` defers to the UA's
 /// content-language-aware default.
 #[derive(
     Clone,
@@ -58,26 +32,12 @@ use style_traits::{CssWriter, ParseError, ToCss};
 )]
 #[repr(C, u8)]
 pub enum BlockEllipsis {
-    /// `none` — no glyph is inserted at truncation.
-    None,
-    /// `auto` — UA-selected default glyph.
-    Auto,
+    /// No glyph is inserted at truncation.
+    NoEllipsis,
+    /// UA-selected default glyph.
+    Ellipsis,
     /// `<string>` — author-supplied ellipsis glyph string.
     String(OwnedStr),
-}
-
-impl BlockEllipsis {
-    /// Initial value (`none`).
-    #[inline]
-    pub fn none() -> Self {
-        Self::None
-    }
-
-    /// Whether the value is `none`.
-    #[inline]
-    pub fn is_none(&self) -> bool {
-        matches!(self, Self::None)
-    }
 }
 
 impl Parse for BlockEllipsis {
@@ -85,11 +45,17 @@ impl Parse for BlockEllipsis {
         _: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
-            return Ok(Self::None);
+        if input
+            .try_parse(|i| i.expect_ident_matching("no-ellipsis"))
+            .is_ok()
+        {
+            return Ok(Self::NoEllipsis);
         }
-        if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
-            return Ok(Self::Auto);
+        if input
+            .try_parse(|i| i.expect_ident_matching("ellipsis"))
+            .is_ok()
+        {
+            return Ok(Self::Ellipsis);
         }
         let s = input.expect_string()?;
         Ok(Self::String(s.as_ref().to_owned().into()))
@@ -133,53 +99,36 @@ impl Parse for PositiveLineCount {
     }
 }
 
-/// Specified value of the `max-lines` property
-/// (<https://drafts.csswg.org/css-overflow-4/#max-lines>).
-///
-/// Grammar: `none | <integer>`. The integer is the maximum number of
-/// lines a fragmentation root may produce before triggering the
-/// `continue` policy.
-#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
-#[repr(C, u8)]
-pub enum MaxLines {
-    /// `none` — no cap.
-    None,
-    /// `<integer>` — line cap; must be positive.
-    Lines(PositiveLineCount),
-}
-
-impl MaxLines {
-    /// Initial value (`none`).
-    #[inline]
-    pub fn none() -> Self {
-        Self::None
-    }
-
-    /// Whether the value is `none`.
-    #[inline]
-    pub fn is_none(&self) -> bool {
-        matches!(self, Self::None)
-    }
-}
+/// Specified maximum line count: `auto | <integer [1,∞]> || auto`.
+pub type MaxLines = crate::values::generics::box_::GenericMaxLines<PositiveLineCount>;
 
 impl Parse for MaxLines {
     fn parse<'i, 't>(
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
-            return Ok(Self::None);
+        let leading_auto = input.try_parse(|i| i.expect_ident_matching("auto")).is_ok();
+        let count = input.try_parse(|i| PositiveLineCount::parse(context, i));
+        match count {
+            Ok(count) => {
+                let automatic =
+                    leading_auto || input.try_parse(|i| i.expect_ident_matching("auto")).is_ok();
+                Ok(if automatic {
+                    Self::LinesAuto(count)
+                } else {
+                    Self::Lines(count)
+                })
+            },
+            Err(_) if leading_auto => Ok(Self::Auto),
+            Err(error) => Err(error),
         }
-        Ok(Self::Lines(PositiveLineCount::parse(context, input)?))
     }
 }
 
 /// Specified value of the `continue` property
 /// (<https://drafts.csswg.org/css-overflow-4/#continue>).
 ///
-/// Grammar: `auto | discard`. Selects whether content overflowing the
-/// `max-lines` cap is preserved on subsequent fragments (`auto`) or
-/// silently discarded (`discard`).
+/// Controls continuation after the line or block-size limit.
 ///
 /// The Rust type is named [`Continue`] but the longhand keyword
 /// `continue` is a Rust reserved word; the generated property module
@@ -203,18 +152,22 @@ impl Parse for MaxLines {
 )]
 #[allow(missing_docs)]
 pub enum Continue {
-    /// `auto` — overflow continues into subsequent fragments.
+    /// Overflow continues into subsequent fragments.
     #[default]
-    Auto,
+    Normal,
     /// `discard` — overflow is dropped at the truncation boundary.
     Discard,
+    /// Excess content has no layout or paint extent.
+    Collapse,
+    /// Applies the legacy vertical box clamping rules.
+    #[css(keyword = "-webkit-legacy")]
+    WebkitLegacy,
 }
 
 /// Specified value of the `text-box-trim` property
 /// (<https://drafts.csswg.org/css-inline-3/#text-box-trim>).
 ///
-/// Current grammar: `none | trim-start | trim-end | trim-both`. The earlier
-/// `normal | start | end | both` keywords remain accepted for compatibility.
+/// Grammar: `none | trim-start | trim-end | trim-both`.
 #[repr(u8)]
 #[derive(
     Clone,
@@ -236,16 +189,16 @@ pub enum Continue {
 pub enum LeadingTrim {
     /// `none` — preserve leading on both edges (default).
     #[default]
-    #[parse(aliases = "none")]
+    #[css(keyword = "none")]
     Normal,
     /// `trim-start` — trim leading from the block-start edge.
-    #[parse(aliases = "trim-start")]
+    #[css(keyword = "trim-start")]
     Start,
     /// `trim-end` — trim leading from the block-end edge.
-    #[parse(aliases = "trim-end")]
+    #[css(keyword = "trim-end")]
     End,
     /// `trim-both` — trim leading from both edges.
-    #[parse(aliases = "trim-both")]
+    #[css(keyword = "trim-both")]
     Both,
 }
 
@@ -328,6 +281,13 @@ impl Parse for TextBoxEdge {
             return Ok(Self::Auto);
         }
 
+        if input
+            .try_parse(|input| input.expect_ident_matching("alphabetic"))
+            .is_ok()
+        {
+            return Ok(Self::Edges(TextEdgeOver::Text, TextEdgeUnder::Alphabetic));
+        }
+
         let over = TextEdgeOver::parse(input)?;
         let under = input
             .try_parse(TextEdgeUnder::parse)
@@ -343,6 +303,9 @@ impl ToCss for TextBoxEdge {
     {
         match self {
             Self::Auto => dest.write_str("auto"),
+            Self::Edges(TextEdgeOver::Text, TextEdgeUnder::Alphabetic) => {
+                dest.write_str("alphabetic")
+            },
             Self::Edges(over, under) => {
                 over.to_css(dest)?;
                 if *under != implicit_under(*over) {
@@ -433,7 +396,7 @@ mod leading_trim_tests {
             assert_eq!(actual, expected);
         }
 
-        for invalid in ["alphabetic", "text cap", "auto text"] {
+        for invalid in ["alphabetic text", "text cap", "auto text"] {
             let mut input = ParserInput::new(invalid);
             assert!(
                 Parser::new(&mut input)

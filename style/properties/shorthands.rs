@@ -218,13 +218,6 @@ pub mod border_radius {
     }
 }
 
-/// CSS Backgrounds and Borders Module Level 4 §5.5 — `corner-shape`
-/// shorthand.
-///
-/// Sets the four `corner-*-shape` longhands at once. The grammar
-/// mirrors `border-radius`: one value applies to all four corners;
-/// two values pair TL+BR / TR+BL; three values apply TL / TR+BL / BR;
-/// four values apply TL / TR / BR / BL.
 pub mod corner_shape {
     pub use crate::properties::shorthands_generated::corner_shape::*;
 
@@ -256,42 +249,103 @@ pub mod corner_shape {
                 corner_bottom_left_shape: bl,
             } = *self;
             let rect = CornerShapeRect {
-                top_left: *tl,
-                top_right: *tr,
-                bottom_right: *br,
-                bottom_left: *bl,
+                top_left: tl.clone(),
+                top_right: tr.clone(),
+                bottom_right: br.clone(),
+                bottom_left: bl.clone(),
             };
             <CornerShapeRect as ToCss>::to_css(&rect, dest)
         }
     }
 }
 
-/// CSS Borders and Box Decorations Module Level 4 §3.4 — `corner`.
-///
-/// Each slash-separated component is one complete radius/shape pair. One to
-/// four components map to TL, TR, BR and BL using the standard four-corner
-/// tiling rule.
+macro_rules! corner_shape_side_shorthand {
+    ($module:ident, $first:ident, $second:ident) => {
+        pub mod $module {
+            use super::*;
+            pub use crate::properties::shorthands_generated::$module::*;
+
+            pub fn parse_value<'i, 't>(
+                context: &ParserContext,
+                input: &mut Parser<'i, 't>,
+            ) -> Result<Longhands, ParseError<'i>> {
+                let [first, second] = corner::parse_shape_pair(context, input)?;
+                Ok(expanded! { $first: first, $second: second })
+            }
+
+            impl ToCss for LonghandsToSerialize<'_> {
+                fn to_css<W: fmt::Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+                    crate::values::generics::size::Size2D::new(self.$first, self.$second)
+                        .to_css(dest)
+                }
+            }
+        }
+    };
+}
+
+corner_shape_side_shorthand!(
+    corner_top_shape,
+    corner_top_left_shape,
+    corner_top_right_shape
+);
+corner_shape_side_shorthand!(
+    corner_right_shape,
+    corner_top_right_shape,
+    corner_bottom_right_shape
+);
+corner_shape_side_shorthand!(
+    corner_bottom_shape,
+    corner_bottom_left_shape,
+    corner_bottom_right_shape
+);
+corner_shape_side_shorthand!(
+    corner_left_shape,
+    corner_top_left_shape,
+    corner_bottom_left_shape
+);
+corner_shape_side_shorthand!(
+    corner_block_start_shape,
+    corner_start_start_shape,
+    corner_start_end_shape
+);
+corner_shape_side_shorthand!(
+    corner_block_end_shape,
+    corner_end_start_shape,
+    corner_end_end_shape
+);
+corner_shape_side_shorthand!(
+    corner_inline_start_shape,
+    corner_start_start_shape,
+    corner_end_start_shape
+);
+corner_shape_side_shorthand!(
+    corner_inline_end_shape,
+    corner_start_end_shape,
+    corner_end_end_shape
+);
+
 pub mod corner {
     pub use crate::properties::shorthands_generated::corner::*;
 
     use super::*;
+    use crate::values::generics::{rect::Rect, size::Size2D};
     use crate::values::specified::border::BorderCornerRadius;
     use crate::values::specified::corner_shape::CornerShape;
     use crate::Zero;
 
     #[derive(Clone)]
-    struct SpecifiedCorner {
-        radius: BorderCornerRadius,
-        shape: CornerShape,
+    pub(super) struct SpecifiedCorner {
+        pub radius: BorderCornerRadius,
+        pub shape: CornerShape,
     }
 
-    impl SpecifiedCorner {
+    impl Parse for SpecifiedCorner {
         fn parse<'i, 't>(
             context: &ParserContext,
             input: &mut Parser<'i, 't>,
         ) -> Result<Self, ParseError<'i>> {
             if input
-                .try_parse(|i| i.expect_ident_matching("normal"))
+                .try_parse(|input| input.expect_ident_matching("normal"))
                 .is_ok()
             {
                 return Ok(Self {
@@ -299,26 +353,68 @@ pub mod corner {
                     shape: CornerShape::Round,
                 });
             }
-
             let radius = input
-                .try_parse(|i| BorderCornerRadius::parse(context, i))
+                .try_parse(|input| BorderCornerRadius::parse(context, input))
                 .ok();
-            let shape = input.try_parse(|i| CornerShape::parse(context, i)).ok();
-            match (radius, shape) {
-                (Some(radius), Some(shape)) => Ok(Self { radius, shape }),
-                (Some(radius), None) => Ok(Self {
-                    radius,
-                    shape: CornerShape::parse(context, input)?,
-                }),
-                (None, Some(shape)) => Ok(Self {
-                    radius: BorderCornerRadius::parse(context, input)?,
-                    shape,
-                }),
-                (None, None) => Err(input.new_custom_error::<_, StyleParseErrorKind>(
-                    StyleParseErrorKind::UnspecifiedError,
-                )),
+            let shape = CornerShape::parse(context, input)?;
+            let radius = match radius {
+                Some(radius) => radius,
+                None => BorderCornerRadius::parse(context, input)?,
+            };
+            Ok(Self { radius, shape })
+        }
+    }
+
+    impl SpecifiedCorner {
+        pub(super) fn parse_next_or_clone<'i, 't>(
+            &self,
+            context: &ParserContext,
+            input: &mut Parser<'i, 't>,
+        ) -> Result<Self, ParseError<'i>> {
+            if input.try_parse(|input| input.expect_delim('/')).is_ok() {
+                Self::parse(context, input)
+            } else {
+                Ok(self.clone())
             }
         }
+    }
+
+    #[derive(Clone, Copy)]
+    pub(super) struct CornerToSerialize<'a> {
+        pub radius: &'a BorderCornerRadius,
+        pub shape: &'a CornerShape,
+    }
+
+    impl CornerToSerialize<'_> {
+        fn is_normal(&self) -> bool {
+            self.radius.is_zero() && self.shape.is_round()
+        }
+    }
+
+    impl PartialEq for CornerToSerialize<'_> {
+        fn eq(&self, other: &Self) -> bool {
+            (self.is_normal() && other.is_normal())
+                || (self.radius == other.radius && self.shape == other.shape)
+        }
+    }
+
+    impl ToCss for CornerToSerialize<'_> {
+        fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+            if self.is_normal() {
+                return dest.write_str("normal");
+            }
+            self.radius.to_css(dest)?;
+            dest.write_char(' ')?;
+            self.shape.to_css(dest)
+        }
+    }
+
+    pub(super) fn parse_shape_pair<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<[CornerShape; 2], ParseError<'i>> {
+        let pair = Size2D::parse_with(context, input, CornerShape::parse)?;
+        Ok([pair.width, pair.height])
     }
 
     pub fn parse_value<'i, 't>(
@@ -326,22 +422,9 @@ pub mod corner {
         input: &mut Parser<'i, 't>,
     ) -> Result<Longhands, ParseError<'i>> {
         let top_left = SpecifiedCorner::parse(context, input)?;
-        let top_right = if input.try_parse(|i| i.expect_delim('/')).is_ok() {
-            SpecifiedCorner::parse(context, input)?
-        } else {
-            top_left.clone()
-        };
-        let bottom_right = if input.try_parse(|i| i.expect_delim('/')).is_ok() {
-            SpecifiedCorner::parse(context, input)?
-        } else {
-            top_left.clone()
-        };
-        let bottom_left = if input.try_parse(|i| i.expect_delim('/')).is_ok() {
-            SpecifiedCorner::parse(context, input)?
-        } else {
-            top_right.clone()
-        };
-
+        let top_right = top_left.parse_next_or_clone(context, input)?;
+        let bottom_right = top_left.parse_next_or_clone(context, input)?;
+        let bottom_left = top_right.parse_next_or_clone(context, input)?;
         Ok(expanded! {
             border_top_left_radius: top_left.radius,
             border_top_right_radius: top_right.radius,
@@ -359,34 +442,175 @@ pub mod corner {
         where
             W: fmt::Write,
         {
-            let LonghandsToSerialize {
-                border_top_left_radius,
-                border_top_right_radius,
-                border_bottom_right_radius,
-                border_bottom_left_radius,
-                corner_top_left_shape,
-                corner_top_right_shape,
-                corner_bottom_right_shape,
-                corner_bottom_left_shape,
-            } = self;
-            let corners = [
-                (border_top_left_radius, corner_top_left_shape),
-                (border_top_right_radius, corner_top_right_shape),
-                (border_bottom_right_radius, corner_bottom_right_shape),
-                (border_bottom_left_radius, corner_bottom_left_shape),
-            ];
-            for (index, (radius, shape)) in corners.into_iter().enumerate() {
-                if index != 0 {
-                    dest.write_str(" / ")?;
-                }
-                radius.to_css(dest)?;
-                dest.write_char(' ')?;
-                shape.to_css(dest)?;
-            }
-            Ok(())
+            Rect(
+                CornerToSerialize {
+                    radius: self.border_top_left_radius,
+                    shape: self.corner_top_left_shape,
+                },
+                CornerToSerialize {
+                    radius: self.border_top_right_radius,
+                    shape: self.corner_top_right_shape,
+                },
+                CornerToSerialize {
+                    radius: self.border_bottom_right_radius,
+                    shape: self.corner_bottom_right_shape,
+                },
+                CornerToSerialize {
+                    radius: self.border_bottom_left_radius,
+                    shape: self.corner_bottom_left_shape,
+                },
+            )
+            .to_css_with_separator(dest, " / ")
         }
     }
 }
+
+macro_rules! single_corner_shorthand {
+    ($module:ident, $radius:ident, $shape:ident) => {
+        pub mod $module {
+            use super::*;
+            pub use crate::properties::shorthands_generated::$module::*;
+
+            pub fn parse_value<'i, 't>(
+                context: &ParserContext,
+                input: &mut Parser<'i, 't>,
+            ) -> Result<Longhands, ParseError<'i>> {
+                let corner = corner::SpecifiedCorner::parse(context, input)?;
+                Ok(expanded! { $radius: corner.radius, $shape: corner.shape })
+            }
+
+            impl ToCss for LonghandsToSerialize<'_> {
+                fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+                    corner::CornerToSerialize {
+                        radius: self.$radius,
+                        shape: self.$shape,
+                    }
+                    .to_css(dest)
+                }
+            }
+        }
+    };
+}
+
+macro_rules! side_corner_shorthand {
+    ($module:ident, $first_radius:ident, $second_radius:ident, $first_shape:ident, $second_shape:ident) => {
+        pub mod $module {
+            pub use crate::properties::shorthands_generated::$module::*;
+            use super::*;
+            use crate::values::generics::rect::Rect;
+
+            pub fn parse_value<'i, 't>(
+                context: &ParserContext,
+                input: &mut Parser<'i, 't>,
+            ) -> Result<Longhands, ParseError<'i>> {
+                let first = corner::SpecifiedCorner::parse(context, input)?;
+                let second = first.parse_next_or_clone(context, input)?;
+                Ok(expanded! { $first_radius: first.radius, $second_radius: second.radius, $first_shape: first.shape, $second_shape: second.shape })
+            }
+
+            impl ToCss for LonghandsToSerialize<'_> {
+                fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+                    let first = corner::CornerToSerialize { radius: self.$first_radius, shape: self.$first_shape };
+                    let second = corner::CornerToSerialize { radius: self.$second_radius, shape: self.$second_shape };
+                    Rect(first, second, first, second).to_css_with_separator(dest, " / ")
+                }
+            }
+        }
+    };
+}
+
+single_corner_shorthand!(
+    corner_top_left,
+    border_top_left_radius,
+    corner_top_left_shape
+);
+single_corner_shorthand!(
+    corner_top_right,
+    border_top_right_radius,
+    corner_top_right_shape
+);
+single_corner_shorthand!(
+    corner_bottom_right,
+    border_bottom_right_radius,
+    corner_bottom_right_shape
+);
+single_corner_shorthand!(
+    corner_bottom_left,
+    border_bottom_left_radius,
+    corner_bottom_left_shape
+);
+single_corner_shorthand!(
+    corner_start_start,
+    border_start_start_radius,
+    corner_start_start_shape
+);
+single_corner_shorthand!(
+    corner_start_end,
+    border_start_end_radius,
+    corner_start_end_shape
+);
+single_corner_shorthand!(
+    corner_end_start,
+    border_end_start_radius,
+    corner_end_start_shape
+);
+single_corner_shorthand!(corner_end_end, border_end_end_radius, corner_end_end_shape);
+side_corner_shorthand!(
+    corner_top,
+    border_top_left_radius,
+    border_top_right_radius,
+    corner_top_left_shape,
+    corner_top_right_shape
+);
+side_corner_shorthand!(
+    corner_right,
+    border_top_right_radius,
+    border_bottom_right_radius,
+    corner_top_right_shape,
+    corner_bottom_right_shape
+);
+side_corner_shorthand!(
+    corner_bottom,
+    border_bottom_left_radius,
+    border_bottom_right_radius,
+    corner_bottom_left_shape,
+    corner_bottom_right_shape
+);
+side_corner_shorthand!(
+    corner_left,
+    border_top_left_radius,
+    border_bottom_left_radius,
+    corner_top_left_shape,
+    corner_bottom_left_shape
+);
+side_corner_shorthand!(
+    corner_block_start,
+    border_start_start_radius,
+    border_start_end_radius,
+    corner_start_start_shape,
+    corner_start_end_shape
+);
+side_corner_shorthand!(
+    corner_block_end,
+    border_end_start_radius,
+    border_end_end_radius,
+    corner_end_start_shape,
+    corner_end_end_shape
+);
+side_corner_shorthand!(
+    corner_inline_start,
+    border_start_start_radius,
+    border_end_start_radius,
+    corner_start_start_shape,
+    corner_end_start_shape
+);
+side_corner_shorthand!(
+    corner_inline_end,
+    border_start_end_radius,
+    border_end_end_radius,
+    corner_start_end_shape,
+    corner_end_end_shape
+);
 
 pub mod border_image {
     pub use crate::properties::shorthands_generated::border_image::*;
@@ -839,33 +1063,112 @@ pub mod page_break_inside {
     }
 }
 
-/// CSS Text 4 §8.1 — `text-align` shorthand.
-///
-///   Value: <text-align-all> || <text-align-last>
-///
-/// When given a single value, set text-align-all to that value and
-/// reset text-align-last to its initial value (`auto`). When given two
-/// values, the first sets text-align-all and the second sets
-/// text-align-last.
-pub mod text_align {
+/// The text-spacing shorthand.
+pub mod text_spacing {
     use super::*;
-    pub use crate::properties::shorthands_generated::text_align::*;
-    use crate::values::specified::text::{TextAlign, TextAlignLast};
+    use crate::properties::longhands;
+    use crate::properties::longhands::text_spacing_trim::SpecifiedValue as Trim;
+    pub use crate::properties::shorthands_generated::text_spacing::*;
+    use crate::values::specified::TextAutospace;
 
     pub fn parse_value<'i>(
         context: &ParserContext,
         input: &mut Parser<'i, '_>,
     ) -> Result<Longhands, ParseError<'i>> {
-        // `<text-align-all>` is parsed via `specified::TextAlign`.
-        // `<text-align-last>` is parsed via `specified::TextAlignLast`.
-        // The `||` combinator allows either order; in practice
-        // implementations interpret an optional second value as
-        // text-align-last. Authors writing `text-align: justify right`
-        // expect `text-align-all: justify` and `text-align-last: right`.
-        let first = TextAlign::parse(context, input)?;
-        let second = input
-            .try_parse(|i| TextAlignLast::parse(i))
-            .unwrap_or(TextAlignLast::Auto);
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
+            return Ok(expanded! {
+                text_spacing_trim: Trim::SpaceAll,
+                text_autospace: TextAutospace::NO_AUTOSPACE,
+            });
+        }
+        if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
+            return Ok(expanded! {
+                text_spacing_trim: Trim::Auto,
+                text_autospace: TextAutospace::AUTO,
+            });
+        }
+        let (trim, autospace) = input
+            .try_parse(|input| {
+                let trim = longhands::text_spacing_trim::parse(context, input)?;
+                let autospace = input
+                    .try_parse(|i| TextAutospace::parse(context, i))
+                    .unwrap_or(TextAutospace::NORMAL);
+                input.expect_exhausted()?;
+                Ok::<_, ParseError<'i>>((trim, autospace))
+            })
+            .or_else(|_| {
+                let autospace = TextAutospace::parse(context, input)?;
+                let trim = input
+                    .try_parse(|i| longhands::text_spacing_trim::parse(context, i))
+                    .unwrap_or(Trim::Normal);
+                Ok::<_, ParseError<'i>>((trim, autospace))
+            })?;
+        if trim == Trim::Auto || autospace == TextAutospace::AUTO {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+        Ok(expanded! {
+            text_spacing_trim: trim,
+            text_autospace: autospace,
+        })
+    }
+
+    impl ToCss for LonghandsToSerialize<'_> {
+        fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+        where
+            W: fmt::Write,
+        {
+            match (*self.text_spacing_trim, *self.text_autospace) {
+                (Trim::SpaceAll, TextAutospace::NO_AUTOSPACE) => dest.write_str("none"),
+                (Trim::Auto, TextAutospace::AUTO) => dest.write_str("auto"),
+                (Trim::Auto, _) | (_, TextAutospace::AUTO) => Ok(()),
+                (trim, TextAutospace::NORMAL) => trim.to_css(dest),
+                (Trim::Normal, autospace) => autospace.to_css(dest),
+                (trim, autospace) => {
+                    trim.to_css(dest)?;
+                    dest.write_char(' ')?;
+                    autospace.to_css(dest)
+                },
+            }
+        }
+    }
+
+    impl SpecifiedValueInfo for Longhands {
+        fn collect_completion_keywords(f: KeywordsCollectFn) {
+            f(&["none", "auto"]);
+            longhands::text_spacing_trim::SpecifiedValue::collect_completion_keywords(f);
+            TextAutospace::collect_completion_keywords(f);
+        }
+    }
+}
+
+pub mod text_align {
+    use super::*;
+    pub use crate::properties::shorthands_generated::text_align::*;
+    use crate::values::specified::text::{
+        TextAlign, TextAlignKeyword, TextAlignLast, TextAlignLastKeyword,
+    };
+
+    pub fn parse_value<'i>(
+        context: &ParserContext,
+        input: &mut Parser<'i, '_>,
+    ) -> Result<Longhands, ParseError<'i>> {
+        let (first, second) = if input
+            .try_parse(|i| i.expect_ident_matching("justify-all"))
+            .is_ok()
+        {
+            (
+                TextAlign::Keyword(TextAlignKeyword::Justify),
+                TextAlignLast::Keyword(TextAlignLastKeyword::Justify),
+            )
+        } else {
+            let first = TextAlign::parse(context, input)?;
+            let second = if first == TextAlign::MatchParent {
+                TextAlignLast::MatchParent
+            } else {
+                TextAlignLast::Keyword(TextAlignLastKeyword::Auto)
+            };
+            (first, second)
+        };
         Ok(expanded! {
             text_align_all: first,
             text_align_last: second,
@@ -877,12 +1180,21 @@ pub mod text_align {
         where
             W: fmt::Write,
         {
-            self.text_align_all.to_css(dest)?;
-            if *self.text_align_last != TextAlignLast::Auto {
-                dest.write_char(' ')?;
-                self.text_align_last.to_css(dest)?;
+            match (*self.text_align_all, *self.text_align_last) {
+                (TextAlign::MatchParent, TextAlignLast::MatchParent) => {
+                    dest.write_str("match-parent")
+                },
+                (
+                    TextAlign::Keyword(TextAlignKeyword::Justify),
+                    TextAlignLast::Keyword(TextAlignLastKeyword::Justify),
+                ) => dest.write_str("justify-all"),
+                (all, TextAlignLast::Keyword(TextAlignLastKeyword::Auto))
+                    if all != TextAlign::MatchParent =>
+                {
+                    all.to_css(dest)
+                },
+                _ => Ok(()),
             }
-            Ok(())
         }
     }
 }
@@ -892,7 +1204,7 @@ pub mod text_align {
 ///   Value: normal | <text-box-trim> || <text-box-edge>
 pub mod text_box {
     use super::*;
-    use crate::properties::longhands::{leading_trim, text_box_edge};
+    use crate::properties::longhands::{text_box_edge, text_box_trim};
     pub use crate::properties::shorthands_generated::text_box::*;
     use crate::values::specified::{LeadingTrim, TextBoxEdge};
 
@@ -905,7 +1217,7 @@ pub mod text_box {
             .is_ok()
         {
             return Ok(expanded! {
-                leading_trim: LeadingTrim::Normal,
+                text_box_trim: LeadingTrim::Normal,
                 text_box_edge: TextBoxEdge::Auto,
             });
         }
@@ -914,10 +1226,7 @@ pub mod text_box {
         let mut edge = None;
         loop {
             if trim.is_none() {
-                if let Ok(value) = input.try_parse(|input| leading_trim::parse(context, input)) {
-                    if value == LeadingTrim::Normal {
-                        return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
-                    }
+                if let Ok(value) = input.try_parse(|input| text_box_trim::parse(context, input)) {
                     trim = Some(value);
                     continue;
                 }
@@ -936,7 +1245,7 @@ pub mod text_box {
         }
 
         Ok(expanded! {
-            leading_trim: trim.unwrap_or(LeadingTrim::Both),
+            text_box_trim: trim.unwrap_or(LeadingTrim::Both),
             text_box_edge: edge.unwrap_or(TextBoxEdge::Auto),
         })
     }
@@ -946,13 +1255,19 @@ pub mod text_box {
         where
             W: fmt::Write,
         {
-            if *self.leading_trim == LeadingTrim::Normal && *self.text_box_edge == TextBoxEdge::Auto
+            if *self.text_box_trim == LeadingTrim::Normal
+                && *self.text_box_edge == TextBoxEdge::Auto
             {
                 return dest.write_str("normal");
             }
 
-            self.leading_trim.to_css(dest)?;
-            dest.write_char(' ')?;
+            if *self.text_box_edge == TextBoxEdge::Auto {
+                return self.text_box_trim.to_css(dest);
+            }
+            if *self.text_box_trim != LeadingTrim::Both {
+                self.text_box_trim.to_css(dest)?;
+                dest.write_char(' ')?;
+            }
             self.text_box_edge.to_css(dest)
         }
     }
@@ -3495,10 +3810,10 @@ pub mod font {
     use crate::properties::longhands::font_language_override;
     use crate::properties::longhands::{font_family, font_size};
     use crate::properties::longhands::{
-        font_feature_settings, font_kerning, font_optical_sizing, font_size_adjust, font_stretch,
-        font_style, font_variant_alternates, font_variant_caps, font_variant_east_asian,
-        font_variant_emoji, font_variant_ligatures, font_variant_numeric, font_variant_position,
-        font_variation_settings, font_weight,
+        font_feature_settings, font_kerning, font_optical_sizing, font_size_adjust, font_style,
+        font_variant_alternates, font_variant_caps, font_variant_east_asian, font_variant_emoji,
+        font_variant_ligatures, font_variant_numeric, font_variant_position,
+        font_variation_settings, font_weight, font_width,
     };
     #[cfg(feature = "gecko")]
     use crate::values::specified::font::SystemFont;
@@ -3527,7 +3842,7 @@ pub mod font {
         font_family: FontFamily,
         font_size: FontSize,
         font_style: FontStyle,
-        font_stretch: FontStretch,
+        font_width: FontStretch,
         font_weight: FontWeight,
         line_height: LineHeight,
         font_variant_caps: font_variant_caps::SpecifiedValue,
@@ -3536,7 +3851,7 @@ pub mod font {
             font_family,
             font_size,
             font_style,
-            font_stretch,
+            font_width,
             font_weight,
             line_height,
             font_kerning: font_kerning::get_initial_specified_value(),
@@ -3571,7 +3886,7 @@ pub mod font {
                 font_family::SpecifiedValue::system_font(sys),
                 font_size::SpecifiedValue::system_font(sys),
                 font_style::SpecifiedValue::system_font(sys),
-                font_stretch::SpecifiedValue::system_font(sys),
+                font_width::SpecifiedValue::system_font(sys),
                 font_weight::SpecifiedValue::system_font(sys),
                 LineHeight::normal(),
                 font_variant_caps::get_initial_specified_value(),
@@ -3588,7 +3903,7 @@ pub mod font {
                 ),
                 font_size::get_initial_specified_value(),
                 font_style::get_initial_specified_value(),
-                font_stretch::get_initial_specified_value(),
+                font_width::get_initial_specified_value(),
                 font_weight::get_initial_specified_value(),
                 LineHeight::normal(),
                 font_variant_caps::get_initial_specified_value(),
@@ -3647,7 +3962,7 @@ pub mod font {
             family,
             size,
             unwrap_or_initial!(font_style, style),
-            unwrap_or_initial!(font_stretch, stretch),
+            unwrap_or_initial!(font_width, stretch),
             unwrap_or_initial!(font_weight, weight),
             line_height.unwrap_or(LineHeight::normal()),
             unwrap_or_initial!(font_variant_caps, variant_caps),
@@ -3722,7 +4037,7 @@ pub mod font {
                 return Ok(());
             }
 
-            let font_stretch = match self.font_stretch {
+            let font_width = match self.font_width {
                 FontStretch::Keyword(ref kw) => *kw,
                 FontStretch::Stretch(ref percentage) => {
                     match percentage
@@ -3759,8 +4074,8 @@ pub mod font {
                 dest.write_char(' ')?;
             }
 
-            if font_stretch != FontStretchKeyword::Normal {
-                font_stretch.to_css(dest)?;
+            if font_width != FontStretchKeyword::Normal {
+                font_width.to_css(dest)?;
                 dest.write_char(' ')?;
             }
 
@@ -3803,7 +4118,7 @@ pub mod font {
                 self.font_family,
                 self.font_size,
                 self.font_style,
-                self.font_stretch,
+                self.font_width,
                 self.font_weight
             );
 
@@ -5669,146 +5984,6 @@ pub mod mask_border {
     }
 }
 
-// CSS Overflow 4 §3.4 — `overflow-clip-margin` shorthand and its
-// per-axis logical companions. Each shorthand parses
-// `<visual-box> || <length [0,∞]>{N}` where N is 1–4 for the
-// physical shorthand and 1–2 for the logical axis shorthands. A single
-// optional `<visual-box>` keyword may appear at either end of the
-// length list and applies uniformly to every expanded sub-property.
-
-fn parse_overflow_clip_margin_values<'i, 't>(
-    context: &ParserContext,
-    input: &mut Parser<'i, 't>,
-    max_lengths: usize,
-) -> Result<
-    (
-        crate::values::generics::box_::OverflowClipMarginBox,
-        Vec<crate::values::specified::length::NonNegativeLength>,
-    ),
-    ParseError<'i>,
-> {
-    use crate::values::generics::box_::OverflowClipMarginBox;
-    use crate::values::specified::length::NonNegativeLength;
-    let mut visual_box: Option<OverflowClipMarginBox> = None;
-    let mut offsets: Vec<NonNegativeLength> = Vec::with_capacity(max_lengths);
-    loop {
-        if visual_box.is_none() {
-            if let Ok(vb) = input.try_parse(OverflowClipMarginBox::parse) {
-                visual_box = Some(vb);
-                continue;
-            }
-        }
-        if offsets.len() < max_lengths {
-            if let Ok(off) = input.try_parse(|i| NonNegativeLength::parse(context, i)) {
-                offsets.push(off);
-                continue;
-            }
-        }
-        break;
-    }
-    if offsets.is_empty() && visual_box.is_none() {
-        return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
-    }
-    Ok((
-        visual_box.unwrap_or(OverflowClipMarginBox::PaddingBox),
-        offsets,
-    ))
-}
-
-fn make_overflow_clip_margin(
-    visual_box: crate::values::generics::box_::OverflowClipMarginBox,
-    offset: crate::values::specified::length::NonNegativeLength,
-) -> crate::values::specified::box_::OverflowClipMargin {
-    crate::values::specified::box_::OverflowClipMargin { offset, visual_box }
-}
-
-fn serialize_overflow_clip_margin_sides<W>(
-    dest: &mut CssWriter<W>,
-    sides: &[&crate::values::specified::box_::OverflowClipMargin],
-) -> fmt::Result
-where
-    W: fmt::Write,
-{
-    use crate::values::generics::box_::OverflowClipMarginBox;
-    use crate::Zero;
-    debug_assert!(!sides.is_empty());
-    // All sides must share the same visual-box for the shorthand to
-    // round-trip. If they diverge we still emit the first side's box
-    // and rely on the longhand to_css for full fidelity; callers
-    // serialise per-longhand when the values disagree.
-    let shared_box = sides[0].visual_box;
-    let all_share_box = sides.iter().all(|s| s.visual_box == shared_box);
-    if !all_share_box {
-        // Fall back: emit each side independently using its longhand
-        // syntax (matches the per-longhand `to_css`).
-        let mut first = true;
-        for side in sides {
-            if !first {
-                dest.write_char(' ')?;
-            }
-            first = false;
-            side.to_css(dest)?;
-        }
-        return Ok(());
-    }
-    if shared_box != OverflowClipMarginBox::PaddingBox {
-        shared_box.to_css(dest)?;
-    }
-    let any_nonzero = sides.iter().any(|s| !s.offset.is_zero());
-    if !any_nonzero {
-        // All sides at the initial offset; the visual-box keyword (if
-        // non-default) is sufficient. For an entirely-initial value
-        // we still need to emit at least one token; `to_css` on the
-        // first side handles that.
-        if shared_box == OverflowClipMarginBox::PaddingBox {
-            return sides[0].offset.to_css(dest);
-        }
-        return Ok(());
-    }
-    // Emit the length list using the standard 4-side / 2-side
-    // compression. The caller passes sides in their canonical order
-    // (top, right, bottom, left for the physical shorthand;
-    // start, end for the axis shorthands).
-    if shared_box != OverflowClipMarginBox::PaddingBox {
-        dest.write_char(' ')?;
-    }
-    if sides.len() == 4 {
-        let (t, r, b, l) = (
-            &sides[0].offset,
-            &sides[1].offset,
-            &sides[2].offset,
-            &sides[3].offset,
-        );
-        t.to_css(dest)?;
-        let lr_same = l == r;
-        let tb_same = t == b;
-        if tb_same && lr_same && t == l {
-            return Ok(());
-        }
-        dest.write_char(' ')?;
-        r.to_css(dest)?;
-        if tb_same && lr_same {
-            return Ok(());
-        }
-        dest.write_char(' ')?;
-        b.to_css(dest)?;
-        if lr_same {
-            return Ok(());
-        }
-        dest.write_char(' ')?;
-        l.to_css(dest)
-    } else {
-        // 2-side axis shorthand: start, end.
-        let (s, e) = (&sides[0].offset, &sides[1].offset);
-        s.to_css(dest)?;
-        if s == e {
-            return Ok(());
-        }
-        dest.write_char(' ')?;
-        e.to_css(dest)
-    }
-}
-
 /// CSS Overflow 4 §5.1 — `line-clamp` shorthand.
 ///
 /// The shorthand expands immediately into `max-lines`, `continue`, and
@@ -5818,7 +5993,7 @@ where
 pub mod line_clamp {
     use super::*;
     pub use crate::properties::shorthands_generated::line_clamp::*;
-    use crate::values::specified::{BlockEllipsis, Continue, MaxLines, PositiveLineCount};
+    use crate::values::specified::{BlockEllipsis, Continue, MaxLines};
 
     pub fn parse_value<'i, 't>(
         context: &ParserContext,
@@ -5829,21 +6004,32 @@ pub mod line_clamp {
             .is_ok()
         {
             return Ok(expanded! {
-                max_lines: MaxLines::None,
-                continue_: Continue::Auto,
-                block_ellipsis: BlockEllipsis::None,
+                max_lines: MaxLines::Auto,
+                continue_: Continue::Normal,
+                block_ellipsis: BlockEllipsis::NoEllipsis,
             });
         }
 
-        let count = PositiveLineCount::parse(context, input)?;
-        let block_ellipsis = input
-            .try_parse(|input| BlockEllipsis::parse(context, input))
-            .unwrap_or(BlockEllipsis::Auto);
+        let max_lines = input
+            .try_parse(|input| MaxLines::parse(context, input))
+            .ok();
+        let block_ellipsis = input.try_parse(|input| BlockEllipsis::parse(context, input));
+        if max_lines.is_none() && block_ellipsis.is_err() {
+            return Err(block_ellipsis.unwrap_err());
+        }
+        let max_lines = max_lines.or_else(|| {
+            input
+                .try_parse(|input| MaxLines::parse(context, input))
+                .ok()
+        });
+        let legacy = input
+            .try_parse(|input| input.expect_ident_matching("-webkit-legacy"))
+            .is_ok();
 
         Ok(expanded! {
-            max_lines: MaxLines::Lines(count),
-            continue_: Continue::Discard,
-            block_ellipsis: block_ellipsis,
+            max_lines: max_lines.unwrap_or(MaxLines::Auto),
+            continue_: if legacy { Continue::WebkitLegacy } else { Continue::Collapse },
+            block_ellipsis: block_ellipsis.unwrap_or(BlockEllipsis::Ellipsis),
         })
     }
 
@@ -5853,12 +6039,17 @@ pub mod line_clamp {
             W: fmt::Write,
         {
             match (self.max_lines, self.continue_, self.block_ellipsis) {
-                (MaxLines::None, Continue::Auto, BlockEllipsis::None) => dest.write_str("none"),
-                (MaxLines::Lines(count), Continue::Discard, block_ellipsis) => {
-                    count.to_css(dest)?;
-                    if block_ellipsis != &BlockEllipsis::Auto {
+                (MaxLines::Auto, Continue::Normal, BlockEllipsis::NoEllipsis) => {
+                    dest.write_str("none")
+                },
+                (max_lines, Continue::Collapse | Continue::WebkitLegacy, block_ellipsis) => {
+                    max_lines.to_css(dest)?;
+                    if block_ellipsis != &BlockEllipsis::Ellipsis {
                         dest.write_char(' ')?;
                         block_ellipsis.to_css(dest)?;
+                    }
+                    if self.continue_ == &Continue::WebkitLegacy {
+                        dest.write_str(" -webkit-legacy")?;
                     }
                     Ok(())
                 },
@@ -5874,155 +6065,54 @@ pub mod line_clamp {
     }
 }
 
-pub mod overflow_clip_margin {
-    pub use crate::properties::shorthands_generated::overflow_clip_margin::*;
-
+/// Legacy line-clamp grammar, expanded through the same three longhands.
+pub mod _webkit_line_clamp {
     use super::*;
+    pub use crate::properties::shorthands_generated::_webkit_line_clamp::*;
+    use crate::values::specified::{BlockEllipsis, Continue, MaxLines, PositiveLineCount};
 
     pub fn parse_value<'i, 't>(
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Longhands, ParseError<'i>> {
-        let (visual_box, offsets) = parse_overflow_clip_margin_values(context, input, 4)?;
-        // Distribute lengths per the standard 1-2-3-4 CSS pattern.
-        let (top, right, bottom, left) = match offsets.len() {
-            0 => {
-                use crate::values::specified::length::NonNegativeLength;
-                use crate::Zero;
-                let zero = NonNegativeLength::zero();
-                (zero.clone(), zero.clone(), zero.clone(), zero)
-            },
-            1 => (
-                offsets[0].clone(),
-                offsets[0].clone(),
-                offsets[0].clone(),
-                offsets[0].clone(),
-            ),
-            2 => (
-                offsets[0].clone(),
-                offsets[1].clone(),
-                offsets[0].clone(),
-                offsets[1].clone(),
-            ),
-            3 => (
-                offsets[0].clone(),
-                offsets[1].clone(),
-                offsets[2].clone(),
-                offsets[1].clone(),
-            ),
-            _ => (
-                offsets[0].clone(),
-                offsets[1].clone(),
-                offsets[2].clone(),
-                offsets[3].clone(),
-            ),
+        let max_lines = if input
+            .try_parse(|input| input.expect_ident_matching("none"))
+            .is_ok()
+        {
+            MaxLines::Auto
+        } else {
+            MaxLines::Lines(PositiveLineCount::parse(context, input)?)
+        };
+        let continuation = if matches!(max_lines, MaxLines::Auto) {
+            Continue::Normal
+        } else {
+            Continue::WebkitLegacy
         };
         Ok(expanded! {
-            overflow_clip_margin_top: make_overflow_clip_margin(visual_box, top),
-            overflow_clip_margin_right: make_overflow_clip_margin(visual_box, right),
-            overflow_clip_margin_bottom: make_overflow_clip_margin(visual_box, bottom),
-            overflow_clip_margin_left: make_overflow_clip_margin(visual_box, left),
+            max_lines: max_lines,
+            continue_: continuation,
+            block_ellipsis: BlockEllipsis::Ellipsis,
         })
     }
 
-    impl<'a> ToCss for LonghandsToSerialize<'a> {
-        fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
-        where
-            W: fmt::Write,
-        {
-            serialize_overflow_clip_margin_sides(
-                dest,
-                &[
-                    self.overflow_clip_margin_top,
-                    self.overflow_clip_margin_right,
-                    self.overflow_clip_margin_bottom,
-                    self.overflow_clip_margin_left,
-                ],
-            )
+    impl ToCss for LonghandsToSerialize<'_> {
+        fn to_css<W: fmt::Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+            if self.block_ellipsis != &BlockEllipsis::Ellipsis {
+                return Ok(());
+            }
+            match self.max_lines {
+                MaxLines::Auto if self.continue_ == &Continue::Normal => dest.write_str("none"),
+                MaxLines::Lines(count) if self.continue_ == &Continue::WebkitLegacy => {
+                    count.to_css(dest)
+                },
+                _ => Ok(()),
+            }
         }
     }
-}
 
-pub mod overflow_clip_margin_block {
-    pub use crate::properties::shorthands_generated::overflow_clip_margin_block::*;
-
-    use super::*;
-
-    pub fn parse_value<'i, 't>(
-        context: &ParserContext,
-        input: &mut Parser<'i, 't>,
-    ) -> Result<Longhands, ParseError<'i>> {
-        let (visual_box, offsets) = parse_overflow_clip_margin_values(context, input, 2)?;
-        let (start, end) = match offsets.len() {
-            0 => {
-                use crate::values::specified::length::NonNegativeLength;
-                use crate::Zero;
-                let zero = NonNegativeLength::zero();
-                (zero.clone(), zero)
-            },
-            1 => (offsets[0].clone(), offsets[0].clone()),
-            _ => (offsets[0].clone(), offsets[1].clone()),
-        };
-        Ok(expanded! {
-            overflow_clip_margin_block_start: make_overflow_clip_margin(visual_box, start),
-            overflow_clip_margin_block_end: make_overflow_clip_margin(visual_box, end),
-        })
-    }
-
-    impl<'a> ToCss for LonghandsToSerialize<'a> {
-        fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
-        where
-            W: fmt::Write,
-        {
-            serialize_overflow_clip_margin_sides(
-                dest,
-                &[
-                    self.overflow_clip_margin_block_start,
-                    self.overflow_clip_margin_block_end,
-                ],
-            )
-        }
-    }
-}
-
-pub mod overflow_clip_margin_inline {
-    pub use crate::properties::shorthands_generated::overflow_clip_margin_inline::*;
-
-    use super::*;
-
-    pub fn parse_value<'i, 't>(
-        context: &ParserContext,
-        input: &mut Parser<'i, 't>,
-    ) -> Result<Longhands, ParseError<'i>> {
-        let (visual_box, offsets) = parse_overflow_clip_margin_values(context, input, 2)?;
-        let (start, end) = match offsets.len() {
-            0 => {
-                use crate::values::specified::length::NonNegativeLength;
-                use crate::Zero;
-                let zero = NonNegativeLength::zero();
-                (zero.clone(), zero)
-            },
-            1 => (offsets[0].clone(), offsets[0].clone()),
-            _ => (offsets[0].clone(), offsets[1].clone()),
-        };
-        Ok(expanded! {
-            overflow_clip_margin_inline_start: make_overflow_clip_margin(visual_box, start),
-            overflow_clip_margin_inline_end: make_overflow_clip_margin(visual_box, end),
-        })
-    }
-
-    impl<'a> ToCss for LonghandsToSerialize<'a> {
-        fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
-        where
-            W: fmt::Write,
-        {
-            serialize_overflow_clip_margin_sides(
-                dest,
-                &[
-                    self.overflow_clip_margin_inline_start,
-                    self.overflow_clip_margin_inline_end,
-                ],
-            )
+    impl SpecifiedValueInfo for Longhands {
+        fn collect_completion_keywords(f: KeywordsCollectFn) {
+            f(&["none"]);
         }
     }
 }
@@ -6069,7 +6159,7 @@ mod font_tests {
             assert_eq!(longhands.font_family.to_css_string(), "serif");
             assert_eq!(longhands.font_size.to_css_string(), "medium");
             assert_eq!(longhands.font_style.to_css_string(), "normal");
-            assert_eq!(longhands.font_stretch.to_css_string(), "normal");
+            assert_eq!(longhands.font_width.to_css_string(), "normal");
             assert_eq!(longhands.font_weight.to_css_string(), "normal");
             assert_eq!(longhands.line_height.to_css_string(), "normal");
         }
@@ -6119,15 +6209,38 @@ mod line_clamp_tests {
     }
 
     #[test]
+    fn line_clamp_current_grammar_retains_line_count_and_automatic_limit() {
+        for (css, max_lines, continuation, ellipsis) in [
+            ("none", "auto", "normal", "no-ellipsis"),
+            ("auto", "auto", "collapse", "ellipsis"),
+            ("8 ellipsis", "8", "collapse", "ellipsis"),
+            ("no-ellipsis 10", "10", "collapse", "no-ellipsis"),
+            ("auto 11", "11 auto", "collapse", "ellipsis"),
+            (
+                "3 auto -webkit-legacy",
+                "3 auto",
+                "-webkit-legacy",
+                "ellipsis",
+            ),
+            (r#""CUSTOM" 12"#, "12", "collapse", r#""CUSTOM""#),
+        ] {
+            assert_expansion(css, max_lines, continuation, ellipsis);
+        }
+        for css in ["3 none", "3 ellipsis auto", "-webkit-legacy"] {
+            assert!(try_parse(css).is_err(), "{css:?} must be invalid");
+        }
+    }
+
+    #[test]
     fn line_clamp_expands_to_its_three_typed_longhands() {
         for (css, max_lines, continue_, block_ellipsis) in [
-            ("none", "none", "auto", "none"),
-            ("3", "3", "discard", "auto"),
-            ("3 auto", "3", "discard", "auto"),
-            ("3 none", "3", "discard", "none"),
-            (r#"3 "CUSTOM""#, "3", "discard", r#""CUSTOM""#),
-            (r#"3 """#, "3", "discard", r#""""#),
-            (r#"4 "続く""#, "4", "discard", r#""続く""#),
+            ("none", "auto", "normal", "no-ellipsis"),
+            ("3", "3", "collapse", "ellipsis"),
+            ("3 auto", "3 auto", "collapse", "ellipsis"),
+            ("3 no-ellipsis", "3", "collapse", "no-ellipsis"),
+            (r#"3 "CUSTOM""#, "3", "collapse", r#""CUSTOM""#),
+            (r#"3 """#, "3", "collapse", r#""""#),
+            (r#"4 "続く""#, "4", "collapse", r#""続く""#),
         ] {
             assert_expansion(css, max_lines, continue_, block_ellipsis);
         }
@@ -6135,7 +6248,14 @@ mod line_clamp_tests {
 
     #[test]
     fn line_clamp_rejects_values_that_cannot_form_a_valid_triplet() {
-        for css in ["0", "-1", "1.5", "none auto", r#""CUSTOM" 3"#, "3 inherit"] {
+        for css in [
+            "0",
+            "-1",
+            "1.5",
+            "none auto",
+            r#""CUSTOM" none"#,
+            "3 inherit",
+        ] {
             assert!(try_parse(css).is_err(), "{css:?} must be invalid");
         }
     }

@@ -1,17 +1,13 @@
 use std::borrow::Cow;
 
-use cssparser::{Parser, ParserInput, serialize_string};
+use cssparser::{Parser, ParserInput};
 
 use crate::css_scan::{is_css_whitespace, is_ident_continue};
 
 pub const INTERNAL_DISPLAY_PROPERTY: &str = "--moegoe-webkit-box-display";
-pub const INTERNAL_CONTINUE_PROPERTY: &str = "--moegoe-continue";
 pub const INTERNAL_LEGACY_TEXT_ALIGN_PROPERTY: &str = "--moegoe-legacy-text-align";
 pub const INTERNAL_LEGACY_TEXT_ALIGN_NAME: &str = "moegoe-legacy-text-align";
 
-const AUTHORED_CONTINUE: &[u8] = b"continue";
-const AUTOMATIC_LINE_CLAMP: &[u8] = b"line-clamp";
-const LEGACY_LINE_CLAMP: &[u8] = b"-webkit-line-clamp";
 const TEXT_ALIGN: &[u8] = b"text-align";
 
 type CompatibilityReplacement = (std::ops::Range<usize>, String);
@@ -135,7 +131,7 @@ fn display_declaration_replacement(
     )
 }
 
-fn line_clamp_declaration_end(bytes: &[u8], value_start: usize) -> usize {
+fn declaration_value_end(bytes: &[u8], value_start: usize) -> usize {
     let mut cursor = value_start;
     let mut quote = None;
     let mut nesting = 0_u32;
@@ -171,279 +167,12 @@ fn line_clamp_declaration_end(bytes: &[u8], value_start: usize) -> usize {
     cursor
 }
 
-fn parse_continue_compat_value(value: &str) -> Option<(String, bool)> {
-    let mut input = ParserInput::new(value);
-    let mut parser = Parser::new(&mut input);
-    parser
-        .parse_entirely(
-            |input| -> Result<(String, bool), cssparser::ParseError<'_, ()>> {
-                let keyword = input.expect_ident_cloned()?.to_ascii_lowercase();
-                if !matches!(
-                    keyword.as_str(),
-                    "auto"
-                        | "collapse"
-                        | "discard"
-                        | "inherit"
-                        | "initial"
-                        | "revert"
-                        | "revert-layer"
-                        | "unset"
-                ) {
-                    return Err(input.new_custom_error(()));
-                }
-                let important = if input.is_exhausted() {
-                    false
-                } else {
-                    input.expect_delim('!')?;
-                    input.expect_ident_matching("important")?;
-                    true
-                };
-                Ok((keyword, important))
-            },
-        )
-        .ok()
-}
-
-fn continue_compat_replacement(
-    bytes: &[u8],
-    cursor: usize,
-) -> (Option<(std::ops::Range<usize>, String)>, usize) {
-    let property_end = cursor + AUTHORED_CONTINUE.len();
-    let Some(value_start) = declaration_value_start(bytes, property_end) else {
-        return (None, property_end);
-    };
-    let declaration_end = line_clamp_declaration_end(bytes, value_start);
-    let value = std::str::from_utf8(&bytes[value_start..declaration_end]).unwrap_or_default();
-    let Some((keyword, important)) = parse_continue_compat_value(value) else {
-        return (None, declaration_end);
-    };
-    let lowered = if keyword == "collapse" {
-        "discard"
-    } else {
-        keyword.as_str()
-    };
-    let important = if important { " !important" } else { "" };
-    (
-        Some((
-            cursor..declaration_end,
-            format!(
-                "continue: {lowered}{important}; {INTERNAL_CONTINUE_PROPERTY}: {keyword}{important}"
-            ),
-        )),
-        declaration_end,
-    )
-}
-
-fn parse_line_clamp_compat_value(
-    value: &str,
-) -> Option<(String, String, bool, bool, &'static str)> {
-    enum BlockEllipsis {
-        Auto,
-        None,
-        String(String),
-    }
-
-    let mut input = ParserInput::new(value);
-    let mut parser = Parser::new(&mut input);
-    let (max_lines, block_ellipsis, important, preserve_authored, continue_value) = parser
-        .parse_entirely(
-            |input| -> Result<
-                (String, BlockEllipsis, bool, bool, &'static str),
-                cssparser::ParseError<'_, ()>,
-            > {
-                let (max_lines, block_ellipsis, preserve_authored, continue_value) = if input
-                    .try_parse(|input| input.expect_ident_matching("none"))
-                    .is_ok()
-                {
-                    ("none".to_string(), BlockEllipsis::None, true, "auto")
-                } else if input
-                    .try_parse(|input| input.expect_ident_matching("auto"))
-                    .is_ok()
-                {
-                    let block_ellipsis = if input
-                        .try_parse(|input| input.expect_ident_matching("no-ellipsis"))
-                        .is_ok()
-                    {
-                        BlockEllipsis::None
-                    } else {
-                        BlockEllipsis::Auto
-                    };
-                    ("none".to_string(), block_ellipsis, false, "collapse")
-                } else if let Ok(lines) = input.try_parse(Parser::expect_integer) {
-                    if lines < 1 {
-                        return Err(input.new_custom_error(()));
-                    }
-                    let (block_ellipsis, preserve_authored) = if input
-                        .try_parse(|input| input.expect_ident_matching("no-ellipsis"))
-                        .is_ok()
-                    {
-                        (BlockEllipsis::None, false)
-                    } else if input
-                        .try_parse(|input| input.expect_ident_matching("none"))
-                        .is_ok()
-                    {
-                        (BlockEllipsis::None, true)
-                    } else if input
-                        .try_parse(|input| input.expect_ident_matching("auto"))
-                        .is_ok()
-                    {
-                        (BlockEllipsis::Auto, true)
-                    } else if let Ok(marker) = input.try_parse(|input| {
-                        input.expect_string().map(|value| value.as_ref().to_owned())
-                    }) {
-                        (BlockEllipsis::String(marker), true)
-                    } else {
-                        (BlockEllipsis::Auto, true)
-                    };
-                    (
-                        lines.to_string(),
-                        block_ellipsis,
-                        preserve_authored,
-                        "collapse",
-                    )
-                } else {
-                    (
-                        "none".to_string(),
-                        BlockEllipsis::String(input.expect_string()?.as_ref().to_owned()),
-                        false,
-                        "collapse",
-                    )
-                };
-                let important = if input.is_exhausted() {
-                    false
-                } else {
-                    input.expect_delim('!')?;
-                    input.expect_ident_matching("important")?;
-                    true
-                };
-                Ok((
-                    max_lines,
-                    block_ellipsis,
-                    important,
-                    preserve_authored,
-                    continue_value,
-                ))
-            },
-        )
-        .ok()?;
-    let block_ellipsis = match block_ellipsis {
-        BlockEllipsis::Auto => "auto".to_string(),
-        BlockEllipsis::None => "none".to_string(),
-        BlockEllipsis::String(value) => {
-            let mut serialised = String::new();
-            serialize_string(&value, &mut serialised).ok()?;
-            serialised
-        },
-    };
-    Some((
-        max_lines,
-        block_ellipsis,
-        important,
-        preserve_authored,
-        continue_value,
-    ))
-}
-
-fn line_clamp_compat_replacement(
-    bytes: &[u8],
-    cursor: usize,
-) -> (Option<(std::ops::Range<usize>, String)>, usize) {
-    let property_end = cursor + AUTOMATIC_LINE_CLAMP.len();
-    let Some(value_start) = declaration_value_start(bytes, property_end) else {
-        return (None, property_end);
-    };
-    let declaration_end = line_clamp_declaration_end(bytes, value_start);
-    let value = std::str::from_utf8(&bytes[value_start..declaration_end]).unwrap_or_default();
-    let Some((max_lines, block_ellipsis, important, preserve_authored, continue_value)) =
-        parse_line_clamp_compat_value(value)
-    else {
-        return (None, declaration_end);
-    };
-    let important = if important { " !important" } else { "" };
-    if preserve_authored {
-        let authored = std::str::from_utf8(&bytes[cursor..declaration_end]).unwrap_or_default();
-        return (
-            Some((
-                cursor..declaration_end,
-                format!("{authored}; {INTERNAL_CONTINUE_PROPERTY}: {continue_value}{important}"),
-            )),
-            declaration_end,
-        );
-    }
-    (
-        Some((
-            cursor..declaration_end,
-            format!(
-                "max-lines: {max_lines}{important}; continue: discard{important}; block-ellipsis: {block_ellipsis}{important}; {INTERNAL_CONTINUE_PROPERTY}: {continue_value}{important}"
-            ),
-        )),
-        declaration_end,
-    )
-}
-
-fn parse_legacy_line_clamp_compat_value(value: &str) -> Option<(String, bool)> {
-    let mut input = ParserInput::new(value);
-    let mut parser = Parser::new(&mut input);
-    parser
-        .parse_entirely(
-            |input| -> Result<(String, bool), cssparser::ParseError<'_, ()>> {
-                let max_lines = if input
-                    .try_parse(|input| input.expect_ident_matching("none"))
-                    .is_ok()
-                {
-                    "none".to_string()
-                } else {
-                    let lines = input.expect_integer()?;
-                    if lines < 1 {
-                        return Err(input.new_custom_error(()));
-                    }
-                    lines.to_string()
-                };
-                let important = if input.is_exhausted() {
-                    false
-                } else {
-                    input.expect_delim('!')?;
-                    input.expect_ident_matching("important")?;
-                    true
-                };
-                Ok((max_lines, important))
-            },
-        )
-        .ok()
-}
-
-fn legacy_line_clamp_compat_replacement(
-    bytes: &[u8],
-    cursor: usize,
-) -> (Option<(std::ops::Range<usize>, String)>, usize) {
-    let property_end = cursor + LEGACY_LINE_CLAMP.len();
-    let Some(value_start) = declaration_value_start(bytes, property_end) else {
-        return (None, property_end);
-    };
-    let declaration_end = line_clamp_declaration_end(bytes, value_start);
-    let value = std::str::from_utf8(&bytes[value_start..declaration_end]).unwrap_or_default();
-    let Some((max_lines, important)) = parse_legacy_line_clamp_compat_value(value) else {
-        return (None, declaration_end);
-    };
-    let authored = std::str::from_utf8(&bytes[cursor..declaration_end]).unwrap_or_default();
-    let important = if important { " !important" } else { "" };
-    (
-        Some((
-            cursor..declaration_end,
-            format!(
-                "{authored}; max-lines: {max_lines}{important}; continue: auto{important}; block-ellipsis: auto{important}; {INTERNAL_CONTINUE_PROPERTY}: auto{important}"
-            ),
-        )),
-        declaration_end,
-    )
-}
-
 fn text_align_compat_replacement(bytes: &[u8], cursor: usize) -> DeclarationReplacement {
     let property_end = cursor + TEXT_ALIGN.len();
     let Some(value_start) = declaration_value_start(bytes, property_end) else {
         return (None, property_end);
     };
-    let declaration_end = line_clamp_declaration_end(bytes, value_start);
+    let declaration_end = declaration_value_end(bytes, value_start);
     let value = std::str::from_utf8(&bytes[value_start..declaration_end]).unwrap_or_default();
     let Some((keyword, important)) = parse_text_align_compat_value(value) else {
         return (None, declaration_end);
@@ -508,12 +237,6 @@ fn needs_compatibility_rewrite(css: &str) -> bool {
         .windows(b"display".len())
         .any(|window| window.eq_ignore_ascii_case(b"display"))
         || bytes
-            .windows(AUTOMATIC_LINE_CLAMP.len())
-            .any(|window| window.eq_ignore_ascii_case(AUTOMATIC_LINE_CLAMP))
-        || bytes
-            .windows(AUTHORED_CONTINUE.len())
-            .any(|window| window.eq_ignore_ascii_case(AUTHORED_CONTINUE))
-        || bytes
             .windows(TEXT_ALIGN.len())
             .any(|window| window.eq_ignore_ascii_case(TEXT_ALIGN))
 }
@@ -528,15 +251,6 @@ fn declaration_compatibility_replacement(
     bytes: &[u8],
     cursor: usize,
 ) -> Option<DeclarationReplacement> {
-    if starts_declaration_property(bytes, cursor, LEGACY_LINE_CLAMP) {
-        return Some(legacy_line_clamp_compat_replacement(bytes, cursor));
-    }
-    if starts_declaration_property(bytes, cursor, AUTHORED_CONTINUE) {
-        return Some(continue_compat_replacement(bytes, cursor));
-    }
-    if starts_declaration_property(bytes, cursor, AUTOMATIC_LINE_CLAMP) {
-        return Some(line_clamp_compat_replacement(bytes, cursor));
-    }
     if starts_declaration_property(bytes, cursor, TEXT_ALIGN) {
         return Some(text_align_compat_replacement(bytes, cursor));
     }

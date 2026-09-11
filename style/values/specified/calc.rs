@@ -25,8 +25,9 @@ use crate::values::specified::length::{
     ContainerRelativeLength, PageRelativeLength, ViewportPercentageLength,
 };
 use crate::values::specified::length::{FontBaseSize, LineHeightBase};
+use crate::values::specified::resolution::ResolutionDimension;
 use crate::values::specified::time::TimeDimension;
-use crate::values::specified::{self, Angle, Resolution, Time};
+use crate::values::specified::{Angle, Resolution, Time};
 use crate::values::{serialize_number, serialize_percentage, CSSFloat, DashedIdent};
 use cssparser::{match_ignore_ascii_case, CowRcStr, Parser, SourceLocation, Token};
 use debug_unreachable::debug_unreachable;
@@ -148,7 +149,7 @@ pub enum Leaf {
     /// `<time>`
     Time(TimeDimension),
     /// `<resolution>`
-    Resolution(Resolution),
+    Resolution(ResolutionDimension),
     /// A component of a color.
     ColorComponent(ChannelKeyword),
     /// `<percentage>`
@@ -179,7 +180,9 @@ impl ToCss for Leaf {
             Self::Size => dest.write_str("size"),
             Self::Length(ref l) => l.to_css(dest),
             Self::Number(n) => serialize_number(n, /* was_calc = */ false, dest),
-            Self::Resolution(ref r) => r.to_css(dest),
+            Self::Resolution(ref r) => {
+                crate::values::serialize_specified_dimension(r.dppx(), "dppx", false, dest)
+            },
             Self::Percentage(p) => serialize_percentage(p, dest),
             Self::Angle(ref a) => crate::values::serialize_specified_dimension(
                 a.degrees(),
@@ -578,7 +581,7 @@ impl generic::CalcNodeLeaf for Leaf {
                 *one = TimeDimension::from_seconds(one.seconds() + other.seconds());
             },
             (&mut Resolution(ref mut one), &Resolution(ref other)) => {
-                *one = specified::Resolution::from_dppx(one.dppx() + other.dppx());
+                *one = ResolutionDimension::from_dppx(one.dppx() + other.dppx());
             },
             (&mut Length(ref mut one), &Length(ref other)) => {
                 *one = one.try_op(other, std::ops::Add::add)?;
@@ -655,7 +658,7 @@ impl generic::CalcNodeLeaf for Leaf {
                 ))));
             },
             (&Resolution(ref one), &Resolution(ref other)) => {
-                return Ok(Leaf::Resolution(specified::Resolution::from_dppx(op(
+                return Ok(Leaf::Resolution(ResolutionDimension::from_dppx(op(
                     one.dppx(),
                     other.dppx(),
                 ))));
@@ -695,7 +698,7 @@ impl generic::CalcNodeLeaf for Leaf {
             Leaf::Length(one) => *one = one.map(op),
             Leaf::Angle(one) => *one = AngleDimension::Deg(op(one.degrees())),
             Leaf::Time(one) => *one = TimeDimension::from_seconds(op(one.seconds())),
-            Leaf::Resolution(one) => *one = specified::Resolution::from_dppx(op(one.dppx())),
+            Leaf::Resolution(one) => *one = ResolutionDimension::from_dppx(op(one.dppx())),
             Leaf::Percentage(one) => *one = op(*one),
             Leaf::Number(one) => *one = op(*one),
             Leaf::ColorComponent(..) => return Err(()),
@@ -830,7 +833,7 @@ impl CalcNode {
                     }
                 }
                 if allowed.includes(CalcUnits::RESOLUTION) {
-                    if let Ok(t) = Resolution::parse_dimension(value, unit) {
+                    if let Ok(t) = ResolutionDimension::parse_dimension(value, unit) {
                         return Ok(CalcNode::Leaf(Leaf::Resolution(t)));
                     }
                 }
@@ -1362,14 +1365,11 @@ impl CalcNode {
     }
 
     /// Tries to simplify the expression into a `<resolution>` value.
-    fn to_resolution(&self) -> Result<Resolution, ()> {
-        let dppx = if let Leaf::Resolution(resolution) = self.resolve()? {
-            resolution.dppx()
-        } else {
-            return Err(());
-        };
-
-        Ok(Resolution::from_dppx_calc(dppx))
+    fn to_resolution(&self) -> Result<ResolutionDimension, ()> {
+        match self.resolve()? {
+            Leaf::Resolution(resolution) => Ok(resolution),
+            _ => Err(()),
+        }
     }
 
     /// Tries to simplify this expression into an angle dimension.
@@ -1468,13 +1468,7 @@ impl CalcNode {
         input: &mut Parser<'i, 't>,
         function: MathFunction,
     ) -> Result<Self, ParseError<'i>> {
-        Self::parse(
-            context,
-            input,
-            function,
-            AllowParse::new(CalcUnits::PERCENTAGE),
-        )?
-        .require_unit(input, CalcUnits::PERCENTAGE)
+        Self::parse_typed_node(context, input, function, CalcUnits::PERCENTAGE)
     }
 
     /// Convenience parsing function for `<length>`.
@@ -1585,6 +1579,13 @@ impl CalcNode {
         self.resolve_contextual_leaves(context)
             .to_time()
             .map(|time| time.seconds())
+    }
+
+    /// Resolves a resolution calculation in its element context.
+    pub fn resolve_resolution(&self, context: &Context) -> Result<CSSFloat, ()> {
+        self.resolve_contextual_leaves(context)
+            .to_resolution()
+            .map(|resolution| resolution.dppx())
     }
 
     /// Resolve a `<number>` calculation after converting context-dependent
@@ -1702,14 +1703,8 @@ impl CalcNode {
         input: &mut Parser<'i, 't>,
         function: MathFunction,
     ) -> Result<Resolution, ParseError<'i>> {
-        Self::parse(
-            context,
-            input,
-            function,
-            AllowParse::new(CalcUnits::RESOLUTION),
-        )?
-        .to_resolution()
-        .map_err(|()| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
+        Self::parse_typed_node(context, input, function, CalcUnits::RESOLUTION)
+            .map(Resolution::from_calc_node)
     }
 }
 
@@ -1725,6 +1720,7 @@ mod tree_counting_tests {
     use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
     use crate::values::computed::font::GenericFontFamily;
     use crate::values::computed::{CSSPixelLength, Length, ToComputedValue};
+    use crate::values::specified;
     use cssparser::{Parser, ParserInput};
     use euclid::{Scale, Size2D};
     use style_traits::ParsingMode;
@@ -1805,6 +1801,47 @@ mod tree_counting_tests {
     #[test]
     fn percentage_sign_resolves_contextual_lengths_before_multiplication() {
         assert_eq!(compute_percentage("calc(sign(20rem - 20px) * 180%)"), 1.8,);
+    }
+
+    #[test]
+    fn resolution_calculations_retain_context_until_computation() {
+        for (css, expected, dppx) in [
+            (
+                "calc(1dppx * sibling-index())",
+                "calc(1dppx * sibling-index())",
+                None,
+            ),
+            (
+                "calc(1dppx * sign(1em - 10px))",
+                "calc(1dppx * sign(1em - 10px))",
+                Some(1.0),
+            ),
+            (
+                "calc(1dppx * sign(1em - 10000px))",
+                "calc(1dppx * sign(1em - 10000px))",
+                Some(0.0),
+            ),
+            ("96dpi", "96dpi", Some(1.0)),
+            ("calc(96dpi)", "calc(1dppx)", Some(1.0)),
+            (
+                "calc(infinity * 1dppx)",
+                "calc(infinity * 1dppx)",
+                Some(f32::MAX),
+            ),
+        ] {
+            let mut input = ParserInput::new(css);
+            let resolution = Parser::new(&mut input)
+                .parse_entirely(|input| Resolution::parse(&context(), input))
+                .unwrap_or_else(|_| panic!("{css} must parse"));
+            assert_eq!(resolution.to_css_string(), expected);
+            if let Some(dppx) = dppx {
+                assert_eq!(
+                    with_computed_context(|context| resolution.to_computed_value(context).dppx()),
+                    dppx,
+                    "{css}"
+                );
+            }
+        }
     }
 
     #[test]

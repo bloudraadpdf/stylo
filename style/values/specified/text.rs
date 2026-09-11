@@ -15,7 +15,7 @@ use crate::values::generics::text::{
     GenericTextDecorationLength, GenericTextIndent, GenericTextSizeAdjust,
 };
 use crate::values::generics::NumberOrAuto;
-use crate::values::specified::length::{Length, LengthPercentage};
+use crate::values::specified::length::LengthPercentage;
 use crate::values::specified::{AllowQuirks, Integer, NonNegativePercentage, Number};
 use crate::Zero;
 use cssparser::{match_ignore_ascii_case, Parser};
@@ -231,6 +231,70 @@ mod tests {
 
     fn parse_initial_letter(css: &str) -> InitialLetter {
         parse_value(css).expect("initial-letter value should parse")
+    }
+
+    #[test]
+    fn text_autospace_accepts_punctuation_and_exclusive_spacing_modes() {
+        for (css, expected) in [
+            ("punctuation", "punctuation"),
+            (
+                "replace punctuation ideograph-alpha",
+                "ideograph-alpha punctuation replace",
+            ),
+            ("insert ideograph-numeric", "ideograph-numeric insert"),
+        ] {
+            let value = parse_value::<TextAutospace>(css).expect(css);
+            assert_eq!(value.to_css_string(), expected);
+        }
+        for css in [
+            "insert replace",
+            "ideograph-alpha insert replace",
+            "punctuation normal",
+        ] {
+            assert!(parse_value::<TextAutospace>(css).is_err(), "{css}");
+        }
+    }
+
+    #[test]
+    fn text_alignment_longhands_accept_match_parent() {
+        assert_eq!(
+            parse_value::<TextAlign>("match-parent")
+                .unwrap()
+                .to_css_string(),
+            "match-parent"
+        );
+        assert_eq!(
+            parse_value::<TextAlignLast>("match-parent")
+                .unwrap()
+                .to_css_string(),
+            "match-parent"
+        );
+    }
+
+    #[test]
+    fn decoration_insets_retain_signed_lengths_and_percentages() {
+        for (css, expected) in [
+            ("10% -20%", "10% -20%"),
+            ("-1px -1px", "-1px"),
+            ("auto", "auto"),
+        ] {
+            assert_eq!(
+                parse_value::<TextDecorationInset>(css)
+                    .expect(css)
+                    .to_css_string(),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn word_break_accepts_manual_phrase_and_legacy_wrapping() {
+        for css in ["manual", "auto-phrase", "break-word"] {
+            assert_eq!(
+                parse_value::<WordBreak>(css).expect(css).to_css_string(),
+                css
+            );
+        }
     }
 
     #[test]
@@ -575,7 +639,7 @@ impl TextTransform {
     }
 }
 
-/// Specified and computed value of text-align-last.
+/// Resolved alignment of the last line.
 #[derive(
     Clone,
     Copy,
@@ -595,7 +659,7 @@ impl TextTransform {
 )]
 #[allow(missing_docs)]
 #[repr(u8)]
-pub enum TextAlignLast {
+pub enum TextAlignLastKeyword {
     Auto,
     Start,
     End,
@@ -603,6 +667,70 @@ pub enum TextAlignLast {
     Right,
     Center,
     Justify,
+}
+
+/// Specified value of text-align-last.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToShmem,
+    ToTyped,
+)]
+pub enum TextAlignLast {
+    /// A line alignment keyword.
+    Keyword(TextAlignLastKeyword),
+    /// Alignment inherited against the parent's direction.
+    MatchParent,
+}
+
+impl ToComputedValue for TextAlignLast {
+    type ComputedValue = computed::text::TextAlignLast;
+
+    fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
+        use TextAlignLastKeyword as K;
+        let keyword = match *self {
+            Self::Keyword(keyword) => return Self::ComputedValue::new(keyword, false),
+            Self::MatchParent if context.builder.is_root_element => K::Start,
+            Self::MatchParent => {
+                let inherited = context.builder.get_parent_inherited_text();
+                let parent = match inherited.clone_text_align_last().keyword() {
+                    K::Auto => match inherited.clone_text_align_all() {
+                        TextAlignKeyword::Start | TextAlignKeyword::Justify => K::Start,
+                        TextAlignKeyword::End => K::End,
+                        TextAlignKeyword::Left | TextAlignKeyword::MozLeft => K::Left,
+                        TextAlignKeyword::Right | TextAlignKeyword::MozRight => K::Right,
+                        TextAlignKeyword::Center | TextAlignKeyword::MozCenter => K::Center,
+                    },
+                    keyword => keyword,
+                };
+                match parent {
+                    K::Start | K::End => {
+                        if (parent == K::Start)
+                            == context.builder.inherited_writing_mode().is_bidi_ltr()
+                        {
+                            K::Left
+                        } else {
+                            K::Right
+                        }
+                    },
+                    _ => parent,
+                }
+            },
+        };
+        Self::ComputedValue::new(keyword, true)
+    }
+
+    fn from_computed_value(computed: &Self::ComputedValue) -> Self {
+        Self::Keyword(computed.keyword())
+    }
 }
 
 /// Specified value of text-align keyword value.
@@ -660,7 +788,6 @@ pub enum TextAlign {
     Keyword(TextAlignKeyword),
     /// `match-parent` value of text-align property. It has a different handling
     /// unlike other keywords.
-    #[cfg(feature = "gecko")]
     MatchParent,
     /// This is how we implement the following HTML behavior from
     /// https://html.spec.whatwg.org/#tables-2:
@@ -685,7 +812,6 @@ impl ToComputedValue for TextAlign {
     fn to_computed_value(&self, _context: &Context) -> Self::ComputedValue {
         match *self {
             TextAlign::Keyword(key) => key,
-            #[cfg(feature = "gecko")]
             TextAlign::MatchParent => {
                 // on the root <html> element we should still respect the dir
                 // but the parent dir of that element is LTR even if it's <html dir=rtl>
@@ -984,11 +1110,12 @@ pub enum WordBreak {
     Normal,
     BreakAll,
     KeepAll,
+    Manual,
+    AutoPhrase,
     /// The break-word value, needed for compat.
     ///
     /// Specifying `word-break: break-word` makes `overflow-wrap` behave as
     /// `anywhere`, and `word-break` behave like `normal`.
-    #[cfg(feature = "gecko")]
     BreakWord,
 }
 
@@ -1376,7 +1503,7 @@ impl TextDecorationLength {
 }
 
 /// Implements type for `text-decoration-inset` property
-pub type TextDecorationInset = GenericTextDecorationInset<Length>;
+pub type TextDecorationInset = GenericTextDecorationInset<LengthPercentage>;
 
 impl TextDecorationInset {
     /// `Auto` value.
@@ -1397,8 +1524,8 @@ impl Parse for TextDecorationInset {
         ctx: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if let Ok(start) = input.try_parse(|i| Length::parse(ctx, i)) {
-            let end = input.try_parse(|i| Length::parse(ctx, i));
+        if let Ok(start) = input.try_parse(|i| LengthPercentage::parse(ctx, i)) {
+            let end = input.try_parse(|i| LengthPercentage::parse(ctx, i));
             let end = end.unwrap_or_else(|_| start.clone());
             return Ok(TextDecorationInset::Length { start, end });
         }
@@ -1578,7 +1705,6 @@ impl SpecifiedValueInfo for RubyPosition {
 ///
 /// https://drafts.csswg.org/css-text-4/#text-autospace-property
 ///
-/// Bug 1980111: 'replace' value is not supported yet.
 #[derive(
     Clone,
     Copy,
@@ -1597,11 +1723,8 @@ impl SpecifiedValueInfo for RubyPosition {
 )]
 #[css(bitflags(
     single = "normal,auto,no-autospace",
-    // Bug 1980111: add 'replace' to 'mixed' in the future so that it parses correctly.
-    // Bug 1986500: add 'punctuation' to 'mixed' in the future so that it parses correctly.
-    mixed = "ideograph-alpha,ideograph-numeric,insert",
-    // Bug 1980111: Uncomment 'validate_mixed' to support 'replace' value.
-    // validate_mixed = "Self::validate_mixed_flags",
+    mixed = "ideograph-alpha,ideograph-numeric,punctuation,insert,replace",
+    validate_mixed = "Self::validate_mixed_flags",
 ))]
 #[repr(C)]
 pub struct TextAutospace(u8);
@@ -1622,26 +1745,19 @@ bitflags! {
         /// 1/8ic space between ideographic characters and non-ideographic decimal numerals.
         const IDEOGRAPH_NUMERIC = 1 << 3;
 
-        /* Bug 1986500: Uncomment the following to support the 'punctuation' value.
         /// Apply special spacing between letters and punctuation (French).
         const PUNCTUATION = 1 << 4;
-        */
 
         /// Auto-spacing is only inserted if no space character is present in the text.
         const INSERT = 1 << 5;
 
-        /* Bug 1980111: Uncomment the following to support 'replace' value.
         /// Auto-spacing may replace an existing U+0020 space with custom space.
         const REPLACE = 1 << 6;
-        */
     }
 }
 
-/* Bug 1980111: Uncomment the following to support 'replace' value.
 impl TextAutospace {
     fn validate_mixed_flags(&self) -> bool {
-        // It's not valid to have both INSERT and REPLACE set.
         !self.contains(TextAutospace::INSERT | TextAutospace::REPLACE)
     }
 }
-*/

@@ -4,8 +4,8 @@ use style::{
     properties::PropertyDeclarationBlock,
     shared_lock::{SharedRwLockReadGuard, ToCssWithGuard},
     stylesheets::{
-        CssRule, CssRules, FontPaletteValuesRule, MarginRule, Origin, PageRule,
         container_rule::{ContainerCondition, ContainerConditions},
+        CssRule, CssRules, FontPaletteValuesRule, MarginRule, Origin, PageRule,
     },
 };
 use style_traits::{CssWriter, ToCss};
@@ -17,11 +17,11 @@ mod keyframes;
 mod native_common_properties;
 mod source;
 pub use font_feature_values::{font_feature_values_node, replace_font_feature_family};
-use keyframes::{CanonicalKeyframeRule, CanonicalKeyframesRule};
 pub use keyframes::{
     parse_keyframe_rule, parse_keyframe_selector, replace_keyframe_declarations,
     replace_keyframe_selector, replace_keyframes_name, serialize_keyframe_selector,
 };
+use keyframes::{CanonicalKeyframeRule, CanonicalKeyframesRule};
 pub use source::{forgiving_rule_sources, stylesheet_parser_input};
 
 #[derive(Clone, Copy, Debug)]
@@ -2662,7 +2662,7 @@ mod tests {
             },
             PropertyDeclaration::Isolation(value) => PropertyDeclaration::Isolation(*value),
             PropertyDeclaration::JustifyItems(value) => PropertyDeclaration::JustifyItems(*value),
-            PropertyDeclaration::LeadingTrim(value) => PropertyDeclaration::LeadingTrim(*value),
+            PropertyDeclaration::TextBoxTrim(value) => PropertyDeclaration::TextBoxTrim(*value),
             PropertyDeclaration::LineBreak(value) => PropertyDeclaration::LineBreak(*value),
             PropertyDeclaration::LineGrid(value) => PropertyDeclaration::LineGrid(*value),
             PropertyDeclaration::ListStylePosition(value) => {
@@ -2715,6 +2715,12 @@ mod tests {
             PropertyDeclaration::RuleOverlap(value) => PropertyDeclaration::RuleOverlap(*value),
             PropertyDeclaration::ScrollBehavior(value) => {
                 PropertyDeclaration::ScrollBehavior(*value)
+            },
+            PropertyDeclaration::ScrollAxisLock(value) => {
+                PropertyDeclaration::ScrollAxisLock(*value)
+            },
+            PropertyDeclaration::ScrollTargetGroup(value) => {
+                PropertyDeclaration::ScrollTargetGroup(*value)
             },
             PropertyDeclaration::ScrollSnapAlign(value) => {
                 PropertyDeclaration::ScrollSnapAlign(*value)
@@ -2845,16 +2851,28 @@ mod tests {
                 PropertyDeclaration::FontSynthesisWeight(*value)
             },
             PropertyDeclaration::CornerBottomLeftShape(value) => {
-                PropertyDeclaration::CornerBottomLeftShape(*value)
+                PropertyDeclaration::CornerBottomLeftShape(value.clone())
             },
             PropertyDeclaration::CornerBottomRightShape(value) => {
-                PropertyDeclaration::CornerBottomRightShape(*value)
+                PropertyDeclaration::CornerBottomRightShape(value.clone())
             },
             PropertyDeclaration::CornerTopLeftShape(value) => {
-                PropertyDeclaration::CornerTopLeftShape(*value)
+                PropertyDeclaration::CornerTopLeftShape(value.clone())
             },
             PropertyDeclaration::CornerTopRightShape(value) => {
-                PropertyDeclaration::CornerTopRightShape(*value)
+                PropertyDeclaration::CornerTopRightShape(value.clone())
+            },
+            PropertyDeclaration::CornerStartStartShape(value) => {
+                PropertyDeclaration::CornerStartStartShape(value.clone())
+            },
+            PropertyDeclaration::CornerStartEndShape(value) => {
+                PropertyDeclaration::CornerStartEndShape(value.clone())
+            },
+            PropertyDeclaration::CornerEndStartShape(value) => {
+                PropertyDeclaration::CornerEndStartShape(value.clone())
+            },
+            PropertyDeclaration::CornerEndEndShape(value) => {
+                PropertyDeclaration::CornerEndEndShape(value.clone())
             },
             PropertyDeclaration::OverflowBlock(value) => PropertyDeclaration::OverflowBlock(*value),
             PropertyDeclaration::OverflowInline(value) => {
@@ -3562,9 +3580,7 @@ mod tests {
             PropertyDeclaration::FontSizeAdjust(value) => {
                 PropertyDeclaration::FontSizeAdjust(value.clone())
             },
-            PropertyDeclaration::FontStretch(value) => {
-                PropertyDeclaration::FontStretch(value.clone())
-            },
+            PropertyDeclaration::FontWidth(value) => PropertyDeclaration::FontWidth(value.clone()),
             PropertyDeclaration::FontVariantAlternates(value) => {
                 PropertyDeclaration::FontVariantAlternates(value.clone())
             },
@@ -3689,6 +3705,9 @@ mod tests {
             PropertyDeclaration::TextDecorationThickness(value) => {
                 PropertyDeclaration::TextDecorationThickness(value.clone())
             },
+            PropertyDeclaration::TextDecorationInset(value) => {
+                PropertyDeclaration::TextDecorationInset(value.clone())
+            },
             PropertyDeclaration::TextDecorationTrim(value) => {
                 PropertyDeclaration::TextDecorationTrim(value.clone())
             },
@@ -3744,9 +3763,6 @@ mod tests {
             },
             PropertyDeclaration::WebkitBoxOrient(value) => {
                 PropertyDeclaration::WebkitBoxOrient(*value)
-            },
-            PropertyDeclaration::WebkitLineClamp(value) => {
-                PropertyDeclaration::WebkitLineClamp(value.clone())
             },
             PropertyDeclaration::WillChange(value) => {
                 PropertyDeclaration::WillChange(value.clone())
@@ -4827,11 +4843,9 @@ mod tests {
         )
         .unwrap()
         .to_rule_node();
-        assert!(
-            rule.payload().nested()[0]
-                .serialization()
-                .contains("old: 1;")
-        );
+        assert!(rule.payload().nested()[0]
+            .serialization()
+            .contains("old: 1;"));
     }
 
     #[test]
@@ -4851,35 +4865,27 @@ mod tests {
             .declaration_block()
             .expect("the font-face declaration block remains typed")
             .declarations();
-        assert!(
-            declarations
-                .iter()
-                .any(|declaration| declaration.name() == "unicode-range"
-                    && declaration.value() == "U+A0-AF")
-        );
-        assert!(
-            declarations
-                .iter()
-                .any(|declaration| declaration.name() == "src")
-        );
-        assert!(
-            super::mutate_non_style_rule_declaration(
-                &updated,
-                "unicode-range",
-                "u+efg",
-                crate::declaration_parser::CssomDeclarationPriority::Normal,
-            )
-            .is_none()
-        );
-        assert!(
-            super::mutate_non_style_rule_declaration(
-                &updated,
-                "unicode-range",
-                "U+20; src: url(injected.ttf)",
-                crate::declaration_parser::CssomDeclarationPriority::Normal,
-            )
-            .is_none()
-        );
+        assert!(declarations
+            .iter()
+            .any(|declaration| declaration.name() == "unicode-range"
+                && declaration.value() == "U+A0-AF"));
+        assert!(declarations
+            .iter()
+            .any(|declaration| declaration.name() == "src"));
+        assert!(super::mutate_non_style_rule_declaration(
+            &updated,
+            "unicode-range",
+            "u+efg",
+            crate::declaration_parser::CssomDeclarationPriority::Normal,
+        )
+        .is_none());
+        assert!(super::mutate_non_style_rule_declaration(
+            &updated,
+            "unicode-range",
+            "U+20; src: url(injected.ttf)",
+            crate::declaration_parser::CssomDeclarationPriority::Normal,
+        )
+        .is_none());
         let removed = super::mutate_non_style_rule_declaration(
             &updated,
             "unicode-range",
@@ -4892,16 +4898,12 @@ mod tests {
             .declaration_block()
             .expect("the font-face declaration block remains typed")
             .declarations();
-        assert!(
-            !declarations
-                .iter()
-                .any(|declaration| declaration.name() == "unicode-range")
-        );
-        assert!(
-            declarations
-                .iter()
-                .any(|declaration| declaration.name() == "src")
-        );
+        assert!(!declarations
+            .iter()
+            .any(|declaration| declaration.name() == "unicode-range"));
+        assert!(declarations
+            .iter()
+            .any(|declaration| declaration.name() == "src"));
     }
 
     #[test]
@@ -5126,14 +5128,12 @@ mod tests {
             crate::declaration_parser::CssomDeclarationPriority::Normal,
         )
         .expect("removing a shorthand keeps a valid page rule");
-        assert!(
-            removed
-                .payload()
-                .declaration_block()
-                .expect("the page declaration block remains typed")
-                .declarations()
-                .is_empty()
-        );
+        assert!(removed
+            .payload()
+            .declaration_block()
+            .expect("the page declaration block remains typed")
+            .declarations()
+            .is_empty());
         assert!(rule.with_page_selector_text("1").is_none());
         assert!(rule.with_page_selector_text("--a").is_none());
         assert_eq!(
@@ -5422,10 +5422,13 @@ mod tests {
                 && declaration.value() == "green"
                 && declaration.important()
         }));
-        assert!(
-            super::mutate_non_style_rule_declaration(&changed, "color", "invalid-colour", Normal)
-                .is_none()
-        );
+        assert!(super::mutate_non_style_rule_declaration(
+            &changed,
+            "color",
+            "invalid-colour",
+            Normal
+        )
+        .is_none());
 
         let removed = super::mutate_non_style_rule_declaration(&changed, "color", "", Normal)
             .expect("nested declaration removal must use the same grammar");

@@ -234,6 +234,39 @@ pub enum TextDecorationSkipKind {
     BoxDecoration,
 }
 
+/// Spaces excluded from a text decoration.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[css(bitflags(single = "none,all", mixed = "start,end"))]
+#[repr(C)]
+pub struct TextDecorationSkipSpaces(u8);
+
+bitflags! {
+    impl TextDecorationSkipSpaces: u8 {
+        /// No spaces are excluded.
+        const NONE = 0;
+        /// Every space is excluded.
+        const ALL = 1;
+        /// Leading spaces are excluded.
+        const START = 1 << 1;
+        /// Trailing spaces are excluded.
+        const END = 1 << 2;
+    }
+}
+
 impl TextDecorationSkipKind {
     /// `none` value.
     #[inline]

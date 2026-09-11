@@ -477,70 +477,49 @@ impl<L: ToCss> ToCss for ContainIntrinsicSize<L> {
     }
 }
 
-/// Note that we only implement -webkit-line-clamp as a single, longhand
-/// property for now, but the spec defines line-clamp as a shorthand for
-/// separate max-lines, block-ellipsis, and continue properties.
-///
-/// https://drafts.csswg.org/css-overflow-3/#line-clamp
+/// A maximum line count, optionally limited by the available block size.
 #[derive(
     Clone,
-    ComputeSquaredDistance,
     Copy,
     Debug,
     MallocSizeOf,
     PartialEq,
     SpecifiedValueInfo,
     ToComputedValue,
-    ToAnimatedValue,
-    ToAnimatedZero,
     ToResolvedValue,
     ToShmem,
     ToTyped,
 )]
-#[repr(transparent)]
-#[value_info(other_values = "none")]
-pub struct GenericLineClamp<I>(I);
-
-pub use self::GenericLineClamp as LineClamp;
-
-impl<I: Zero> LineClamp<I> {
-    /// Returns the `none` value.
-    pub fn none() -> Self {
-        Self(crate::Zero::zero())
-    }
-
-    /// Returns whether we're the `none` value.
-    pub fn is_none(&self) -> bool {
-        self.0.is_zero()
-    }
-
-    /// Returns the private zero-or-positive payload to invariant-preserving
-    /// code inside Stylo.
-    #[inline]
-    pub(crate) fn value(&self) -> &I {
-        &self.0
-    }
+#[repr(C, u8)]
+pub enum GenericMaxLines<I> {
+    /// Only the available block size limits the line count.
+    Auto,
+    /// A specified positive line count.
+    Lines(I),
+    /// Both the line count and available block size limit the content.
+    LinesAuto(I),
 }
 
-impl<I> LineClamp<I> {
-    /// Constructs a non-`none` line clamp from a parser-proven positive value.
-    #[inline]
-    pub(crate) fn from_positive(
-        value: crate::values::generics::GreaterThanOrEqualToOne<I>,
-    ) -> Self {
-        Self(value.0)
-    }
-}
-
-impl<I: Zero + ToCss> ToCss for LineClamp<I> {
-    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
-    where
-        W: Write,
-    {
-        if self.is_none() {
-            return dest.write_str("none");
+impl<I> GenericMaxLines<I> {
+    /// Returns the explicit line count, if present.
+    pub fn lines(&self) -> Option<&I> {
+        match self {
+            Self::Auto => None,
+            Self::Lines(count) | Self::LinesAuto(count) => Some(count),
         }
-        self.0.to_css(dest)
+    }
+}
+
+impl<I: ToCss> ToCss for GenericMaxLines<I> {
+    fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        match self {
+            Self::Auto => dest.write_str("auto"),
+            Self::Lines(count) => count.to_css(dest),
+            Self::LinesAuto(count) => {
+                count.to_css(dest)?;
+                dest.write_str(" auto")
+            },
+        }
     }
 }
 

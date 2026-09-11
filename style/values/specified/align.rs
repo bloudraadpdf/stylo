@@ -58,6 +58,10 @@ bitflags! {
         const SPACE_EVENLY = 16;
         /// `anchor-center`
         const ANCHOR_CENTER = 17;
+        /// `flow-start`
+        const FLOW_START = 18;
+        /// `flow-end`
+        const FLOW_END = 19;
 
         // Additional flags stored in the upper bits:
         /// 'legacy' (mutually exclusive w. SAFE & UNSAFE)
@@ -122,6 +126,8 @@ impl ToCss for AlignFlags {
             AlignFlags::END => "end",
             AlignFlags::FLEX_START => "flex-start",
             AlignFlags::FLEX_END => "flex-end",
+            AlignFlags::FLOW_START => "flow-start",
+            AlignFlags::FLOW_END => "flow-end",
             AlignFlags::CENTER => "center",
             AlignFlags::LEFT => "left",
             AlignFlags::RIGHT => "right",
@@ -260,6 +266,8 @@ impl ContentDistribution {
             "end" => AlignFlags::END,
             "flex-start" => AlignFlags::FLEX_START,
             "flex-end" => AlignFlags::FLEX_END,
+            "flow-start" => AlignFlags::FLOW_START,
+            "flow-end" => AlignFlags::FLOW_END,
             "center" => AlignFlags::CENTER,
             "left" if axis == AxisDirection::Inline => AlignFlags::LEFT,
             "right" if axis == AxisDirection::Inline => AlignFlags::RIGHT,
@@ -277,7 +285,7 @@ impl SpecifiedValueInfo for ContentDistribution {
         list_baseline_keywords(f); // block-axis only
         list_content_distribution_keywords(f);
         list_overflow_position_keywords(f);
-        f(&["start", "end", "flex-start", "flex-end", "center"]);
+        f(&["start", "end", "flex-start", "flex-end", "flow-start", "flow-end", "center"]);
         f(&["left", "right"]); // inline-axis only
     }
 }
@@ -381,6 +389,8 @@ impl SelfAlignment {
             AlignFlags::END => AlignFlags::START,
             AlignFlags::FLEX_START => AlignFlags::FLEX_END,
             AlignFlags::FLEX_END => AlignFlags::FLEX_START,
+            AlignFlags::FLOW_START => AlignFlags::FLOW_END,
+            AlignFlags::FLOW_END => AlignFlags::FLOW_START,
             AlignFlags::LEFT => AlignFlags::RIGHT,
             AlignFlags::RIGHT => AlignFlags::LEFT,
             AlignFlags::SELF_START => AlignFlags::SELF_END,
@@ -646,6 +656,8 @@ fn parse_self_position<'i, 't>(
         "end" => AlignFlags::END,
         "flex-start" => AlignFlags::FLEX_START,
         "flex-end" => AlignFlags::FLEX_END,
+        "flow-start" => AlignFlags::FLOW_START,
+        "flow-end" => AlignFlags::FLOW_END,
         "center" => AlignFlags::CENTER,
         "self-start" => AlignFlags::SELF_START,
         "self-end" => AlignFlags::SELF_END,
@@ -661,6 +673,8 @@ fn list_self_position_keywords(f: KeywordsCollectFn, axis: AxisDirection) {
         "end",
         "flex-start",
         "flex-end",
+        "flow-start",
+        "flow-end",
         "center",
         "self-start",
         "self-end",

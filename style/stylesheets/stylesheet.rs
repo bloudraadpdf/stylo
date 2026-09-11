@@ -2326,7 +2326,7 @@ mod tests {
             expansion,
             [
                 ("block-ellipsis", r#""CUSTOM""#.to_owned()),
-                ("continue", "discard".to_owned()),
+                ("continue", "collapse".to_owned()),
                 ("max-lines", "3".to_owned()),
             ]
         );
@@ -2335,6 +2335,64 @@ mod tests {
             3,
             "no independent line-clamp declaration may survive"
         );
+    }
+
+    #[test]
+    fn servo_text_spacing_shorthand_resets_and_expands_native_longhands() {
+        for (css, trim, autospace) in [
+            ("none", "space-all", "no-autospace"),
+            ("normal", "normal", "normal"),
+            ("auto", "auto", "auto"),
+            ("no-autospace trim-start", "trim-start", "no-autospace"),
+        ] {
+            let declarations = parsed_declarations(
+                &format!(".test {{ text-spacing: {css}; }}"),
+                |declaration| match declaration {
+                    PropertyDeclaration::TextSpacingTrim(value) => {
+                        ("text-spacing-trim", value.to_css_string())
+                    },
+                    PropertyDeclaration::TextAutospace(value) => {
+                        ("text-autospace", value.to_css_string())
+                    },
+                    _ => panic!("unexpected shorthand member"),
+                },
+            );
+            assert_eq!(
+                declarations,
+                vec![
+                    ("text-spacing-trim", trim.to_owned(), Importance::Normal),
+                    ("text-autospace", autospace.to_owned(), Importance::Normal),
+                ],
+                "{css}"
+            );
+        }
+    }
+
+    #[test]
+    fn servo_text_align_shorthand_accepts_one_alignment_and_resets_last_line() {
+        for css in ["match-parent", "justify-all", "center"] {
+            assert_property_roundtrip("text-align", css);
+            assert_parsed_declaration_count(&format!("p {{ text-align: {css}; }}"), 2);
+        }
+        for css in [
+            "start end",
+            "left right",
+            "center justify",
+            "justify-all match-parent",
+        ] {
+            assert_parsed_declaration_count(&format!("p {{ text-align: {css}; }}"), 0);
+        }
+    }
+
+    #[test]
+    fn servo_decoration_inset_and_space_skipping_use_their_own_grammars() {
+        assert_property_roundtrip("text-decoration-inset", "10% -20%");
+        for css in ["none", "all", "start", "end", "start end"] {
+            assert_property_roundtrip("text-decoration-skip-spaces", css);
+        }
+        for css in ["auto", "edges", "objects", "all start", "none end"] {
+            assert_parsed_declaration_count(&format!("p {{ text-decoration-skip-spaces: {css}; }}"), 0);
+        }
     }
 
     #[test]
@@ -2358,9 +2416,7 @@ mod tests {
                 .map_err(|_| ())
         }
 
-        fn parse_legacy_line_clamp(
-            css: &str,
-        ) -> Result<crate::values::specified::box_::LineClamp, ()> {
+        fn parse_legacy_line_clamp(css: &str) -> Result<crate::values::specified::MaxLines, ()> {
             let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
             let context = ParserContext::new(
                 Origin::Author,
@@ -2376,7 +2432,8 @@ mod tests {
             let mut parser = Parser::new(&mut input);
             parser
                 .parse_entirely(|input| {
-                    crate::values::specified::box_::LineClamp::parse(&context, input)
+                    crate::properties::shorthands::_webkit_line_clamp::parse_value(&context, input)
+                        .map(|value| value.max_lines)
                 })
                 .map_err(|_| ())
         }
@@ -2488,7 +2545,7 @@ mod tests {
 
     #[test]
     fn text_box_trim_and_edge_have_their_specified_inheritance() {
-        assert!(!LonghandId::LeadingTrim.inherited());
+        assert!(!LonghandId::TextBoxTrim.inherited());
         assert!(LonghandId::TextBoxEdge.inherited());
     }
 
@@ -2509,8 +2566,8 @@ mod tests {
         let mut expanded = block
             .declaration_importance_iter()
             .filter_map(|(declaration, _)| match declaration {
-                PropertyDeclaration::LeadingTrim(value) => {
-                    Some(("leading-trim", value.to_css_string()))
+                PropertyDeclaration::TextBoxTrim(value) => {
+                    Some(("text-box-trim", value.to_css_string()))
                 },
                 PropertyDeclaration::TextBoxEdge(value) => {
                     Some(("text-box-edge", value.to_css_string()))
@@ -2523,8 +2580,8 @@ mod tests {
         assert_eq!(
             expanded,
             [
-                ("leading-trim", "both".to_owned()),
-                ("text-box-edge", "cap alphabetic".to_owned())
+                ("text-box-edge", "cap alphabetic".to_owned()),
+                ("text-box-trim", "trim-both".to_owned())
             ],
         );
     }

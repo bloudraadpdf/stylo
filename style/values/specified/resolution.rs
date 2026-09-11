@@ -8,116 +8,128 @@
 
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
+use crate::values::computed::{Context, ToComputedValue};
 use crate::values::specified::CalcNode;
 use crate::values::CSSFloat;
 use cssparser::{match_ignore_ascii_case, Parser, Token};
 use std::fmt::{self, Write};
 use style_traits::{CssWriter, ParseError, StyleParseErrorKind, ToCss};
 
-/// A specified resolution.
-#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToShmem)]
-pub struct Resolution {
+/// A literal resolution dimension.
+#[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToShmem)]
+pub struct ResolutionDimension {
     value: CSSFloat,
     unit: ResolutionUnit,
-    was_calc: bool,
 }
 
-#[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem)]
+#[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToShmem)]
 enum ResolutionUnit {
-    /// Dots per inch.
     Dpi,
-    /// An alias unit for dots per pixel.
     X,
-    /// Dots per pixel.
     Dppx,
-    /// Dots per centimeter.
     Dpcm,
 }
 
-impl ResolutionUnit {
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Dpi => "dpi",
-            Self::X => "x",
-            Self::Dppx => "dppx",
-            Self::Dpcm => "dpcm",
-        }
-    }
-}
-
-impl Resolution {
-    /// Returns a resolution value from dppx units.
+impl ResolutionDimension {
+    /// Creates a resolution in dots per pixel.
     pub fn from_dppx(value: CSSFloat) -> Self {
         Self {
             value,
             unit: ResolutionUnit::Dppx,
-            was_calc: false,
         }
     }
 
-    /// Returns a resolution value from dppx units.
-    pub fn from_x(value: CSSFloat) -> Self {
-        Self {
-            value,
-            unit: ResolutionUnit::X,
-            was_calc: false,
-        }
-    }
-
-    /// Returns a resolution value from dppx units.
-    pub fn from_dppx_calc(value: CSSFloat) -> Self {
-        Self {
-            value,
-            unit: ResolutionUnit::Dppx,
-            was_calc: true,
-        }
-    }
-
-    /// Convert this resolution value to dppx units.
-    pub fn dppx(&self) -> CSSFloat {
+    /// Converts this resolution to dots per pixel.
+    pub fn dppx(self) -> CSSFloat {
         match self.unit {
             ResolutionUnit::X | ResolutionUnit::Dppx => self.value,
-            _ => self.dpi() / 96.0,
+            ResolutionUnit::Dpi => self.value / 96.0,
+            ResolutionUnit::Dpcm => self.value * 2.54 / 96.0,
         }
     }
 
-    /// Convert this resolution value to dpi units.
-    pub fn dpi(&self) -> CSSFloat {
-        match self.unit {
-            ResolutionUnit::Dpi => self.value,
-            ResolutionUnit::X | ResolutionUnit::Dppx => self.value * 96.0,
-            ResolutionUnit::Dpcm => self.value * 2.54,
-        }
-    }
-
-    /// Parse a resolution given a value and unit.
-    pub fn parse_dimension<'i, 't>(value: CSSFloat, unit: &str) -> Result<Self, ()> {
-        let unit = match_ignore_ascii_case! { &unit,
+    /// Parses a literal resolution dimension.
+    pub fn parse_dimension(value: CSSFloat, unit: &str) -> Result<Self, ()> {
+        let unit = match_ignore_ascii_case! { unit,
             "dpi" => ResolutionUnit::Dpi,
             "dppx" => ResolutionUnit::Dppx,
             "dpcm" => ResolutionUnit::Dpcm,
             "x" => ResolutionUnit::X,
             _ => return Err(())
         };
-        Ok(Self {
+        Ok(Self { value, unit })
+    }
+}
+
+impl ToCss for ResolutionDimension {
+    fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        let unit = match self.unit {
+            ResolutionUnit::Dpi => "dpi",
+            ResolutionUnit::X => "x",
+            ResolutionUnit::Dppx => "dppx",
+            ResolutionUnit::Dpcm => "dpcm",
+        };
+        crate::values::serialize_specified_dimension(self.value, unit, false, dest)
+    }
+}
+
+/// A specified resolution, retained until its calculation context is available.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
+pub struct Resolution(ResolutionValue);
+
+impl style_traits::SpecifiedValueInfo for Resolution {}
+
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
+enum ResolutionValue {
+    Dimension(ResolutionDimension),
+    Calc(Box<CalcNode>),
+}
+
+impl Resolution {
+    /// Creates a resolution in dots per pixel.
+    pub fn from_dppx(value: CSSFloat) -> Self {
+        Self(ResolutionValue::Dimension(ResolutionDimension::from_dppx(
             value,
-            unit,
-            was_calc: false,
-        })
+        )))
+    }
+
+    /// Creates a resolution using the x unit.
+    pub fn from_x(value: CSSFloat) -> Self {
+        Self(ResolutionValue::Dimension(ResolutionDimension {
+            value,
+            unit: ResolutionUnit::X,
+        }))
+    }
+
+    pub(crate) fn from_calc_node(node: CalcNode) -> Self {
+        Self(ResolutionValue::Calc(Box::new(node)))
+    }
+}
+
+impl ToComputedValue for Resolution {
+    type ComputedValue = crate::values::computed::Resolution;
+
+    fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
+        let dppx = match &self.0 {
+            ResolutionValue::Dimension(value) => value.dppx(),
+            ResolutionValue::Calc(node) => node
+                .resolve_resolution(context)
+                .expect("a validated resolution calculation must resolve in its element context"),
+        };
+        Self::ComputedValue::from_dppx(crate::values::normalize(dppx).clamp(0.0, f32::MAX))
+    }
+
+    fn from_computed_value(computed: &Self::ComputedValue) -> Self {
+        Self::from_dppx(computed.dppx())
     }
 }
 
 impl ToCss for Resolution {
-    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
-    where
-        W: Write,
-    {
-        crate::values::serialize_specified_dimension(
-            self.value,
-            self.unit.as_str(),
-            self.was_calc,
-            dest,
-        )
+    fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        match &self.0 {
+            ResolutionValue::Dimension(value) => value.to_css(dest),
+            ResolutionValue::Calc(node) => node.to_css(dest),
+        }
     }
 }
 
@@ -130,13 +142,14 @@ impl Parse for Resolution {
         match *input.next()? {
             Token::Dimension {
                 value, ref unit, ..
-            } if value >= 0. => Self::parse_dimension(value, unit)
+            } if value >= 0. => ResolutionDimension::parse_dimension(value, unit)
+                .map(|value| Self(ResolutionValue::Dimension(value)))
                 .map_err(|()| location.new_custom_error(StyleParseErrorKind::UnspecifiedError)),
             Token::Function(ref name) => {
                 let function = CalcNode::math_function(context, name, location)?;
                 CalcNode::parse_resolution(context, input, function)
             },
-            ref t => return Err(location.new_unexpected_token_error(t.clone())),
+            ref token => Err(location.new_unexpected_token_error(token.clone())),
         }
     }
 }

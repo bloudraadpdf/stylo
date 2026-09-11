@@ -582,10 +582,7 @@ pub enum SpecifiedPropertyName {
 pub enum InlineCompatibilityProperty {
     FlowTolerance,
     GridLanesPack,
-    Continue,
     LegacyTextAlign,
-    LineClamp,
-    WebkitLineClamp,
     WebkitBoxDisplay,
 }
 
@@ -595,10 +592,7 @@ impl InlineCompatibilityProperty {
         match self {
             Self::FlowTolerance => "flow-tolerance",
             Self::GridLanesPack => "grid-lanes-pack",
-            Self::Continue => "continue",
             Self::LegacyTextAlign => "text-align",
-            Self::LineClamp => "line-clamp",
-            Self::WebkitLineClamp => "-webkit-line-clamp",
             Self::WebkitBoxDisplay => "display",
         }
     }
@@ -1129,6 +1123,12 @@ pub struct StyleState {
     stylesheets: stylesheet_graph::StyleGraph,
 }
 
+pub type StyleStateFork = (
+    StyleState,
+    Vec<(DeclarationHandle, DeclarationLease, StyleDomInstall)>,
+    Vec<(StyleSheetHandle, StyleSheetLease)>,
+);
+
 impl StyleState {
     #[must_use]
     pub fn new(document: StyleDocumentHandle) -> Self {
@@ -1451,14 +1451,7 @@ impl StyleState {
     pub fn fork(
         &self,
         document: StyleDocumentHandle,
-    ) -> Result<
-        (
-            Self,
-            Vec<(DeclarationHandle, DeclarationLease, StyleDomInstall)>,
-            Vec<(StyleSheetHandle, StyleSheetLease)>,
-        ),
-        StyleTransactionError,
-    > {
+    ) -> Result<StyleStateFork, StyleTransactionError> {
         let mut destination = Self::new(document);
         destination.imperative_registrations = self.imperative_registrations.clone();
         destination.imperative_registration_revision = self.imperative_registration_revision;

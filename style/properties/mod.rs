@@ -1202,16 +1202,22 @@ impl<'a> PropertyDeclarationId<'a> {
 }
 
 /// A set of all properties.
-#[derive(Clone, PartialEq, Default)]
+#[derive(Clone, PartialEq)]
 pub struct NonCustomPropertyIdSet {
-    storage: [u32; ((property_counts::NON_CUSTOM as usize) - 1 + 32) / 32],
+    storage: [u32; (property_counts::NON_CUSTOM as usize).div_ceil(32)],
+}
+
+impl Default for NonCustomPropertyIdSet {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl NonCustomPropertyIdSet {
     /// Creates an empty `NonCustomPropertyIdSet`.
     pub fn new() -> Self {
         Self {
-            storage: Default::default(),
+            storage: [0; (property_counts::NON_CUSTOM as usize).div_ceil(32)],
         }
     }
 

@@ -98,10 +98,12 @@ impl BorderImageSlice {
     }
 }
 
-/// https://drafts.csswg.org/css-backgrounds-3/#typedef-line-width
+/// https://drafts.csswg.org/css-borders-4/#typedef-line-width
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
 #[typed_value(derive_fields)]
 pub enum LineWidth {
+    /// `hairline`
+    Hairline,
     /// `thin`
     Thin,
     /// `medium`
@@ -130,6 +132,7 @@ impl LineWidth {
             return Ok(Self::Length(length));
         }
         Ok(try_match_ident_ignore_ascii_case! { input,
+            "hairline" => Self::Hairline,
             "thin" => Self::Thin,
             "medium" => Self::Medium,
             "thick" => Self::Thick,
@@ -152,6 +155,13 @@ impl ToComputedValue for LineWidth {
     #[inline]
     fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
         match *self {
+            Self::Hairline => {
+                let dppx = context
+                    .device()
+                    .device_pixel_ratio_ignoring_full_zoom()
+                    .get();
+                Au::from_f32_px(1.0 / dppx).min(Au::from_px(1))
+            },
             // https://drafts.csswg.org/css-backgrounds-3/#line-width
             Self::Thin => Au::from_px(1),
             Self::Medium => Au::from_px(3),

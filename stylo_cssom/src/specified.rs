@@ -99,15 +99,6 @@ fn project_inline_compatibility_declaration(
                 Vec::new()
             }
         },
-        Property::Compatibility(Compat::Continue) => {
-            project_continue_compatibility(&declaration.value, importance)
-        },
-        Property::Compatibility(Compat::LineClamp) => {
-            project_line_clamp_compatibility(&declaration.value, importance)
-        },
-        Property::Compatibility(Compat::WebkitLineClamp) => {
-            project_webkit_line_clamp_compatibility(&declaration.value, importance)
-        },
         Property::Compatibility(Compat::LegacyTextAlign) => vec![
             ("text-align".to_owned(), value.clone(), importance),
             (
@@ -198,183 +189,6 @@ fn project_inline_compatibility_declaration(
         Property::Custom(property) => one(property, value),
         Property::Vendor(_) => Vec::new(),
     }
-}
-
-fn project_continue_compatibility(
-    value: &stylo_cssom_model::SpecifiedStyleValue,
-    importance: stylo_cssom_model::Importance,
-) -> Vec<(String, String, stylo_cssom_model::Importance)> {
-    let Some(keyword) = projected_single_ident(value) else {
-        return Vec::new();
-    };
-    if !matches!(
-        keyword.to_ascii_lowercase().as_str(),
-        "auto"
-            | "collapse"
-            | "discard"
-            | "inherit"
-            | "initial"
-            | "revert"
-            | "revert-layer"
-            | "unset"
-    ) {
-        return Vec::new();
-    }
-    let lowered = if keyword.eq_ignore_ascii_case("collapse") {
-        "discard"
-    } else {
-        keyword
-    };
-    vec![
-        ("continue".to_owned(), lowered.to_owned(), importance),
-        (
-            crate::webkit_box_orient_rewrite::INTERNAL_CONTINUE_PROPERTY.to_owned(),
-            keyword.to_owned(),
-            importance,
-        ),
-    ]
-}
-
-fn project_webkit_line_clamp_compatibility(
-    value: &stylo_cssom_model::SpecifiedStyleValue,
-    importance: stylo_cssom_model::Importance,
-) -> Vec<(String, String, stylo_cssom_model::Importance)> {
-    let valid = projected_single_ident(value)
-        .is_some_and(|value| value.eq_ignore_ascii_case("none"))
-        || projected_single_positive_integer(value).is_some();
-    if !valid {
-        return Vec::new();
-    }
-    let value = projected_specified_style_value_text(value);
-    vec![
-        ("-webkit-line-clamp".to_owned(), value.clone(), importance),
-        ("max-lines".to_owned(), value, importance),
-        ("continue".to_owned(), "auto".to_owned(), importance),
-        ("block-ellipsis".to_owned(), "auto".to_owned(), importance),
-        (
-            crate::webkit_box_orient_rewrite::INTERNAL_CONTINUE_PROPERTY.to_owned(),
-            "auto".to_owned(),
-            importance,
-        ),
-    ]
-}
-
-fn project_line_clamp_compatibility(
-    value: &stylo_cssom_model::SpecifiedStyleValue,
-    importance: stylo_cssom_model::Importance,
-) -> Vec<(String, String, stylo_cssom_model::Importance)> {
-    use stylo_cssom_model::SpecifiedComponentValue as Component;
-
-    let Some(components) = projected_components(value) else {
-        return Vec::new();
-    };
-    let authored = projected_specified_style_value_text(value);
-    let output = |property: &str, value: &str| (property.to_owned(), value.to_owned(), importance);
-    let marker = |value: &str| {
-        (
-            crate::webkit_box_orient_rewrite::INTERNAL_CONTINUE_PROPERTY.to_owned(),
-            value.to_owned(),
-            importance,
-        )
-    };
-    match components {
-        [Component::Ident(value)] if value.eq_ignore_ascii_case("none") => {
-            vec![output("line-clamp", &authored), marker("auto")]
-        },
-        [Component::Ident(value)] if value.eq_ignore_ascii_case("auto") => vec![
-            output("max-lines", "none"),
-            output("continue", "discard"),
-            output("block-ellipsis", "auto"),
-            marker("collapse"),
-        ],
-        [Component::Ident(value), Component::Ident(ellipsis)]
-            if value.eq_ignore_ascii_case("auto")
-                && ellipsis.eq_ignore_ascii_case("no-ellipsis") =>
-        {
-            vec![
-                output("max-lines", "none"),
-                output("continue", "discard"),
-                output("block-ellipsis", "none"),
-                marker("collapse"),
-            ]
-        },
-        [Component::String(marker_value)] => vec![
-            output("max-lines", "none"),
-            output("continue", "discard"),
-            output("block-ellipsis", &serialize_css_string(marker_value)),
-            marker("collapse"),
-        ],
-        [Component::Number { value: lines, .. }] if positive_integer(*lines) => {
-            vec![output("line-clamp", &authored), marker("collapse")]
-        },
-        [
-            Component::Number { value: lines, .. },
-            Component::Ident(ellipsis),
-        ] if positive_integer(*lines) && ellipsis.eq_ignore_ascii_case("no-ellipsis") => {
-            vec![
-                output("max-lines", &lines.to_string()),
-                output("continue", "discard"),
-                output("block-ellipsis", "none"),
-                marker("collapse"),
-            ]
-        },
-        [
-            Component::Number { value: lines, .. },
-            Component::Ident(ellipsis),
-        ] if positive_integer(*lines)
-            && matches!(ellipsis.to_ascii_lowercase().as_str(), "none" | "auto") =>
-        {
-            vec![output("line-clamp", &authored), marker("collapse")]
-        },
-        [Component::Number { value: lines, .. }, Component::String(_)]
-            if positive_integer(*lines) =>
-        {
-            vec![output("line-clamp", &authored), marker("collapse")]
-        },
-        _ => Vec::new(),
-    }
-}
-
-fn projected_components(
-    value: &stylo_cssom_model::SpecifiedStyleValue,
-) -> Option<&[stylo_cssom_model::SpecifiedComponentValue]> {
-    let stylo_cssom_model::SpecifiedStyleValue::Components(components) = value else {
-        return None;
-    };
-    Some(components)
-}
-
-fn projected_single_ident(value: &stylo_cssom_model::SpecifiedStyleValue) -> Option<&str> {
-    if let stylo_cssom_model::SpecifiedStyleValue::CssWide(keyword) = value {
-        return Some(crate::declaration_parser::compatibility::css_wide_keyword_text(*keyword));
-    }
-    let [stylo_cssom_model::SpecifiedComponentValue::Ident(value)] = projected_components(value)?
-    else {
-        return None;
-    };
-    Some(value)
-}
-
-fn projected_single_positive_integer(
-    value: &stylo_cssom_model::SpecifiedStyleValue,
-) -> Option<f32> {
-    let [stylo_cssom_model::SpecifiedComponentValue::Number { value, .. }] =
-        projected_components(value)?
-    else {
-        return None;
-    };
-    positive_integer(*value).then_some(*value)
-}
-
-fn positive_integer(value: f32) -> bool {
-    value >= 1.0 && value.fract() == 0.0
-}
-
-fn serialize_css_string(value: &str) -> String {
-    let mut serialized = String::new();
-    cssparser::serialize_string(value, &mut serialized)
-        .expect("writing CSS to a string is infallible");
-    serialized
 }
 
 #[cfg(test)]
@@ -739,11 +553,9 @@ mod inline_compatibility_projection_tests {
             .collect::<Vec<_>>();
 
         for expected in [
-            ("max-lines", "none"),
-            ("block-ellipsis", "none"),
-            ("-webkit-line-clamp", "4"),
-            ("continue", "discard"),
-            ("--moegoe-continue", "collapse"),
+            ("max-lines", "auto"),
+            ("block-ellipsis", "no-ellipsis"),
+            ("continue", "collapse"),
             ("--moegoe-legacy-text-align", "-moz-right"),
             ("--moegoe-webkit-box-display", "-webkit-box"),
         ] {
