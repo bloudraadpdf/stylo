@@ -539,8 +539,9 @@ pub fn parse_nested_declarations_input(
 fn parse_authored_compatibility_rule(source: &str) -> Option<stylo_cssom_model::RuleNode> {
     parse_highlight_compatibility_rule(source)
         .or_else(|| parse_view_transition_compatibility_rule(source))
+        .or_else(|| parse_vendor_compatibility_rule(source))
         .or_else(|| {
-            (source.trim_start().starts_with('@')
+            (crate::rule_parser::starts_at_rule(source)
                 && crate::rule_parser::ParsedCssRule::retain_scanned_rule(source))
             .then(|| {
                 stylo_cssom_model::RuleNode::authored(
@@ -549,6 +550,44 @@ fn parse_authored_compatibility_rule(source: &str) -> Option<stylo_cssom_model::
                     Vec::<stylo_cssom_model::RuleNode>::new(),
                 )
             })
+        })
+}
+
+fn parse_vendor_compatibility_rule(source: &str) -> Option<stylo_cssom_model::RuleNode> {
+    use crate::compat::{CompatMode, translate::translate_compat};
+    use stylo_cssom_model::{RuleCssomData, RuleGrammar};
+
+    [CompatMode::PdfReactor, CompatMode::Prince]
+        .into_iter()
+        .find_map(|compat| {
+            let translated = translate_compat(source, compat);
+            if translated.rewritten == source {
+                return None;
+            }
+            let rule = crate::rule_parser::ParsedCssRule::parse(&translated.rewritten)?;
+            let mut input = ParserInput::new(source);
+            let mut input = Parser::new(&mut input);
+            input.skip_whitespace();
+            if rule.grammar() == RuleGrammar::Page
+                && !matches!(input.next().ok()?, Token::AtKeyword(name) if name.eq_ignore_ascii_case("page"))
+            {
+                return None;
+            }
+            let start = input.position();
+            let selector = loop {
+                let end = input.position();
+                if matches!(input.next().ok()?, Token::CurlyBracketBlock) {
+                    break input.slice(start..end).trim();
+                }
+            };
+            let data = match rule.grammar() {
+                RuleGrammar::Style => RuleCssomData::Style { selector: selector.into() },
+                RuleGrammar::Page => RuleCssomData::Page { selector: selector.into() },
+                _ => return None,
+            };
+            authored_rule_node(&rule, source)
+                .with_authored_serialization(source)
+                .with_cssom_data(data)
         })
 }
 
@@ -2052,6 +2091,93 @@ mod tests {
             nested[0].grammar(),
             stylo_cssom_model::RuleGrammar::NestedDeclarations
         );
+    }
+
+    #[test]
+    fn pdfreactor_authored_rules_preserve_vendor_grammar() {
+        for (source, expected) in [
+            ("@page:ro-nth(2) { margin-top: 17pt }", ":nth(2)"),
+            ("@page:-ro-nth(2n+1) { margin-top: 17pt }", ":nth(2n+1)"),
+            ("@page:-ro-last { margin-top: 17pt }", ":last"),
+            (
+                "p::-ro-before-break { content: 'BEFORE' }",
+                "::-bd-before-break",
+            ),
+            (
+                "p::-ro-after-break { content: 'AFTER' }",
+                "::-bd-after-break",
+            ),
+        ] {
+            assert_pdfreactor_authored_projection(source, expected);
+        }
+    }
+
+    #[test]
+    fn pdfreactor_authored_preferences_ignore_leading_comments() {
+        for prefix in ["", "/* preferences */ ", " /* first */\n/* second */ "] {
+            assert_pdfreactor_authored_projection(
+                &format!("{prefix}@-ro-preferences {{ first-page-side: verso; }}"),
+                "-bd-first-page-side: verso",
+            );
+        }
+    }
+
+    #[test]
+    fn pdfreactor_authored_nested_rules_reach_projection() {
+        let source = concat!(
+            "@media print { ",
+            "p { color: green } ",
+            "@page:ro-nth(2) { margin-top: 17pt } ",
+            "p::-ro-after-break { content: 'AFTER' } ",
+            "}",
+        );
+        for expected in ["color: green", ":nth(2)", "::-bd-after-break"] {
+            assert_pdfreactor_authored_projection(source, expected);
+        }
+    }
+
+    #[test]
+    fn pdfreactor_authored_recovery_rejects_invalid_rules() {
+        for source in [
+            "@page:unknown { margin-top: 17pt }",
+            "/* comment */ @page:unknown { margin-top: 17pt }",
+            "@page:ro-nth(bad) { margin-top: 17pt }",
+            "p:unknown, p::-ro-after-break { color: red }",
+            "1badselector { color: red }",
+        ] {
+            assert!(
+                ParsedStylesheet::parse(source)
+                    .unwrap()
+                    .rule_nodes()
+                    .is_empty(),
+                "invalid rule survived: {source}",
+            );
+        }
+    }
+
+    fn assert_pdfreactor_authored_projection(source: &str, expected: &str) {
+        use crate::compat::{CompatMode, translate::project_compat_root};
+        use stylo_cssom_model::{InternalStylesheetRoot, StyleOrigin};
+
+        let parsed = ParsedStylesheet::parse(source).unwrap();
+        assert_eq!(parsed.rule_nodes().len(), 1, "{source}");
+        if let Some(
+            stylo_cssom_model::RuleCssomData::Style { selector }
+            | stylo_cssom_model::RuleCssomData::Page { selector },
+        ) = parsed.rule_nodes()[0].cssom_data()
+        {
+            assert!(
+                source.contains(selector.as_ref()),
+                "foreign selector changed: {selector}"
+            );
+        }
+        let root = InternalStylesheetRoot::new(StyleOrigin::Author, parsed.rule_nodes().to_vec());
+        let (native, _) = project_compat_root(&root, CompatMode::None);
+        assert_eq!(native.projection_serialization(), source.trim_start());
+        let (projected, _) = project_compat_root(&root, CompatMode::PdfReactor);
+        let css = projected.projection_serialization();
+        assert!(css.contains(expected), "missing {expected}: {css}");
+        assert!(!crate::rule_parser::ParsedCssRule::parse_stylesheet(&css).is_empty());
     }
 
     #[test]

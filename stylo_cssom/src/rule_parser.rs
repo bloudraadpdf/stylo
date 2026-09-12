@@ -4,8 +4,8 @@ use style::{
     properties::PropertyDeclarationBlock,
     shared_lock::{SharedRwLockReadGuard, ToCssWithGuard},
     stylesheets::{
-        container_rule::{ContainerCondition, ContainerConditions},
         CssRule, CssRules, FontPaletteValuesRule, MarginRule, Origin, PageRule,
+        container_rule::{ContainerCondition, ContainerConditions},
     },
 };
 use style_traits::{CssWriter, ToCss};
@@ -17,11 +17,11 @@ mod keyframes;
 mod native_common_properties;
 mod source;
 pub use font_feature_values::{font_feature_values_node, replace_font_feature_family};
+use keyframes::{CanonicalKeyframeRule, CanonicalKeyframesRule};
 pub use keyframes::{
     parse_keyframe_rule, parse_keyframe_selector, replace_keyframe_declarations,
     replace_keyframe_selector, replace_keyframes_name, serialize_keyframe_selector,
 };
-use keyframes::{CanonicalKeyframeRule, CanonicalKeyframesRule};
 pub use source::{forgiving_rule_sources, stylesheet_parser_input};
 
 #[derive(Clone, Copy, Debug)]
@@ -1452,7 +1452,7 @@ impl ParsedCssRule {
     /// Syntax requires that malformed rule to be discarded.
     pub fn retain_scanned_rule(css: &str) -> bool {
         Self::parse(css).is_some()
-            || if css.trim_start().starts_with('@') {
+            || if starts_at_rule(css) {
                 first_at_keyword(css).is_some() && !starts_with_typed_rule_at_keyword(css)
             } else {
                 true
@@ -2333,15 +2333,23 @@ fn starts_with_typed_rule_at_keyword(css: &str) -> bool {
     })
 }
 
-fn first_at_keyword(css: &str) -> Option<String> {
+fn first_rule_token(css: &str) -> Option<Token<'_>> {
     let mut input = ParserInput::new(css);
     let mut parser = Parser::new(&mut input);
-    loop {
-        match parser.next_including_whitespace_and_comments() {
-            Ok(Token::WhiteSpace(_) | Token::Comment(_)) => {},
-            Ok(Token::AtKeyword(name)) => return Some(name.to_string()),
-            Ok(_) | Err(_) => return None,
-        }
+    parser.next().ok().cloned()
+}
+
+pub(super) fn starts_at_rule(css: &str) -> bool {
+    matches!(
+        first_rule_token(css),
+        Some(Token::AtKeyword(_) | Token::Delim('@'))
+    )
+}
+
+fn first_at_keyword(css: &str) -> Option<String> {
+    match first_rule_token(css)? {
+        Token::AtKeyword(name) => Some(name.to_string()),
+        _ => None,
     }
 }
 
@@ -4847,9 +4855,11 @@ mod tests {
         )
         .unwrap()
         .to_rule_node();
-        assert!(rule.payload().nested()[0]
-            .serialization()
-            .contains("old: 1;"));
+        assert!(
+            rule.payload().nested()[0]
+                .serialization()
+                .contains("old: 1;")
+        );
     }
 
     #[test]
@@ -4869,27 +4879,35 @@ mod tests {
             .declaration_block()
             .expect("the font-face declaration block remains typed")
             .declarations();
-        assert!(declarations
-            .iter()
-            .any(|declaration| declaration.name() == "unicode-range"
-                && declaration.value() == "U+A0-AF"));
-        assert!(declarations
-            .iter()
-            .any(|declaration| declaration.name() == "src"));
-        assert!(super::mutate_non_style_rule_declaration(
-            &updated,
-            "unicode-range",
-            "u+efg",
-            crate::declaration_parser::CssomDeclarationPriority::Normal,
-        )
-        .is_none());
-        assert!(super::mutate_non_style_rule_declaration(
-            &updated,
-            "unicode-range",
-            "U+20; src: url(injected.ttf)",
-            crate::declaration_parser::CssomDeclarationPriority::Normal,
-        )
-        .is_none());
+        assert!(
+            declarations
+                .iter()
+                .any(|declaration| declaration.name() == "unicode-range"
+                    && declaration.value() == "U+A0-AF")
+        );
+        assert!(
+            declarations
+                .iter()
+                .any(|declaration| declaration.name() == "src")
+        );
+        assert!(
+            super::mutate_non_style_rule_declaration(
+                &updated,
+                "unicode-range",
+                "u+efg",
+                crate::declaration_parser::CssomDeclarationPriority::Normal,
+            )
+            .is_none()
+        );
+        assert!(
+            super::mutate_non_style_rule_declaration(
+                &updated,
+                "unicode-range",
+                "U+20; src: url(injected.ttf)",
+                crate::declaration_parser::CssomDeclarationPriority::Normal,
+            )
+            .is_none()
+        );
         let removed = super::mutate_non_style_rule_declaration(
             &updated,
             "unicode-range",
@@ -4902,12 +4920,16 @@ mod tests {
             .declaration_block()
             .expect("the font-face declaration block remains typed")
             .declarations();
-        assert!(!declarations
-            .iter()
-            .any(|declaration| declaration.name() == "unicode-range"));
-        assert!(declarations
-            .iter()
-            .any(|declaration| declaration.name() == "src"));
+        assert!(
+            !declarations
+                .iter()
+                .any(|declaration| declaration.name() == "unicode-range")
+        );
+        assert!(
+            declarations
+                .iter()
+                .any(|declaration| declaration.name() == "src")
+        );
     }
 
     #[test]
@@ -5132,12 +5154,14 @@ mod tests {
             crate::declaration_parser::CssomDeclarationPriority::Normal,
         )
         .expect("removing a shorthand keeps a valid page rule");
-        assert!(removed
-            .payload()
-            .declaration_block()
-            .expect("the page declaration block remains typed")
-            .declarations()
-            .is_empty());
+        assert!(
+            removed
+                .payload()
+                .declaration_block()
+                .expect("the page declaration block remains typed")
+                .declarations()
+                .is_empty()
+        );
         assert!(rule.with_page_selector_text("1").is_none());
         assert!(rule.with_page_selector_text("--a").is_none());
         assert_eq!(
@@ -5426,13 +5450,10 @@ mod tests {
                 && declaration.value() == "green"
                 && declaration.important()
         }));
-        assert!(super::mutate_non_style_rule_declaration(
-            &changed,
-            "color",
-            "invalid-colour",
-            Normal
-        )
-        .is_none());
+        assert!(
+            super::mutate_non_style_rule_declaration(&changed, "color", "invalid-colour", Normal)
+                .is_none()
+        );
 
         let removed = super::mutate_non_style_rule_declaration(&changed, "color", "", Normal)
             .expect("nested declaration removal must use the same grammar");
