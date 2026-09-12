@@ -14,14 +14,14 @@ const BITS_PER_ENTRY: usize = 64;
 const BITS_PER_ENTRY: usize = 32;
 
 /// One bit per each non-custom CSS property.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct CountedUnknownPropertyUseCounters {
     storage:
         [AtomicUsize; (property_counts::COUNTED_UNKNOWN + BITS_PER_ENTRY - 1) / BITS_PER_ENTRY],
 }
 
 /// One bit per each non-custom CSS property.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct NonCustomPropertyUseCounters {
     storage: [AtomicUsize; (property_counts::NON_CUSTOM + BITS_PER_ENTRY - 1) / BITS_PER_ENTRY],
 }
@@ -92,8 +92,24 @@ macro_rules! use_counters_methods {
     };
 }
 
+impl Default for CountedUnknownPropertyUseCounters {
+    fn default() -> Self {
+        Self {
+            storage: std::array::from_fn(|_| AtomicUsize::new(0)),
+        }
+    }
+}
+
 impl CountedUnknownPropertyUseCounters {
     use_counters_methods!(CountedUnknownProperty);
+}
+
+impl Default for NonCustomPropertyUseCounters {
+    fn default() -> Self {
+        Self {
+            storage: std::array::from_fn(|_| AtomicUsize::new(0)),
+        }
+    }
 }
 
 impl NonCustomPropertyUseCounters {
