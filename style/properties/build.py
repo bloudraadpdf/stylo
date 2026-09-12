@@ -70,7 +70,7 @@ def main():
     # Four dotdots: /path/to/target(4)/debug(3)/build(2)/style-*(1)/out
     # Do not ascend above the target dir, because it may not be called target
     # or even have a parent (see CARGO_TARGET_DIR).
-    doc_servo = os.path.join(OUT_DIR, "..", "..", "..", "..", "doc", "stylo")
+    doc_servo = os.path.normpath(os.path.join(OUT_DIR, "..", "..", "..", "..", "doc", "stylo"))
 
     write(doc_servo, "css-properties.html", as_html)
     write(doc_servo, "css-properties.json", as_json)
