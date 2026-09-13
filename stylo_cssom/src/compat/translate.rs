@@ -2355,6 +2355,22 @@ mod internal_stylesheet_root_tests {
     use super::{CompatMode, pdfreactor_builtin_counter_stylesheet_root, project_compat_root};
 
     #[test]
+    fn compatibility_projection_rewrites_retained_shorthand_tokens() {
+        let css = "@page:right{background-position:calc(var(--x) - 100-ro-pw)}";
+        let parsed = crate::authored_rules::ParsedStylesheet::parse(css).unwrap();
+        let authored = InternalStylesheetRoot::new(StyleOrigin::Author, parsed.rule_nodes());
+        let (projected, warnings) = project_compat_root(&authored, CompatMode::PdfReactor);
+        assert!(warnings.is_empty());
+        let block = projected.rules()[0].payload().declaration_block().unwrap();
+        assert_eq!(block.declarations().len(), 2);
+        for declaration in block.declarations() {
+            let pending = declaration.pending_substitution().unwrap();
+            assert_eq!(pending.tokens(), "calc(var(--x) - 100-bd-pw)");
+        }
+        assert_eq!(authored.projection_serialization(), css);
+    }
+
+    #[test]
     fn vendor_and_compatibility_projections_retain_typed_rule_grammars() {
         let counters = pdfreactor_builtin_counter_stylesheet_root(CompatMode::PdfReactor)
             .expect("PDFReactor compatibility must supply its counter styles");

@@ -1291,39 +1291,10 @@ pub fn project_stylesheet_rule_urls(
                 &rule.projection_serialization(),
                 base_url.as_str(),
             ));
-        let Some(block) = rule.payload().declaration_block().filter(|block| {
-            block
-                .declarations()
-                .iter()
-                .any(|declaration| declaration.pending_substitution().is_some())
-        }) else {
-            return projected;
-        };
-        let declarations = block
-            .declarations()
-            .iter()
-            .map(|declaration| {
-                let Some(pending) = declaration.pending_substitution() else {
-                    return declaration.clone();
-                };
-                stylo_cssom_model::RuleDeclaration::from_pending_substitution(
-                    declaration.name(),
-                    pending.shorthand(),
-                    pending.tokens(),
-                    base_url.as_str(),
-                )
-                .expect("a retained pending value keeps its validated shorthand member")
-                .with_importance(declaration.important())
-            })
-            .collect::<Vec<_>>();
-        projected.with_declaration_block(
-            stylo_cssom_model::RuleDeclarationBlock::new(
-                block.domain(),
-                block.serialization(),
-                declarations,
-            )
-            .with_namespaces(block.namespaces().clone())
-            .with_shorthand_values(block.shorthand_values()),
+        crate::author_rule_projection::map_pending_declarations(
+            projected,
+            str::to_owned,
+            Some(base_url.as_str()),
         )
     })
 }
