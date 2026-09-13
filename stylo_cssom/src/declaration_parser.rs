@@ -1649,6 +1649,25 @@ mod tests {
     }
 
     #[test]
+    fn native_form_height_retains_vendor_authority() {
+        for value in ["auto", "24pt", "var(--field-height)"] {
+            let declarations = parse_inline_style_declarations(
+                &format!("-ro-height:{value}"),
+                "about:blank".into(),
+            );
+            let projected = crate::specified::project_inline_style_declaration_with_compat(
+                &declarations[0],
+                crate::compat::CompatMode::PdfReactor,
+                &crate::context::ABOUT_BLANK.clone().into(),
+            );
+            assert_eq!(projected.len(), 2);
+            assert_eq!(projected[0].name(), "height");
+            assert_eq!(projected[1].name(), "--__bd-form-control-height");
+            assert_eq!(projected[1].value(), value);
+        }
+    }
+
+    #[test]
     fn inline_vendor_declarations_validate_and_mutate_authored_properties() {
         let base_url = Arc::from("about:blank");
         for value in ["", "nonsense", "2; color:red", "2 !important"] {

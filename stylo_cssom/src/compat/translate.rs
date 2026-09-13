@@ -4288,10 +4288,10 @@ pub(crate) fn inline_vendor_declarations(
 
 fn translate_property(lower_property: &str, raw_value: &str) -> Translated {
     match lower_property {
-        "-ro-height" => Translated::Native {
-            native_property: "height",
-            native_value: raw_value.trim().to_string(),
-        },
+        "-ro-height" => Translated::Natives(vec![
+            ("height", raw_value.trim().to_string()),
+            ("--__bd-form-control-height", raw_value.trim().to_string()),
+        ]),
         "-ro-block-size" => Translated::Native {
             native_property: "block-size",
             native_value: raw_value.trim().to_string(),
