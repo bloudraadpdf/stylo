@@ -5,7 +5,7 @@
 //! Computed corner shapes with resolved curvature.
 
 use crate::derives::*;
-use crate::values::animated::{Context, ToAnimatedValue};
+use crate::values::animated::{Animate, Context, Procedure, ToAnimatedValue, ToAnimatedZero};
 use std::fmt::{self, Write};
 use style_traits::{CssWriter, ToCss};
 
@@ -50,10 +50,23 @@ impl CornerShape {
 }
 
 /// The normalised superellipse half corner used by CSS Borders interpolation.
-#[derive(
-    Animate, Clone, Copy, ComputeSquaredDistance, Debug, MallocSizeOf, PartialEq, ToAnimatedZero,
-)]
+#[derive(Clone, Copy, ComputeSquaredDistance, Debug, MallocSizeOf, PartialEq)]
 pub struct AnimatedCornerShape(f64);
+
+impl Animate for AnimatedCornerShape {
+    fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
+        match procedure {
+            Procedure::Interpolate { .. } => Ok(Self(self.0.animate(&other.0, procedure)?)),
+            Procedure::Add | Procedure::Accumulate { .. } => Ok(*other),
+        }
+    }
+}
+
+impl ToAnimatedZero for AnimatedCornerShape {
+    fn to_animated_zero(&self) -> Result<Self, ()> {
+        Err(())
+    }
+}
 
 impl ToAnimatedValue for CornerShape {
     type AnimatedValue = AnimatedCornerShape;
@@ -93,7 +106,7 @@ impl ToCss for CornerShape {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::values::animated::{Animate, Procedure};
+    use crate::values::animated::{Animate, Procedure, ToAnimatedZero};
 
     fn shape(value: f32) -> CornerShape {
         CornerShape::from_curvature(SuperellipseCurvature::from_css_number(value))
@@ -127,6 +140,16 @@ mod tests {
                 "{actual:?} != {expected}"
             );
         }
+    }
+
+    #[test]
+    fn composition_replaces_when_corner_shape_has_no_addition_procedure() {
+        let underlying = AnimatedCornerShape(shape(1.0).normalized_half_corner());
+        let effect = AnimatedCornerShape(shape(-1.0).normalized_half_corner());
+        for procedure in [Procedure::Add, Procedure::Accumulate { count: 2 }] {
+            assert_eq!(underlying.animate(&effect, procedure).unwrap(), effect);
+        }
+        assert!(effect.to_animated_zero().is_err());
     }
 
     #[test]
