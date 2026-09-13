@@ -5,6 +5,7 @@
 //! Computed corner shapes with resolved curvature.
 
 use crate::derives::*;
+use crate::values::animated::{Context, ToAnimatedValue};
 use std::fmt::{self, Write};
 use style_traits::{CssWriter, ToCss};
 
@@ -30,6 +31,55 @@ impl CornerShape {
     pub const fn curvature(self) -> SuperellipseCurvature {
         self.0
     }
+
+    fn normalized_half_corner(self) -> f64 {
+        match self.0 {
+            SuperellipseCurvature::NegativeInfinity => 0.0,
+            SuperellipseCurvature::PositiveInfinity => 1.0,
+            SuperellipseCurvature::Finite(value) => {
+                let curvature = f64::from(value.value());
+                let convex = 0.5_f64.powf(2.0_f64.powf(-curvature.abs()));
+                if curvature < 0.0 {
+                    1.0 - convex
+                } else {
+                    convex
+                }
+            },
+        }
+    }
+}
+
+/// The normalised superellipse half corner used by CSS Borders interpolation.
+#[derive(
+    Animate, Clone, Copy, ComputeSquaredDistance, Debug, MallocSizeOf, PartialEq, ToAnimatedZero,
+)]
+pub struct AnimatedCornerShape(f64);
+
+impl ToAnimatedValue for CornerShape {
+    type AnimatedValue = AnimatedCornerShape;
+
+    fn to_animated_value(self, _: &Context) -> Self::AnimatedValue {
+        AnimatedCornerShape(self.normalized_half_corner())
+    }
+
+    fn from_animated_value(animated: Self::AnimatedValue) -> Self {
+        let half_corner = animated.0.clamp(0.0, 1.0);
+        let curvature = if half_corner == 0.0 {
+            SuperellipseCurvature::NegativeInfinity
+        } else if half_corner == 1.0 {
+            SuperellipseCurvature::PositiveInfinity
+        } else {
+            let convex = half_corner.max(1.0 - half_corner);
+            let magnitude = (0.5_f64.ln() / convex.ln()).log2();
+            let value = if half_corner < 0.5 {
+                -magnitude
+            } else {
+                magnitude
+            };
+            SuperellipseCurvature::from_css_number(value as f32)
+        };
+        Self(curvature)
+    }
 }
 
 impl ToCss for CornerShape {
@@ -37,5 +87,70 @@ impl ToCss for CornerShape {
         dest.write_str("superellipse(")?;
         self.0.to_css(dest)?;
         dest.write_char(')')
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::values::animated::{Animate, Procedure};
+
+    fn shape(value: f32) -> CornerShape {
+        CornerShape::from_curvature(SuperellipseCurvature::from_css_number(value))
+    }
+
+    #[test]
+    fn curvature_interpolates_in_normalized_half_corner_space() {
+        for (from, to, progress, expected) in [
+            (1.0, 0.0, -0.3, 1.4),
+            (1.0, 0.0, 0.6, 0.36),
+            (1.0, 0.0, 1.5, -0.46),
+            (1.0, -1.0, 0.5, 0.0),
+            (1.0, -1.0, 1.5, -2.95),
+            (f32::NEG_INFINITY, f32::INFINITY, 0.5, 0.0),
+            (f32::NEG_INFINITY, f32::INFINITY, 0.8, 1.64),
+            (3.0, -2.0, 0.5, 0.16),
+            (3.0, -2.0, 0.8, -0.9),
+            (3.0, -2.0, 1.1, -2.99),
+        ] {
+            let from = AnimatedCornerShape(shape(from).normalized_half_corner());
+            let to = AnimatedCornerShape(shape(to).normalized_half_corner());
+            let actual = CornerShape::from_animated_value(
+                from.animate(&to, Procedure::Interpolate { progress })
+                    .unwrap(),
+            );
+            let SuperellipseCurvature::Finite(value) = actual.curvature() else {
+                panic!("expected finite curvature {expected}, got {actual:?}");
+            };
+            assert!(
+                (value.value() - expected).abs() < 0.005,
+                "{actual:?} != {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn half_corner_bounds_include_infinite_curvature_and_clamp_overshoot() {
+        for (half_corner, expected) in [
+            (-0.3, f32::NEG_INFINITY),
+            (0.0, f32::NEG_INFINITY),
+            (0.5, 0.0),
+            (1.0, f32::INFINITY),
+            (1.5, f32::INFINITY),
+        ] {
+            assert_eq!(
+                CornerShape::from_animated_value(AnimatedCornerShape(half_corner)),
+                shape(expected),
+            );
+        }
+        for value in [f32::NEG_INFINITY, -3.0, -1.0, 0.0, 1.0, 3.0, f32::INFINITY] {
+            let value = shape(value);
+            assert_eq!(
+                CornerShape::from_animated_value(AnimatedCornerShape(
+                    value.normalized_half_corner()
+                )),
+                value,
+            );
+        }
     }
 }

@@ -7486,7 +7486,6 @@ initial_specified_value = "specified::CornerShape::Round"
 struct = "border"
 spec = "https://drafts.csswg.org/css-borders-4/#corner-shaping"
 logical_group = "corner-shape"
-animation_type = "none"
 affects = "paint"
 
 [corner-top-right-shape]
@@ -7497,7 +7496,6 @@ initial_specified_value = "specified::CornerShape::Round"
 struct = "border"
 spec = "https://drafts.csswg.org/css-borders-4/#corner-shaping"
 logical_group = "corner-shape"
-animation_type = "none"
 affects = "paint"
 
 [corner-bottom-right-shape]
@@ -7508,7 +7506,6 @@ initial_specified_value = "specified::CornerShape::Round"
 struct = "border"
 spec = "https://drafts.csswg.org/css-borders-4/#corner-shaping"
 logical_group = "corner-shape"
-animation_type = "none"
 affects = "paint"
 
 [corner-bottom-left-shape]
@@ -7519,7 +7516,6 @@ initial_specified_value = "specified::CornerShape::Round"
 struct = "border"
 spec = "https://drafts.csswg.org/css-borders-4/#corner-shaping"
 logical_group = "corner-shape"
-animation_type = "none"
 affects = "paint"
 
 [corner-start-start-shape]
@@ -7531,7 +7527,6 @@ struct = "border"
 spec = "https://drafts.csswg.org/css-borders-4/#corner-shaping"
 logical_group = "corner-shape"
 logical = true
-animation_type = "none"
 affects = "paint"
 
 [corner-start-end-shape]
@@ -7543,7 +7538,6 @@ struct = "border"
 spec = "https://drafts.csswg.org/css-borders-4/#corner-shaping"
 logical_group = "corner-shape"
 logical = true
-animation_type = "none"
 affects = "paint"
 
 [corner-end-start-shape]
@@ -7555,7 +7549,6 @@ struct = "border"
 spec = "https://drafts.csswg.org/css-borders-4/#corner-shaping"
 logical_group = "corner-shape"
 logical = true
-animation_type = "none"
 affects = "paint"
 
 [corner-end-end-shape]
@@ -7567,7 +7560,6 @@ struct = "border"
 spec = "https://drafts.csswg.org/css-borders-4/#corner-shaping"
 logical_group = "corner-shape"
 logical = true
-animation_type = "none"
 affects = "paint"
 
 [margin-top]
