@@ -1711,6 +1711,7 @@ mod tests {
 
     #[test]
     fn enabled_author_properties_preserve_native_names_and_aliases() {
+        let _preferences = crate::test_support::pref_lock().lock().unwrap();
         let properties = NonCustomPropertyId::all_enabled_for_content().collect::<Vec<_>>();
         let names = properties.iter().map(|id| id.name()).collect::<Vec<_>>();
         for expected in [

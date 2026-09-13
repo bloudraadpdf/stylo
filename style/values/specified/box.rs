@@ -2948,10 +2948,6 @@ pub enum BreakWithin {
     AvoidPage,
     AvoidRegion,
     AvoidColumn,
-    // https://drafts.csswg.org/css-break-4/#break-within
-    // Force the formatter to break within this element in a region fragmentation
-    // context. Added alongside the existing `avoid-region` for symmetry.
-    Region,
 }
 
 impl BreakWithin {
@@ -2967,10 +2963,7 @@ impl BreakWithin {
         let break_value = BreakWithin::parse(input)?;
         match break_value {
             BreakWithin::Auto | BreakWithin::Avoid => Ok(break_value),
-            BreakWithin::AvoidPage
-            | BreakWithin::AvoidRegion
-            | BreakWithin::AvoidColumn
-            | BreakWithin::Region => {
+            BreakWithin::AvoidPage | BreakWithin::AvoidRegion | BreakWithin::AvoidColumn => {
                 Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
             },
         }
@@ -2986,10 +2979,7 @@ impl BreakWithin {
     {
         match *self {
             BreakWithin::Auto | BreakWithin::Avoid => self.to_css(dest),
-            BreakWithin::AvoidPage
-            | BreakWithin::AvoidRegion
-            | BreakWithin::AvoidColumn
-            | BreakWithin::Region => Ok(()),
+            BreakWithin::AvoidPage | BreakWithin::AvoidRegion | BreakWithin::AvoidColumn => Ok(()),
         }
     }
 }

@@ -522,6 +522,39 @@ mod inline_compatibility_projection_tests {
     }
 
     #[test]
+    fn pending_legacy_shorthands_serialize_as_empty_longhands() {
+        for (shorthand, longhand) in [
+            ("page-break-before", "break-before"),
+            ("page-break-after", "break-after"),
+            ("page-break-inside", "break-inside"),
+            ("-webkit-perspective", "perspective"),
+            ("-webkit-transform", "transform"),
+        ] {
+            for priority in ["", " !important"] {
+                let css = format!("{shorthand}: var(--break){priority};");
+                let block = crate::declaration_parser::parse_inline_style_block(&css);
+                let canonical =
+                    crate::declaration_serialization::serialise_inline_style_block(&block)
+                        .into_css_text();
+                assert_eq!(canonical, format!("{longhand}: {priority};"));
+                let declarations = crate::declaration_parser::parse_inline_style_declarations(
+                    &css,
+                    "about:blank".into(),
+                );
+                assert_eq!(
+                    projected_specified_property_value(&declarations, shorthand).as_deref(),
+                    Some("var(--break)")
+                );
+                assert_eq!(
+                    projected_specified_property_value(&declarations, longhand),
+                    None
+                );
+                assert_eq!(serialize_specified_declarations(&declarations), canonical);
+            }
+        }
+    }
+
+    #[test]
     fn independent_gap_rule_longhands_serialise_as_available_shorthands() {
         let declarations = crate::declaration_parser::parse_inline_style_declarations(
             concat!(
@@ -662,6 +695,12 @@ pub fn serialize_specified_declarations(
         let shorthand = declaration
             .shorthand_source
             .map(stylo_cssom_model::SpecifiedShorthandSource::property)
+            .filter(|shorthand| {
+                !style::properties::PropertyId::parse_unchecked(shorthand.schema().name, None)
+                    .ok()
+                    .and_then(|property| property.as_shorthand().ok())
+                    .is_some_and(style::properties::ShorthandId::is_legacy_shorthand)
+            })
             .filter(|shorthand| !emitted_shorthands.contains(shorthand))
             .filter(|_| shorthand_completeness[index]);
         if declaration.shorthand_source.is_some() && shorthand.is_none() {

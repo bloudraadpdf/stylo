@@ -38,6 +38,25 @@ fn assert_serialization(name: &str, input: &str, expected: Option<&str>) {
 }
 
 #[test]
+fn break_inside_accepts_only_auto_and_avoid_values() {
+    for value in [
+        "auto",
+        "avoid",
+        "avoid-page",
+        "avoid-column",
+        "avoid-region",
+    ] {
+        assert_serialization("break-inside", value, Some(value));
+    }
+    for value in ["region", "page", "column", "always", "auto avoid"] {
+        assert_serialization("break-inside", value, None);
+    }
+    for name in ["break-before", "break-after"] {
+        assert_serialization(name, "region", Some("region"));
+    }
+}
+
+#[test]
 fn webkit_text_orientation_is_a_native_alias() {
     for name in ["text-orientation", "-webkit-text-orientation"] {
         for value in ["mixed", "upright", "sideways"] {
