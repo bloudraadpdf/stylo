@@ -408,6 +408,7 @@ pub enum NonTSPseudoClass {
     /// borders / backgrounds on otherwise-empty containers.
     /// Compat translator rewrites `:-ro-no-content`.
     BdNoContent,
+    BdStaticForm,
     Checked,
     /// The :state` pseudo-class.
     CustomState(CustomState),
@@ -524,6 +525,7 @@ impl ToCss for NonTSPseudoClass {
             Self::AnyLink => ":any-link",
             Self::Autofill => ":autofill",
             Self::BdNoContent => ":-bd-no-content",
+            Self::BdStaticForm => ":-bd-static-form",
             Self::Checked => ":checked",
             Self::CustomState(ref state) => {
                 dest.write_str(":state(")?;
@@ -620,6 +622,7 @@ impl NonTSPseudoClass {
             Self::Visited => ElementState::VISITED,
             Self::Dir(ref direction) => direction.element_state(),
             Self::BdNoContent
+            | Self::BdStaticForm
             | Self::CustomState(_)
             | Self::Heading(_)
             | Self::Lang(_)
@@ -763,6 +766,7 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             // rewritten to `:-bd-no-content` by the compat
             // translator before Stylo parses.
             "-bd-no-content" => NonTSPseudoClass::BdNoContent,
+            "-bd-static-form" | "-ro-static-form" => NonTSPseudoClass::BdStaticForm,
             "-servo-nonzero-border" => {
                 if !self.in_user_agent_stylesheet() {
                     return Err(location.new_custom_error(

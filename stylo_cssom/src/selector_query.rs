@@ -99,6 +99,24 @@ mod tests {
     use super::{parse_dom_selector, selector_targets_pseudo_element};
 
     #[test]
+    fn static_form_selector_retains_its_pseudo_class_specificity() {
+        for source in [
+            "select[size]:-bd-static-form option[selected]",
+            "select[size]:-ro-static-form option[selected]",
+        ] {
+            let parsed = super::parse_selector(source).expect("static form selectors are admitted");
+            assert_eq!(
+                super::serialize_selector_list(&parsed),
+                "select[size]:-bd-static-form option[selected]"
+            );
+            assert_eq!(
+                super::selector_specificity(source).unwrap(),
+                super::selector_specificity("select[size]:enabled option[selected]").unwrap()
+            );
+        }
+    }
+
+    #[test]
     fn dom_selector_lists_retain_only_element_targets() {
         for selector in [
             "::part(test):is(:focus)",
