@@ -1295,18 +1295,51 @@ mod tests {
     }
 
     fn test_stylist() -> crate::stylist::Stylist {
+        test_stylist_for_media(MediaType::print(), 1.0)
+    }
+
+    fn test_stylist_for_media(media: MediaType, dppx: f32) -> crate::stylist::Stylist {
         let default_computed_values =
             ComputedValues::initial_values_with_font_override(Font::initial_values());
         let device = Device::new(
-            MediaType::print(),
+            media,
             QuirksMode::NoQuirks,
             Size2D::<f32, CSSPixel>::new(793.7, 1122.5),
-            Scale::<f32, CSSPixel, DevicePixel>::new(1.0),
+            Scale::<f32, CSSPixel, DevicePixel>::new(dppx),
             Box::new(TestFontMetricsProvider),
             default_computed_values,
             PrefersColorScheme::Light,
         );
         crate::stylist::Stylist::new(device, QuirksMode::NoQuirks)
+    }
+
+    #[test]
+    fn border_widths_snap_to_screen_pixels_and_retain_print_precision() {
+        for (media, dppx, expected) in [
+            (MediaType::screen(), 1.0, [0.0, 1.0, 1.0, 2.0, 3.0]),
+            (MediaType::screen(), 2.0, [0.0, 0.5, 1.5, 2.5, 3.0]),
+            (MediaType::print(), 1.0, [0.0, 0.1, 1.5, 8.0 / 3.0, 3.0]),
+            (MediaType::print(), 2.0, [0.0, 0.1, 1.5, 8.0 / 3.0, 3.0]),
+        ] {
+            let stylist = test_stylist_for_media(media.clone(), dppx);
+            crate::values::computed::Context::for_media_query_evaluation(
+                stylist.device(),
+                QuirksMode::NoQuirks,
+                |context| {
+                    for (authored, expected) in
+                        [0.0, 0.1, 1.5, 8.0 / 3.0, 3.0].into_iter().zip(expected)
+                    {
+                        let computed = crate::values::specified::BorderSideWidth::from_px(authored)
+                            .to_computed_value(context);
+                        assert_eq!(
+                            computed.0,
+                            app_units::Au::from_f32_px(expected),
+                            "{media:?} at {dppx}dppx: {authored}px"
+                        );
+                    }
+                },
+            );
+        }
     }
 
     fn computed_values_with_custom_length(
@@ -2391,7 +2424,10 @@ mod tests {
             assert_property_roundtrip("text-decoration-skip-spaces", css);
         }
         for css in ["auto", "edges", "objects", "all start", "none end"] {
-            assert_parsed_declaration_count(&format!("p {{ text-decoration-skip-spaces: {css}; }}"), 0);
+            assert_parsed_declaration_count(
+                &format!("p {{ text-decoration-skip-spaces: {css}; }}"),
+                0,
+            );
         }
     }
 

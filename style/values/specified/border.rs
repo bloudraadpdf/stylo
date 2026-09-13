@@ -220,25 +220,20 @@ fn snap_as_border_width(len: Au, context: &Context) -> Au {
     )
 }
 
-// peedeeef-fork note: `BorderSideWidth::to_computed_value` no longer
-// applies `snap_as_border_width`. Vector PDF renderers (and Chromium's
-// layout pipeline) both preserve the unsnapped author-resolved length
-// through computed values; the snap belongs in the rasteriser, not in
-// compute. Carrying the unsnapped Au keeps `border-width` /
-// `outline-width` authored in `pt` from losing up to 25% of their
-// value after Stylo style resolution at 96dpi (e.g. `2pt → 1.5pt`).
-// See peedeeef memo
-// `project_a49_ui_outline_pt_widths_lost_to_stylo_snap_deferred.md`.
-//
-// `snap_as_border_width` is retained because the pref-gated
-// `OutlineOffset::to_computed_value` below still calls it when chrome
-// rules opt in, and Servo callers can still elect to snap explicitly.
 impl ToComputedValue for BorderSideWidth {
     type ComputedValue = ComputedBorderSideWidth;
 
     #[inline]
     fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
-        ComputedBorderSideWidth(self.0.to_computed_value(context))
+        let width = self.0.to_computed_value(context);
+        // Vector print output has no device-pixel grid.
+        ComputedBorderSideWidth(
+            if context.device().media_type() == crate::media_queries::MediaType::print() {
+                width
+            } else {
+                snap_as_border_width(width, context)
+            },
+        )
     }
 
     #[inline]
