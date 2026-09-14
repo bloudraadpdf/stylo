@@ -2304,6 +2304,17 @@ rule_types_allowed = ["page"]
 boxed = true
 affects = "layout"
 
+[-bd-prince-trim]
+type = "PrinceBleed"
+initial = "computed::PrinceBleed::auto()"
+struct = "page"
+initial_specified_value = "specified::PrinceBleed::auto()"
+spec = "Nonstandard (Prince printer margin; auto | <length>{1,4})"
+animation_type = "none"
+rule_types_allowed = ["page"]
+boxed = true
+affects = "layout"
+
 # moegoe -bd-pdf-* document metadata longhands. Native fork-extension
 # surface for G6 (PDF document metadata via CSS). Applies to all
 # elements (not @page descriptors); not inherited; initial `none`.

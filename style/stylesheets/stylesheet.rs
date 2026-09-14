@@ -3401,52 +3401,36 @@ mod tests {
     }
 
     #[test]
-    fn servo_parses_typed_prince_bleed_grammar() {
-        for value in [
-            "auto",
-            "1pt",
-            "1pt 2pt",
-            "1pt 2pt 3pt",
-            "1pt 2pt 3pt 4pt",
-            "calc(2pt + max(1em, 3pt))",
-            "var(--prince-bleed)",
-        ] {
-            let stylesheet = parse_stylesheet(&format!("@page {{ -bd-prince-bleed: {value}; }}"));
-            let guard = stylesheet.shared_lock.read();
-            let contents = stylesheet.contents.read_with(&guard);
-            let rules = contents.rules(&guard);
-            let page_rule_css = rules
-                .iter()
-                .find_map(|rule| match rule {
-                    CssRule::Page(_) => Some(rule.to_css_string(&guard)),
-                    _ => None,
-                })
-                .expect("expected @page rule");
-            assert!(
-                page_rule_css.contains("-bd-prince-bleed:"),
-                "valid Prince bleed must enter the typed declaration block: {page_rule_css}",
-            );
-        }
-    }
-
-    #[test]
-    fn servo_rejects_invalid_prince_bleed_at_the_parser_boundary() {
-        for invalid in ["none", "auto 1pt", "1pt 2pt 3pt 4pt 5pt"] {
-            let stylesheet = parse_stylesheet(&format!("@page {{ -bd-prince-bleed: {invalid}; }}"));
-            let guard = stylesheet.shared_lock.read();
-            let contents = stylesheet.contents.read_with(&guard);
-            let rules = contents.rules(&guard);
-            let page_rule_css = rules
-                .iter()
-                .find_map(|rule| match rule {
-                    CssRule::Page(_) => Some(rule.to_css_string(&guard)),
-                    _ => None,
-                })
-                .expect("expected @page rule");
-            assert!(
-                !page_rule_css.contains("-bd-prince-bleed:"),
-                "invalid Prince bleed must not enter the typed declaration block: {page_rule_css}",
-            );
+    fn servo_parses_typed_prince_page_edges_and_rejects_invalid_values() {
+        for property in ["-bd-prince-bleed", "-bd-prince-trim"] {
+            for (value, valid) in [
+                ("auto", true),
+                ("1pt", true),
+                ("1pt 2pt", true),
+                ("1pt 2pt 3pt", true),
+                ("1pt 2pt 3pt 4pt", true),
+                ("calc(2pt + max(1em, 3pt))", true),
+                ("var(--page-edge)", true),
+                ("none", false),
+                ("auto 1pt", false),
+                ("1pt 2pt 3pt 4pt 5pt", false),
+            ] {
+                let stylesheet = parse_stylesheet(&format!("@page {{ {property}: {value}; }}"));
+                let guard = stylesheet.shared_lock.read();
+                let contents = stylesheet.contents.read_with(&guard);
+                let rules = contents.rules(&guard);
+                let page_rule_css = rules
+                    .iter()
+                    .find_map(|rule| match rule {
+                        CssRule::Page(_) => Some(rule.to_css_string(&guard)),
+                        _ => None,
+                    })
+                    .expect("expected @page rule");
+                assert_eq!(
+                    page_rule_css.contains(&format!("{property}:")), valid,
+                    "{property}: {value} produced {page_rule_css}",
+                );
+            }
         }
     }
 

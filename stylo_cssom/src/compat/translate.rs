@@ -5302,21 +5302,9 @@ fn translate_property(lower_property: &str, raw_value: &str) -> Translated {
         },
 
         "-prince-trim" => {
-            let trimmed = raw_value.trim();
-            if trimmed.eq_ignore_ascii_case("auto") {
-                return Translated::Native {
-                    native_property: "-bd-pdf-crop-size",
-                    native_value: "auto".to_string(),
-                };
-            }
-
-            let token_count = trimmed.split_ascii_whitespace().count();
-            if token_count == 0 || token_count > 2 {
-                return Translated::ValueDropped;
-            }
             Translated::Native {
-                native_property: "-bd-pdf-crop-size",
-                native_value: trimmed.to_string(),
+                native_property: "-bd-prince-trim",
+                native_value: raw_value.trim().to_string(),
             }
         },
 
@@ -6631,6 +6619,21 @@ fn line_column_to_byte(css: &str, line: u32, column: u32) -> Option<usize> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod prince_trim_tests {
+    use super::{CompatMode, translate_compat};
+
+    #[test]
+    fn prince_trim_preserves_page_edge_lengths_and_cascade_values() {
+        for value in ["auto", "1pt", "1pt 2pt 3pt 4pt", "calc(2pt + 1em)", "var(--trim)"] {
+            let source = format!("@page {{ -prince-trim: {value}; }}");
+            let translated = translate_compat(&source, CompatMode::Prince);
+            assert!(translated.rewritten.contains(&format!("-bd-prince-trim: {value};")));
+            assert!(!translated.rewritten.contains("-bd-pdf-crop-size"));
+        }
+    }
 }
 
 #[cfg(test)]

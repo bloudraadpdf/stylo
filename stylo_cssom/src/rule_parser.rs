@@ -3441,6 +3441,9 @@ mod tests {
             PropertyDeclaration::BdPrinceBleed(value) => {
                 PropertyDeclaration::BdPrinceBleed(value.clone())
             },
+            PropertyDeclaration::BdPrinceTrim(value) => {
+                PropertyDeclaration::BdPrinceTrim(value.clone())
+            },
             PropertyDeclaration::BdRasterization(value) => {
                 PropertyDeclaration::BdRasterization(value.clone())
             },
