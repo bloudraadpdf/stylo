@@ -924,6 +924,24 @@ struct DeclarationRecord {
 }
 
 impl DeclarationRecord {
+    fn fork(&self, document: StyleDocumentHandle) -> Self {
+        Self {
+            document,
+            slot: StyleSlotHandle::allocate(),
+            handle: DeclarationHandle::allocate(),
+            revision: 0,
+            declarations: self.declarations.clone(),
+            diagnostics: self.diagnostics.clone(),
+            presentation: self.presentation.clone(),
+            provenance: self.provenance,
+            context: InlineStyleContext {
+                document,
+                base_url: self.context.base_url.clone(),
+            },
+            hydrated: self.hydrated,
+        }
+    }
+
     fn target(&self) -> StyleDomTarget {
         StyleDomTarget {
             document: self.document,
@@ -1213,7 +1231,7 @@ impl StyleState {
         candidate.recontextualize_urls();
         let slot = StyleSlotHandle::allocate();
         let handle = DeclarationHandle::allocate();
-        let record = Arc::new(Mutex::new(DeclarationRecord {
+        let record = DeclarationRecord {
             document: self.document,
             slot,
             handle,
@@ -1224,15 +1242,22 @@ impl StyleState {
             provenance: candidate.provenance,
             context: candidate.context,
             hydrated: candidate.hydrated,
-        }));
-        let install = record
-            .lock()
-            .expect("declaration cell mutex poisoned")
-            .install();
+        };
+        Ok(self.insert_declaration(record))
+    }
+
+    fn insert_declaration(
+        &mut self,
+        record: DeclarationRecord,
+    ) -> (DeclarationLease, StyleDomInstall) {
+        let slot = record.slot;
+        let handle = record.handle;
+        let install = record.install();
+        let record = Arc::new(Mutex::new(record));
         self.slots.insert(slot, Arc::downgrade(&record));
         self.declarations.insert(handle, Arc::clone(&record));
         self.declaration_order.push(handle);
-        Ok((DeclarationLease { cell: record }, install))
+        (DeclarationLease { cell: record }, install)
     }
 
     pub fn prepare_dom_update(
@@ -1461,20 +1486,11 @@ impl StyleState {
                 .declarations
                 .get(handle)
                 .ok_or(StyleTransactionError::MissingDeclaration)?;
-            let record = cell.lock().expect("declaration cell mutex poisoned");
-            let candidate = InlineDeclarationCandidate {
-                declarations: record.declarations.clone(),
-                diagnostics: record.diagnostics.clone(),
-                presentation: record.presentation.clone(),
-                provenance: record.provenance,
-                context: InlineStyleContext {
-                    document,
-                    base_url: record.context.base_url.clone(),
-                },
-                hydrated: record.hydrated,
-            };
-            drop(record);
-            let (lease, install) = destination.create_inline_attribute(candidate)?;
+            let record = cell
+                .lock()
+                .expect("declaration cell mutex poisoned")
+                .fork(document);
+            let (lease, install) = destination.insert_declaration(record);
             copies.push((*handle, lease, install));
         }
         let stylesheet_copies = self.fork_stylesheets_to(&mut destination);
@@ -3111,6 +3127,64 @@ mod tests {
             CssWrapperIdentity::InlineDeclaration(lease.handle()),
             CssWrapperIdentity::InlinePropertyMap(lease.handle())
         );
+    }
+
+    #[test]
+    fn forks_share_immutable_declarations_and_isolate_later_updates() {
+        fn declaration(base_url: &str) -> SpecifiedDeclaration {
+            SpecifiedDeclaration {
+                property: super::SpecifiedPropertyName::Standard(
+                    property_schema("background-image").unwrap().id,
+                ),
+                value: super::SpecifiedStyleValue::Components(Box::new([
+                    super::SpecifiedComponentValue::Url {
+                        value: Arc::from("image.png"),
+                        source: super::UrlSourceContext {
+                            base_url: Arc::from(base_url),
+                        },
+                    },
+                ])),
+                importance: super::Importance::Normal,
+                shorthand_source: None,
+                shorthand_value: None,
+                typed_om_representation: None,
+            }
+        }
+
+        let document = StyleDocumentHandle::allocate();
+        let mut source = StyleState::new(document);
+        let (original, _) = source
+            .create_inline_attribute(InlineDeclarationCandidate::raw(
+                context(document, "https://example.test/source/"),
+                Some("background-image: url(image.png)"),
+                vec![declaration("https://parser.test/")],
+            ))
+            .unwrap();
+        let values = original.declarations();
+        assert_eq!(
+            values.as_ref(),
+            &[declaration("https://example.test/source/")]
+        );
+
+        let (mut fork, copies, _) = source.fork(StyleDocumentHandle::allocate()).unwrap();
+        let copied = &copies[0].1;
+        assert!(Arc::ptr_eq(&values, &copied.declarations()));
+        assert_ne!(copied.handle(), original.handle());
+        assert_ne!(copied.slot(), original.slot());
+        assert_ne!(copied.context().document, original.context().document);
+
+        fork.recontextualize_inline_attributes(Arc::from("https://example.test/fork/"));
+        assert_eq!(
+            copied.declarations().as_ref(),
+            &[declaration("https://example.test/fork/")]
+        );
+        assert_eq!(original.declarations().as_ref(), values.as_ref());
+        let update = fork
+            .prepare_dom_update(copied, copied.slot(), raw(fork.document(), None))
+            .unwrap();
+        fork.commit_dom_update(update).unwrap();
+        assert!(copied.declarations().is_empty());
+        assert_eq!(original.declarations().as_ref(), values.as_ref());
     }
 
     #[test]
