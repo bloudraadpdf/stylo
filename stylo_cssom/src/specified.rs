@@ -10,6 +10,19 @@ pub fn project_inline_style_declaration_with_compat(
     compat: crate::compat::CompatMode,
     url_data: &UrlExtraData,
 ) -> Vec<stylo_cssom_model::RuleDeclaration> {
+    if compat == crate::compat::CompatMode::PdfReactor
+        && let stylo_cssom_model::SpecifiedPropertyName::Standard(property) = &declaration.property
+        && property.schema().name == "font-family"
+        && let Some(value) = crate::compat::translate::rewrite_pdfreactor_font_family_value(
+            &projected_specified_style_value_text(&declaration.value),
+        )
+    {
+        return vec![
+            stylo_cssom_model::RuleDeclaration::new(property.schema().name, value).with_importance(
+                declaration.importance == stylo_cssom_model::Importance::Important,
+            ),
+        ];
+    }
     let stylo_cssom_model::SpecifiedPropertyName::Vendor(property) = &declaration.property else {
         return project_inline_style_declaration(declaration, url_data);
     };
@@ -197,6 +210,46 @@ mod inline_compatibility_projection_tests {
         project_inline_compatibility_declaration, project_inline_style_declaration,
         projected_specified_property_value, serialize_specified_declarations,
     };
+
+    #[test]
+    fn inline_pdfreactor_emoji_families_preserve_alias_order_and_priority() {
+        use crate::compat::CompatMode;
+
+        let url_data = crate::context::ABOUT_BLANK.clone().into();
+        for (authored, expected) in [
+            ("-ro-emoji", "-bd-emoji"),
+            ("sans-serif, -ro-emoji", "sans-serif, -bd-emoji"),
+            ("-ro-color-emoji, serif", "-bd-color-emoji, serif"),
+            ("\"-RO-EMOJI\"", "\"-bd-emoji\""),
+            ("\"custom-ro-emoji\"", "\"custom-ro-emoji\""),
+        ] {
+            let declarations = crate::declaration_parser::parse_inline_style_declarations(
+                &format!("font-family: {authored} !important"),
+                "about:blank".into(),
+            );
+            let declaration = &declarations[0];
+            for compat in [CompatMode::None, CompatMode::Prince, CompatMode::PdfReactor] {
+                let projected = super::project_inline_style_declaration_with_compat(
+                    declaration,
+                    compat,
+                    &url_data,
+                );
+                let value = if compat == CompatMode::PdfReactor {
+                    expected
+                } else {
+                    authored
+                };
+                assert_eq!(
+                    projected,
+                    vec![
+                        stylo_cssom_model::RuleDeclaration::new("font-family", value)
+                            .with_importance(true)
+                    ],
+                    "{authored}, {compat:?}"
+                );
+            }
+        }
+    }
 
     #[test]
     fn all_shorthand_serialisation_does_not_repeat_completeness_scans() {

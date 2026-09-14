@@ -2828,7 +2828,7 @@ fn rewrite_css_identifier_tokens(
     Some(out)
 }
 
-fn rewrite_pdfreactor_font_family_value(value: &str) -> Option<String> {
+pub(crate) fn rewrite_pdfreactor_font_family_value(value: &str) -> Option<String> {
     fn native_alias(name: &str) -> Option<&'static str> {
         if name.eq_ignore_ascii_case("-ro-color-emoji") {
             Some("-bd-color-emoji")
