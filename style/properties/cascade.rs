@@ -301,9 +301,12 @@ where
         rule_cache_conditions,
         container_size_query,
     );
-    if let Some(element) = element {
+    context.set_tree_counting(move || {
+        let Some(element) = element else {
+            return (0, 0);
+        };
         let node = element.as_node();
-        let (sibling_index, sibling_count) = match node.parent_node() {
+        match node.parent_node() {
             Some(parent) => {
                 let mut index = 0;
                 let mut count = 0;
@@ -319,9 +322,8 @@ where
                 (index, count)
             },
             None => (1, 1),
-        };
-        context.set_tree_counting(sibling_index, sibling_count);
-    }
+        }
+    });
 
     context.style().add_flags(cascade_input_flags);
 

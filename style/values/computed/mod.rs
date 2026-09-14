@@ -392,11 +392,8 @@ pub mod transform;
 pub mod ui;
 pub mod url;
 
-#[derive(Default)]
-struct TreeCounting {
-    index: CSSFloat,
-    count: CSSFloat,
-}
+mod tree_counting;
+use self::tree_counting::TreeCounting;
 
 /// A `Context` is all the data a specified value could ever need to compute
 /// itself and be transformed to a computed value.
@@ -450,7 +447,7 @@ pub struct Context<'a> {
     /// The cascade level in the shadow tree hierarchy.
     pub scope: CascadeLevel,
 
-    tree_counting: TreeCounting,
+    tree_counting: TreeCounting<'a>,
 
     /// Container size query for this context.
     container_size_query: RefCell<ContainerSizeQuery<'a>>,
@@ -598,21 +595,18 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub(crate) fn set_tree_counting(&mut self, sibling_index: usize, sibling_count: usize) {
-        self.tree_counting = TreeCounting {
-            index: sibling_index as CSSFloat,
-            count: sibling_count as CSSFloat,
-        };
+    pub(crate) fn set_tree_counting(&mut self, resolve: impl Fn() -> (usize, usize) + 'a) {
+        self.tree_counting = TreeCounting::new(resolve);
     }
 
     pub(crate) fn sibling_index(&self) -> CSSFloat {
         self.note_tree_counting_dependency();
-        self.tree_counting.index
+        self.tree_counting.get().0 as CSSFloat
     }
 
     pub(crate) fn sibling_count(&self) -> CSSFloat {
         self.note_tree_counting_dependency();
-        self.tree_counting.count
+        self.tree_counting.get().1 as CSSFloat
     }
 
     fn note_tree_counting_dependency(&self) {

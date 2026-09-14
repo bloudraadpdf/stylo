@@ -10,6 +10,10 @@ Stylo
 
 Stylo is a high-performance, browser-grade CSS style engine written in Rust that powers [Servo](https://servo.org) and [Firefox](https://firefox.com). This repo contains Servo’s downstream version of Stylo. The upstream version lives in mozilla-central with the rest of the Gecko/Firefox codebase.
 
+Tree-counting functions resolve sibling positions only when a computed value
+needs them. Each computed-value context reuses its first result, so ordinary
+styles do not scan siblings.
+
 Coordination of Stylo development happens:
 
 - Here in Github Issues
