@@ -1497,12 +1497,15 @@ impl ToResolvedValue for LineHeight {
         }
         #[cfg(feature = "servo")]
         {
-            if let LineHeight::Number(num) = &self {
-                let size = context.style.get_font().clone_font_size().computed_size();
-                LineHeight::Length(NonNegativeLength::new(size.px() * num.0))
-            } else {
-                self
-            }
+            let length = match self {
+                Self::Normal => return Self::Normal,
+                Self::Number(num) => {
+                    let size = context.style.get_font().clone_font_size().computed_size();
+                    NonNegativeLength::new(size.px() * num.0)
+                },
+                Self::Length(length) => length,
+            };
+            Self::Length(length.to_resolved_value(context))
         }
     }
 
@@ -1530,5 +1533,37 @@ mod tests {
             .expect("matching font metrics must interpolate numerically");
 
         assert_eq!(value.to_css_string(), "0");
+    }
+
+    #[cfg(feature = "servo")]
+    #[test]
+    fn resolved_line_height_lengths_are_unzoomed() {
+        use super::{FontSize, Length, LineHeight, NonNegativeLength, Zoom};
+        use crate::properties::{style_structs::Font, ComputedValues, LonghandId};
+        use crate::values::animated::ToAnimatedValue;
+        use crate::values::resolved::{Context, ToResolvedValue};
+
+        for factor in [1.0, 1.25, 2.0] {
+            let zoom = Zoom::from_animated_value(factor);
+            let mut font = Font::initial_values();
+            font.font_size = FontSize::from_animated_value(Length::new(20.0 * factor));
+            let mut style = (*ComputedValues::initial_values_with_font_override(font)).clone();
+            style.effective_zoom = zoom;
+            let context = Context {
+                style: &style,
+                for_property: LonghandId::LineHeight.into(),
+                current_longhand: Some(LonghandId::LineHeight),
+            };
+            for (value, expected) in [
+                (LineHeight::Normal, "normal"),
+                (LineHeight::Number(NonNegative(1.2)), "24px"),
+                (
+                    LineHeight::Length(NonNegativeLength::new(24.0 * factor)),
+                    "24px",
+                ),
+            ] {
+                assert_eq!(value.to_resolved_value(&context).to_css_string(), expected);
+            }
+        }
     }
 }
