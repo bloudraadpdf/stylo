@@ -783,6 +783,7 @@ trait PrivateMatchMethods: TElement {
             &shared_context,
             old_values.as_ref(),
             after_change_style.as_ref().unwrap_or(new_values),
+            &self.host_animated_longhands(pseudo_element),
         );
 
         // This should change the computed values in the style, so we don't need

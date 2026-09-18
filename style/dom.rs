@@ -793,6 +793,16 @@ pub trait TElement:
         pseudo_element: Option<PseudoElement>,
     ) -> bool;
 
+    /// The longhands that a host animation outside the style system covers on this element.
+    /// The before-change style and the after-change style both take the value of that
+    /// animation, so they are equal and no transition starts for such a longhand.
+    fn host_animated_longhands(
+        &self,
+        _pseudo_element: Option<PseudoElement>,
+    ) -> crate::properties::LonghandIdSet {
+        crate::properties::LonghandIdSet::default()
+    }
+
     /// Returns true if the element has animation restyle hints.
     fn has_animation_restyle_hints(&self) -> bool {
         let data = match self.borrow_data() {

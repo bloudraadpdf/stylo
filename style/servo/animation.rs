@@ -1145,6 +1145,7 @@ impl ElementAnimationSet {
         context: &SharedStyleContext,
         old_style: Option<&Arc<ComputedValues>>,
         after_change_style: &Arc<ComputedValues>,
+        host_animated: &crate::properties::LonghandIdSet,
     ) {
         // If this is the first style, we don't trigger any transitions and we assume
         // there were no previously triggered transitions.
@@ -1173,6 +1174,7 @@ impl ElementAnimationSet {
             &before_change_style,
             after_change_style,
             self,
+            host_animated,
         );
 
         // Cancel any non-finished transitions that have properties which no
@@ -1633,6 +1635,7 @@ pub fn start_transitions_if_applicable(
     old_style: &ComputedValues,
     new_style: &Arc<ComputedValues>,
     animation_state: &mut ElementAnimationSet,
+    host_animated: &crate::properties::LonghandIdSet,
 ) -> PropertyDeclarationIdSet {
     // See <https://www.w3.org/TR/css-transitions-1/#transitions>
     // "If a property is specified multiple times in the value of transition-property
@@ -1662,6 +1665,10 @@ pub fn start_transitions_if_applicable(
         }
 
         properties_that_transition.insert(physical_property);
+        if matches!(physical_property, PropertyDeclarationId::Longhand(id) if host_animated.contains(id))
+        {
+            continue;
+        }
         animation_state.start_transition_if_applicable(
             context,
             &physical_property,
