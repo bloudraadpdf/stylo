@@ -806,14 +806,13 @@ pub fn stylo_inline_style_block(
     url_data: &UrlExtraData,
 ) -> InlineStyleBlock {
     let mut block = style::properties::declaration_block::PropertyDeclarationBlock::new();
+    let namespaces = Namespaces::default();
+    let mut pending = PendingShorthandExpansions::new(CssomDeclarationContext::Style, &namespaces);
     for declaration in declarations {
         if declaration.pending_substitution().is_some() {
-            let (value, importance) = restore_pending_declaration(
-                &declaration,
-                CssomDeclarationContext::Style,
-                &Namespaces::default(),
-            )
-            .expect("a projected pending longhand must retain its valid shorthand source");
+            let (value, importance) = pending
+                .restore(&declaration)
+                .expect("a projected pending longhand must retain its valid shorthand source");
             let _ = block.push(value, importance);
             continue;
         }
@@ -1246,6 +1245,7 @@ pub fn stylo_rule_declaration_block(
 ) -> Option<style::properties::declaration_block::PropertyDeclarationBlock> {
     let mut parsed = parse_cssom_declaration_block("", context);
     let namespaces = stylo_namespaces(block.namespaces());
+    let mut pending = PendingShorthandExpansions::new(context, &namespaces);
     for declaration in block.declarations() {
         let importance = if declaration.important() {
             CssomDeclarationPriority::Important
@@ -1253,8 +1253,7 @@ pub fn stylo_rule_declaration_block(
             CssomDeclarationPriority::Normal
         };
         if declaration.pending_substitution().is_some() {
-            let (retained, importance) =
-                restore_pending_declaration(declaration, context, &namespaces)?;
+            let (retained, importance) = pending.restore(declaration)?;
             let _ = parsed.0.push(retained, importance);
         } else if !declaration_block_set_property_with_context(
             &mut parsed.0,
@@ -1271,34 +1270,90 @@ pub fn stylo_rule_declaration_block(
     Some(parsed.0)
 }
 
-fn restore_pending_declaration(
-    declaration: &stylo_cssom_model::RuleDeclaration,
+struct PendingShorthandExpansion {
+    source: stylo_cssom_model::PendingSubstitutionValue,
+    important: bool,
+    declarations: Vec<(PropertyDeclaration, Importance)>,
+    cursor: usize,
+}
+
+/// Restores pending-substitution longhands. Each distinct shorthand source is
+/// expanded one time, and its longhands are taken in expansion order.
+struct PendingShorthandExpansions<'a> {
     context: CssomDeclarationContext,
-    namespaces: &Namespaces,
-) -> Option<(PropertyDeclaration, Importance)> {
-    let pending = declaration.pending_substitution()?;
-    let url_data = url::Url::parse(pending.base_url()).ok()?.into();
-    let mut source = style::properties::declaration_block::PropertyDeclarationBlock::new();
-    let importance = if declaration.important() {
-        CssomDeclarationPriority::Important
-    } else {
-        CssomDeclarationPriority::Normal
-    };
-    if !declaration_block_set_property_with_context(
-        &mut source,
-        pending.shorthand().schema().name,
-        pending.tokens(),
-        importance,
-        context.rule_type(),
-        &url_data,
-        namespaces,
-    ) {
-        return None;
+    namespaces: &'a Namespaces,
+    expansions: Vec<PendingShorthandExpansion>,
+}
+
+impl<'a> PendingShorthandExpansions<'a> {
+    const fn new(context: CssomDeclarationContext, namespaces: &'a Namespaces) -> Self {
+        Self {
+            context,
+            namespaces,
+            expansions: Vec::new(),
+        }
     }
-    source
-        .declaration_importance_iter()
-        .find(|(candidate, _)| candidate.id().name() == declaration.name())
-        .map(|(value, importance)| (value.clone(), importance))
+
+    fn restore(
+        &mut self,
+        declaration: &stylo_cssom_model::RuleDeclaration,
+    ) -> Option<(PropertyDeclaration, Importance)> {
+        let pending = declaration.pending_substitution()?;
+        let important = declaration.important();
+        let index = match self
+            .expansions
+            .iter()
+            .position(|expansion| expansion.important == important && expansion.source == *pending)
+        {
+            Some(index) => index,
+            None => {
+                self.expansions.push(self.expand(pending, important)?);
+                self.expansions.len() - 1
+            },
+        };
+        let expansion = &mut self.expansions[index];
+        let matches = |(candidate, _): &(PropertyDeclaration, Importance)| {
+            candidate.id().name() == declaration.name()
+        };
+        let position = match expansion.declarations.get(expansion.cursor) {
+            Some(candidate) if matches(candidate) => expansion.cursor,
+            _ => expansion.declarations.iter().position(matches)?,
+        };
+        expansion.cursor = position + 1;
+        Some(expansion.declarations[position].clone())
+    }
+
+    fn expand(
+        &self,
+        pending: &stylo_cssom_model::PendingSubstitutionValue,
+        important: bool,
+    ) -> Option<PendingShorthandExpansion> {
+        let url_data = url::Url::parse(pending.base_url()).ok()?.into();
+        let mut source = style::properties::declaration_block::PropertyDeclarationBlock::new();
+        let priority = if important {
+            CssomDeclarationPriority::Important
+        } else {
+            CssomDeclarationPriority::Normal
+        };
+        declaration_block_set_property_with_context(
+            &mut source,
+            pending.shorthand().schema().name,
+            pending.tokens(),
+            priority,
+            self.context.rule_type(),
+            &url_data,
+            self.namespaces,
+        )
+        .then(|| PendingShorthandExpansion {
+            source: pending.clone(),
+            important,
+            declarations: source
+                .declaration_importance_iter()
+                .map(|(value, importance)| (value.clone(), importance))
+                .collect(),
+            cursor: 0,
+        })
+    }
 }
 
 pub fn rule_declaration_block_from_cssom(
