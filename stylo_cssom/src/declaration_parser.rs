@@ -739,18 +739,17 @@ pub fn parse_inline_style_property_declarations(
         &mut block,
         DeclarationPropertyInput::new(property, value),
         priority,
-    ) || inline_style_get_property_value(&block, backing_property).is_none()
-    {
+    ) {
         return None;
     }
+    let backing_value = inline_style_get_property_value(&block, backing_property)?;
     let mut declarations =
         specified_declarations_from_inline_style_block(&block, base_url.clone()).to_vec();
     if let Some(shorthand) =
         stylo_cssom_model::property_schema(&backing_property.to_ascii_lowercase())
             .filter(|schema| inline_shorthand_serializes(schema))
     {
-        let value = inline_style_get_property_value(&block, shorthand.name)
-            .and_then(|value| specified_style_value_from_css(&value, base_url))?;
+        let value = specified_style_value_from_css(&backing_value, base_url)?;
         for declaration in &mut declarations {
             declaration.shorthand_source = Some(
                 if declaration.shorthand_source.is_some_and(
@@ -1869,6 +1868,24 @@ mod tests {
                 .collect::<Vec<_>>();
             assert_eq!(winners, [(name, value.to_owned(), importance)], "{css}");
         }
+    }
+
+    #[test]
+    fn shorthand_value_is_independent_of_the_longhand_order() {
+        for css in [
+            "margin-top: 1px; margin-right: 2px; margin-bottom: 3px; margin-left: 4px",
+            "margin-left: 4px; margin-bottom: 3px; margin-right: 2px; margin-top: 1px",
+            "margin-right: 2px; color: red; margin-left: 4px; margin-top: 1px; margin-bottom: 3px",
+        ] {
+            let block = parse_inline_style_block(css);
+            assert_eq!(
+                inline_style_get_property_value(&block, "margin").as_deref(),
+                Some("1px 2px 3px 4px"),
+                "{css}"
+            );
+        }
+        let incomplete = parse_inline_style_block("margin-top: 1px; margin-left: 4px");
+        assert_eq!(inline_style_get_property_value(&incomplete, "margin"), None);
     }
 
     #[test]

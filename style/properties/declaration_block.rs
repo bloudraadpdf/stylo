@@ -518,6 +518,40 @@ impl PropertyDeclarationBlock {
             .find(|(declaration, _)| declaration.id() == property)
     }
 
+    /// The declaration of each longhand of `shorthand`, in longhand order, or
+    /// `None` when a longhand is absent.
+    ///
+    /// A shorthand expansion stores its longhands in this order, so each lookup
+    /// starts at the position after the previous match.
+    fn shorthand_declarations(
+        &self,
+        shorthand: ShorthandId,
+    ) -> Option<SmallVec<[(&PropertyDeclaration, Importance); 10]>> {
+        let mut found = SmallVec::new();
+        let mut cursor = 0;
+        for longhand in shorthand.longhands() {
+            let id = PropertyDeclarationId::Longhand(longhand);
+            if !self.contains(id) {
+                return None;
+            }
+            let position = match self.declarations.get(cursor) {
+                Some(declaration) if declaration.id() == id => cursor,
+                _ => self
+                    .declarations
+                    .iter()
+                    .position(|declaration| declaration.id() == id)?,
+            };
+            cursor = position + 1;
+            let importance = if self.declarations_importance[position] {
+                Importance::Important
+            } else {
+                Importance::Normal
+            };
+            found.push((&self.declarations[position], importance));
+        }
+        Some(found)
+    }
+
     /// Tries to serialize a given shorthand from the declarations in this
     /// block.
     pub fn shorthand_to_css(
@@ -527,25 +561,18 @@ impl PropertyDeclarationBlock {
     ) -> fmt::Result {
         // Step 1.2.1 of
         // https://drafts.csswg.org/cssom/#dom-cssstyledeclaration-getpropertyvalue
-        let mut list = SmallVec::<[&_; 10]>::new();
-        let mut important_count = 0;
-
         // Step 1.2.2
-        for longhand in shorthand.longhands() {
-            // Step 1.2.2.1
-            let declaration = self.get(PropertyDeclarationId::Longhand(longhand));
-
-            // Step 1.2.2.2 & 1.2.2.3
-            match declaration {
-                Some((declaration, importance)) => {
-                    list.push(declaration);
-                    if importance.important() {
-                        important_count += 1;
-                    }
-                },
-                None => return Ok(()),
-            }
-        }
+        let Some(declarations) = self.shorthand_declarations(shorthand) else {
+            return Ok(());
+        };
+        let important_count = declarations
+            .iter()
+            .filter(|(_, importance)| importance.important())
+            .count();
+        let list = declarations
+            .iter()
+            .map(|(declaration, _)| *declaration)
+            .collect::<SmallVec<[&_; 10]>>();
 
         // If there is one or more longhand with important, and one or more
         // without important, we don't serialize it as a shorthand.
@@ -595,9 +622,10 @@ impl PropertyDeclarationBlock {
         match property.as_shorthand() {
             Ok(shorthand) => {
                 // Step 2.1 & 2.2 & 2.3
-                if shorthand.longhands().all(|l| {
-                    self.get(PropertyDeclarationId::Longhand(l))
-                        .map_or(false, |(_, importance)| importance.important())
+                if self.shorthand_declarations(shorthand).is_some_and(|declarations| {
+                    declarations
+                        .iter()
+                        .all(|(_, importance)| importance.important())
                 }) {
                     Importance::Important
                 } else {
