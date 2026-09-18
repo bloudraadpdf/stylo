@@ -45,3 +45,17 @@ fn native_properties_resolve_their_matching_schema() {
         assert_eq!(resolved.id, row.id);
     }
 }
+
+#[test]
+fn schema_rows_follow_the_native_property_order() {
+    use style::properties::{LonghandId, ShorthandId};
+    use stylo_cssom_model::STANDARD_PROPERTIES;
+
+    let native = LonghandId::ALL
+        .iter()
+        .map(LonghandId::name)
+        .chain(ShorthandId::ALL.iter().map(ShorthandId::name));
+    for (row, name) in STANDARD_PROPERTIES.iter().zip(native) {
+        assert_eq!(row.name, name);
+    }
+}
