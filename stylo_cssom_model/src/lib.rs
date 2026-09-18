@@ -1500,6 +1500,10 @@ impl StyleState {
         destination.imperative_registrations = self.imperative_registrations.clone();
         destination.imperative_registration_revision = self.imperative_registration_revision;
         let mut copies = Vec::with_capacity(self.declaration_order.len());
+        destination.declarations.reserve(self.declarations.len());
+        destination.declaration_order.reserve(self.declaration_order.len());
+        destination.slots.reserve(self.slots.len());
+        destination.unhydrated.reserve(self.unhydrated.len());
         for handle in &self.declaration_order {
             let cell = self
                 .declarations
