@@ -19,7 +19,7 @@ pub use font_feature_values::{
 pub use stylesheet_input::{CssEncoding, StylesheetEnvironmentEncoding, StylesheetLinkEncoding};
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{
         Arc, LazyLock, Mutex, Weak,
         atomic::{AtomicU64, Ordering},
@@ -1135,6 +1135,7 @@ pub struct StyleState {
     document: StyleDocumentHandle,
     declarations: HashMap<DeclarationHandle, Arc<Mutex<DeclarationRecord>>>,
     declaration_order: Vec<DeclarationHandle>,
+    unhydrated: HashSet<DeclarationHandle>,
     slots: HashMap<StyleSlotHandle, Weak<Mutex<DeclarationRecord>>>,
     imperative_registrations: Vec<ImperativePropertyRegistration>,
     imperative_registration_revision: u64,
@@ -1154,6 +1155,7 @@ impl StyleState {
             document,
             declarations: HashMap::new(),
             declaration_order: Vec::new(),
+            unhydrated: HashSet::new(),
             slots: HashMap::new(),
             imperative_registrations: Vec::new(),
             imperative_registration_revision: 0,
@@ -1246,6 +1248,12 @@ impl StyleState {
         Ok(self.insert_declaration(record))
     }
 
+    /// The declarations whose presentation text is not parsed yet.
+    #[must_use]
+    pub fn unhydrated_declarations(&self) -> &HashSet<DeclarationHandle> {
+        &self.unhydrated
+    }
+
     fn insert_declaration(
         &mut self,
         record: DeclarationRecord,
@@ -1253,6 +1261,9 @@ impl StyleState {
         let slot = record.slot;
         let handle = record.handle;
         let install = record.install();
+        if !record.hydrated {
+            self.unhydrated.insert(handle);
+        }
         let record = Arc::new(Mutex::new(record));
         self.slots.insert(slot, Arc::downgrade(&record));
         self.declarations.insert(handle, Arc::clone(&record));
@@ -1335,6 +1346,11 @@ impl StyleState {
         record.provenance = candidate.provenance;
         record.context = candidate.context;
         record.hydrated = candidate.hydrated;
+        if record.hydrated {
+            self.unhydrated.remove(&update.declaration);
+        } else {
+            self.unhydrated.insert(update.declaration);
+        }
         Ok(record.install())
     }
 
@@ -1420,6 +1436,9 @@ impl StyleState {
         let handle = record.handle;
         let slot = record.slot;
         self.declarations.remove(&handle);
+        if self.unhydrated.remove(&handle) {
+            destination.unhydrated.insert(handle);
+        }
         self.declaration_order
             .retain(|candidate| *candidate != handle);
         self.slots.remove(&slot);
@@ -3185,6 +3204,67 @@ mod tests {
         fork.commit_dom_update(update).unwrap();
         assert!(copied.declarations().is_empty());
         assert_eq!(original.declarations().as_ref(), values.as_ref());
+    }
+
+    #[test]
+    fn the_unhydrated_set_follows_each_declaration() {
+        let document = StyleDocumentHandle::allocate();
+        let mut state = StyleState::new(document);
+        let unparsed = |text| {
+            InlineDeclarationCandidate::unparsed(
+                context(document, "https://example.test/"),
+                Some(text),
+            )
+        };
+        let (pending, _) = state
+            .create_inline_attribute(unparsed("color: red"))
+            .expect("an unparsed declaration must bind");
+        let (hydrated, _) = state
+            .create_inline_attribute(raw(document, Some("color: blue")))
+            .expect("a parsed declaration must bind");
+        assert!(state.unhydrated_declarations().contains(&pending.handle()));
+        assert!(!state.unhydrated_declarations().contains(&hydrated.handle()));
+
+        let (fork, copies, _) = state
+            .fork(StyleDocumentHandle::allocate())
+            .expect("the store must fork");
+        assert_eq!(
+            fork.unhydrated_declarations()
+                .iter()
+                .copied()
+                .collect::<Vec<_>>(),
+            [copies[0].1.handle()]
+        );
+
+        let update = state
+            .prepare_dom_update(&pending, pending.slot(), raw(document, Some("color: red")))
+            .expect("the hydration must prepare");
+        state
+            .commit_dom_update(update)
+            .expect("the hydration must commit");
+        assert!(state.unhydrated_declarations().is_empty());
+
+        let update = state
+            .prepare_dom_update(&hydrated, hydrated.slot(), unparsed("color: green"))
+            .expect("the raw replacement must prepare");
+        state
+            .commit_dom_update(update)
+            .expect("the raw replacement must commit");
+        let destination_document = StyleDocumentHandle::allocate();
+        let mut destination = StyleState::new(destination_document);
+        state
+            .adopt_inline_attribute_to(
+                &hydrated,
+                &mut destination,
+                context(destination_document, "https://example.test/"),
+            )
+            .expect("the declaration must transfer");
+        assert!(state.unhydrated_declarations().is_empty());
+        assert!(
+            destination
+                .unhydrated_declarations()
+                .contains(&hydrated.handle())
+        );
     }
 
     #[test]
