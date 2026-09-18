@@ -618,18 +618,13 @@ trait PrivateMatchMethods: TElement {
             }
         }
 
-        self.process_animations_for_pseudo(
-            context,
-            old_styles,
-            new_resolved_styles,
+        for pseudo in [
             PseudoElement::Before,
-        );
-        self.process_animations_for_pseudo(
-            context,
-            old_styles,
-            new_resolved_styles,
             PseudoElement::After,
-        );
+            PseudoElement::Marker,
+        ] {
+            self.process_animations_for_pseudo(context, old_styles, new_resolved_styles, pseudo);
+        }
     }
 
     #[cfg(feature = "servo")]
