@@ -31,6 +31,43 @@ pub fn parse_dom_selector(selector: &str) -> Result<ParsedSelectorList, String> 
     Ok(SelectorList::from_iter(elements.into_iter()))
 }
 
+struct ContentLanguageReads(bool);
+
+impl selectors::visitor::SelectorVisitor for ContentLanguageReads {
+    type Impl = SelectorImpl;
+
+    fn visit_simple_selector(
+        &mut self,
+        component: &selectors::parser::Component<SelectorImpl>,
+    ) -> bool {
+        self.0 |= matches!(
+            component,
+            selectors::parser::Component::NonTSPseudoClass(
+                style::selector_parser::NonTSPseudoClass::Lang(_)
+            )
+        );
+        !self.0
+    }
+
+    fn visit_relative_selector_list(
+        &mut self,
+        list: &[selectors::parser::RelativeSelector<SelectorImpl>],
+    ) -> bool {
+        list.iter().all(|relative| relative.selector.visit(self))
+    }
+}
+
+/// Whether a match of the list can read the content language of an element.
+#[must_use]
+pub fn reads_content_language(selectors: &ParsedSelectorList) -> bool {
+    let mut reads = ContentLanguageReads(false);
+    selectors
+        .slice()
+        .iter()
+        .all(|selector| selector.visit(&mut reads));
+    reads.0
+}
+
 pub fn selector_specificity(selector: &str) -> Result<u32, String> {
     let list = parse_selector(selector)?;
     let [selector] = list.slice() else {
@@ -97,6 +134,22 @@ pub fn selector_targets_pseudo_element(source: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{parse_dom_selector, selector_targets_pseudo_element};
+
+    #[test]
+    fn only_a_lang_selector_reads_the_content_language() {
+        for (source, expected) in [
+            (".transition", false),
+            ("#fixture > .container:not(.to)", false),
+            ("p:lang(en)", true),
+            ("div, p:lang(en)", true),
+            ("div:not(:lang(en))", true),
+            ("div:is(.a, :lang(fr))", true),
+            ("div:has(> p:lang(de))", true),
+        ] {
+            let parsed = super::parse_selector(source).expect("the selector is valid");
+            assert_eq!(super::reads_content_language(&parsed), expected, "{source}");
+        }
+    }
 
     #[test]
     fn static_form_selector_retains_its_pseudo_class_specificity() {
