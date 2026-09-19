@@ -2373,7 +2373,7 @@ mod internal_stylesheet_root_tests {
     #[test]
     fn vendor_and_compatibility_projections_retain_typed_rule_grammars() {
         let counters = pdfreactor_builtin_counter_stylesheet_root(CompatMode::PdfReactor)
-            .expect("PDFReactor compatibility must supply its counter styles");
+            .expect("PDFreactor compatibility must supply its counter styles");
         assert_eq!(
             counters.projection_serialization(),
             concat!(
