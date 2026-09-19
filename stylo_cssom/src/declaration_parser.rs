@@ -1172,10 +1172,34 @@ pub fn cssom_declaration_set_property(
 pub fn declaration_block_shorthand_values(
     block: &style::properties::declaration_block::PropertyDeclarationBlock,
 ) -> Vec<stylo_cssom_model::RuleDeclaration> {
-    stylo_cssom_model::STANDARD_PROPERTIES
+    static SHORTHANDS: std::sync::LazyLock<
+        Box<[(&'static stylo_cssom_model::PropertySchemaRow, Option<style::properties::ShorthandId>)]>,
+    > = std::sync::LazyLock::new(|| {
+        stylo_cssom_model::STANDARD_PROPERTIES
+            .iter()
+            .filter(|schema| schema.kind == stylo_cssom_model::PropertyKind::Shorthand)
+            .map(|schema| {
+                let shorthand = PropertyId::parse_enabled_for_all_content(schema.name)
+                    .ok()
+                    .and_then(|property| property.as_shorthand().ok());
+                (schema, shorthand)
+            })
+            .collect()
+    });
+
+    // A shorthand has a value only when the block holds one of its longhands. A schema
+    // shorthand that Stylo does not know as a shorthand is evaluated as before.
+    let present = block.property_ids();
+    SHORTHANDS
         .iter()
-        .filter(|schema| schema.kind == stylo_cssom_model::PropertyKind::Shorthand)
-        .filter_map(|schema| {
+        .filter(|(_, shorthand)| {
+            shorthand.is_none_or(|shorthand| {
+                shorthand
+                    .longhands()
+                    .any(|longhand| present.contains(style::properties::PropertyDeclarationId::Longhand(longhand)))
+            })
+        })
+        .filter_map(|(schema, _)| {
             let value = declaration_block_get_property_value(block, schema.name)?;
             Some(
                 stylo_cssom_model::RuleDeclaration::new(schema.name, value)
@@ -1941,6 +1965,37 @@ mod tests {
         }
         let incomplete = parse_inline_style_block("margin-top: 1px; margin-left: 4px");
         assert_eq!(inline_style_get_property_value(&incomplete, "margin"), None);
+    }
+
+    #[test]
+    fn the_shorthand_values_of_a_block_equal_an_evaluation_of_each_schema_shorthand() {
+        let mut covered = 0;
+        for css in [
+            "opacity: 0.5",
+            "margin-top: 1px; margin-left: 4px",
+            "margin: 1px 2px 3px 4px; opacity: 0",
+            "margin: 1px !important; padding: 2px; border: 1px solid red",
+            "container: sidebar / inline-size; transition: opacity 1s",
+            "font: 12px/1.5 serif; background: url(a.png) no-repeat; flex: 1 1 0",
+            "margin: var(--space); grid-area: 1 / 2 / 3 / 4",
+        ] {
+            let block = parse_inline_style_block(css).0;
+            let every_schema_shorthand = stylo_cssom_model::STANDARD_PROPERTIES
+                .iter()
+                .filter(|schema| schema.kind == stylo_cssom_model::PropertyKind::Shorthand)
+                .filter_map(|schema| {
+                    let value = super::declaration_block_get_property_value(&block, schema.name)?;
+                    Some((schema.name.to_owned(), value))
+                })
+                .collect::<Vec<_>>();
+            let filtered = super::declaration_block_shorthand_values(&block)
+                .iter()
+                .map(|declaration| (declaration.name().to_owned(), declaration.value().to_owned()))
+                .collect::<Vec<_>>();
+            assert_eq!(filtered, every_schema_shorthand, "{css}");
+            covered += filtered.len();
+        }
+        assert!(covered > 5, "the fixtures must give shorthand values: {covered}");
     }
 
     #[test]
