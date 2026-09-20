@@ -2764,8 +2764,11 @@ impl RuleLease {
             snapshot.payload_mut().declaration_block = source.payload().declaration_block.clone();
         }
         snapshot.payload_mut().cssom_data = source.payload().cssom_data.clone();
-        snapshot.payload_mut().projection_serialization =
-            source.payload().projection_serialization.clone();
+        snapshot.payload_mut().projection_serialization = source
+            .payload()
+            .projection_serialization
+            .as_ref()
+            .map(|_| self.projection_serialization().into());
         snapshot.payload_mut().source_stamp = Some(source_stamp);
         snapshot
     }
