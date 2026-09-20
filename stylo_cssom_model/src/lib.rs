@@ -2775,6 +2775,54 @@ mod tests {
     }
 
     #[test]
+    fn fork_preserves_nested_cssom_mutation_in_projection() {
+        let document = StyleDocumentHandle::allocate();
+        let mut state = StyleState::new(document);
+        let layer = RuleNode::authored_with_group_header(
+            RuleGrammar::LayerBlock,
+            "@layer values {#target {}}",
+            [RuleNode::internal_style("#target", [])],
+            RuleGroupHeader::new("@layer values"),
+        )
+        .with_projection_serialization("@layer values {#target {}}");
+        let sheet = state
+            .create_stylesheet(StyleSheetCandidate::new(
+                StyleSheetSourceContext::inline(
+                    document,
+                    StyleOrigin::Author,
+                    "https://example.test/".into(),
+                ),
+                [layer],
+            ))
+            .expect("the source stylesheet must bind");
+        let list = sheet
+            .rule_list_at_path(&[0])
+            .expect("the layer has a rule list");
+        let update = state
+            .prepare_mutate_rule(
+                &sheet,
+                &list,
+                0,
+                RuleNode::internal_style("#target", [RuleDeclaration::new("height", "123px")]),
+            )
+            .expect("the child style rule can change");
+        state
+            .commit_rule_graph_update(update)
+            .expect("the mutation must commit");
+
+        let expected = sheet.serialise_projection(ImportBindingContext::Source);
+        assert!(expected.contains("height: 123px"), "{expected}");
+        let (_, _, copies) = state
+            .fork(StyleDocumentHandle::allocate())
+            .expect("the stylesheet must fork");
+        let copied = &copies[0].1;
+        assert_eq!(
+            copied.serialise_projection(ImportBindingContext::Source),
+            expected
+        );
+    }
+
+    #[test]
     fn stylesheet_forks_preserve_import_topology_with_fresh_cells() {
         let document = StyleDocumentHandle::allocate();
         let mut state = StyleState::new(document);
