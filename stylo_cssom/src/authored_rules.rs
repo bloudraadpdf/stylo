@@ -307,6 +307,12 @@ impl ParsedStylesheet {
         url: String,
         encoding: stylo_cssom_model::CssEncoding,
     ) -> Self {
+        if let Ok(base) = Url::parse(&url) {
+            self.rules = project_stylesheet_rule_urls(
+                &self.rules,
+                &crate::CssStylesheetBaseUrl::from_absolute(base),
+            );
+        }
         self.linked_source = Some(ParsedLinkedStylesheetSource { url, encoding });
         self
     }
@@ -1949,6 +1955,24 @@ mod tests {
                     .is_err()
             );
         }
+    }
+
+    #[test]
+    fn linked_stylesheet_projects_font_urls_without_changing_cssom_sources() {
+        let parsed =
+            ParsedStylesheet::parse("@font-face { font-family: Fixture; src: url(font.otf) }")
+                .unwrap();
+        let specified = parsed.serialise();
+        let linked = parsed.with_linked_source(
+            "https://example.test/support/font.css".into(),
+            stylo_cssom_model::CssEncoding::new("UTF-8").unwrap(),
+        );
+        assert_eq!(linked.serialise(), specified);
+        assert!(
+            linked.rule_nodes()[0]
+                .projection_serialization()
+                .contains("https://example.test/support/font.otf")
+        );
     }
 
     #[test]
