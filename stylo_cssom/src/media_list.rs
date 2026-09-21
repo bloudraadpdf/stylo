@@ -105,6 +105,18 @@ mod tests {
     use super::CssomMediaList;
 
     #[test]
+    fn general_enclosed_queries_close_blocks_at_end_of_input() {
+        assert_eq!(
+            CssomMediaList::parse("all,(orientation:").serialization(),
+            "all, (orientation:)"
+        );
+        assert_eq!(
+            CssomMediaList::parse("unknown(foo[").serialization(),
+            "unknown(foo[])"
+        );
+    }
+
+    #[test]
     fn media_lists_use_css_syntax_and_canonical_serialization() {
         let mut list = CssomMediaList::parse("screen and (min-width: 480px), print");
         assert_eq!(list.items(), ["screen and (min-width: 480px)", "print"]);
