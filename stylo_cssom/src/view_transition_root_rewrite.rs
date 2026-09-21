@@ -28,6 +28,9 @@ pub const INTERNAL_GROUP_CHILDREN_BORDER_COLOR_MARKER: &str =
 pub const INTERNAL_GROUP_CHILDREN_OVERFLOW_MARKER: &str =
     "--moegoe-view-transition-group-children-overflow";
 pub const GROUP_ANIMATION_CARRIER_ELEMENT: &str = "moegoe-internal-view-transition-group";
+pub const IMAGE_PAIR_ANIMATION_CARRIER_ELEMENT: &str = "moegoe-internal-view-transition-image-pair";
+pub const OLD_ANIMATION_CARRIER_ELEMENT: &str = "moegoe-internal-view-transition-old";
+pub const NEW_ANIMATION_CARRIER_ELEMENT: &str = "moegoe-internal-view-transition-new";
 pub const TRANSITION_STYLE_ELEMENT: &str = "moegoe-internal-view-transition-style";
 pub const GROUP_STYLE_ELEMENT: &str = "moegoe-internal-view-transition-group-style";
 pub const GROUP_CHILDREN_STYLE_ELEMENT: &str =
@@ -168,7 +171,7 @@ pub fn expand_style_rule(prelude: &str, body: &str) -> StyleRuleExpansion {
     append_projected_rule(
         &mut rule,
         project_group_animation_carrier_selectors(prelude),
-        project_group_carrier_declarations(body),
+        project_animation_carrier_declarations(body),
     );
     append_projected_rule(
         &mut rule,
@@ -180,6 +183,26 @@ pub fn expand_style_rule(prelude: &str, body: &str) -> StyleRuleExpansion {
         project_group_animation_carrier_selectors(prelude),
         project_group_authored_transform_marker(body),
     );
+    for (pseudo, carrier) in [
+        (
+            b"::view-transition-image-pair".as_slice(),
+            IMAGE_PAIR_ANIMATION_CARRIER_ELEMENT,
+        ),
+        (
+            b"::view-transition-old".as_slice(),
+            OLD_ANIMATION_CARRIER_ELEMENT,
+        ),
+        (
+            b"::view-transition-new".as_slice(),
+            NEW_ANIMATION_CARRIER_ELEMENT,
+        ),
+    ] {
+        append_projected_rule(
+            &mut rule,
+            project_group_style_selectors(prelude, pseudo, carrier),
+            project_animation_carrier_declarations(body),
+        );
+    }
     append_projected_style_tree_rules(&mut rule, prelude, body);
     append_projected_rule(
         &mut rule,
@@ -807,7 +830,7 @@ fn project_ancestor_placement_declarations(body: &str, prefix: &str) -> Option<S
     (!output.is_empty()).then_some(output)
 }
 
-fn project_group_carrier_declarations(body: &str) -> Option<String> {
+fn project_animation_carrier_declarations(body: &str) -> Option<String> {
     project_declarations(
         body,
         &[
@@ -941,10 +964,10 @@ fn project_declarations(
 #[cfg(test)]
 mod tests {
     use super::{
-        GROUP_CHILDREN_STYLE_ELEMENT, GROUP_STYLE_ELEMENT, INTERNAL_BACKGROUND_PROPERTY,
-        INTERNAL_IMAGE_PAIR_OPACITY_PROPERTY, SPECIFICITY_WITNESS, TRANSITION_STYLE_ELEMENT,
         parse_view_transition_group_pseudo_selector, project_named_capture_selector,
         project_standalone_root_view_transition_root, rewrite_view_transition_root,
+        GROUP_CHILDREN_STYLE_ELEMENT, GROUP_STYLE_ELEMENT, INTERNAL_BACKGROUND_PROPERTY,
+        INTERNAL_IMAGE_PAIR_OPACITY_PROPERTY, SPECIFICITY_WITNESS, TRANSITION_STYLE_ELEMENT,
     };
     use crate::selector_query::selector_specificity;
 
@@ -1304,10 +1327,16 @@ mod tests {
             "::view-transition-old(*),::view-transition-image-pair(*){animation-play-state:paused}",
         ));
 
-        assert!(rewritten.contains(concat!(
-            "moegoe-internal-view-transition-group",
-            ":where([data-moegoe-view-transition-name]){animation-play-state:paused;}",
-        )));
+        for carrier in [
+            super::GROUP_ANIMATION_CARRIER_ELEMENT,
+            super::IMAGE_PAIR_ANIMATION_CARRIER_ELEMENT,
+            super::OLD_ANIMATION_CARRIER_ELEMENT,
+            super::NEW_ANIMATION_CARRIER_ELEMENT,
+        ] {
+            assert!(rewritten.contains(&format!(
+                "{carrier}:where([data-moegoe-view-transition-name]){{animation-play-state:paused;}}"
+            )), "{rewritten}");
+        }
     }
 
     #[test]
