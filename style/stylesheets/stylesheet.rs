@@ -1347,6 +1347,29 @@ mod tests {
         }
     }
 
+    #[test]
+    fn servo_media_feature_calculations_resolve_against_the_device() {
+        use crate::media_queries::MediaList;
+        use crate::stylesheets::CustomMediaEvaluator;
+        use cssparser::{Parser, ParserInput};
+        let url: UrlExtraData = url::Url::parse("https://example.test/").unwrap().into();
+        let context = ParserContext::new(Origin::Author, &url, None, ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks, Default::default(), None, None);
+        let stylist = test_stylist_for_media(MediaType::screen(), 1.0);
+        for (query, expected) in [
+            ("(grid: calc(2 * sign(17px - 1rem)))", false),
+            ("(grid: calc(2 * sign(16px - 1rem)))", true),
+            ("(color: calc(8 * sign(17px - 1rem)))", true),
+            ("(aspect-ratio > calc(sign(17px - 1rem)) / 2)", true),
+            ("(aspect-ratio < calc(sign(17px - 1rem)) / 2)", false),
+        ] {
+            let mut input = ParserInput::new(query);
+            let list = MediaList::parse(&context, &mut Parser::new(&mut input));
+            assert_eq!(list.evaluate(stylist.device(), QuirksMode::NoQuirks,
+                &mut CustomMediaEvaluator::none()), expected, "{query}");
+        }
+    }
+
     fn test_stylist() -> crate::stylist::Stylist {
         test_stylist_for_media(MediaType::print(), 1.0)
     }
