@@ -38,6 +38,16 @@ fn assert_serialization(name: &str, input: &str, expected: Option<&str>) {
 }
 
 #[test]
+fn scroll_initial_target_accepts_only_none_and_nearest() {
+    for value in ["none", "nearest"] {
+        assert_serialization("scroll-initial-target", value, Some(value));
+    }
+    for value in ["auto", "all", "nearest none"] {
+        assert_serialization("scroll-initial-target", value, None);
+    }
+}
+
+#[test]
 fn break_inside_accepts_only_auto_and_avoid_values() {
     for value in [
         "auto",

@@ -1268,6 +1268,16 @@ mod scroll_marker_group_tests {
 }
 
 impl ScrollSnapType {
+    /// The snap axis.
+    pub const fn axis(self) -> ScrollSnapAxis {
+        self.axis
+    }
+
+    /// The snap strictness.
+    pub const fn strictness(self) -> ScrollSnapStrictness {
+        self.strictness
+    }
+
     /// Returns `none`.
     #[inline]
     pub fn none() -> Self {
@@ -1364,6 +1374,16 @@ pub struct ScrollSnapAlign {
 }
 
 impl ScrollSnapAlign {
+    /// The block-axis alignment.
+    pub const fn block(self) -> ScrollSnapAlignKeyword {
+        self.block
+    }
+
+    /// The inline-axis alignment.
+    pub const fn inline(self) -> ScrollSnapAlignKeyword {
+        self.inline
+    }
+
     /// Returns `none`.
     #[inline]
     pub fn none() -> Self {

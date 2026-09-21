@@ -8031,6 +8031,14 @@ animation_type = "discrete"
 affects = ""
 keyword = { values = ["auto", "smooth"] }
 
+[scroll-initial-target]
+struct = "box"
+engine = "servo"
+spec = "https://drafts.csswg.org/css-scroll-snap-2/#scroll-initial-target"
+animation_type = "none"
+affects = "layout"
+keyword = { values = ["none", "nearest"] }
+
 [scroll-axis-lock]
 struct = "box"
 spec = "https://drafts.csswg.org/css-overflow-5/#scroll-axis-lock"
