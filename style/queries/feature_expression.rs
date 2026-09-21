@@ -10,9 +10,8 @@ use super::feature::{FeatureFlags, KeywordDiscriminant};
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
 use crate::str::{starts_with_ignore_ascii_case, string_as_ascii_lowercase};
-use crate::values::computed::{self, Ratio, ToComputedValue};
-use crate::values::specified::{Integer, Length, Number, Resolution};
-use crate::values::CSSFloat;
+use crate::values::computed::{self, ToComputedValue};
+use crate::values::specified::{Integer, Length, Number, Ratio, Resolution};
 use crate::{Atom, Zero};
 use cssparser::{Parser, Token};
 use selectors::kleene_value::KleeneValue;
@@ -587,11 +586,11 @@ impl QueryFeatureExpression {
             },
             Evaluator::Integer(eval) => {
                 let v = eval(context);
-                self.kind.evaluate(v, |v| *expect!(Integer, v))
+                self.kind.evaluate(v, |v| expect!(Integer, v).to_computed_value(context))
             },
             Evaluator::Float(eval) => {
                 let v = eval(context);
-                self.kind.evaluate(v, |v| *expect!(Float, v))
+                self.kind.evaluate(v, |v| expect!(Float, v).to_computed_value(context))
             },
             Evaluator::NumberRatio(eval) => {
                 let ratio = eval(context);
@@ -600,7 +599,7 @@ impl QueryFeatureExpression {
                 // FIXME: we may need to update here once
                 // https://github.com/w3c/csswg-drafts/issues/4954 got resolved.
                 self.kind
-                    .evaluate(ratio, |v| expect!(NumberRatio, v).used_value())
+                    .evaluate(ratio, |v| expect!(NumberRatio, v).to_computed_value(context).used_value())
             },
             Evaluator::OptionalNumberRatio(eval) => {
                 let ratio = match eval(context) {
@@ -609,7 +608,7 @@ impl QueryFeatureExpression {
                 };
                 // See above for subtleties here.
                 self.kind
-                    .evaluate(ratio, |v| expect!(NumberRatio, v).used_value())
+                    .evaluate(ratio, |v| expect!(NumberRatio, v).to_computed_value(context).used_value())
             },
             Evaluator::Resolution(eval) => {
                 let v = eval(context).dppx();
@@ -628,32 +627,25 @@ impl QueryFeatureExpression {
                 let computed = self
                     .kind
                     .non_ranged_value()
-                    .map(|v| *expect!(BoolInteger, v));
+                    .map(|v| expect!(BoolInteger, v).to_computed_value(context));
                 let boolean = eval(context);
-                computed.map_or(boolean, |v| v == boolean)
+                computed.map_or(boolean, |value| value.clamp(0, 1) == i32::from(boolean))
             },
         })
     }
 }
 
 /// A value found or expected in a expression.
-///
-/// FIXME(emilio): How should calc() serialize in the Number / Integer /
-/// BoolInteger / NumberRatio case, as computed or as specified value?
-///
-/// If the first, this would need to store the relevant values.
-///
-/// See: https://github.com/w3c/csswg-drafts/issues/1968
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
 pub enum QueryExpressionValue {
     /// A length.
     Length(Length),
     /// An integer.
-    Integer(i32),
+    Integer(Integer),
     /// A floating point value.
-    Float(CSSFloat),
+    Float(Number),
     /// A boolean value, specified as an integer (i.e., either 0 or 1).
-    BoolInteger(bool),
+    BoolInteger(Integer),
     /// A single non-negative number or two non-negative numbers separated by '/',
     /// with optional whitespace on either side of the '/'.
     NumberRatio(Ratio),
@@ -671,10 +663,10 @@ impl QueryExpressionValue {
     {
         match *self {
             QueryExpressionValue::Length(ref l) => l.to_css(dest),
-            QueryExpressionValue::Integer(v) => v.to_css(dest),
-            QueryExpressionValue::Float(v) => v.to_css(dest),
-            QueryExpressionValue::BoolInteger(v) => dest.write_str(if v { "1" } else { "0" }),
-            QueryExpressionValue::NumberRatio(ratio) => ratio.to_css(dest),
+            QueryExpressionValue::Integer(ref v) => v.to_css(dest),
+            QueryExpressionValue::Float(ref v) => v.to_css(dest),
+            QueryExpressionValue::BoolInteger(ref v) => v.to_css(dest),
+            QueryExpressionValue::NumberRatio(ref ratio) => ratio.to_css(dest),
             QueryExpressionValue::Resolution(ref r) => r.to_css(dest),
             QueryExpressionValue::Enumerated(value) => match for_expr.feature().evaluator {
                 Evaluator::Enumerated { serializer, .. } => dest.write_str(&*serializer(value)),
@@ -695,24 +687,24 @@ impl QueryExpressionValue {
             },
             Evaluator::Integer(..) => {
                 let integer = Integer::parse(context, input)?;
-                QueryExpressionValue::Integer(integer.value())
+                QueryExpressionValue::Integer(integer)
             },
             Evaluator::BoolInteger(..) => {
                 let integer = Integer::parse_non_negative(context, input)?;
                 let value = integer.value();
-                if value > 1 {
+                if !integer.was_calc() && value > 1 {
                     return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
                 }
-                QueryExpressionValue::BoolInteger(value == 1)
+                QueryExpressionValue::BoolInteger(integer)
             },
             Evaluator::Float(..) => {
                 let number = Number::parse(context, input)?;
-                QueryExpressionValue::Float(number.get())
+                QueryExpressionValue::Float(number)
             },
             Evaluator::OptionalNumberRatio(..) | Evaluator::NumberRatio(..) => {
                 use crate::values::specified::Ratio as SpecifiedRatio;
                 let ratio = SpecifiedRatio::parse(context, input)?;
-                QueryExpressionValue::NumberRatio(Ratio::new(ratio.0.get(), ratio.1.get()))
+                QueryExpressionValue::NumberRatio(ratio)
             },
             Evaluator::Resolution(..) => {
                 QueryExpressionValue::Resolution(Resolution::parse(context, input)?)
