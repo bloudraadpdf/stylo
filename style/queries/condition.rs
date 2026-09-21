@@ -287,8 +287,27 @@ impl ToCss for QueryCondition {
 }
 
 /// <https://drafts.csswg.org/css-syntax-3/#typedef-any-value>
-fn consume_any_value<'i, 't>(input: &mut Parser<'i, 't>) -> Result<(), ParseError<'i>> {
-    input.expect_no_error_token().map_err(Into::into)
+fn serialize_any_value<'i, 't>(
+    input: &mut Parser<'i, 't>,
+    output: &mut String,
+) -> Result<(), ParseError<'i>> {
+    while let Ok(token) = input.next_including_whitespace_and_comments().cloned() {
+        if token.is_parse_error() {
+            return Err(input.new_unexpected_token_error(token));
+        }
+        let closing = match token {
+            Token::Function(_) | Token::ParenthesisBlock => Some(')'),
+            Token::SquareBracketBlock => Some(']'),
+            Token::CurlyBracketBlock => Some('}'),
+            _ => None,
+        };
+        cssparser::ToCss::to_css(&token, output).unwrap();
+        if let Some(closing) = closing {
+            input.parse_nested_block(|nested| serialize_any_value(nested, output))?;
+            output.push(closing);
+        }
+    }
+    Ok(())
 }
 
 impl QueryCondition {
@@ -452,7 +471,8 @@ impl QueryCondition {
         input.skip_whitespace();
         let start = input.position();
         let start_location = input.current_source_location();
-        match *input.next()? {
+        let token = input.next()?.clone();
+        match token {
             Token::ParenthesisBlock => {
                 let nested = Self::try_parse_block(context, input, start, |input| {
                     Self::parse_in_parenthesis_block(context, input, feature_type)
@@ -484,8 +504,11 @@ impl QueryCondition {
             },
             ref t => return Err(start_location.new_unexpected_token_error(t.clone())),
         }
-        input.parse_nested_block(consume_any_value)?;
-        Ok(Self::GeneralEnclosed(input.slice_from(start).to_owned()))
+        let mut serialization = String::new();
+        cssparser::ToCss::to_css(&token, &mut serialization).unwrap();
+        input.parse_nested_block(|nested| serialize_any_value(nested, &mut serialization))?;
+        serialization.push(')');
+        Ok(Self::GeneralEnclosed(serialization))
     }
 
     /// Whether this condition matches the device and quirks mode.
