@@ -28,6 +28,11 @@ impl CssomMediaList {
     }
 
     #[must_use]
+    pub fn parsed(&self) -> &MediaList {
+        &self.0
+    }
+
+    #[must_use]
     pub fn items(&self) -> Vec<String> {
         self.0
             .media_queries
