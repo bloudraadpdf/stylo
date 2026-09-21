@@ -2791,6 +2791,9 @@ mod tests {
             PropertyDeclaration::ScrollBehavior(value) => {
                 PropertyDeclaration::ScrollBehavior(*value)
             },
+            PropertyDeclaration::ScrollInitialTarget(value) => {
+                PropertyDeclaration::ScrollInitialTarget(*value)
+            },
             PropertyDeclaration::ScrollAxisLock(value) => {
                 PropertyDeclaration::ScrollAxisLock(*value)
             },

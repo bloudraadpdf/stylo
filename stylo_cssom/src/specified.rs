@@ -206,6 +206,19 @@ fn project_inline_compatibility_declaration(
 
 #[cfg(test)]
 mod inline_compatibility_projection_tests {
+    #[test]
+    fn initial_scroll_target_survives_specified_projection() {
+        let declarations = crate::declaration_parser::parse_inline_style_declarations(
+            "scroll-initial-target: nearest",
+            "about:blank".into(),
+        );
+        assert_eq!(
+            super::projected_specified_property_value(&declarations, "scroll-initial-target")
+                .as_deref(),
+            Some("nearest")
+        );
+    }
+
     use super::{
         project_inline_compatibility_declaration, project_inline_style_declaration,
         projected_specified_property_value, serialize_specified_declarations,
