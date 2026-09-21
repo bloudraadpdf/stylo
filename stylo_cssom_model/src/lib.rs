@@ -82,7 +82,7 @@ pub use stylesheet_graph::{
     DetachedRuleLease, DetachedRuleListLease, DetachedStyleSheetLease, ImportBindingContext,
     ImportBindingHandle, ImportBindingLease, ImportBindingLoadState, InternalStylesheetRoot,
     PendingSubstitutionValue, PositionTryDescriptorName, PreparedRuleGraphUpdate,
-    RuleBindingContext, RuleBlock, RuleConditionKind, RuleContainerCondition, RuleCssomData,
+    RuleBindingContext, RuleBlock, RuleConditionKind, RuleContainerCondition, RuleCssomData, RuleCustomMediaQuery,
     RuleDeclaration, RuleDeclarationBlock, RuleDeclarationDomain, RuleGrammar, RuleGraphError,
     RuleGroupHeader, RuleHandle, RuleImportCorsMode, RuleImportLayer, RuleImportPrelude,
     RuleImportReferrerPolicy, RuleImportRequest, RuleKeyframeSelector, RuleLease, RuleListHandle,
