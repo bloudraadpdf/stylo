@@ -16,6 +16,7 @@ pub mod stylesheet_input;
 pub mod svg_presentation;
 pub mod values;
 pub mod view_transition;
+pub mod viewport_meta;
 pub mod view_transition_name_rewrite;
 
 pub mod active_view_transition_selector;
