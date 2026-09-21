@@ -7,6 +7,16 @@ use std::{
 
 use crate::{CssEncoding, StyleDocumentHandle, StyleState};
 
+#[cfg(test)]
+thread_local! {
+    static SNAPSHOT_VISITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(crate) fn take_snapshot_visits() -> usize {
+    SNAPSHOT_VISITS.with(|visits| visits.replace(0))
+}
+
 non_reused_handle!(
     StyleSheetHandle,
     NEXT_STYLE_SHEET_HANDLE,
@@ -2682,62 +2692,17 @@ impl RuleLease {
     }
     #[must_use]
     pub fn serialization(&self) -> String {
-        let record = self.0.lock().expect("rule cell mutex poisoned");
-        let mut node = record.node.clone();
-        let nested = record.nested_list.clone();
-        drop(record);
-        let Some(nested) = nested else {
-            return node.serialization();
-        };
-        let Some(header) = node.payload().group_header.as_ref() else {
-            node.payload_mut().nested = nested.nodes();
-            return node.serialization();
-        };
-        let children = (0..nested.len())
-            .filter_map(|index| nested.rule(index))
-            .map(|rule| rule.serialization())
-            .collect::<Vec<_>>();
-        serialise_cssom_group(
-            node.grammar(),
-            header,
-            node.payload().declaration_block(),
-            &children,
-        )
+        self.snapshot_node().serialization()
     }
 
     #[must_use]
     pub fn projection_serialization(&self) -> String {
-        let record = self.0.lock().expect("rule cell mutex poisoned");
-        let projection = record.node.payload().projection_serialization.clone();
-        let grammar = record.node.grammar();
-        let nested = record.nested_list.clone();
-        let header = record.node.payload().group_header.clone();
-        let declarations = record.node.payload().declaration_block.clone();
-        let original_nested = record.node.payload().nested.clone();
-        drop(record);
-        let Some(projection) = projection else {
-            return self.serialization();
-        };
-        let Some(nested) = nested else {
-            return projection.to_string();
-        };
-        if nested.is_empty() {
-            return projection.to_string();
-        }
-        if rule_lists_have_equal_projection_semantics(&nested.nodes(), &original_nested) {
-            return projection.to_string();
-        }
-        let Some(header) = header else {
-            return self.serialization();
-        };
-        let children = (0..nested.len())
-            .filter_map(|index| nested.rule(index))
-            .map(|rule| rule.projection_serialization())
-            .collect::<Vec<_>>();
-        serialise_cssom_group(grammar, &header, declarations.as_ref(), &children)
+        self.snapshot_node().projection_serialization()
     }
 
     fn snapshot_node(&self) -> RuleNode {
+        #[cfg(test)]
+        SNAPSHOT_VISITS.with(|visits| visits.set(visits.get() + 1));
         let record = self.0.lock().expect("rule cell mutex poisoned");
         let source_stamp = record.source_stamp;
         let source = record.node.clone();
@@ -2746,15 +2711,62 @@ impl RuleLease {
         let block = record.block.clone();
         let header = source.payload().group_header.clone();
         drop(record);
-        let nested_nodes = nested.map_or_else(|| Arc::from([]), |list| list.nodes());
+        let nested_nodes = nested
+            .as_ref()
+            .map_or_else(|| Arc::from([]), RuleListLease::nodes);
+        let serialization = match (&nested, &header) {
+            (None, _) => source.serialization(),
+            (Some(_), Some(header)) => {
+                let children = nested_nodes
+                    .iter()
+                    .map(RuleNode::serialization)
+                    .collect::<Vec<_>>();
+                serialise_cssom_group(
+                    grammar,
+                    header,
+                    source.payload().declaration_block(),
+                    &children,
+                )
+            },
+            (Some(_), None) => {
+                let mut current = source.clone();
+                current.payload_mut().nested = nested_nodes.clone();
+                current.serialization()
+            },
+        };
+        let projection_serialization =
+            source
+                .payload()
+                .projection_serialization
+                .as_ref()
+                .map(|projection| {
+                    if nested_nodes.is_empty()
+                        || rule_lists_have_equal_projection_semantics(
+                            &nested_nodes,
+                            source.payload().nested(),
+                        )
+                    {
+                        return projection.clone();
+                    }
+                    let Some(header) = header.as_ref() else {
+                        return Arc::from(serialization.as_str());
+                    };
+                    let children = nested_nodes
+                        .iter()
+                        .map(RuleNode::projection_serialization)
+                        .collect::<Vec<_>>();
+                    Arc::from(serialise_cssom_group(
+                        grammar,
+                        header,
+                        source.payload().declaration_block(),
+                        &children,
+                    ))
+                });
         let mut snapshot = match header {
-            Some(header) => RuleNode::authored_with_group_header(
-                grammar,
-                self.serialization(),
-                nested_nodes,
-                header,
-            ),
-            None => RuleNode::authored(grammar, self.serialization(), nested_nodes),
+            Some(header) => {
+                RuleNode::authored_with_group_header(grammar, serialization, nested_nodes, header)
+            },
+            None => RuleNode::authored(grammar, serialization, nested_nodes),
         };
         if let Some(block) = block {
             let declaration_block = block.snapshot();
@@ -2764,11 +2776,7 @@ impl RuleLease {
             snapshot.payload_mut().declaration_block = source.payload().declaration_block.clone();
         }
         snapshot.payload_mut().cssom_data = source.payload().cssom_data.clone();
-        snapshot.payload_mut().projection_serialization = source
-            .payload()
-            .projection_serialization
-            .as_ref()
-            .map(|_| self.projection_serialization().into());
+        snapshot.payload_mut().projection_serialization = projection_serialization;
         snapshot.payload_mut().source_stamp = Some(source_stamp);
         snapshot
     }
