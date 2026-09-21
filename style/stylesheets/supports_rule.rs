@@ -13,8 +13,8 @@ use crate::shared_lock::{DeepCloneWithLock, Locked};
 use crate::shared_lock::{SharedRwLock, SharedRwLockReadGuard, ToCssWithGuard};
 use crate::stylesheets::{CssRuleType, CssRules};
 use cssparser::parse_important;
-use cssparser::{match_ignore_ascii_case, ParseError as CssParseError, ParserInput};
 use cssparser::{Delimiter, Parser, SourceLocation, Token};
+use cssparser::{ParseError as CssParseError, ParserInput, match_ignore_ascii_case};
 #[cfg(feature = "gecko")]
 use malloc_size_of::{MallocSizeOfOps, MallocUnconditionalShallowSizeOf};
 use selectors::parser::{Selector, SelectorParseErrorKind};
@@ -89,6 +89,8 @@ pub enum SupportsCondition {
     FontFormat(FontFaceSourceFormatKeyword),
     /// `font-tech(<font-tech>)`
     FontTech(FontFaceSourceTechFlags),
+    /// `named-feature(<ident>)`
+    NamedFeature(crate::Atom),
     /// `(any tokens)` or `func(any tokens)`
     FutureSyntax(String),
 }
@@ -156,6 +158,9 @@ impl SupportsCondition {
                 let flag = FontFaceSourceTechFlags::parse_one(input)?;
                 Ok(SupportsCondition::FontTech(flag))
             },
+            "named-feature" => {
+                Ok(SupportsCondition::NamedFeature(crate::Atom::from(input.expect_ident()?.as_ref())))
+            },
             _ => {
                 Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
             },
@@ -214,6 +219,13 @@ impl SupportsCondition {
             SupportsCondition::Selector(ref selector) => selector.eval(cx),
             SupportsCondition::FontFormat(ref format) => eval_font_format(format),
             SupportsCondition::FontTech(ref tech) => eval_font_tech(tech),
+            SupportsCondition::NamedFeature(ref name) => {
+                cfg!(feature = "servo")
+                    && matches!(
+                        name.as_ref(),
+                        "anchor-position-follows-transforms" | "single-axis-scroll-container"
+                    )
+            },
             SupportsCondition::FutureSyntax(_) => false,
         }
     }
@@ -376,6 +388,11 @@ impl ToCss for SupportsCondition {
                 dest.write_char(')')
             },
             SupportsCondition::FutureSyntax(ref s) => dest.write_str(&s),
+            SupportsCondition::NamedFeature(ref name) => {
+                dest.write_str("named-feature(")?;
+                cssparser::serialize_identifier(name, dest)?;
+                dest.write_char(')')
+            },
         }
     }
 }
