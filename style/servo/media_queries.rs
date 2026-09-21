@@ -78,6 +78,7 @@ pub struct Device {
     media_type: MediaType,
     /// The current viewport size, in CSS pixels.
     viewport_size: Size2D<f32, CSSPixel>,
+    device_size: Size2D<f32, CSSPixel>,
     /// The current bleed-box size, in CSS pixels.
     ///
     /// Mirrors `viewport_size` but is consulted by the
@@ -180,6 +181,7 @@ impl Device {
         Device {
             media_type,
             viewport_size,
+            device_size: viewport_size,
             bleed_box_size: viewport_size,
             page_box_size: viewport_size,
             device_pixel_ratio,
@@ -751,8 +753,155 @@ fn eval_color(_: &Context) -> i32 {
     8
 }
 
+macro_rules! discrete_feature {
+    ($name:ident { $($value:ident),+ }, $evaluate:ident($context:ident), $current:expr, $boolean:expr) => {
+        #[derive(Clone, Copy, Debug, FromPrimitive, Parse, PartialEq, ToCss)]
+        #[repr(u8)]
+        enum $name { $($value),+ }
+
+        fn $evaluate($context: &Context, query: Option<$name>) -> bool {
+            let current = $current;
+            query.map_or($boolean, |value| value == current)
+        }
+    };
+}
+
+discrete_feature!(
+    ReducedPreference { NoPreference, Reduce },
+    eval_reduced_preference(_context),
+    ReducedPreference::NoPreference,
+    false
+);
+discrete_feature!(
+    ContrastPreference {
+        NoPreference,
+        More,
+        Less,
+        Custom
+    },
+    eval_contrast_preference(_context),
+    ContrastPreference::NoPreference,
+    false
+);
+discrete_feature!(
+    InvertedColors { None, Inverted },
+    eval_inverted_colors(_context),
+    InvertedColors::None,
+    false
+);
+discrete_feature!(
+    DynamicRange { Standard, High },
+    eval_dynamic_range(_context),
+    DynamicRange::Standard,
+    true
+);
+discrete_feature!(
+    ColorGamut { Srgb, P3, Rec2020 },
+    eval_color_gamut(_context),
+    ColorGamut::Srgb,
+    true
+);
+discrete_feature!(
+    DisplayMode {
+        Browser,
+        MinimalUi,
+        Standalone,
+        Fullscreen,
+        PictureInPicture
+    },
+    eval_display_mode(_context),
+    DisplayMode::Browser,
+    true
+);
+discrete_feature!(
+    OverflowInline { None, Scroll },
+    eval_overflow_inline(context),
+    if context.device().media_type() == MediaType::print() {
+        OverflowInline::None
+    } else {
+        OverflowInline::Scroll
+    },
+    context.device().media_type() != MediaType::print()
+);
+discrete_feature!(
+    OverflowBlock { None, Scroll, Paged },
+    eval_overflow_block(context),
+    if context.device().media_type() == MediaType::print() {
+        OverflowBlock::Paged
+    } else {
+        OverflowBlock::Scroll
+    },
+    true
+);
+discrete_feature!(
+    Update { None, Slow, Fast },
+    eval_update(context),
+    if context.device().media_type() == MediaType::print() {
+        Update::None
+    } else {
+        Update::Fast
+    },
+    context.device().media_type() != MediaType::print()
+);
+discrete_feature!(
+    Scripting {
+        None,
+        InitialOnly,
+        Enabled
+    },
+    eval_scripting(context),
+    if context.device().media_type() == MediaType::print() {
+        Scripting::InitialOnly
+    } else {
+        Scripting::Enabled
+    },
+    true
+);
+discrete_feature!(
+    Pointer { None, Coarse, Fine },
+    eval_pointer(context),
+    if context.device().media_type() == MediaType::print() {
+        Pointer::None
+    } else {
+        Pointer::Fine
+    },
+    context.device().media_type() != MediaType::print()
+);
+discrete_feature!(
+    Hover { None, Hover },
+    eval_hover(context),
+    if context.device().media_type() == MediaType::print() {
+        Hover::None
+    } else {
+        Hover::Hover
+    },
+    context.device().media_type() != MediaType::print()
+);
+
+fn eval_forced_colors(context: &Context, query: Option<ForcedColors>) -> bool {
+    let forced = context.device().forced_colors();
+    query.map_or(forced != ForcedColors::None, |value| value == forced)
+}
+
+fn eval_zero(_: &Context) -> i32 {
+    0
+}
+fn eval_grid(_: &Context) -> bool {
+    false
+}
+fn eval_device_width(context: &Context) -> CSSPixelLength {
+    CSSPixelLength::new(context.device().device_size.width)
+}
+fn eval_device_height(context: &Context) -> CSSPixelLength {
+    CSSPixelLength::new(context.device().device_size.height)
+}
+fn eval_device_aspect_ratio(context: &Context) -> Ratio {
+    let size = context.device().device_size;
+    Ratio::new(size.width, size.height)
+}
+
 /// A list with all the media features that Servo supports.
-pub static MEDIA_FEATURES: [QueryFeatureDescription; 10] = [
+pub static MEDIA_FEATURES: [QueryFeatureDescription; 35] = [
     feature!(
         atom!("width"),
         AllowsRanges::Yes,
@@ -811,6 +960,156 @@ pub static MEDIA_FEATURES: [QueryFeatureDescription; 10] = [
         atom!("color"),
         AllowsRanges::Yes,
         Evaluator::Integer(eval_color),
+        FeatureFlags::empty(),
+    ),
+    feature!(
+        atom!("device-width"),
+        AllowsRanges::Yes,
+        Evaluator::Length(eval_device_width),
+        FeatureFlags::empty(),
+    ),
+    feature!(
+        atom!("device-height"),
+        AllowsRanges::Yes,
+        Evaluator::Length(eval_device_height),
+        FeatureFlags::empty(),
+    ),
+    feature!(
+        atom!("device-aspect-ratio"),
+        AllowsRanges::Yes,
+        Evaluator::NumberRatio(eval_device_aspect_ratio),
+        FeatureFlags::empty(),
+    ),
+    feature!(
+        atom!("color-index"),
+        AllowsRanges::Yes,
+        Evaluator::Integer(eval_zero),
+        FeatureFlags::empty(),
+    ),
+    feature!(
+        atom!("monochrome"),
+        AllowsRanges::Yes,
+        Evaluator::Integer(eval_zero),
+        FeatureFlags::empty(),
+    ),
+    feature!(
+        atom!("grid"),
+        AllowsRanges::No,
+        Evaluator::BoolInteger(eval_grid),
+        FeatureFlags::empty(),
+    ),
+    feature!(
+        atom!("prefers-reduced-motion"),
+        AllowsRanges::No,
+        keyword_evaluator!(eval_reduced_preference, ReducedPreference),
+        FeatureFlags::empty(),
+    ),
+    feature!(
+        atom!("prefers-reduced-transparency"),
+        AllowsRanges::No,
+        keyword_evaluator!(eval_reduced_preference, ReducedPreference),
+        FeatureFlags::empty(),
+    ),
+    feature!(
+        atom!("prefers-reduced-data"),
+        AllowsRanges::No,
+        keyword_evaluator!(eval_reduced_preference, ReducedPreference),
+        FeatureFlags::empty(),
+    ),
+    feature!(
+        atom!("prefers-contrast"),
+        AllowsRanges::No,
+        keyword_evaluator!(eval_contrast_preference, ContrastPreference),
+        FeatureFlags::empty(),
+    ),
+    feature!(
+        atom!("forced-colors"),
+        AllowsRanges::No,
+        keyword_evaluator!(eval_forced_colors, ForcedColors),
+        FeatureFlags::empty(),
+    ),
+    feature!(
+        atom!("inverted-colors"),
+        AllowsRanges::No,
+        keyword_evaluator!(eval_inverted_colors, InvertedColors),
+        FeatureFlags::empty(),
+    ),
+    feature!(
+        atom!("color-gamut"),
+        AllowsRanges::No,
+        keyword_evaluator!(eval_color_gamut, ColorGamut),
+        FeatureFlags::empty(),
+    ),
+    feature!(
+        atom!("video-color-gamut"),
+        AllowsRanges::No,
+        keyword_evaluator!(eval_color_gamut, ColorGamut),
+        FeatureFlags::empty(),
+    ),
+    feature!(
+        atom!("dynamic-range"),
+        AllowsRanges::No,
+        keyword_evaluator!(eval_dynamic_range, DynamicRange),
+        FeatureFlags::empty(),
+    ),
+    feature!(
+        atom!("video-dynamic-range"),
+        AllowsRanges::No,
+        keyword_evaluator!(eval_dynamic_range, DynamicRange),
+        FeatureFlags::empty(),
+    ),
+    feature!(
+        atom!("display-mode"),
+        AllowsRanges::No,
+        keyword_evaluator!(eval_display_mode, DisplayMode),
+        FeatureFlags::empty(),
+    ),
+    feature!(
+        atom!("overflow-inline"),
+        AllowsRanges::No,
+        keyword_evaluator!(eval_overflow_inline, OverflowInline),
+        FeatureFlags::empty(),
+    ),
+    feature!(
+        atom!("overflow-block"),
+        AllowsRanges::No,
+        keyword_evaluator!(eval_overflow_block, OverflowBlock),
+        FeatureFlags::empty(),
+    ),
+    feature!(
+        atom!("update"),
+        AllowsRanges::No,
+        keyword_evaluator!(eval_update, Update),
+        FeatureFlags::empty(),
+    ),
+    feature!(
+        atom!("scripting"),
+        AllowsRanges::No,
+        keyword_evaluator!(eval_scripting, Scripting),
+        FeatureFlags::empty(),
+    ),
+    feature!(
+        atom!("pointer"),
+        AllowsRanges::No,
+        keyword_evaluator!(eval_pointer, Pointer),
+        FeatureFlags::empty(),
+    ),
+    feature!(
+        atom!("any-pointer"),
+        AllowsRanges::No,
+        keyword_evaluator!(eval_pointer, Pointer),
+        FeatureFlags::empty(),
+    ),
+    feature!(
+        atom!("hover"),
+        AllowsRanges::No,
+        keyword_evaluator!(eval_hover, Hover),
+        FeatureFlags::empty(),
+    ),
+    feature!(
+        atom!("any-hover"),
+        AllowsRanges::No,
+        keyword_evaluator!(eval_hover, Hover),
         FeatureFlags::empty(),
     ),
 ];

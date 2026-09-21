@@ -1294,6 +1294,59 @@ mod tests {
         }
     }
 
+    #[test]
+    fn servo_media_features_distinguish_values_and_unknown_conditions() {
+        use crate::media_queries::MediaList;
+        use crate::stylesheets::CustomMediaEvaluator;
+        use cssparser::{Parser, ParserInput};
+        let url: UrlExtraData = url::Url::parse("https://example.test/").unwrap().into();
+        let context = ParserContext::new(
+            Origin::Author,
+            &url,
+            None,
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        for (media, query, expected) in [
+            (MediaType::screen(), "(device-width: 793.7px)", true),
+            (MediaType::screen(), "(color-index: 0)", true),
+            (MediaType::screen(), "(prefers-reduced-motion: no-preference)", true),
+            (MediaType::screen(), "(prefers-reduced-motion)", false),
+            (MediaType::screen(), "(prefers-reduced-data: no-preference)", true),
+            (MediaType::screen(), "(prefers-contrast: no-preference)", true),
+            (MediaType::screen(), "(forced-colors: none)", true),
+            (MediaType::screen(), "(inverted-colors: none)", true),
+            (MediaType::screen(), "(display-mode: browser)", true),
+            (MediaType::screen(), "(dynamic-range: standard)", true),
+            (MediaType::screen(), "(video-dynamic-range: high)", false),
+            (MediaType::screen(), "(overflow-inline: scroll)", true),
+            (MediaType::screen(), "(overflow-block: paged)", false),
+            (MediaType::print(), "(overflow-inline: none)", true),
+            (MediaType::print(), "(overflow-block: paged)", true),
+            (MediaType::print(), "(update: none)", true),
+            (MediaType::screen(), "(scripting: enabled)", true),
+            (MediaType::screen(), "(color-gamut: srgb)", true),
+            (MediaType::screen(), "(color-gamut: p3)", false),
+            (MediaType::screen(), "not (forced-colors: invalid)", false),
+        ] {
+            let stylist = test_stylist_for_media(media, 1.0);
+            let mut input = ParserInput::new(query);
+            let list = MediaList::parse(&context, &mut Parser::new(&mut input));
+            assert_eq!(
+                list.evaluate(
+                    stylist.device(),
+                    QuirksMode::NoQuirks,
+                    &mut CustomMediaEvaluator::none()
+                ),
+                expected,
+                "{query}"
+            );
+        }
+    }
+
     fn test_stylist() -> crate::stylist::Stylist {
         test_stylist_for_media(MediaType::print(), 1.0)
     }
