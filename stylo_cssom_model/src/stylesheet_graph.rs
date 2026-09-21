@@ -427,7 +427,17 @@ impl RuleContainerCondition {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub enum RuleCustomMediaQuery {
+    Boolean(bool),
+    MediaList(Arc<str>),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RuleCssomData {
+    CustomMedia {
+        name: Arc<str>,
+        query: RuleCustomMediaQuery,
+    },
     FontFeatureValues {
         values: crate::RuleFontFeatureValues,
     },
@@ -503,6 +513,7 @@ pub enum RuleCssomData {
 impl RuleCssomData {
     const fn grammar(&self) -> RuleGrammar {
         match self {
+            Self::CustomMedia { .. } => RuleGrammar::CustomMedia,
             Self::Keyframes { .. } => RuleGrammar::Keyframes,
             Self::FontFeatureValues { .. } => RuleGrammar::FontFeatureValues,
             Self::Keyframe { .. } => RuleGrammar::Keyframe,
@@ -1280,6 +1291,16 @@ impl RuleNode {
                 RuleCssomData::Conditional {
                     kind: RuleConditionKind::Media,
                     condition: condition.clone(),
+                },
+            ),
+            RuleCssomData::CustomMedia {
+                name,
+                query: RuleCustomMediaQuery::MediaList(_),
+            } => (
+                format!("{name} {condition}").into(),
+                RuleCssomData::CustomMedia {
+                    name: name.clone(),
+                    query: RuleCustomMediaQuery::MediaList(condition),
                 },
             ),
             RuleCssomData::Import { request } => {

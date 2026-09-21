@@ -121,6 +121,7 @@ cssom_rule_interface_names! {
     Namespace => "CSSNamespaceRule",
     Import => "CSSImportRule",
     Media => "CSSMediaRule",
+    CustomMedia => "CSSCustomMediaRule",
     Supports => "CSSSupportsRule",
     Container => "CSSContainerRule",
     FontFace => "CSSFontFaceRule",
@@ -158,6 +159,7 @@ impl CssomRuleInterfaceName {
             "import" => Self::Import,
             "namespace" => Self::Namespace,
             "media" => Self::Media,
+            "custom-media" => Self::CustomMedia,
             "supports" => Self::Supports,
             "container" => Self::Container,
             "font-face" => Self::FontFace,
@@ -201,6 +203,7 @@ impl CssomRuleInterfaceName {
                 CssomRuleInterfaceParent::ConditionRule
             },
             Self::Namespace
+            | Self::CustomMedia
             | Self::Import
             | Self::FontFace
             | Self::FontFeatureValues
@@ -232,6 +235,7 @@ impl CssomRuleInterfaceName {
             Self::Margin => Some(CssomLegacyRuleType::Margin),
             Self::Page => Some(CssomLegacyRuleType::Page),
             Self::CssRule
+            | Self::CustomMedia
             | Self::Container
             | Self::FontPaletteValues
             | Self::Property
@@ -267,6 +271,7 @@ pub const fn cssom_rule_interface_name_for_grammar(
         RuleGrammar::Namespace => CssomRuleInterfaceName::Namespace,
         RuleGrammar::Import => CssomRuleInterfaceName::Import,
         RuleGrammar::Media => CssomRuleInterfaceName::Media,
+        RuleGrammar::CustomMedia => CssomRuleInterfaceName::CustomMedia,
         RuleGrammar::Supports => CssomRuleInterfaceName::Supports,
         RuleGrammar::Container => CssomRuleInterfaceName::Container,
         RuleGrammar::FontFace => CssomRuleInterfaceName::FontFace,
@@ -288,7 +293,6 @@ pub const fn cssom_rule_interface_name_for_grammar(
         RuleGrammar::When
         | RuleGrammar::Else
         | RuleGrammar::Document
-        | RuleGrammar::CustomMedia
         | RuleGrammar::Region
         | RuleGrammar::Footnote
         | RuleGrammar::Sidenote
@@ -348,6 +352,10 @@ impl CanonicalCssDeclarationBlock {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum ParsedCssRuleKind {
+    CustomMedia {
+        name: String,
+        query: stylo_cssom_model::RuleCustomMediaQuery,
+    },
     Style(CanonicalStyleRule),
     Keyframes(CanonicalKeyframesRule),
     Keyframe(CanonicalKeyframeRule),
@@ -955,6 +963,21 @@ impl ParsedCssRule {
                     grouping,
                 })
             },
+            CssRule::CustomMedia(rule) => {
+                use style::stylesheets::CustomMediaCondition;
+                use stylo_cssom_model::RuleCustomMediaQuery;
+                let query = match &rule.condition {
+                    CustomMediaCondition::True => RuleCustomMediaQuery::Boolean(true),
+                    CustomMediaCondition::False => RuleCustomMediaQuery::Boolean(false),
+                    CustomMediaCondition::MediaList(list) => RuleCustomMediaQuery::MediaList(
+                        list.read_with(guard).to_css_string().into(),
+                    ),
+                };
+                ParsedCssRuleKind::CustomMedia {
+                    name: rule.name.to_css_string(),
+                    query,
+                }
+            },
             CssRule::Namespace(rule) => {
                 ParsedCssRuleKind::Namespace(canonical_namespace_rule(rule))
             },
@@ -1175,6 +1198,10 @@ impl ParsedCssRule {
         use stylo_cssom_model::{RuleConditionKind, RuleContainerCondition, RuleCssomData};
 
         Some(match &self.kind {
+            ParsedCssRuleKind::CustomMedia { name, query } => RuleCssomData::CustomMedia {
+                name: name.as_str().into(),
+                query: query.clone(),
+            },
             ParsedCssRuleKind::FontFeatureValues(values) => RuleCssomData::FontFeatureValues {
                 values: values.clone(),
             },
@@ -1300,6 +1327,7 @@ impl ParsedCssRule {
             | ParsedCssRuleKind::FontPaletteValues(_)
             | ParsedCssRuleKind::CounterStyle(_)
             | ParsedCssRuleKind::Property(_)
+            | ParsedCssRuleKind::CustomMedia { .. }
             | ParsedCssRuleKind::Other => return None,
         };
         Some(self.declarations()?.rule_block(domain, &self.namespaces))
@@ -1353,6 +1381,7 @@ impl ParsedCssRule {
             | ParsedCssRuleKind::LayerBlock(_)
             | ParsedCssRuleKind::LayerStatement(_)
             | ParsedCssRuleKind::Scope(_)
+            | ParsedCssRuleKind::CustomMedia { .. }
             | ParsedCssRuleKind::Other => None,
         }
     }
@@ -2073,6 +2102,7 @@ pub fn replace_rule_selector(
         },
         RuleCssomData::Keyframes { .. }
         | RuleCssomData::FontFeatureValues { .. }
+        | RuleCssomData::CustomMedia { .. }
         | RuleCssomData::Keyframe { .. }
         | RuleCssomData::Namespace { .. }
         | RuleCssomData::Import { .. }
@@ -2213,6 +2243,7 @@ fn interface_name_for_rule(rule: &CssRule) -> CssomRuleInterfaceName {
         CssRule::Namespace(_) => CssomRuleInterfaceName::Namespace,
         CssRule::Import(_) => CssomRuleInterfaceName::Import,
         CssRule::Media(_) => CssomRuleInterfaceName::Media,
+        CssRule::CustomMedia(_) => CssomRuleInterfaceName::CustomMedia,
         CssRule::Container(_) => CssomRuleInterfaceName::Container,
         CssRule::FontFace(_) => CssomRuleInterfaceName::FontFace,
         CssRule::FontFeatureValues(_) => CssomRuleInterfaceName::FontFeatureValues,
@@ -2423,6 +2454,42 @@ fn is_single_css_value(value: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn custom_media_rules_expose_their_cssom_interface() {
+        let rule = ParsedCssRule::parse("@custom-media --narrow (width < 30em);").unwrap();
+        assert_eq!(rule.interface_name().as_str(), "CSSCustomMediaRule");
+        use stylo_cssom_model::{RuleCssomData, RuleCustomMediaQuery};
+        let node = rule.to_rule_node();
+        assert_eq!(
+            node.cssom_data(),
+            Some(&RuleCssomData::CustomMedia {
+                name: "--narrow".into(),
+                query: RuleCustomMediaQuery::MediaList("(width < 30em)".into()),
+            })
+        );
+        let changed = node.with_cssom_media_condition("(color), (hover)").unwrap();
+        let parsed = ParsedCssRule::parse(&changed.serialization())
+            .unwrap()
+            .to_rule_node();
+        assert_eq!(parsed.cssom_data(), changed.cssom_data());
+        for (value, query) in [
+            ("true", RuleCustomMediaQuery::Boolean(true)),
+            ("false", RuleCustomMediaQuery::Boolean(false)),
+            ("", RuleCustomMediaQuery::MediaList("".into())),
+        ] {
+            let node = ParsedCssRule::parse(&format!("@custom-media --query {value};"))
+                .unwrap()
+                .to_rule_node();
+            assert_eq!(
+                node.cssom_data(),
+                Some(&RuleCssomData::CustomMedia {
+                    name: "--query".into(),
+                    query,
+                })
+            );
+        }
+    }
+
     #[test]
     fn css_keyframes_parser_preserves_child_rules_and_declarations() {
         let parsed = super::ParsedCssRule::parse(
@@ -4566,6 +4633,7 @@ mod tests {
             (Name::Namespace, "CSSNamespaceRule", Parent::CssRule),
             (Name::Import, "CSSImportRule", Parent::CssRule),
             (Name::Media, "CSSMediaRule", Parent::ConditionRule),
+            (Name::CustomMedia, "CSSCustomMediaRule", Parent::CssRule),
             (Name::Supports, "CSSSupportsRule", Parent::ConditionRule),
             (Name::Container, "CSSContainerRule", Parent::ConditionRule),
             (Name::FontFace, "CSSFontFaceRule", Parent::CssRule),
@@ -4980,7 +5048,7 @@ mod tests {
                 "CSSColorProfileRule",
             ),
             ("@region .x { color: red }", "CSSRule"),
-            ("@custom-media --x (color);", "CSSRule"),
+            ("@custom-media --x (color);", "CSSCustomMediaRule"),
             ("@-bd-colour Spot { colour-values: red }", "CSSRule"),
             ("@footnote {}", "CSSRule"),
             ("@-bd-sidenote notes {}", "CSSRule"),
