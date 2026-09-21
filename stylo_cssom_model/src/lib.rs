@@ -2823,6 +2823,45 @@ mod tests {
     }
 
     #[test]
+    fn deep_scope_snapshot_visits_each_rule_once() {
+        let document = StyleDocumentHandle::allocate();
+        let mut state = StyleState::new(document);
+        let mut rule = RuleNode::authored(RuleGrammar::Style, "#target { color: green; }", []);
+        const DEPTH: usize = 90;
+        for _ in 0..DEPTH {
+            rule = RuleNode::authored_with_group_header(
+                RuleGrammar::Scope,
+                "@scope { #target { color: green; } }",
+                [rule],
+                RuleGroupHeader::new("@scope"),
+            )
+            .with_projection_serialization("@scope { #target { color: green; } }");
+        }
+        let sheet = state
+            .create_stylesheet(StyleSheetCandidate::new(
+                StyleSheetSourceContext::inline(
+                    document,
+                    StyleOrigin::Author,
+                    "https://example.test/".into(),
+                ),
+                [rule],
+            ))
+            .expect("the stylesheet must bind");
+        super::stylesheet_graph::take_snapshot_visits();
+        let snapshot = sheet
+            .top_list()
+            .rule(0)
+            .expect("scope must exist")
+            .snapshot();
+        assert_eq!(snapshot.grammar(), RuleGrammar::Scope);
+        assert_eq!(
+            super::stylesheet_graph::take_snapshot_visits(),
+            DEPTH + 1,
+            "snapshotting must visit each nested rule only once",
+        );
+    }
+
+    #[test]
     fn stylesheet_forks_preserve_import_topology_with_fresh_cells() {
         let document = StyleDocumentHandle::allocate();
         let mut state = StyleState::new(document);
