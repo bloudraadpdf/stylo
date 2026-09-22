@@ -57,7 +57,8 @@ pub fn used_flex_wrap(
     }
 }
 
-fn is_legacy_box(computed: &style::properties::ComputedValues) -> bool {
+/// Whether the computed display uses the legacy WebKit box layout rules.
+pub fn is_legacy_box(computed: &style::properties::ComputedValues) -> bool {
     let properties = computed.custom_properties();
     let name = style::Atom::from("moegoe-webkit-box-display");
     properties
