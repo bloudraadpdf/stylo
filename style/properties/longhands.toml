@@ -6031,6 +6031,15 @@ affects = "layout"
 servo_restyle_damage = "rebuild_box"
 keyword = { values = ["horizontal", "vertical", "inline-axis", "block-axis"] }
 
+[-webkit-box-align]
+struct = "box"
+engine = "servo"
+animation_type = "discrete"
+spec = "Nonstandard (legacy -webkit-box compatibility)"
+affects = "layout"
+servo_restyle_damage = "rebuild_box"
+keyword = { values = ["stretch", "start", "center", "baseline", "end"] }
+
 [vector-effect]
 type = "VectorEffect"
 initial = "computed::VectorEffect::none()"

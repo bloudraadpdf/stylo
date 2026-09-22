@@ -57,6 +57,26 @@ pub fn used_flex_wrap(
     }
 }
 
+/// Resolve legacy box alignment without changing modern computed alignment.
+pub fn used_align_items(
+    computed: &style::properties::ComputedValues,
+) -> style::values::specified::ItemPlacement {
+    use style::properties::longhands::_webkit_box_align::computed_value::T as BoxAlign;
+    use style::values::specified::ItemPlacement;
+    use style::values::specified::align::AlignFlags;
+
+    if !is_legacy_box(computed) {
+        return computed.get_position().align_items;
+    }
+    ItemPlacement(match computed.clone__webkit_box_align() {
+        BoxAlign::Stretch => AlignFlags::STRETCH,
+        BoxAlign::Start => AlignFlags::FLEX_START,
+        BoxAlign::Center => AlignFlags::CENTER,
+        BoxAlign::Baseline => AlignFlags::BASELINE,
+        BoxAlign::End => AlignFlags::FLEX_END,
+    })
+}
+
 /// Whether the computed display uses the legacy WebKit box layout rules.
 pub fn is_legacy_box(computed: &style::properties::ComputedValues) -> bool {
     let properties = computed.custom_properties();
