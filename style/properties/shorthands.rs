@@ -4501,53 +4501,60 @@ pub mod text_decoration {
     }
 }
 
-/// CSS Text Decoration 4 §5 — informational `text-decoration-skip`
-/// shorthand. The spec leaves the shorthand grammar deliberately
-/// loose; per §5, authors may write any subset of the four longhand
-/// values, in any order, and each unspecified longhand resets to its
-/// per-aspect initial. This implementation accepts each of the four
-/// `text-decoration-skip-*` longhands' values up to once and applies
-/// them slot-by-slot. The `TextDecorationSkipKind` Parse impl is
-/// permissive (every keyword is valid for every longhand), so an
-/// ambiguous keyword like `none` lands in the first unused slot. The
-/// spec defers tie-breaking to the implementation; this ordering is
-/// stable and round-trips through the `derive_serialize` serialiser.
+/// CSS Text Decoration 4 §2.10: reset every decoration skipping aspect.
 pub mod text_decoration_skip {
     pub use crate::properties::shorthands_generated::text_decoration_skip::*;
 
     use super::*;
-    use crate::properties::longhands::{
-        text_decoration_skip_box, text_decoration_skip_inset, text_decoration_skip_self,
-        text_decoration_skip_spaces,
-    };
+    use crate::properties::longhands;
+    use specified::{TextDecorationSkipInk, TextDecorationSkipKind, TextDecorationSkipSpaces};
 
     pub fn parse_value<'i, 't>(
-        context: &ParserContext,
+        _: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Longhands, ParseError<'i>> {
-        let mut s_self = None;
-        let mut s_box = None;
-        let mut s_inset = None;
-        let mut s_spaces = None;
-        let mut parsed = 0;
-        loop {
-            parsed += 1;
-            try_parse_one!(context, input, s_self, text_decoration_skip_self::parse);
-            try_parse_one!(context, input, s_box, text_decoration_skip_box::parse);
-            try_parse_one!(context, input, s_inset, text_decoration_skip_inset::parse);
-            try_parse_one!(context, input, s_spaces, text_decoration_skip_spaces::parse);
-            parsed -= 1;
-            break;
-        }
-        if parsed == 0 {
-            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        let none = input.try_parse(|i| i.expect_ident_matching("none")).is_ok();
+        if !none {
+            input.expect_ident_matching("auto")?;
         }
         Ok(expanded! {
-            text_decoration_skip_self: unwrap_or_initial!(text_decoration_skip_self, s_self),
-            text_decoration_skip_box: unwrap_or_initial!(text_decoration_skip_box, s_box),
-            text_decoration_skip_inset: unwrap_or_initial!(text_decoration_skip_inset, s_inset),
-            text_decoration_skip_spaces: unwrap_or_initial!(text_decoration_skip_spaces, s_spaces),
+            text_decoration_skip_self: if none { TextDecorationSkipKind::None } else {
+                longhands::text_decoration_skip_self::get_initial_specified_value()
+            },
+            text_decoration_skip_box: longhands::text_decoration_skip_box::get_initial_specified_value(),
+            text_decoration_skip_inset: longhands::text_decoration_skip_inset::get_initial_specified_value(),
+            text_decoration_skip_spaces: if none { TextDecorationSkipSpaces::NONE } else {
+                longhands::text_decoration_skip_spaces::get_initial_specified_value()
+            },
+            text_decoration_skip_ink: if none { TextDecorationSkipInk::None } else {
+                TextDecorationSkipInk::Auto
+            },
         })
+    }
+
+    impl ToCss for LonghandsToSerialize<'_> {
+        fn to_css<W: fmt::Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+            if *self.text_decoration_skip_box != TextDecorationSkipKind::None
+                || *self.text_decoration_skip_inset != TextDecorationSkipKind::None
+            {
+                return Ok(());
+            }
+            if *self.text_decoration_skip_self == TextDecorationSkipKind::None
+                && *self.text_decoration_skip_spaces == TextDecorationSkipSpaces::NONE
+                && *self.text_decoration_skip_ink == TextDecorationSkipInk::None
+            {
+                return dest.write_str("none");
+            }
+            if *self.text_decoration_skip_self
+                == longhands::text_decoration_skip_self::get_initial_specified_value()
+                && *self.text_decoration_skip_spaces
+                    == longhands::text_decoration_skip_spaces::get_initial_specified_value()
+                && *self.text_decoration_skip_ink == TextDecorationSkipInk::Auto
+            {
+                return dest.write_str("auto");
+            }
+            Ok(())
+        }
     }
 }
 

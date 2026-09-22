@@ -2494,6 +2494,52 @@ mod tests {
     }
 
     #[test]
+    fn text_decoration_skip_resets_every_aspect_including_ink() {
+        use crate::properties::PropertyId;
+        for (value, expected) in [
+            ("none", ["none", "none", "none", "none", "none"]),
+            ("auto", ["objects", "none", "none", "start end", "auto"]),
+        ] {
+            inspect_style_declaration_block(
+                &format!("p {{ text-decoration-skip-ink: all; text-decoration-skip: {value}; }}"),
+                |block| {
+                    for (property, expected) in [
+                        "text-decoration-skip-self",
+                        "text-decoration-skip-box",
+                        "text-decoration-skip-inset",
+                        "text-decoration-skip-spaces",
+                        "text-decoration-skip-ink",
+                    ]
+                    .into_iter()
+                    .zip(expected)
+                    {
+                        let id = PropertyId::parse_enabled_for_all_content(property).unwrap();
+                        let mut output = String::new();
+                        block.property_value_to_css(&id, &mut output).unwrap();
+                        assert_eq!(output, expected, "{value}: {property}");
+                    }
+                },
+            );
+            assert_property_roundtrip("text-decoration-skip", value);
+        }
+        for value in ["none auto", "objects", "spaces", "start end", "ink", "all"] {
+            assert_parsed_declaration_count(&format!("p {{ text-decoration-skip: {value}; }}"), 0);
+        }
+        inspect_style_declaration_block(
+            "p { text-decoration-skip: none; text-decoration-skip-ink: auto; }",
+            |block| {
+                let id = PropertyId::parse_enabled_for_all_content("text-decoration-skip").unwrap();
+                let mut output = String::new();
+                block.property_value_to_css(&id, &mut output).unwrap();
+                assert!(
+                    output.is_empty(),
+                    "mixed skipping cannot serialize as a shorthand"
+                );
+            },
+        );
+    }
+
+    #[test]
     fn servo_decoration_inset_and_space_skipping_use_their_own_grammars() {
         assert_property_roundtrip("text-decoration-inset", "10% -20%");
         for css in ["none", "all", "start", "end", "start end"] {
