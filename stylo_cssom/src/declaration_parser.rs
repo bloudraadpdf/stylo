@@ -1827,6 +1827,23 @@ mod tests {
     }
 
     #[test]
+    fn legacy_box_alignment_has_native_keyword_declarations() {
+        for keyword in ["stretch", "start", "center", "baseline", "end"] {
+            let declarations = parse_inline_style_declarations(
+                &format!("-webkit-box-align:{keyword};align-items:safe center"),
+                "about:blank".into(),
+            );
+            assert_eq!(
+                crate::specified::projected_specified_property_value(
+                    &declarations,
+                    "-webkit-box-align",
+                ),
+                Some(keyword.to_owned()),
+            );
+        }
+    }
+
+    #[test]
     fn inline_compatibility_declarations_enforce_custom_grammars() {
         let base_url = std::sync::Arc::from("about:blank");
         for value in [

@@ -3849,6 +3849,9 @@ mod tests {
             PropertyDeclaration::WebkitBoxOrient(value) => {
                 PropertyDeclaration::WebkitBoxOrient(*value)
             },
+            PropertyDeclaration::WebkitBoxAlign(value) => {
+                PropertyDeclaration::WebkitBoxAlign(*value)
+            },
             PropertyDeclaration::WillChange(value) => {
                 PropertyDeclaration::WillChange(value.clone())
             },
