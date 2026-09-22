@@ -5635,7 +5635,7 @@ fn translate_property(lower_property: &str, raw_value: &str) -> Translated {
         },
 
         "-ro-hyphenate-limit-lines" | "-prince-hyphenate-limit-lines" => Translated::Native {
-            native_property: "-bd-hyphenate-limit-lines",
+            native_property: "hyphenate-limit-lines",
             native_value: raw_value.trim().to_string(),
         },
         "-prince-hyphenate-patterns" => Translated::Native {

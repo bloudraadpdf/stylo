@@ -4,8 +4,6 @@
 
 //! moegoe hyphenation extensions (F31).
 //!
-//! - `-bd-hyphenate-limit-lines`: max number of consecutive
-//!   hyphenated lines.
 //! - `-bd-hyphenate-patterns`: URL to TeX-style patterns dictionary.
 //! - `-bd-hyphenate-lines`: alternating no-hyphenate / hyphenate counts.
 //! - `-bd-hyphenate-word-length`: deprecated alias of
@@ -18,47 +16,6 @@ use crate::values::specified::url::SpecifiedUrl;
 use crate::values::specified::Integer;
 use cssparser::Parser;
 use style_traits::ParseError;
-
-/// Specified value of `-bd-hyphenate-limit-lines`.
-///
-/// `no-limit | <integer>`. Default `no-limit`.
-#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
-#[repr(C, u8)]
-pub enum BdHyphenateLimitLines {
-    /// `no-limit` (initial).
-    NoLimit,
-    /// `<integer>` cap on consecutive hyphenated lines.
-    Count(Integer),
-}
-
-impl BdHyphenateLimitLines {
-    /// Initial value (`no-limit`).
-    #[inline]
-    pub fn no_limit() -> Self {
-        Self::NoLimit
-    }
-
-    /// Whether the value is `no-limit`.
-    #[inline]
-    pub fn is_no_limit(&self) -> bool {
-        matches!(self, Self::NoLimit)
-    }
-}
-
-impl Parse for BdHyphenateLimitLines {
-    fn parse<'i, 't>(
-        context: &ParserContext,
-        input: &mut Parser<'i, 't>,
-    ) -> Result<Self, ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("no-limit"))
-            .is_ok()
-        {
-            return Ok(Self::NoLimit);
-        }
-        Ok(Self::Count(Integer::parse(context, input)?))
-    }
-}
 
 /// Specified value of `-bd-hyphenate-patterns`.
 ///

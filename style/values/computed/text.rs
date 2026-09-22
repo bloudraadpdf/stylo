@@ -9,9 +9,9 @@ use crate::values::animated::{Animate, Procedure};
 use crate::values::computed::length::LengthPercentage;
 use crate::values::generics::length::GenericLengthPercentageOrAuto;
 use crate::values::generics::text::{
-    GenericHyphenateLimitChars, GenericInitialLetter, GenericTextDecorationInset,
-    GenericTextDecorationLength, GenericTextFit, GenericTextIndent, GenericTextSizeAdjust,
-    GenericTextUnderlineOffset,
+    GenericHyphenateLimitChars, GenericHyphenateLimitLines, GenericInitialLetter,
+    GenericTextDecorationInset, GenericTextDecorationLength, GenericTextFit, GenericTextIndent,
+    GenericTextSizeAdjust, GenericTextUnderlineOffset,
 };
 use crate::values::generics::NumberOrAuto;
 use crate::values::specified::text as specified;
@@ -169,6 +169,10 @@ pub type TextIndent = GenericTextIndent<LengthPercentage>;
 
 /// A computed value for the `hyphenate-character` property.
 pub type HyphenateLimitChars = GenericHyphenateLimitChars<CSSInteger>;
+
+/// The computed limit on successive hyphenated lines.
+pub type HyphenateLimitLines =
+    GenericHyphenateLimitLines<crate::values::generics::NonNegative<CSSInteger>>;
 
 impl HyphenateLimitChars {
     /// Return the `auto` value, which has all three component values as `auto`.

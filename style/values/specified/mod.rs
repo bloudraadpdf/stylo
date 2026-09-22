@@ -73,8 +73,7 @@ pub use self::bd_gaps::{
     MaskBorderMode, Overlay, RuleBreak, RuleOverlap, RuleVisibilityItems,
 };
 pub use self::bd_hyphenation::{
-    BdHyphenateLimitLines, BdHyphenateLines, BdHyphenatePatterns, BdHyphenateWordLength,
-    BdLinebreakMagic,
+    BdHyphenateLines, BdHyphenatePatterns, BdHyphenateWordLength, BdLinebreakMagic,
 };
 pub use self::bd_image::{
     BdImageClipPath, BdImageInteractivity, BdImageMagic, BdImageOrientation, BdImageRecompression,
@@ -267,7 +266,7 @@ pub use self::text::{
     HangingPunctuation, InitialLetter, LetterSpacing, LineBreak, TextAlign, TextCombineUpright,
     TextFit, TextIndent, TextSizeAdjust,
 };
-pub use self::text::{HyphenateCharacter, HyphenateLimitChars};
+pub use self::text::{HyphenateCharacter, HyphenateLimitChars, HyphenateLimitLines};
 pub use self::text::{
     OverflowWrap, TextEmphasisPosition, TextEmphasisStyle, WordBreak, WordSpaceTransform,
 };

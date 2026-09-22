@@ -3179,8 +3179,8 @@ mod tests {
             PropertyDeclaration::BdGlyphLayoutMode(value) => {
                 PropertyDeclaration::BdGlyphLayoutMode(value.clone())
             },
-            PropertyDeclaration::BdHyphenateLimitLines(value) => {
-                PropertyDeclaration::BdHyphenateLimitLines(value.clone())
+            PropertyDeclaration::HyphenateLimitLines(value) => {
+                PropertyDeclaration::HyphenateLimitLines(value.clone())
             },
             PropertyDeclaration::BdHyphenateLines(value) => {
                 PropertyDeclaration::BdHyphenateLines(value.clone())

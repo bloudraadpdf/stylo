@@ -82,8 +82,7 @@ pub use self::bd_gaps::{
     GapRuleColorList, GapRuleList, GapRuleStyleList, GapRuleWidth, GapRuleWidthList,
 };
 pub use self::bd_hyphenation::{
-    BdHyphenateLimitLines, BdHyphenateLines, BdHyphenatePatterns, BdHyphenateWordLength,
-    BdLinebreakMagic,
+    BdHyphenateLines, BdHyphenatePatterns, BdHyphenateWordLength, BdLinebreakMagic,
 };
 pub use self::bd_image::{
     BdImageClipPath, BdImageInteractivity, BdImageMagic, BdImageOrientation, BdImageRecompression,
@@ -271,7 +270,7 @@ pub use self::text::{
     HangingPunctuation, InitialLetter, LetterSpacing, LineBreak, TextCombineUpright, TextFit,
     TextIndent, TextSizeAdjust,
 };
-pub use self::text::{HyphenateCharacter, HyphenateLimitChars};
+pub use self::text::{HyphenateCharacter, HyphenateLimitChars, HyphenateLimitLines};
 pub use self::text::{
     OverflowWrap, RubyPosition, TextOverflow, WordBreak, WordSpaceTransform, WordSpacing,
 };

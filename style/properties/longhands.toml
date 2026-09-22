@@ -4555,16 +4555,17 @@ spec = "Nonstandard (Prince-named extension; F30 page-group)"
 animation_type = "none"
 affects = ""
 
-# moegoe F31 — hyphenation extensions.
-[-bd-hyphenate-limit-lines]
-type = "BdHyphenateLimitLines"
-initial = "computed::BdHyphenateLimitLines::NoLimit"
+# Standard line limit with the existing moegoe alias.
+[hyphenate-limit-lines]
+type = "HyphenateLimitLines"
+initial = "computed::HyphenateLimitLines::NoLimit"
 struct = "inherited_text"
-initial_specified_value = "specified::BdHyphenateLimitLines::NoLimit"
-spec = "Nonstandard (moegoe -bd-* fork extension; F31 hyphenate-limit-lines)"
-animation_type = "none"
+initial_specified_value = "specified::HyphenateLimitLines::NoLimit"
+aliases = ["-bd-hyphenate-limit-lines"]
+spec = "https://drafts.csswg.org/css-text-4/#propdef-hyphenate-limit-lines"
 affects = "layout"
 
+# moegoe F31 — hyphenation extensions.
 [-bd-hyphenate-patterns]
 type = "BdHyphenatePatterns"
 initial = "computed::BdHyphenatePatterns::None"

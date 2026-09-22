@@ -10,6 +10,34 @@ use crate::Zero;
 use std::fmt::{self, Write};
 use style_traits::{CssWriter, ToCss};
 
+/// The maximum number of successive hyphenated lines.
+#[derive(
+    Animate,
+    Clone,
+    ComputeSquaredDistance,
+    Copy,
+    Debug,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToAnimatedValue,
+    ToAnimatedZero,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(C, u8)]
+pub enum GenericHyphenateLimitLines<Integer> {
+    /// Hyphenation has no line limit.
+    #[animation(error)]
+    NoLimit,
+    /// A non-negative consecutive line limit.
+    Count(Integer),
+}
+
 /// A generic value that is either a number or `auto`.
 #[derive(
     Animate,
