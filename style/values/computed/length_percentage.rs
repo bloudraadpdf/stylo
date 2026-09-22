@@ -1456,10 +1456,29 @@ impl LengthPercentage {
                 let one = product_with(self.to_calc_node(), l as f32);
                 let other = product_with(other.to_calc_node(), r as f32);
 
-                Self::new_calc(
+                let mixed = Self::new_calc(
                     CalcNode::Sum(vec![one, other].into()),
                     AllowedNumericType::All,
-                )
+                );
+                // A combined percentage-dimension value with a zero dimension
+                // computes to a percentage (CSS Values 4, section 5.6.1).
+                // Keep authored calculations and zero percentage terms intact:
+                // an unresolved percentage still carries its basis dependency.
+                if let Unpacked::Calc(calc) = mixed.unpack() {
+                    if let CalcNode::Sum(terms) = &calc.node {
+                        use CalcLengthPercentageLeaf::{Length, Percentage};
+                        match &**terms {
+                            [CalcNode::Leaf(Length(length)), CalcNode::Leaf(Percentage(percent))]
+                            | [CalcNode::Leaf(Percentage(percent)), CalcNode::Leaf(Length(length))]
+                                if length.px() == 0.0 =>
+                            {
+                                return Ok(Self::new_percent(*percent));
+                            },
+                            _ => {},
+                        }
+                    }
+                }
+                mixed
             },
         })
     }
@@ -1585,5 +1604,46 @@ mod tests {
             .expect("mixed length-percentage endpoints must interpolate");
 
         assert_eq!(sampled.to_css_string(), "calc(0% + 480px)");
+    }
+
+    #[test]
+    fn mixed_animation_with_zero_dimension_computes_to_percentage() {
+        let percent = LengthPercentage::new_percent(Percentage(2.4));
+        for length in [0.0, -0.0, 480.0] {
+            let dimension = LengthPercentage::new_length(Length::new(length));
+            for (from, to, progress) in [(&dimension, &percent, 1.0), (&percent, &dimension, 0.0)] {
+                let sampled = from
+                    .animate_as_percentage_dimension_mix(to, Procedure::Interpolate { progress })
+                    .unwrap();
+                assert_eq!(sampled.to_percentage(), Some(Percentage(2.4)));
+                assert_eq!(sampled.to_css_string(), "240%");
+            }
+        }
+
+        let mixed = |length| {
+            LengthPercentage::new_calc(
+                CalcNode::Sum(
+                    vec![
+                        CalcNode::Leaf(CalcLengthPercentageLeaf::Length(Length::new(length))),
+                        CalcNode::Leaf(CalcLengthPercentageLeaf::Percentage(Percentage(0.5))),
+                    ]
+                    .into(),
+                ),
+                AllowedNumericType::All,
+            )
+        };
+        for procedure in [Procedure::Interpolate { progress: 0.5 }, Procedure::Add] {
+            let sampled = mixed(20.0)
+                .animate_as_percentage_dimension_mix(&mixed(-20.0), procedure)
+                .unwrap();
+            assert_eq!(
+                sampled.to_css_string(),
+                if matches!(procedure, Procedure::Add) {
+                    "100%"
+                } else {
+                    "50%"
+                }
+            );
+        }
     }
 }

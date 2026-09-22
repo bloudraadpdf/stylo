@@ -139,6 +139,10 @@ mod text_decoration_animation_tests {
             .expect("mixed text-decoration-thickness endpoints must interpolate");
 
         assert_eq!(sampled.to_css_string(), "calc(0% + 16px)");
+        let percentage = from
+            .animate(&to, Procedure::Interpolate { progress: 1.0 })
+            .unwrap();
+        assert_eq!(percentage.to_css_string(), "200%");
     }
 
     #[test]
@@ -155,6 +159,10 @@ mod text_decoration_animation_tests {
             .expect("mixed text-underline-offset endpoints must interpolate");
 
         assert_eq!(sampled.to_css_string(), "calc(0% + 32px)");
+        let percentage = from
+            .animate(&to, Procedure::Interpolate { progress: 0.0 })
+            .unwrap();
+        assert_eq!(percentage.to_css_string(), "100%");
     }
 }
 
