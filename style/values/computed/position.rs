@@ -286,13 +286,11 @@ pub type AspectRatio = GenericAspectRatio<NonNegativeNumber>;
 /// never enters shareable-memory storage (only the specified value
 /// does, and that lives on the specified-side `MasonrySlack`).
 #[derive(
-    Animate,
     Clone,
     ComputeSquaredDistance,
     Debug,
     MallocSizeOf,
     PartialEq,
-    ToAnimatedValue,
     ToAnimatedZero,
     ToCss,
     ToResolvedValue,
@@ -306,6 +304,45 @@ pub enum MasonrySlack {
     Auto,
     /// `<length-percentage>` — explicit slack budget.
     LengthPercentage(crate::values::computed::length::NonNegativeLengthPercentage),
+}
+
+impl crate::values::animated::Animate for MasonrySlack {
+    fn animate(
+        &self,
+        other: &Self,
+        procedure: crate::values::animated::Procedure,
+    ) -> Result<Self, ()> {
+        match (self, other) {
+            (Self::LengthPercentage(from), Self::LengthPercentage(to)) => Ok(
+                Self::LengthPercentage(crate::values::generics::NonNegative(
+                    from.0
+                        .animate_as_percentage_dimension_mix(&to.0, procedure)?,
+                )),
+            ),
+            (Self::Infinite, Self::Infinite) => Ok(Self::Infinite),
+            (Self::Auto, Self::Auto) => Ok(Self::Auto),
+            _ => Err(()),
+        }
+    }
+}
+
+impl crate::values::animated::ToAnimatedValue for MasonrySlack {
+    type AnimatedValue = Self;
+
+    fn to_animated_value(self, _: &crate::values::animated::Context) -> Self {
+        self
+    }
+
+    fn from_animated_value(animated: Self) -> Self {
+        match animated {
+            Self::LengthPercentage(value) => Self::LengthPercentage(
+                crate::values::computed::length::NonNegativeLengthPercentage::from_animated_value(
+                    value,
+                ),
+            ),
+            keyword => keyword,
+        }
+    }
 }
 
 impl MasonrySlack {
@@ -326,16 +363,30 @@ mod masonry_slack_tests {
     #[test]
     fn masonry_slack_interpolates_numeric_values_but_not_keywords() {
         let length = |value| {
-            MasonrySlack::LengthPercentage(NonNegative(LengthPercentage::new_length(Length::new(value))))
+            MasonrySlack::LengthPercentage(NonNegative(LengthPercentage::new_length(Length::new(
+                value,
+            ))))
         };
         let percentage = |value| {
-            MasonrySlack::LengthPercentage(NonNegative(LengthPercentage::new_percent(Percentage(value))))
+            MasonrySlack::LengthPercentage(NonNegative(LengthPercentage::new_percent(Percentage(
+                value,
+            ))))
         };
         let sample = Procedure::Interpolate { progress: 0.25 };
-        assert_eq!(length(10.0).animate(&length(50.0), sample), Ok(length(20.0)));
-        assert_eq!(percentage(0.1).animate(&percentage(0.5), sample), Ok(percentage(0.2)));
-        assert!(length(10.0).animate(&MasonrySlack::Infinite, sample).is_err());
-        assert!(MasonrySlack::Auto.animate(&MasonrySlack::Infinite, sample).is_err());
+        assert_eq!(
+            length(10.0).animate(&length(50.0), sample),
+            Ok(length(20.0))
+        );
+        assert_eq!(
+            percentage(0.1).animate(&percentage(0.5), sample),
+            Ok(percentage(0.2))
+        );
+        assert!(length(10.0)
+            .animate(&MasonrySlack::Infinite, sample)
+            .is_err());
+        assert!(MasonrySlack::Auto
+            .animate(&MasonrySlack::Infinite, sample)
+            .is_err());
     }
 
     #[test]
@@ -348,5 +399,27 @@ mod masonry_slack_tests {
         let backing = PropertyId::parse_enabled_for_all_content("masonry-slack").unwrap();
         assert_eq!(alias.as_shorthand(), backing.as_shorthand());
         assert!(alias.is_animatable());
+    }
+
+    #[test]
+    fn masonry_slack_clamps_extrapolation_and_keeps_mixed_percentage_endpoints() {
+        use crate::values::animated::ToAnimatedValue;
+        use style_traits::ToCss;
+        let length = |value| {
+            MasonrySlack::LengthPercentage(NonNegative(LengthPercentage::new_length(Length::new(
+                value,
+            ))))
+        };
+        let sampled = length(10.0)
+            .animate(&length(50.0), Procedure::Interpolate { progress: -1.0 })
+            .unwrap();
+        assert_eq!(MasonrySlack::from_animated_value(sampled), length(0.0));
+        let percentage = MasonrySlack::LengthPercentage(NonNegative(
+            LengthPercentage::new_percent(Percentage(0.5)),
+        ));
+        let sampled = length(10.0)
+            .animate(&percentage, Procedure::Interpolate { progress: 0.0 })
+            .unwrap();
+        assert_eq!(sampled.to_css_string(), "calc(0% + 10px)");
     }
 }

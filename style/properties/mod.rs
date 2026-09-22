@@ -935,8 +935,13 @@ impl PropertyDeclaration {
                     input,
                     &start,
                     |declarations, input| {
-                        let decl = input
-                            .parse_entirely(|input| longhand_id.parse_value(context, input))?;
+                        let decl = input.parse_entirely(|input| {
+                            if non_custom_id.as_alias() == Some(AliasId::FlowTolerance) {
+                                return crate::values::specified::MasonrySlack::parse_flow_tolerance(context, input)
+                                    .map(PropertyDeclaration::MasonrySlack);
+                            }
+                            longhand_id.parse_value(context, input)
+                        })?;
                         declarations.push(decl);
                         Ok(())
                     },

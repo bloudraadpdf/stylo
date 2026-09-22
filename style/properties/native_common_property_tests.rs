@@ -38,6 +38,28 @@ fn assert_serialization(name: &str, input: &str, expected: Option<&str>) {
 }
 
 #[test]
+fn masonry_slack_alias_preserves_flow_tolerance_keyword_semantics() {
+    let _lock = crate::test_support::pref_lock().lock().unwrap();
+    let _pref = crate::test_support::BoolPrefGuard::set(
+        "layout.css.grid-template-masonry-value.enabled",
+        true,
+    );
+    for (input, backing) in [
+        ("normal", "infinite"),
+        ("infinite", "auto"),
+        ("10px", "10px"),
+    ] {
+        let declarations = block(&format!("flow-tolerance:{input}"));
+        assert_eq!(serialized_value(&declarations, "masonry-slack"), backing);
+    }
+    assert!(block("flow-tolerance:auto").is_empty());
+    assert_eq!(
+        serialized_value(&block("masonry-slack:infinite"), "masonry-slack"),
+        "infinite"
+    );
+}
+
+#[test]
 fn scroll_initial_target_accepts_only_none_and_nearest() {
     for value in ["none", "nearest"] {
         assert_serialization("scroll-initial-target", value, Some(value));
