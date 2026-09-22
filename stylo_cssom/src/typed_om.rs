@@ -151,10 +151,7 @@ pub enum TypedOmTransformComponent {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TypedOmTextDecorationSkipKeyword {
     None,
-    Objects,
-    Edges,
-    BoxDecoration,
-    Spaces,
+    Auto,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -204,10 +201,7 @@ impl TypedOmTextDecorationSkipKeyword {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::None => "none",
-            Self::Objects => "objects",
-            Self::Edges => "edges",
-            Self::BoxDecoration => "box-decoration",
-            Self::Spaces => "spaces",
+            Self::Auto => "auto",
         }
     }
 }
@@ -349,10 +343,7 @@ pub fn parse_typed_om_background_size_numeric_value(
     Some(TypedOmBackgroundSizeNumericValue(value))
 }
 
-/// Recover the single-keyword legacy shorthand from Stylo's computed
-/// longhand tuple. The four trailing components are the initial values of the
-/// newer skip longhands and therefore do not contribute another shorthand
-/// keyword.
+/// Reify a computed text-decoration-skip shorthand keyword.
 pub fn parse_typed_om_text_decoration_skip_keyword(
     input: TypedOmTextDecorationSkipInput<'_>,
 ) -> Option<TypedOmTextDecorationSkipKeyword> {
@@ -363,16 +354,9 @@ pub fn parse_typed_om_text_decoration_skip_keyword(
         .parse_entirely(|input| {
             let keyword = match input.expect_ident_cloned()?.to_ascii_lowercase().as_str() {
                 "none" => TypedOmTextDecorationSkipKeyword::None,
-                "objects" => TypedOmTextDecorationSkipKeyword::Objects,
-                "edges" => TypedOmTextDecorationSkipKeyword::Edges,
-                "box-decoration" => TypedOmTextDecorationSkipKeyword::BoxDecoration,
-                "spaces" => TypedOmTextDecorationSkipKeyword::Spaces,
+                "auto" => TypedOmTextDecorationSkipKeyword::Auto,
                 _ => return Err(input.new_custom_error::<(), ()>(())),
             };
-            input.expect_ident_matching("none")?;
-            input.expect_ident_matching("none")?;
-            input.expect_ident_matching("start")?;
-            input.expect_ident_matching("end")?;
             Ok(keyword)
         })
         .ok()
@@ -734,26 +718,24 @@ mod tests {
     }
 
     #[test]
-    fn text_decoration_skip_recovers_only_a_single_legacy_keyword() {
-        assert_eq!(
-            parse_typed_om_text_decoration_skip_keyword(TypedOmTextDecorationSkipInput::new(
-                "objects none none start end"
-            ))
-            .map(TypedOmTextDecorationSkipKeyword::as_str),
-            Some("objects")
-        );
-        assert!(
-            parse_typed_om_text_decoration_skip_keyword(TypedOmTextDecorationSkipInput::new(
-                "objects spaces none start end"
-            ))
-            .is_none()
-        );
-        assert!(
-            parse_typed_om_text_decoration_skip_keyword(TypedOmTextDecorationSkipInput::new(
-                "objects none none start"
-            ))
-            .is_none()
-        );
+    fn text_decoration_skip_reifies_its_current_shorthand_keywords() {
+        for keyword in ["none", "auto"] {
+            assert_eq!(
+                parse_typed_om_text_decoration_skip_keyword(TypedOmTextDecorationSkipInput::new(
+                    keyword
+                ))
+                .map(TypedOmTextDecorationSkipKeyword::as_str),
+                Some(keyword),
+            );
+        }
+        for invalid in ["", "objects", "objects none none start end", "none auto"] {
+            assert!(
+                parse_typed_om_text_decoration_skip_keyword(TypedOmTextDecorationSkipInput::new(
+                    invalid
+                ))
+                .is_none()
+            );
+        }
     }
 
     #[test]

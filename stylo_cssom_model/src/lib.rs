@@ -3092,6 +3092,17 @@ mod tests {
     }
 
     #[test]
+    fn text_decoration_skip_schema_retains_the_current_initial_keyword() {
+        assert_eq!(
+            property_schema("text-decoration-skip")
+                .unwrap()
+                .initial
+                .serialized,
+            "auto"
+        );
+    }
+
+    #[test]
     fn resolved_cssom_values_serialise_at_the_observable_boundary() {
         assert_eq!(ResolvedCssomValue::css_pixel(12.0).to_css_string(), "12px");
         assert_eq!(
