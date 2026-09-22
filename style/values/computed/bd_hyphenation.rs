@@ -12,46 +12,6 @@ use crate::OwnedSlice;
 
 pub use specified::BdLinebreakMagic;
 
-/// Computed value of `-bd-hyphenate-limit-lines`.
-#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToCss, ToResolvedValue, ToShmem, ToTyped)]
-#[repr(C, u8)]
-pub enum BdHyphenateLimitLines {
-    /// `no-limit` (initial).
-    NoLimit,
-    /// `<integer>` cap on consecutive hyphenated lines.
-    Count(Integer),
-}
-
-impl BdHyphenateLimitLines {
-    /// Initial value.
-    #[inline]
-    pub fn no_limit() -> Self {
-        Self::NoLimit
-    }
-}
-
-impl ToComputedValue for specified::BdHyphenateLimitLines {
-    type ComputedValue = BdHyphenateLimitLines;
-
-    fn to_computed_value(&self, ctx: &Context) -> Self::ComputedValue {
-        match self {
-            specified::BdHyphenateLimitLines::NoLimit => BdHyphenateLimitLines::NoLimit,
-            specified::BdHyphenateLimitLines::Count(i) => {
-                BdHyphenateLimitLines::Count(i.to_computed_value(ctx))
-            },
-        }
-    }
-
-    fn from_computed_value(computed: &Self::ComputedValue) -> Self {
-        match computed {
-            BdHyphenateLimitLines::NoLimit => specified::BdHyphenateLimitLines::NoLimit,
-            BdHyphenateLimitLines::Count(i) => {
-                specified::BdHyphenateLimitLines::Count(ToComputedValue::from_computed_value(i))
-            },
-        }
-    }
-}
-
 /// Computed value of `-bd-hyphenate-patterns`.
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, ToCss, ToResolvedValue, ToTyped)]
 #[repr(C, u8)]

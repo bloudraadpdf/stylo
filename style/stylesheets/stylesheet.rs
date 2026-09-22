@@ -4314,12 +4314,79 @@ mod tests {
         );
     }
 
+    #[test]
+    fn hyphenate_limit_lines_accepts_standard_nonnegative_values() {
+        assert_standard_properties(&["hyphenate-limit-lines"]);
+        for value in ["no-limit", "0", "4", "calc(2 + 2)", "calc(4.1)"] {
+            assert_property_roundtrip("hyphenate-limit-lines", value);
+        }
+        for value in [
+            "auto",
+            "none",
+            "-1",
+            "1.2",
+            "1px",
+            "\"1\"",
+            "no-limit 2",
+            "1 2",
+        ] {
+            assert_parsed_declaration_count(&format!("p {{ hyphenate-limit-lines: {value}; }}"), 0);
+        }
+    }
+
+    #[test]
+    fn hyphenate_limit_lines_computes_and_animates_nonnegative_integers() {
+        use crate::values::animated::{Animate, Procedure, ToAnimatedValue};
+        use crate::values::computed::HyphenateLimitLines;
+        use crate::values::generics::NonNegative;
+
+        let stylist = test_stylist();
+        for (input, expected) in [("calc(2 + 2)", 4), ("calc(4.1)", 4), ("calc(-1)", 0)] {
+            inspect_style_declaration_block(
+                &format!("p {{ hyphenate-limit-lines: {input}; }}"),
+                |block| {
+                    let (PropertyDeclaration::HyphenateLimitLines(value), _) = block
+                        .declaration_importance_iter()
+                        .next()
+                        .expect("the standard declaration parses")
+                    else {
+                        panic!("expected a typed hyphenation line limit")
+                    };
+                    let computed = crate::values::computed::Context::for_media_query_evaluation(
+                        stylist.device(),
+                        QuirksMode::NoQuirks,
+                        |context| value.to_computed_value(context),
+                    );
+                    assert_eq!(computed, HyphenateLimitLines::Count(NonNegative(expected)));
+                    assert_eq!(computed.to_css_string(), expected.to_string());
+                },
+            );
+        }
+        let start = HyphenateLimitLines::Count(NonNegative(10));
+        let end = HyphenateLimitLines::Count(NonNegative(0));
+        for (progress, expected) in [(-0.5, 15), (0.3, 7), (0.7, 3), (1.5, 0)] {
+            let animated = start
+                .animate(&end, Procedure::Interpolate { progress })
+                .unwrap();
+            assert_eq!(
+                HyphenateLimitLines::from_animated_value(animated),
+                HyphenateLimitLines::Count(NonNegative(expected)),
+            );
+        }
+        assert!(start
+            .animate(
+                &HyphenateLimitLines::NoLimit,
+                Procedure::Interpolate { progress: 0.5 }
+            )
+            .is_err());
+    }
+
     // ----- F31 ---------------------------------------------------------
     #[test]
     fn servo_preserves_bd_hyphenate_limit_lines_declaration() {
         assert_bd_roundtrip(
             "p { -bd-hyphenate-limit-lines: 2; }",
-            "-bd-hyphenate-limit-lines",
+            "hyphenate-limit-lines",
             "2",
         );
     }

@@ -11,9 +11,9 @@ use crate::values::computed;
 use crate::values::computed::text::TextEmphasisStyle as ComputedTextEmphasisStyle;
 use crate::values::computed::{Context, ToComputedValue};
 use crate::values::generics::text::{
-    GenericHyphenateLimitChars, GenericInitialLetter, GenericTextDecorationInset,
-    GenericTextDecorationLength, GenericTextFit, GenericTextIndent, GenericTextSizeAdjust,
-    TextFitLines, TextFitMode,
+    GenericHyphenateLimitChars, GenericHyphenateLimitLines, GenericInitialLetter,
+    GenericTextDecorationInset, GenericTextDecorationLength, GenericTextFit, GenericTextIndent,
+    GenericTextSizeAdjust, TextFitLines, TextFitMode,
 };
 use crate::values::generics::NumberOrAuto;
 use crate::values::specified::length::LengthPercentage;
@@ -171,6 +171,10 @@ pub enum HyphenateCharacter {
 
 /// A value for the `hyphenate-limit-chars` property.
 pub type HyphenateLimitChars = GenericHyphenateLimitChars<Integer>;
+
+/// The specified limit on successive hyphenated lines.
+pub type HyphenateLimitLines =
+    GenericHyphenateLimitLines<crate::values::specified::NonNegativeInteger>;
 
 impl Parse for HyphenateLimitChars {
     fn parse<'i, 't>(

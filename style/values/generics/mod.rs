@@ -76,6 +76,12 @@ impl ClampToNonNegative for f32 {
     }
 }
 
+impl ClampToNonNegative for i32 {
+    fn clamp_to_non_negative(self) -> Self {
+        self.max(0)
+    }
+}
+
 impl<T: Add<Output = T>> Add<NonNegative<T>> for NonNegative<T> {
     type Output = Self;
 
