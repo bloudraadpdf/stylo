@@ -285,7 +285,19 @@ pub type AspectRatio = GenericAspectRatio<NonNegativeNumber>;
 /// is a tagged union without a `ToShmem` impl and the computed value
 /// never enters shareable-memory storage (only the specified value
 /// does, and that lives on the specified-side `MasonrySlack`).
-#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToCss, ToResolvedValue, ToTyped)]
+#[derive(
+    Animate,
+    Clone,
+    ComputeSquaredDistance,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    ToAnimatedValue,
+    ToAnimatedZero,
+    ToCss,
+    ToResolvedValue,
+    ToTyped,
+)]
 #[repr(C, u8)]
 pub enum MasonrySlack {
     /// `infinite` — no slack constraint; initial value.
@@ -301,5 +313,40 @@ impl MasonrySlack {
     #[inline]
     pub fn initial() -> Self {
         Self::Infinite
+    }
+}
+
+#[cfg(test)]
+mod masonry_slack_tests {
+    use super::MasonrySlack;
+    use crate::values::animated::{Animate, Procedure};
+    use crate::values::computed::{Length, LengthPercentage, Percentage};
+    use crate::values::generics::NonNegative;
+
+    #[test]
+    fn masonry_slack_interpolates_numeric_values_but_not_keywords() {
+        let length = |value| {
+            MasonrySlack::LengthPercentage(NonNegative(LengthPercentage::new_length(Length::new(value))))
+        };
+        let percentage = |value| {
+            MasonrySlack::LengthPercentage(NonNegative(LengthPercentage::new_percent(Percentage(value))))
+        };
+        let sample = Procedure::Interpolate { progress: 0.25 };
+        assert_eq!(length(10.0).animate(&length(50.0), sample), Ok(length(20.0)));
+        assert_eq!(percentage(0.1).animate(&percentage(0.5), sample), Ok(percentage(0.2)));
+        assert!(length(10.0).animate(&MasonrySlack::Infinite, sample).is_err());
+        assert!(MasonrySlack::Auto.animate(&MasonrySlack::Infinite, sample).is_err());
+    }
+
+    #[test]
+    fn masonry_slack_animation_property_recognises_flow_tolerance() {
+        use crate::properties::PropertyId;
+        use crate::test_support::{pref_lock, BoolPrefGuard};
+        let _lock = pref_lock().lock().unwrap();
+        let _pref = BoolPrefGuard::set("layout.css.grid-template-masonry-value.enabled", true);
+        let alias = PropertyId::parse_enabled_for_all_content("flow-tolerance").unwrap();
+        let backing = PropertyId::parse_enabled_for_all_content("masonry-slack").unwrap();
+        assert_eq!(alias.as_shorthand(), backing.as_shorthand());
+        assert!(alias.is_animatable());
     }
 }
