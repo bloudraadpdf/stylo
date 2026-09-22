@@ -1655,6 +1655,48 @@ pub type TextDecorationLength = GenericTextDecorationLength<LengthPercentage>;
 pub type TextUnderlineOffset =
     crate::values::generics::text::GenericTextUnderlineOffset<LengthPercentage>;
 
+impl ToComputedValue for TextDecorationLength {
+    type ComputedValue = computed::TextDecorationLength;
+
+    fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
+        match self {
+            Self::Auto => Self::ComputedValue::Auto,
+            Self::FromFont => Self::ComputedValue::FromFont,
+            Self::LengthPercentage(value) => Self::ComputedValue::LengthPercentage(
+                value.to_computed_value(context).reduce_zero_dimension(),
+            ),
+        }
+    }
+
+    fn from_computed_value(value: &Self::ComputedValue) -> Self {
+        match value {
+            Self::ComputedValue::Auto => Self::Auto,
+            Self::ComputedValue::FromFont => Self::FromFont,
+            Self::ComputedValue::LengthPercentage(value) => {
+                Self::LengthPercentage(ToComputedValue::from_computed_value(value))
+            },
+        }
+    }
+}
+
+impl ToComputedValue for TextUnderlineOffset {
+    type ComputedValue = computed::TextUnderlineOffset;
+
+    fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
+        use crate::values::generics::length::GenericLengthPercentageOrAuto as Value;
+        crate::values::generics::text::GenericTextUnderlineOffset(match &self.0 {
+            Value::Auto => Value::Auto,
+            Value::LengthPercentage(value) => {
+                Value::LengthPercentage(value.to_computed_value(context).reduce_zero_dimension())
+            },
+        })
+    }
+
+    fn from_computed_value(value: &Self::ComputedValue) -> Self {
+        Self(ToComputedValue::from_computed_value(&value.0))
+    }
+}
+
 impl TextDecorationLength {
     /// `Auto` value.
     #[inline]
