@@ -4361,6 +4361,41 @@ mod tests {
     }
 
     #[test]
+    fn decoration_percentage_mixes_compute_zero_dimensions() {
+        let stylist = test_stylist();
+        for property in ["text-decoration-thickness", "text-underline-offset"] {
+            for (input, expected) in [
+                ("calc(200% - 0px)", "200%"),
+                ("calc(50% - 0px)", "50%"),
+                ("calc(100% + 0px)", "100%"),
+                ("calc(0% + 32px)", "calc(0% + 32px)"),
+                ("calc(50% + 32px)", "calc(50% + 32px)"),
+            ] {
+                inspect_style_declaration_block(
+                    &format!("p {{ {property}: {input}; }}"),
+                    |block| {
+                        let (value, _) = block.declaration_importance_iter().next().unwrap();
+                        let computed = crate::values::computed::Context::for_media_query_evaluation(
+                            stylist.device(),
+                            QuirksMode::NoQuirks,
+                            |context| match value {
+                                PropertyDeclaration::TextDecorationThickness(value) => {
+                                    value.to_computed_value(context).to_css_string()
+                                },
+                                PropertyDeclaration::TextUnderlineOffset(value) => {
+                                    value.to_computed_value(context).to_css_string()
+                                },
+                                _ => panic!("expected a decoration length"),
+                            },
+                        );
+                        assert_eq!(computed, expected, "{property}: {input}");
+                    },
+                );
+            }
+        }
+    }
+
+    #[test]
     fn hyphenate_limit_lines_accepts_standard_nonnegative_values() {
         assert_standard_properties(&["hyphenate-limit-lines"]);
         for value in ["no-limit", "0", "4", "calc(2 + 2)", "calc(4.1)"] {

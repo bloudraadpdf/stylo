@@ -1456,31 +1456,34 @@ impl LengthPercentage {
                 let one = product_with(self.to_calc_node(), l as f32);
                 let other = product_with(other.to_calc_node(), r as f32);
 
-                let mixed = Self::new_calc(
+                Self::new_calc(
                     CalcNode::Sum(vec![one, other].into()),
                     AllowedNumericType::All,
-                );
-                // A combined percentage-dimension value with a zero dimension
-                // computes to a percentage (CSS Values 4, section 5.6.1).
-                // Keep authored calculations and zero percentage terms intact:
-                // an unresolved percentage still carries its basis dependency.
-                if let Unpacked::Calc(calc) = mixed.unpack() {
-                    if let CalcNode::Sum(terms) = &calc.node {
-                        use CalcLengthPercentageLeaf::{Length, Percentage};
-                        match &**terms {
-                            [CalcNode::Leaf(Length(length)), CalcNode::Leaf(Percentage(percent))]
-                            | [CalcNode::Leaf(Percentage(percent)), CalcNode::Leaf(Length(length))]
-                                if length.px() == 0.0 =>
-                            {
-                                return Ok(Self::new_percent(*percent));
-                            },
-                            _ => {},
-                        }
-                    }
-                }
-                mixed
+                )
+                .reduce_zero_dimension()
             },
         })
+    }
+
+    /// Reduce a percentage-dimension mix as required by CSS Values 4 section 5.6.1.
+    pub(crate) fn reduce_zero_dimension(self) -> Self {
+        if let Unpacked::Calc(calc) = self.unpack() {
+            if let CalcNode::Sum(terms) = &calc.node {
+                use CalcLengthPercentageLeaf::{Length, Percentage};
+                match &**terms {
+                    [CalcNode::Leaf(Length(length)), CalcNode::Leaf(Percentage(percent))]
+                    | [CalcNode::Leaf(Percentage(percent)), CalcNode::Leaf(Length(length))]
+                        if length.px() == 0.0 =>
+                    {
+                        return Self::new_percent(crate::values::computed::Percentage(
+                            calc.clamping_mode.clamp(percent.0),
+                        ));
+                    },
+                    _ => {},
+                }
+            }
+        }
+        self
     }
 
     /// Interpolate a value whose property requires a mixed percentage and
