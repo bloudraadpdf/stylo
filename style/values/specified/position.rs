@@ -2034,14 +2034,33 @@ impl Parse for MasonrySlack {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
+        Self::parse_with_keywords(context, input, "infinite", "auto")
+    }
+}
+
+impl MasonrySlack {
+    /// Parse the standard name, whose keywords differ from the legacy longhand.
+    pub fn parse_flow_tolerance<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        Self::parse_with_keywords(context, input, "normal", "infinite")
+    }
+
+    fn parse_with_keywords<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+        normal: &str,
+        infinite: &str,
+    ) -> Result<Self, ParseError<'i>> {
         if let Ok(ident) = input.try_parse(|i| i.expect_ident_cloned()) {
-            return match_ignore_ascii_case! { &ident,
-                "infinite" => Ok(Self::Infinite),
-                "auto" => Ok(Self::Auto),
-                _ => Err(input.new_custom_error(
-                    SelectorParseErrorKind::UnexpectedIdent(ident),
-                )),
-            };
+            if ident.eq_ignore_ascii_case(normal) {
+                return Ok(Self::Infinite);
+            }
+            if ident.eq_ignore_ascii_case(infinite) {
+                return Ok(Self::Auto);
+            }
+            return Err(input.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(ident)));
         }
         let lp = NonNegativeLengthPercentage::parse(context, input)?;
         Ok(Self::LengthPercentage(lp))
