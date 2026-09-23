@@ -120,7 +120,27 @@ pub fn rgb_to_hsl(from: &ColorComponents) -> ColorComponents {
         0.0
     };
 
+    // Out-of-gamut RGB can produce a negative saturation. Its equivalent HSL
+    // representation has a positive saturation and the opposite hue.
+    let (hue, saturation) = if saturation < 0.0 {
+        (normalize_hue(hue + 180.0), -saturation)
+    } else {
+        (hue, saturation)
+    };
+
     ColorComponents(hue, saturation * 100.0, lightness * 100.0)
+}
+
+#[cfg(test)]
+mod hsl_tests {
+    use super::{rgb_to_hsl, ColorComponents};
+
+    #[test]
+    fn out_of_gamut_rgb_rotates_negative_saturation() {
+        let hsl = rgb_to_hsl(&ColorComponents(3.0, 0.0, 0.0));
+
+        assert_eq!(hsl, ColorComponents(180.0, 300.0, 150.0));
+    }
 }
 
 /// Convert from HWB notation to RGB notation.
