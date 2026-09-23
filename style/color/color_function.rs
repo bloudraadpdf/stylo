@@ -1354,4 +1354,22 @@ mod tests {
         assert!(color.c1().expect("chroma") > 0.0);
         assert!(color.c2().expect("hue") > 0.0);
     }
+
+    #[test]
+    fn relative_srgb_origin_uses_chromium_lab_conversion() {
+        let origin = AbsoluteColor::new(ColorSpace::Srgb, 0.5, 0.5, 0.5, 1.0);
+        let function = ColorFunction::Lch(
+            Optional::Some(origin),
+            ColorComponent::ChannelKeyword(ChannelKeyword::L),
+            ColorComponent::ChannelKeyword(ChannelKeyword::C),
+            ColorComponent::ChannelKeyword(ChannelKeyword::H),
+            ColorComponent::AlphaOmitted,
+        );
+        let color = function
+            .resolve_to_absolute()
+            .expect("relative lch resolves");
+        assert!((color.c0().expect("lightness") - 53.3883).abs() < 0.001);
+        assert!((color.c1().expect("chroma") - 0.0112553).abs() < 0.001);
+        assert!((color.c2().expect("hue") - 356.6).abs() < 0.1);
+    }
 }

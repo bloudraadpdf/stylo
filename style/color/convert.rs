@@ -162,6 +162,46 @@ pub fn hwb_to_rgb(from: &ColorComponents) -> ColorComponents {
     hsl_to_rgb(&ColorComponents(hue, 100.0, 50.0)).map(|v| v * x + whiteness)
 }
 
+/// Convert sRGB to Lab with Chromium's quantised ICC matrix.
+pub fn chromium_rgb_to_lab(from: &ColorComponents) -> ColorComponents {
+    let linear = [from.0, from.1, from.2].map(|value| {
+        let value = value as f64;
+        if value.abs() < 0.04045 {
+            value / 12.92
+        } else {
+            value.signum() * ((value.abs() + 0.055) / 1.055).powf(2.4)
+        }
+    });
+    // Chromium's sRGB ICC matrix stores each D50 coefficient as signed 16.16.
+    const MATRIX: [[f64; 3]; 3] = [
+        [28578.0, 25241.0, 9376.0],
+        [14581.0, 46981.0, 3972.0],
+        [912.0, 6362.0, 46799.0],
+    ];
+    let xyz = MATRIX.map(|row| {
+        row.iter()
+            .zip(linear)
+            .map(|(coefficient, channel)| coefficient * channel)
+            .sum::<f64>()
+            / 65536.0
+    });
+    let adapted = [xyz[0] / 0.9642, xyz[1], xyz[2] / 0.8251];
+    const EPSILON: f64 = 216.0 / 24389.0;
+    const KAPPA: f64 = 24389.0 / 27.0;
+    let [x, y, z] = adapted.map(|value| {
+        if value > EPSILON {
+            value.cbrt()
+        } else {
+            (KAPPA * value + 16.0) / 116.0
+        }
+    });
+    ColorComponents(
+        (116.0 * y - 16.0) as f32,
+        (500.0 * (x - y)) as f32,
+        (200.0 * (y - z)) as f32,
+    )
+}
+
 /// Convert from RGB notation to HWB notation.
 /// https://drafts.csswg.org/css-color-4/#rgb-to-hwb
 #[inline]
