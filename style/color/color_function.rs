@@ -1372,4 +1372,22 @@ mod tests {
         assert!((color.c1().expect("chroma") - 0.0112553).abs() < 0.001);
         assert!((color.c2().expect("hue") - 356.6).abs() < 0.1);
     }
+
+    #[test]
+    fn relative_lab_origin_keeps_chromium_oklch_neutral_hue() {
+        let origin = AbsoluteColor::new(ColorSpace::Lab, 50.0, None::<f32>, None::<f32>, 1.0);
+        let function = ColorFunction::Oklch(
+            Optional::Some(origin),
+            ColorComponent::ChannelKeyword(ChannelKeyword::L),
+            ColorComponent::ChannelKeyword(ChannelKeyword::C),
+            ColorComponent::ChannelKeyword(ChannelKeyword::H),
+            ColorComponent::AlphaOmitted,
+        );
+        let color = function
+            .resolve_to_absolute()
+            .expect("relative oklch resolves");
+        assert!((color.c0().expect("lightness") - 0.568964).abs() < 0.001);
+        assert!((color.c1().expect("chroma") - 0.000014436).abs() < 0.00001);
+        assert!((color.c2().expect("hue") - 112.966).abs() < 3.0);
+    }
 }

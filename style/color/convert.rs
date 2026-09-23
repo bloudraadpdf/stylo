@@ -12,7 +12,7 @@
 //! NOTE: Matrices has to be transposed from the examples in the spec for use
 //! with the `euclid` library.
 
-use crate::color::ColorComponents;
+use crate::color::{ColorComponents, ColorSpace};
 use crate::values::normalize;
 
 type Transform = euclid::default::Transform3D<f32>;
@@ -200,6 +200,172 @@ pub fn chromium_rgb_to_lab(from: &ColorComponents) -> ColorComponents {
         (500.0 * (x - y)) as f32,
         (200.0 * (y - z)) as f32,
     )
+}
+
+/// Convert a relative colour through Chromium's D50 and D65 matrices.
+pub fn chromium_relative_convert(
+    source: ColorSpace,
+    target: ColorSpace,
+    components: &ColorComponents,
+) -> Option<ColorComponents> {
+    use ColorSpace::*;
+
+    if !matches!(target, Lab | Lch | Oklab | Oklch) {
+        return None;
+    }
+
+    fn mul(matrix: [[f64; 3]; 3], vector: [f64; 3]) -> [f64; 3] {
+        matrix.map(|row| row.iter().zip(vector).map(|(a, b)| a * b).sum())
+    }
+
+    fn lab_to_xyz([l, a, b]: [f64; 3]) -> [f64; 3] {
+        const KAPPA: f64 = 24389.0 / 27.0;
+        const EPSILON: f64 = 216.0 / 24389.0;
+        let fy = (l + 16.0) / 116.0;
+        let f = [fy + a / 500.0, fy, fy - b / 200.0];
+        let xyz = f.map(|value| {
+            let cubed = value * value * value;
+            if cubed > EPSILON {
+                cubed
+            } else {
+                (116.0 * value - 16.0) / KAPPA
+            }
+        });
+        [xyz[0] * 0.9642, xyz[1], xyz[2] * 0.8251]
+    }
+
+    fn xyz_to_lab([x, y, z]: [f64; 3]) -> [f64; 3] {
+        const KAPPA: f64 = 24389.0 / 27.0;
+        const EPSILON: f64 = 216.0 / 24389.0;
+        let [fx, fy, fz] = [x / 0.9642, y, z / 0.8251].map(|value| {
+            if value > EPSILON {
+                value.cbrt()
+            } else {
+                (KAPPA * value + 16.0) / 116.0
+            }
+        });
+        [116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz)]
+    }
+
+    fn oklab_to_xyz([l, a, b]: [f64; 3]) -> [f64; 3] {
+        let lms = mul(
+            [
+                [0.9999999984505198, 0.3963377921737679, 0.2158037580607588],
+                [
+                    1.0000000088817608,
+                    -0.10556134232365635,
+                    -0.0638541747717059,
+                ],
+                [1.000000054672411, -0.08948418209496576, -1.2914855378640917],
+            ],
+            [l, a, b],
+        )
+        .map(|value| value * value * value);
+        mul(
+            [
+                [1.2268798733741557, -0.5578149965554813, 0.28139105017721583],
+                [
+                    -0.04057576262431372,
+                    1.1122868293970594,
+                    -0.07171106666151701,
+                ],
+                [
+                    -0.07637294974672142,
+                    -0.4214933239627914,
+                    1.5869240244272418,
+                ],
+            ],
+            lms,
+        )
+    }
+
+    fn xyz_to_oklab(xyz: [f64; 3]) -> [f64; 3] {
+        let lms = mul(
+            [
+                [0.8190224432164319, 0.3619062562801221, -0.12887378261216414],
+                [0.0329836671980271, 0.9292868468965546, 0.03614466816999844],
+                [
+                    0.048177199566046255,
+                    0.26423952494422764,
+                    0.6335478258136937,
+                ],
+            ],
+            xyz,
+        )
+        .map(f64::cbrt);
+        mul(
+            [
+                [0.2104542553, 0.793617785, -0.0040720468],
+                [1.9779984951, -2.428592205, 0.4505937099],
+                [0.0259040371, 0.7827717662, -0.808675766],
+            ],
+            lms,
+        )
+    }
+
+    let [c0, c1, c2] = [
+        components.0 as f64,
+        components.1 as f64,
+        components.2 as f64,
+    ];
+    let (xyz, d50) = match source {
+        Srgb | Hsl | Hwb => {
+            let rgb = match source {
+                Hsl => hsl_to_rgb(components),
+                Hwb => hwb_to_rgb(components),
+                _ => *components,
+            };
+            let lab = chromium_rgb_to_lab(&rgb);
+            (lab_to_xyz([lab.0 as f64, lab.1 as f64, lab.2 as f64]), true)
+        },
+        Lab => (lab_to_xyz([c0, c1, c2]), true),
+        Lch => {
+            let hue = c2.to_radians();
+            (lab_to_xyz([c0, c1 * hue.cos(), c1 * hue.sin()]), true)
+        },
+        Oklab => (oklab_to_xyz([c0, c1, c2]), false),
+        Oklch => {
+            let hue = c2.to_radians();
+            (oklab_to_xyz([c0, c1 * hue.cos(), c1 * hue.sin()]), false)
+        },
+        _ => return None,
+    };
+    let target_d50 = matches!(target, Lab | Lch);
+    let xyz = match (d50, target_d50) {
+        (true, false) => mul(
+            [
+                [0.955537, -0.02306, 0.0632184],
+                [-0.0283153, 1.00995, 0.021026],
+                [0.0123088, -0.0205005, 1.33019],
+            ],
+            xyz,
+        ),
+        (false, true) => mul(
+            [
+                [1.04786, 0.0229073, -0.0501622],
+                [0.0295704, 0.990476, -0.0170615],
+                [-0.00924047, 0.0150529, 0.751971],
+            ],
+            xyz,
+        ),
+        _ => xyz,
+    };
+    let mut result = if target_d50 {
+        xyz_to_lab(xyz)
+    } else {
+        xyz_to_oklab(xyz)
+    };
+    if matches!(target, Lch | Oklch) {
+        let chroma = result[1].hypot(result[2]);
+        let hue = result[2].atan2(result[1]).to_degrees().rem_euclid(360.0);
+        result[1] = chroma;
+        result[2] = hue;
+    }
+    Some(ColorComponents(
+        result[0] as f32,
+        result[1] as f32,
+        result[2] as f32,
+    ))
 }
 
 /// Convert from RGB notation to HWB notation.

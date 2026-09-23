@@ -592,21 +592,11 @@ impl AbsoluteColor {
             missing_to_zero!(self.c2()),
         );
 
-        let result = if keep_numeric_hue
-            && matches!(self.color_space, Srgb | Hsl | Hwb)
-            && matches!(color_space, Lab | Lch)
+        let result = if let Some(converted) = keep_numeric_hue
+            .then(|| convert::chromium_relative_convert(self.color_space, color_space, &components))
+            .flatten()
         {
-            let rgb = match self.color_space {
-                Hsl => convert::hsl_to_rgb(&components),
-                Hwb => convert::hwb_to_rgb(&components),
-                _ => components,
-            };
-            let lab = convert::chromium_rgb_to_lab(&rgb);
-            if color_space == Lch {
-                convert::orthogonal_to_polar(&lab, 0.0)
-            } else {
-                lab
-            }
+            converted
         } else {
             match (self.color_space, color_space) {
                 // We have simplified conversions that do not need to convert to XYZ
