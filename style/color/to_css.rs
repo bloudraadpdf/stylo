@@ -111,7 +111,34 @@ impl ToCss for AbsoluteColor {
                 dest.write_char(')')
             },
             ColorSpace::Hsl | ColorSpace::Hwb => {
-                if self.flags.contains(ColorFlags::IS_LEGACY_SRGB) {
+                if self.flags.intersects(
+                    ColorFlags::C0_IS_NONE
+                        | ColorFlags::C1_IS_NONE
+                        | ColorFlags::C2_IS_NONE
+                        | ColorFlags::ALPHA_IS_NONE,
+                ) {
+                    dest.write_str(if self.color_space == ColorSpace::Hsl {
+                        "hsl("
+                    } else {
+                        "hwb("
+                    })?;
+                    ModernComponent(&self.c0()).to_css(dest)?;
+                    if self.c0().is_some() {
+                        dest.write_str("deg")?;
+                    }
+                    dest.write_char(' ')?;
+                    ModernComponent(&self.c1()).to_css(dest)?;
+                    if self.c1().is_some() {
+                        dest.write_char('%')?;
+                    }
+                    dest.write_char(' ')?;
+                    ModernComponent(&self.c2()).to_css(dest)?;
+                    if self.c2().is_some() {
+                        dest.write_char('%')?;
+                    }
+                    serialize_color_alpha(dest, self.alpha(), false)?;
+                    dest.write_char(')')
+                } else if self.flags.contains(ColorFlags::IS_LEGACY_SRGB) {
                     self.into_srgb_legacy().to_css(dest)
                 } else {
                     self.to_color_space(ColorSpace::Srgb).to_css(dest)
@@ -185,7 +212,7 @@ impl ToCss for AbsoluteColor {
 
 #[cfg(test)]
 mod tests {
-    use super::legacy_srgb_channel;
+    use super::{AbsoluteColor, ColorSpace, ToCss, legacy_srgb_channel};
 
     #[test]
     fn extrapolated_six_digit_timing_rounds_legacy_half_channel_up() {
@@ -193,6 +220,15 @@ mod tests {
         let green = (165.0 / 255.0) * extrapolated_progress;
 
         assert_eq!(legacy_srgb_channel(green), 248);
+    }
+
+    #[test]
+    fn hsl_and_hwb_keep_missing_components_when_serialized() {
+        let hsl = AbsoluteColor::new(ColorSpace::Hsl, None::<f32>, 50.0, 50.0, 1.0);
+        assert_eq!(hsl.to_css_string(), "hsl(none 50% 50%)");
+
+        let hwb = AbsoluteColor::new(ColorSpace::Hwb, 180.0, None::<f32>, 25.0, None::<f32>);
+        assert_eq!(hwb.to_css_string(), "hwb(180deg none 25% / none)");
     }
 }
 
