@@ -673,8 +673,21 @@ impl AbsoluteColor {
         }
 
         let mut c0 = nan_to_missing!(result.0);
-        let c1 = nan_to_missing!(result.1);
+        let mut c1 = nan_to_missing!(result.1);
         let mut c2 = nan_to_missing!(result.2);
+
+        let source_is_neutral = match self.color_space {
+            Hsl => components.1 == 0.0 || components.2 == 0.0 || components.2 == 100.0,
+            Hwb => components.1 + components.2 >= 100.0,
+            Lab | Oklab => components.1 == 0.0 && components.2 == 0.0,
+            Lch | Oklch => components.1 == 0.0,
+            Srgb => components.0 == components.1 && components.1 == components.2,
+            _ => false,
+        };
+        if source_is_neutral && matches!(color_space, Lch | Oklch) && c1.is_some() {
+            c1 = Some(0.0);
+            c2 = None;
+        }
 
         // Check the source because finite-precision conversion can cross the
         // target's powerless threshold.
@@ -825,5 +838,18 @@ mod tests {
         let lab = AbsoluteColor::new(ColorSpace::Lab, 50.0, None::<f32>, None::<f32>, 1.0);
         let hsl = lab.to_color_space_with_missing(ColorSpace::Hsl);
         assert_eq!(hsl.c1(), None);
+    }
+
+    #[test]
+    fn exact_neutral_origins_convert_to_zero_polar_chroma() {
+        for origin in [
+            AbsoluteColor::new(ColorSpace::Hsl, 180.0, 0.0, 50.0, 1.0),
+            AbsoluteColor::new(ColorSpace::Hwb, 180.0, 100.0, 25.0, 1.0),
+            AbsoluteColor::new(ColorSpace::Lch, 20.0, 0.0, 180.0, 1.0),
+        ] {
+            let converted = origin.to_color_space(ColorSpace::Oklch);
+            assert_eq!(converted.c1(), Some(0.0), "{origin:?}");
+            assert_eq!(converted.c2(), None, "{origin:?}");
+        }
     }
 }
