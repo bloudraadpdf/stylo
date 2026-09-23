@@ -192,7 +192,7 @@ impl<ValueType: ColorComponentType> ColorComponent<ValueType> {
             ColorComponent::ChannelKeyword(channel_keyword) => match origin_color {
                 Some(origin_color) => {
                     let value = origin_color.get_component_by_channel_keyword(*channel_keyword)?;
-                    Some(ValueType::from_value(value.unwrap_or(0.0)))
+                    value.map(ValueType::from_value)
                 },
                 None => return Err(()),
             },
@@ -311,14 +311,14 @@ mod tests {
     use crate::color::ColorSpace;
 
     #[test]
-    fn direct_relative_channel_uses_zero_for_missing_origin_component() {
+    fn direct_relative_channel_preserves_missing_origin_component() {
         let origin = AbsoluteColor::new(ColorSpace::Hsl, None::<f32>, 50.0, 50.0, 1.0);
         let channel = ColorComponent::<f32>::ChannelKeyword(ChannelKeyword::H);
-        assert_eq!(channel.resolve(Some(&origin)), Ok(Some(0.0)));
+        assert_eq!(channel.resolve(Some(&origin)), Ok(None));
         assert_eq!(ColorComponent::<f32>::None.resolve(Some(&origin)), Ok(None));
 
         let origin = AbsoluteColor::new(ColorSpace::Hsl, 30.0, 50.0, 50.0, None::<f32>);
         let alpha = ColorComponent::<f32>::ChannelKeyword(ChannelKeyword::Alpha);
-        assert_eq!(alpha.resolve(Some(&origin)), Ok(Some(0.0)));
+        assert_eq!(alpha.resolve(Some(&origin)), Ok(None));
     }
 }
