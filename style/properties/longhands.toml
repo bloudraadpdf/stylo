@@ -6558,9 +6558,11 @@ affects = "paint"
 # F21.4 — mask-border-slice.
 [mask-border-slice]
 type = "BorderImageSlice"
-initial = "computed::BorderImageSlice::hundred_percent()"
+# CSS Masking 1 changed the initial value from `0 fill` to `0`; only
+# `border-image-slice` keeps `100%`.
+initial = "computed::BorderImageSlice::zero()"
 struct = "svg"
-initial_specified_value = "specified::BorderImageSlice::hundred_percent()"
+initial_specified_value = "specified::BorderImageSlice::zero()"
 spec = "https://drafts.fxtf.org/css-masking-1/#propdef-mask-border-slice"
 extra_prefixes = ["webkit"]
 boxed = true
@@ -6570,9 +6572,11 @@ affects = "paint"
 # F21.5 — mask-border-width.
 [mask-border-width]
 type = "BorderImageWidth"
-initial = "computed::BorderImageWidth::all(computed::BorderImageSideWidth::one())"
+# CSS Masking 1 gives `mask-border-width` the initial value `auto`; only
+# `border-image-width` starts at `1`.
+initial = "computed::BorderImageWidth::all(computed::BorderImageSideWidth::Auto)"
 struct = "svg"
-initial_specified_value = "specified::BorderImageWidth::all(specified::BorderImageSideWidth::one())"
+initial_specified_value = "specified::BorderImageWidth::all(specified::BorderImageSideWidth::Auto)"
 spec = "https://drafts.fxtf.org/css-masking-1/#propdef-mask-border-width"
 extra_prefixes = ["webkit"]
 boxed = true

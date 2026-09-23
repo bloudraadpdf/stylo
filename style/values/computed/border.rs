@@ -158,6 +158,15 @@ impl BorderImageSlice {
             fill: false,
         }
     }
+
+    /// Returns the `0` value, the initial value of `mask-border-slice`.
+    #[inline]
+    pub fn zero() -> Self {
+        GenericBorderImageSlice {
+            offsets: Rect::all(NonNegativeNumberOrPercentage::zero()),
+            fill: false,
+        }
+    }
 }
 
 impl BorderSpacing {
