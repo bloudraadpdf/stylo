@@ -833,6 +833,7 @@ sub_properties = [
   "font-variation-settings",
   "font-size-adjust",
   "font-kerning",
+  "font-language-override",
   "font-variant-alternates",
   "font-variant-east-asian",
   "font-variant-emoji",
@@ -840,9 +841,6 @@ sub_properties = [
   "font-variant-numeric",
   "font-variant-position",
   "font-feature-settings"
-]
-extra_gecko_sub_properties = [
-  "font-language-override"
 ]
 spec = "https://drafts.csswg.org/css-fonts-3/#propdef-font"
 derive_value_info = false

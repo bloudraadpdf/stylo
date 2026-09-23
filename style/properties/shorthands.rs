@@ -3806,7 +3806,6 @@ pub mod font {
     use super::*;
     #[cfg(feature = "servo")]
     use crate::derives::Parse;
-    #[cfg(feature = "gecko")]
     use crate::properties::longhands::font_language_override;
     use crate::properties::longhands::{font_family, font_size};
     use crate::properties::longhands::{
@@ -3855,7 +3854,6 @@ pub mod font {
             font_weight,
             line_height,
             font_kerning: font_kerning::get_initial_specified_value(),
-            #[cfg(feature = "gecko")]
             font_language_override: font_language_override::get_initial_specified_value(),
             font_size_adjust: font_size_adjust::get_initial_specified_value(),
             font_variant_alternates: font_variant_alternates::get_initial_specified_value(),
@@ -4005,7 +4003,6 @@ pub mod font {
             if self.font_kerning != &font_kerning::get_initial_specified_value() {
                 return Ok(());
             }
-            #[cfg(feature = "gecko")]
             if self.font_language_override != &font_language_override::get_initial_specified_value()
             {
                 return Ok(());
