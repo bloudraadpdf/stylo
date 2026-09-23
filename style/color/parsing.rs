@@ -903,7 +903,7 @@ mod specified_color_tests {
     }
 
     #[test]
-    fn specified_hsl_and_hwb_serialize_static_channels_as_numbers() {
+    fn specified_color_functions_serialize_static_channels_as_numbers() {
         let url_data = UrlExtraData::from(
             url::Url::parse("https://example.invalid/").expect("test URL parses"),
         );
@@ -921,6 +921,14 @@ mod specified_color_tests {
         for (source, expected) in [
             ("hsl(120 80% none)", "hsl(120 80 none)"),
             ("hwb(120 30% 50% / none)", "hwb(120 30 50 / none)"),
+            (
+                "color(srgb calc(50%) 50% 0.5)",
+                "color(srgb calc(50%) 0.5 0.5)",
+            ),
+            (
+                "color(from rebeccapurple srgb 50% g b / alpha)",
+                "color(from rebeccapurple srgb 50% g b / alpha)",
+            ),
             (
                 "hsl(0deg 0% 0% / calc(50% + (sign(1em - 10px) * 10%)))",
                 "hsl(0 0 0 / calc(50% + (10% * sign(1em - 10px))))",
