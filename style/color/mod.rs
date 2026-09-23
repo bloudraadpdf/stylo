@@ -778,5 +778,10 @@ mod tests {
         assert!(hsl.c0().is_some());
         assert!(hsl.c1().is_some());
         assert_eq!(hsl.c2(), None);
+
+        let missing_lightness_and_chroma =
+            AbsoluteColor::new(ColorSpace::Lch, None::<f32>, None::<f32>, 180.0, 1.0);
+        let hwb = missing_lightness_and_chroma.to_color_space_with_missing(ColorSpace::Hwb);
+        assert_eq!((hwb.c0(), hwb.c1(), hwb.c2()), (None, None, None));
     }
 }
