@@ -903,7 +903,7 @@ mod specified_color_tests {
     }
 
     #[test]
-    fn deferred_hsl_and_hwb_serialize_static_channels_as_numbers() {
+    fn specified_hsl_and_hwb_serialize_static_channels_as_numbers() {
         let url_data = UrlExtraData::from(
             url::Url::parse("https://example.invalid/").expect("test URL parses"),
         );
@@ -919,6 +919,8 @@ mod specified_color_tests {
         );
 
         for (source, expected) in [
+            ("hsl(120 80% none)", "hsl(120 80 none)"),
+            ("hwb(120 30% 50% / none)", "hwb(120 30 50 / none)"),
             (
                 "hsl(0deg 0% 0% / calc(50% + (sign(1em - 10px) * 10%)))",
                 "hsl(0 0 0 / calc(50% + (10% * sign(1em - 10px))))",
@@ -930,6 +932,10 @@ mod specified_color_tests {
             (
                 "hsl(calc(50deg + (sign(1em - 10px) * 10deg)) -100% 300% / 50%)",
                 "hsl(calc(50deg + (10deg * sign(1em - 10px))) 0 300 / 0.5)",
+            ),
+            (
+                "hsl(from rebeccapurple h 0% l / alpha)",
+                "hsl(from rebeccapurple h 0% l / alpha)",
             ),
         ] {
             let mut input = ParserInput::new(source);
