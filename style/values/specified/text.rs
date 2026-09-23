@@ -431,6 +431,12 @@ mod tests {
             "digits 2.0",
             "digits invalid",
             "digits 2 3",
+            "digits calc(0 + 1)",
+            "digits calc(2 + 3)",
+            "digits calc(4 - 3)",
+            "digits calc(infinity)",
+            "digits calc(-infinity)",
+            "digits calc(NaN)",
         ] {
             assert!(parse_value::<TextCombineUpright>(css).is_err(), "{css}");
         }
@@ -1526,7 +1532,7 @@ impl Parse for TextCombineUpright {
                 } else {
                     Integer::parse(context, input)?
                 };
-                if !digits.was_calc() && !(2..=4).contains(&digits.value()) {
+                if digits.resolve().is_some_and(|value| !(2..=4).contains(&value)) {
                     return Err(location.new_custom_error(StyleParseErrorKind::UnspecifiedError));
                 }
                 Ok(Self::Digits(digits))
