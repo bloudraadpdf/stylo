@@ -317,6 +317,16 @@ mod tests {
     }
 
     #[test]
+    fn hanging_punctuation_end_modes_are_mutually_exclusive() {
+        for css in ["allow-end force-end", "first allow-end last force-end"] {
+            assert!(parse_value::<HangingPunctuation>(css).is_err(), "{css}");
+        }
+        for css in ["first allow-end last", "force-end last"] {
+            assert!(parse_value::<HangingPunctuation>(css).is_ok(), "{css}");
+        }
+    }
+
+    #[test]
     fn decoration_insets_retain_signed_lengths_and_percentages() {
         for (css, expected) in [
             ("10% -20%", "10% -20%"),
@@ -1326,7 +1336,11 @@ impl SpecifiedValueInfo for WordSpaceTransform {
     ToShmem,
     ToTyped,
 )]
-#[css(bitflags(single = "none", mixed = "first,last,allow-end,force-end"))]
+#[css(bitflags(
+    single = "none",
+    mixed = "first,last,allow-end,force-end",
+    validate_mixed = "Self::validate_mixed_flags",
+))]
 #[repr(C)]
 #[allow(missing_docs)]
 pub struct HangingPunctuation(u8);
@@ -1342,6 +1356,12 @@ bitflags! {
         const ALLOW_END = 1 << 2;
         /// Always hang a stop or comma at line end.
         const FORCE_END = 1 << 3;
+    }
+}
+
+impl HangingPunctuation {
+    fn validate_mixed_flags(&self) -> bool {
+        !self.contains(Self::ALLOW_END | Self::FORCE_END)
     }
 }
 
