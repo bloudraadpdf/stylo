@@ -260,7 +260,7 @@ impl ColorFunction<AbsoluteColor> {
 
                 if use_color_syntax {
                     let origin_color = origin_color.as_ref().map(|origin| {
-                        let origin = origin.to_color_space(ColorSpace::Srgb);
+                        let origin = origin.to_color_space_with_missing(ColorSpace::Srgb);
                         // Because rgb(..) syntax have components in range [0..255), we have to
                         // map them.
                         // NOTE: The IS_LEGACY_SRGB flag is not added back to the color, because
@@ -327,7 +327,7 @@ impl ColorFunction<AbsoluteColor> {
 
                 let origin_color = origin_color
                     .as_ref()
-                    .map(|o| o.to_color_space(ColorSpace::Hsl));
+                    .map(|o| o.to_color_space_with_missing(ColorSpace::Hsl));
 
                 let mut result = AbsoluteColor::new(
                     ColorSpace::Hsl,
@@ -374,7 +374,7 @@ impl ColorFunction<AbsoluteColor> {
 
                 let origin_color = origin_color
                     .as_ref()
-                    .map(|o| o.to_color_space(ColorSpace::Hwb));
+                    .map(|o| o.to_color_space_with_missing(ColorSpace::Hwb));
 
                 let mut result = AbsoluteColor::new(
                     ColorSpace::Hwb,
@@ -411,7 +411,7 @@ impl ColorFunction<AbsoluteColor> {
 
                 let origin_color = origin_color
                     .as_ref()
-                    .map(|o| o.to_color_space(ColorSpace::Lab));
+                    .map(|o| o.to_color_space_with_missing(ColorSpace::Lab));
 
                 AbsoluteColor::new(
                     ColorSpace::Lab,
@@ -432,7 +432,7 @@ impl ColorFunction<AbsoluteColor> {
 
                 let origin_color = origin_color
                     .as_ref()
-                    .map(|o| o.to_color_space(ColorSpace::Lch));
+                    .map(|o| o.to_color_space_with_missing(ColorSpace::Lch));
 
                 AbsoluteColor::new(
                     ColorSpace::Lch,
@@ -453,7 +453,7 @@ impl ColorFunction<AbsoluteColor> {
 
                 let origin_color = origin_color
                     .as_ref()
-                    .map(|o| o.to_color_space(ColorSpace::Oklab));
+                    .map(|o| o.to_color_space_with_missing(ColorSpace::Oklab));
 
                 AbsoluteColor::new(
                     ColorSpace::Oklab,
@@ -474,7 +474,7 @@ impl ColorFunction<AbsoluteColor> {
 
                 let origin_color = origin_color
                     .as_ref()
-                    .map(|o| o.to_color_space(ColorSpace::Oklch));
+                    .map(|o| o.to_color_space_with_missing(ColorSpace::Oklch));
 
                 AbsoluteColor::new(
                     ColorSpace::Oklch,
@@ -489,7 +489,7 @@ impl ColorFunction<AbsoluteColor> {
             },
             ColorFunction::Color(origin_color, r, g, b, alpha, color_space) => {
                 let origin_color = origin_color.as_ref().map(|o| {
-                    let mut result = o.to_color_space(*color_space);
+                    let mut result = o.to_color_space_with_missing(*color_space);
 
                     // If the origin color was a `rgb(..)` function, we should
                     // make sure it doesn't have the legacy flag any more so

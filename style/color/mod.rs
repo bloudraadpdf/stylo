@@ -700,6 +700,15 @@ impl AbsoluteColor {
 
         Self::new(color_space, c0, c1, c2, self.alpha())
     }
+
+    /// Convert an origin used for interpolation or relative channel references.
+    /// Its missing components are carried to analogous channels after the
+    /// numeric conversion has treated them as zero.
+    pub(crate) fn to_color_space_with_missing(&self, color_space: ColorSpace) -> Self {
+        let mut converted = self.to_color_space(color_space);
+        converted.carry_forward_analogous_missing_components(self);
+        converted
+    }
 }
 
 impl From<PredefinedColorSpace> for ColorSpace {
@@ -755,5 +764,19 @@ mod tests {
         assert!(hsl.c0().is_some());
         assert!(hsl.c1().is_some());
         assert!(hsl.c2().is_some());
+    }
+
+    #[test]
+    fn interpolation_carries_missing_channels_after_zero_based_conversion() {
+        let all_missing =
+            AbsoluteColor::new(ColorSpace::Srgb, None::<f32>, None::<f32>, None::<f32>, 1.0);
+        let lab = all_missing.to_color_space_with_missing(ColorSpace::Lab);
+        assert_eq!((lab.c0(), lab.c1(), lab.c2()), (None, None, None));
+
+        let missing_lightness = AbsoluteColor::new(ColorSpace::Lch, None::<f32>, 20.0, 180.0, 1.0);
+        let hsl = missing_lightness.to_color_space_with_missing(ColorSpace::Hsl);
+        assert!(hsl.c0().is_some());
+        assert!(hsl.c1().is_some());
+        assert_eq!(hsl.c2(), None);
     }
 }
