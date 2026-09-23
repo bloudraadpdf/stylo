@@ -250,9 +250,8 @@ impl ColorFunction<AbsoluteColor> {
                 )
             },
             ColorFunction::Rgb(origin_color, r, g, b, alpha) => {
-                // Use `color(srgb ...)` to serialize `rgb(...)` if an origin color is available;
-                // missing components also require the modern syntax because
-                // legacy rgb() cannot represent `none`.
+                // Keep missing components available for interpolation. Direct
+                // rgb() still serializes them as zero in legacy syntax.
                 let use_color_syntax = origin_color.is_some()
                     || r.is_none()
                     || g.is_none()
@@ -277,7 +276,7 @@ impl ColorFunction<AbsoluteColor> {
 
                     // We have to map all the components back to [0..1) range after all the
                     // calculations.
-                    AbsoluteColor::new(
+                    let mut result = AbsoluteColor::new(
                         ColorSpace::Srgb,
                         r.resolve(origin_color.as_ref())?
                             .map(|c| c.to_number(255.0) / 255.0),
@@ -286,7 +285,11 @@ impl ColorFunction<AbsoluteColor> {
                         b.resolve(origin_color.as_ref())?
                             .map(|c| c.to_number(255.0) / 255.0),
                         alpha!(alpha, origin_color.as_ref()),
-                    )
+                    );
+                    if origin_color.is_none() {
+                        result.flags.insert(ColorFlags::IS_LEGACY_SRGB);
+                    }
+                    result
                 } else {
                     #[inline]
                     fn resolve(
@@ -1259,7 +1262,7 @@ mod tests {
         assert_eq!(color.c0(), None);
         assert_eq!(color.c1(), Some(1.0));
         assert_eq!(color.c2(), None);
-        assert!(!color.is_legacy_syntax());
+        assert!(color.is_legacy_syntax());
     }
 
     #[test]

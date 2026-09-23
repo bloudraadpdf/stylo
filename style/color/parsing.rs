@@ -865,6 +865,34 @@ mod specified_color_tests {
     use style_traits::{ParsingMode, ToCss};
 
     #[test]
+    fn direct_rgb_missing_components_serialize_as_legacy_zeroes() {
+        let url_data = UrlExtraData::from(
+            url::Url::parse("https://example.invalid/").expect("test URL parses"),
+        );
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        for (source, expected) in [
+            ("rgb(none none none)", "rgb(0, 0, 0)"),
+            ("rgb(128 none none / none)", "rgba(128, 0, 0, 0)"),
+            ("rgb(20% none none / 50%)", "rgba(51, 0, 0, 0.5)"),
+        ] {
+            let mut input = ParserInput::new(source);
+            let specified = Parser::new(&mut input)
+                .parse_entirely(|parser| parse_color_with(&context, parser))
+                .expect("direct RGB with missing components parses");
+            assert_eq!(specified.to_css_string(), expected);
+        }
+    }
+
+    #[test]
     fn absolute_lab_keeps_authored_calc_components() {
         let url_data = UrlExtraData::from(
             url::Url::parse("https://example.invalid/").expect("test URL parses"),
