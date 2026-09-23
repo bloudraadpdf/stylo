@@ -887,6 +887,36 @@ mod specified_color_tests {
     }
 
     #[test]
+    fn color_mix_hsl_items_serialize_as_chromium_rgb() {
+        let url_data = UrlExtraData::from(
+            url::Url::parse("https://example.invalid/").expect("test URL parses"),
+        );
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input =
+            ParserInput::new("color-mix(in hsl, hsl(none none none), hsl(none none none))");
+        let specified = Parser::new(&mut input)
+            .parse_entirely(|parser| {
+                <crate::values::specified::color::Color as crate::parser::Parse>::parse(
+                    &context, parser,
+                )
+            })
+            .expect("HSL color mix parses");
+        assert_eq!(
+            specified.to_css_string(),
+            "color-mix(in hsl, rgb(0, 0, 0), rgb(0, 0, 0))"
+        );
+    }
+
+    #[test]
     fn direct_rgb_missing_components_serialize_as_legacy_zeroes() {
         let url_data = UrlExtraData::from(
             url::Url::parse("https://example.invalid/").expect("test URL parses"),
