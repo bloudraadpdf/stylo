@@ -900,6 +900,18 @@ mod specified_color_tests {
                 crate::values::specified::color::Color::Absolute(..)
             ));
         }
+
+        for value in [
+            "lab(calc(infinity) 0 0)",
+            "lch(50 calc(-infinity) 0)",
+            "oklch(0.5 0.1 calc(infinity))",
+        ] {
+            let mut input = ParserInput::new(value);
+            let specified = Parser::new(&mut input)
+                .parse_entirely(|parser| parse_color_with(&context, parser))
+                .expect("infinite Lab or LCH color parses");
+            assert_eq!(specified.to_css_string(), value);
+        }
     }
 
     #[test]
