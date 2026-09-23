@@ -285,13 +285,19 @@ pub enum FontDisplay {
 ///
 /// https://drafts.csswg.org/css-fonts-4/#descdef-font-face-font-weight
 #[derive(Clone, Debug, PartialEq, ToShmem)]
-pub struct FontWeightRange(pub AbsoluteFontWeight, pub AbsoluteFontWeight);
+pub struct FontWeightRange(pub AbsoluteFontWeight, pub AbsoluteFontWeight, bool);
 
 impl Parse for FontWeightRange {
     fn parse<'i, 't>(
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
+        if input
+            .try_parse(|input| input.expect_ident_matching("auto"))
+            .is_ok()
+        {
+            return Ok(Self(AbsoluteFontWeight::Normal, AbsoluteFontWeight::Normal, true));
+        }
         fn is_resolvable(value: &AbsoluteFontWeight) -> bool {
             match value {
                 AbsoluteFontWeight::Weight(number) => number.resolve().is_some(),
@@ -306,7 +312,7 @@ impl Parse for FontWeightRange {
         if !is_resolvable(&first) || !is_resolvable(&second) {
             return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
         }
-        Ok(Self(first, second))
+        Ok(Self(first, second, false))
     }
 }
 
@@ -315,6 +321,9 @@ impl ToCss for FontWeightRange {
     where
         W: fmt::Write,
     {
+        if self.2 {
+            return dest.write_str("auto");
+        }
         self.0.to_css(dest)?;
         if self.0 != self.1 {
             dest.write_char(' ')?;
@@ -434,6 +443,7 @@ impl FontStretchRange {
 #[derive(Clone, Debug, PartialEq, ToShmem)]
 #[allow(missing_docs)]
 pub enum FontStyle {
+    Auto,
     Italic,
     Oblique(Angle, Angle),
 }
@@ -452,6 +462,12 @@ impl Parse for FontStyle {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
+        if input
+            .try_parse(|i| i.expect_ident_matching("auto"))
+            .is_ok()
+        {
+            return Ok(FontStyle::Auto);
+        }
         // We parse 'normal' explicitly here to distinguish it from 'oblique 0deg',
         // because we must not accept a following angle.
         if input
@@ -481,6 +497,7 @@ impl ToCss for FontStyle {
         W: fmt::Write,
     {
         match *self {
+            FontStyle::Auto => dest.write_str("auto"),
             FontStyle::Italic => dest.write_str("italic"),
             FontStyle::Oblique(ref first, ref second) => {
                 // Not first.is_zero() because we don't want to serialize
@@ -510,6 +527,7 @@ impl FontStyle {
         context: &crate::values::computed::Context,
     ) -> ComputedFontStyleDescriptor {
         match *self {
+            FontStyle::Auto => ComputedFontStyleDescriptor::Oblique(0.0, 0.0),
             FontStyle::Italic => ComputedFontStyleDescriptor::Italic,
             FontStyle::Oblique(ref first, ref second) => {
                 let (min, max) = sort_range(
