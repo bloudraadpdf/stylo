@@ -1077,6 +1077,17 @@ impl<C: ColorFunctionCssContext> style_traits::ToCss for ColorFunction<C> {
             }};
         }
 
+        macro_rules! serialize_canonical_alpha {
+            ($alpha:expr) => {{
+                if !is_opaque && !matches!($alpha, ColorComponent::AlphaOmitted) {
+                    dest.write_str(" / ")?;
+                    serialize_static_component($alpha, dest, |value| {
+                        value.to_number(OPAQUE).clamp(0.0, OPAQUE)
+                    })?;
+                }
+            }};
+        }
+
         macro_rules! serialize_hsl_hwb {
             ($hue:expr, $second:expr, $third:expr, $alpha:expr, $second_value:expr) => {{
                 serialize_static_component($hue, dest, |value| normalize_hue(value.degrees()))?;
@@ -1084,12 +1095,7 @@ impl<C: ColorFunctionCssContext> style_traits::ToCss for ColorFunction<C> {
                 serialize_static_component($second, dest, $second_value)?;
                 dest.write_str(" ")?;
                 serialize_static_component($third, dest, |value| value.to_number(100.0))?;
-                if !is_opaque && !matches!($alpha, ColorComponent::AlphaOmitted) {
-                    dest.write_str(" / ")?;
-                    serialize_static_component($alpha, dest, |value| {
-                        value.to_number(OPAQUE).clamp(0.0, OPAQUE)
-                    })?;
-                }
+                serialize_canonical_alpha!($alpha);
             }};
         }
 
@@ -1135,11 +1141,20 @@ impl<C: ColorFunctionCssContext> style_traits::ToCss for ColorFunction<C> {
                 serialize_components!(c0, c1, c2);
                 serialize_alpha!(alpha);
             },
-            Self::Color(_, c0, c1, c2, alpha, color_space) => {
+            Self::Color(origin, c0, c1, c2, alpha, color_space) => {
                 color_space.to_css(dest)?;
                 dest.write_str(" ")?;
-                serialize_components!(c0, c1, c2);
-                serialize_alpha!(alpha);
+                if C::SPECIFIED && origin.is_none() {
+                    serialize_static_component(c0, dest, |value| value.to_number(1.0))?;
+                    dest.write_str(" ")?;
+                    serialize_static_component(c1, dest, |value| value.to_number(1.0))?;
+                    dest.write_str(" ")?;
+                    serialize_static_component(c2, dest, |value| value.to_number(1.0))?;
+                    serialize_canonical_alpha!(alpha);
+                } else {
+                    serialize_components!(c0, c1, c2);
+                    serialize_alpha!(alpha);
+                }
             },
             Self::DeviceCmyk(..) => unreachable!("handled above"),
             Self::BdSpot(..) => unreachable!("handled above"),
