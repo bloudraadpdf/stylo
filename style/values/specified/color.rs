@@ -6,7 +6,9 @@
 
 use super::AllowQuirks;
 use crate::color::mix::ColorInterpolationMethod;
-use crate::color::{parsing, AbsoluteColor, ColorFunction, ColorMixItemList, ColorSpace};
+use crate::color::{
+    parsing, AbsoluteColor, ColorFlags, ColorFunction, ColorMixItemList, ColorSpace,
+};
 use crate::derives::*;
 use crate::media_queries::Device;
 use crate::parser::{Parse, ParserContext};
@@ -792,6 +794,23 @@ impl Color {
     }
 }
 
+impl Color {
+    fn to_css_as_mix_item<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        if let Self::Absolute(absolute) = self {
+            if absolute
+                .color
+                .flags
+                .contains(ColorFlags::SERIALIZE_AS_LEGACY_SRGB)
+            {
+                let mut color = absolute.color;
+                color.flags.remove(ColorFlags::SERIALIZE_AS_LEGACY_SRGB);
+                return color.to_css_as_specified(dest);
+            }
+        }
+        self.to_css(dest)
+    }
+}
+
 impl ToCss for Color {
     fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
     where
@@ -801,7 +820,9 @@ impl ToCss for Color {
             Color::CurrentColor => dest.write_str("currentcolor"),
             Color::Absolute(ref absolute) => absolute.to_css(dest),
             Color::ColorFunction(ref color_function) => color_function.to_css(dest),
-            Color::ColorMix(ref mix) => mix.to_css(dest),
+            Color::ColorMix(ref mix) => {
+                mix.to_css_with_color(dest, |color, dest| color.to_css_as_mix_item(dest))
+            },
             Color::LightDark(ref ld) => ld.to_css(dest),
             Color::ContrastColor(ref c) => {
                 dest.write_str("contrast-color(")?;
