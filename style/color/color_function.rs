@@ -241,7 +241,7 @@ impl ColorFunction<AbsoluteColor> {
         Ok(match self {
             ColorFunction::Alpha(relative) => {
                 let origin = relative.origin();
-                AbsoluteColor::new(
+                AbsoluteColor::new_unclamped(
                     origin.color_space,
                     origin.c0(),
                     origin.c1(),
@@ -407,7 +407,7 @@ impl ColorFunction<AbsoluteColor> {
                     .as_ref()
                     .map(|o| o.to_color_space_for_relative(ColorSpace::Lab));
 
-                AbsoluteColor::new(
+                AbsoluteColor::new_impl(
                     ColorSpace::Lab,
                     l.resolve(origin_color.as_ref())?
                         .map(|l| l.to_number(LIGHTNESS_RANGE)),
@@ -416,6 +416,7 @@ impl ColorFunction<AbsoluteColor> {
                     b.resolve(origin_color.as_ref())?
                         .map(|b| b.to_number(A_B_RANGE)),
                     alpha!(alpha, origin_color.as_ref()),
+                    origin_color.is_none(),
                 )
             },
             ColorFunction::Lch(origin_color, l, c, h, alpha) => {
@@ -428,7 +429,7 @@ impl ColorFunction<AbsoluteColor> {
                     .as_ref()
                     .map(|o| o.to_color_space_for_relative(ColorSpace::Lch));
 
-                AbsoluteColor::new(
+                AbsoluteColor::new_impl(
                     ColorSpace::Lch,
                     l.resolve(origin_color.as_ref())?
                         .map(|l| l.to_number(LIGHTNESS_RANGE)),
@@ -437,6 +438,7 @@ impl ColorFunction<AbsoluteColor> {
                     h.resolve(origin_color.as_ref())?
                         .map(|angle| normalize_hue(normalize(angle.degrees()))),
                     alpha!(alpha, origin_color.as_ref()),
+                    origin_color.is_none(),
                 )
             },
             ColorFunction::Oklab(origin_color, l, a, b, alpha) => {
@@ -449,7 +451,7 @@ impl ColorFunction<AbsoluteColor> {
                     .as_ref()
                     .map(|o| o.to_color_space_for_relative(ColorSpace::Oklab));
 
-                AbsoluteColor::new(
+                AbsoluteColor::new_impl(
                     ColorSpace::Oklab,
                     l.resolve(origin_color.as_ref())?
                         .map(|l| l.to_number(LIGHTNESS_RANGE)),
@@ -458,6 +460,7 @@ impl ColorFunction<AbsoluteColor> {
                     b.resolve(origin_color.as_ref())?
                         .map(|b| b.to_number(A_B_RANGE)),
                     alpha!(alpha, origin_color.as_ref()),
+                    origin_color.is_none(),
                 )
             },
             ColorFunction::Oklch(origin_color, l, c, h, alpha) => {
@@ -470,7 +473,7 @@ impl ColorFunction<AbsoluteColor> {
                     .as_ref()
                     .map(|o| o.to_color_space_for_relative(ColorSpace::Oklch));
 
-                AbsoluteColor::new(
+                AbsoluteColor::new_impl(
                     ColorSpace::Oklch,
                     l.resolve(origin_color.as_ref())?
                         .map(|l| l.to_number(LIGHTNESS_RANGE)),
@@ -479,6 +482,7 @@ impl ColorFunction<AbsoluteColor> {
                     h.resolve(origin_color.as_ref())?
                         .map(|angle| normalize_hue(normalize(angle.degrees()))),
                     alpha!(alpha, origin_color.as_ref()),
+                    origin_color.is_none(),
                 )
             },
             ColorFunction::Color(origin_color, r, g, b, alpha, color_space) => {
@@ -1413,6 +1417,22 @@ mod tests {
             .expect("relative oklch resolves");
         assert!(color.c1().expect("chroma") > 0.000004);
         assert_eq!(color.c2(), None);
+    }
+
+    #[test]
+    fn relative_oklch_keeps_converted_negative_lightness() {
+        let origin = AbsoluteColor::new(ColorSpace::Lch, 0.0, 20.0, 180.0, 1.0);
+        let function = ColorFunction::Oklch(
+            Optional::Some(origin),
+            ColorComponent::ChannelKeyword(ChannelKeyword::L),
+            ColorComponent::ChannelKeyword(ChannelKeyword::C),
+            ColorComponent::ChannelKeyword(ChannelKeyword::H),
+            ColorComponent::AlphaOmitted,
+        );
+        let color = function
+            .resolve_to_absolute()
+            .expect("relative oklch resolves");
+        assert!(color.c0().expect("lightness") < 0.0);
     }
 
     #[test]

@@ -237,7 +237,7 @@ pub fn mix_many(
     //        then divide after calculations?
     let alpha = (alpha.clamp(0.0, 1.0) * 1000.0).round() / 1000.0;
 
-    let mut result = AbsoluteColor::new(
+    let mut result = AbsoluteColor::new_unclamped(
         interpolation.space,
         components[0],
         components[1],
@@ -456,7 +456,8 @@ fn mix_with_weights(
         &outcomes,
     );
 
-    let mut result = AbsoluteColor::new(color_space, result[0], result[1], result[2], result[3]);
+    let mut result =
+        AbsoluteColor::new_unclamped(color_space, result[0], result[1], result[2], result[3]);
     result.flags = result_flags;
     result
 }
@@ -723,6 +724,22 @@ mod tests {
             );
             assert_eq!(mixed.to_css_string(), expected);
         }
+    }
+
+    #[test]
+    fn single_out_of_gamut_item_keeps_converted_lightness() {
+        let mixed = mix_many(
+            ColorInterpolationMethod {
+                space: ColorSpace::Oklch,
+                hue: super::HueInterpolationMethod::Shorter,
+            },
+            [ColorMixItem::new(
+                AbsoluteColor::new(ColorSpace::Lch, 0.0, 20.0, 180.0, 1.0),
+                1.0,
+            )],
+            ColorMixFlags::NORMALIZE_WEIGHTS,
+        );
+        assert!(mixed.c0().expect("lightness") < 0.0);
     }
 
     #[test]
