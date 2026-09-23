@@ -123,9 +123,6 @@ impl ToCss for AbsoluteColor {
                         "hwb("
                     })?;
                     ModernComponent(&self.c0()).to_css(dest)?;
-                    if self.c0().is_some() {
-                        dest.write_str("deg")?;
-                    }
                     dest.write_char(' ')?;
                     ModernComponent(&self.c1()).to_css(dest)?;
                     if self.c1().is_some() {
@@ -228,7 +225,7 @@ mod tests {
         assert_eq!(hsl.to_css_string(), "hsl(none 50% 50%)");
 
         let hwb = AbsoluteColor::new(ColorSpace::Hwb, 180.0, None::<f32>, 25.0, None::<f32>);
-        assert_eq!(hwb.to_css_string(), "hwb(180deg none 25% / none)");
+        assert_eq!(hwb.to_css_string(), "hwb(180 none 25% / none)");
     }
 }
 
