@@ -1093,13 +1093,19 @@ impl CalcNode {
                     Ok(Self::Leaf(Leaf::Angle(AngleDimension::Rad(radians))))
                 },
                 MathFunction::Pow => {
-                    let a = Self::parse_number_argument(context, input)?;
+                    let units = if allowed.includes(CalcUnits::COLOR_COMPONENT) {
+                        CalcUnits::COLOR_COMPONENT
+                    } else {
+                        CalcUnits::empty()
+                    };
+                    let a = Self::parse_argument(context, input, AllowParse::new(units))?;
                     input.expect_comma()?;
-                    let b = Self::parse_number_argument(context, input)?;
-
-                    let number = a.powf(b);
-
-                    Ok(Self::Leaf(Leaf::Number(number)))
+                    let b = Self::parse_argument(context, input, AllowParse::new(units))?;
+                    let node = Self::Pow(Box::new(a), Box::new(b));
+                    node.unit().map_err(|()| {
+                        input.new_custom_error(StyleParseErrorKind::UnspecifiedError)
+                    })?;
+                    Ok(node.resolve().map(Self::Leaf).unwrap_or(node))
                 },
                 MathFunction::Sqrt => {
                     let a = Self::parse_number_argument(context, input)?;

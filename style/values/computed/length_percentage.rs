@@ -1016,6 +1016,9 @@ fn fold_float_offset_calc_node<F: crate::values::computed::box_::FloatOffsetCalc
         GenericCalcNode::Trigonometric(_, _) => {
             Err(crate::values::computed::box_::UnsupportedFloatOffsetCalculation::Trigonometric)
         },
+        GenericCalcNode::Pow(_, _) => {
+            Err(crate::values::computed::box_::UnsupportedFloatOffsetCalculation::Pow)
+        },
         GenericCalcNode::Progress {
             value,
             start,

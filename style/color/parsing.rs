@@ -1072,6 +1072,35 @@ mod specified_color_tests {
     }
 
     #[test]
+    fn relative_color_accepts_power_of_origin_channel() {
+        let url_data = UrlExtraData::from(
+            url::Url::parse("https://example.invalid/").expect("test URL parses"),
+        );
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        for source in [
+            "oklch(from green pow(l, 1) c h)",
+            "oklch(from green pow(l, c) c h)",
+        ] {
+            let mut input = ParserInput::new(source);
+            assert!(
+                Parser::new(&mut input)
+                    .parse_entirely(|parser| parse_color_with(&context, parser))
+                    .is_ok(),
+                "{source}"
+            );
+        }
+    }
+
+    #[test]
     fn direct_rgb_missing_components_serialize_as_legacy_zeroes() {
         let url_data = UrlExtraData::from(
             url::Url::parse("https://example.invalid/").expect("test URL parses"),

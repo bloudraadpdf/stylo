@@ -2502,7 +2502,8 @@ fn calc_size_expression(node: CalcNode) -> Result<GenericCalcSizeExpression<NoCa
         )
         | GenericCalcNode::Anchor(_)
         | GenericCalcNode::AnchorSize(_)
-        | GenericCalcNode::Trigonometric(_, _) => return Err(()),
+        | GenericCalcNode::Trigonometric(_, _)
+        | GenericCalcNode::Pow(_, _) => return Err(()),
         GenericCalcNode::Negate(value) => {
             GenericCalcSizeExpression::Negate(Box::new(calc_size_expression(*value)?))
         },
