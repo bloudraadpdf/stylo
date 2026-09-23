@@ -912,10 +912,32 @@ fn serialize_static_component<W: Write, T: style_traits::ToCss>(
 
 trait ColorFunctionCssContext: ToCss {
     const SPECIFIED: bool;
+
+    fn to_css_as_relative_origin<W: std::fmt::Write>(
+        &self,
+        dest: &mut style_traits::CssWriter<W>,
+    ) -> std::fmt::Result {
+        self.to_css(dest)
+    }
 }
 
 impl ColorFunctionCssContext for SpecifiedColor {
     const SPECIFIED: bool = true;
+
+    fn to_css_as_relative_origin<W: std::fmt::Write>(
+        &self,
+        dest: &mut style_traits::CssWriter<W>,
+    ) -> std::fmt::Result {
+        if let SpecifiedColor::Absolute(absolute) = self {
+            if matches!(
+                absolute.color.color_space,
+                ColorSpace::Hsl | ColorSpace::Hwb
+            ) {
+                return absolute.color.clone().into_srgb_legacy().to_css(dest);
+            }
+        }
+        self.to_css(dest)
+    }
 }
 
 impl ColorFunctionCssContext for ComputedColor {
@@ -1054,7 +1076,7 @@ impl<C: ColorFunctionCssContext> style_traits::ToCss for ColorFunction<C> {
 
         if let Optional::Some(origin_color) = origin_color {
             dest.write_str("from ")?;
-            origin_color.to_css(dest)?;
+            origin_color.to_css_as_relative_origin(dest)?;
             dest.write_str(" ")?;
         }
 
