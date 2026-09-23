@@ -4,6 +4,7 @@
 
 //! Specified values for font properties
 
+use crate::color::mix::ColorInterpolationMethod;
 use crate::context::QuirksMode;
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
@@ -18,7 +19,7 @@ use crate::values::generics::font::{
 };
 use crate::values::generics::NonNegative;
 use crate::values::specified::length::{FontBaseSize, LineHeightBase, PX_PER_PT};
-use crate::values::specified::{AllowQuirks, Angle, Integer, LengthPercentage};
+use crate::values::specified::{AllowQuirks, Angle, Integer, LengthPercentage, Percentage};
 use crate::values::specified::{
     FontRelativeLength, NoCalcLength, NonNegativeLengthPercentage, NonNegativeNumber,
     NonNegativePercentage, Number,
@@ -1663,11 +1664,100 @@ impl FontPalette {
 }
 
 impl Parse for FontPalette {
-    /// normal | light | dark | dashed-ident
+    /// normal | light | dark | dashed-ident | palette-mix()
     fn parse<'i, 't>(
-        _context: &ParserContext,
+        context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<FontPalette, ParseError<'i>> {
+        if input
+            .try_parse(|input| input.expect_function_matching("palette-mix"))
+            .is_ok()
+        {
+            return input.parse_nested_block(|input| {
+                let interpolation = input
+                    .try_parse(|input| -> Result<_, ParseError<'i>> {
+                        let method = ColorInterpolationMethod::parse(context, input)?;
+                        input.expect_comma()?;
+                        Ok(method)
+                    })
+                    .unwrap_or_default();
+                let mut items = Vec::new();
+                loop {
+                    let mut percentage = input
+                        .try_parse(|input| Percentage::parse_zero_to_a_hundred(context, input))
+                        .ok();
+                    let palette = FontPalette::parse(context, input)?;
+                    if percentage.is_none() {
+                        percentage = input
+                            .try_parse(|input| Percentage::parse_zero_to_a_hundred(context, input))
+                            .ok();
+                    }
+                    if percentage
+                        .as_ref()
+                        .is_some_and(|value| value.resolve().is_none())
+                    {
+                        return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+                    }
+                    items.push((palette, percentage));
+                    if input.try_parse(|input| input.expect_comma()).is_err() {
+                        break;
+                    }
+                }
+                let specified_sum: f32 = items
+                    .iter()
+                    .filter_map(|(_, percentage)| percentage.as_ref().and_then(Percentage::resolve))
+                    .sum();
+                let missing = items
+                    .iter()
+                    .filter(|(_, percentage)| percentage.is_none())
+                    .count();
+                let implied = if missing == items.len() {
+                    1.0 / items.len() as f32
+                } else {
+                    (1.0 - specified_sum.min(1.0)) / missing.max(1) as f32
+                };
+                let all_missing = missing == items.len();
+                let has_calc = items.iter().any(|(_, percentage)| {
+                    percentage
+                        .as_ref()
+                        .is_some_and(|percentage| percentage.calc_clamping_mode().is_some())
+                });
+                let equal_weights = items.len() == 2
+                    && !has_calc
+                    && items.iter().all(|(_, percentage)| {
+                        percentage
+                            .as_ref()
+                            .is_none_or(|value| value.resolve() == Some(0.5))
+                    });
+                let single_hundred = items.len() == 1
+                    && !has_calc
+                    && items[0]
+                        .1
+                        .as_ref()
+                        .is_none_or(|value| value.resolve() == Some(1.0));
+                let mut serialized = String::from("palette-mix(");
+                if !interpolation.is_default() {
+                    serialized.push_str(&interpolation.to_css_string());
+                    serialized.push_str(", ");
+                }
+                for (index, (palette, percentage)) in items.into_iter().enumerate() {
+                    if index > 0 {
+                        serialized.push_str(", ");
+                    }
+                    serialized.push_str(&palette.to_css_string());
+                    if !all_missing && !equal_weights && !single_hundred {
+                        if let Some(percentage) =
+                            percentage.or_else(|| (!has_calc).then(|| Percentage::new(implied)))
+                        {
+                            serialized.push(' ');
+                            serialized.push_str(&percentage.to_css_string());
+                        }
+                    }
+                }
+                serialized.push(')');
+                Ok(Self(Atom::from(serialized.as_str())))
+            });
+        }
         let location = input.current_source_location();
         let ident = input.expect_ident()?;
         match_ignore_ascii_case! { &ident,
@@ -1688,7 +1778,11 @@ impl ToCss for FontPalette {
     where
         W: Write,
     {
-        serialize_atom_identifier(&self.0, dest)
+        if self.0.as_ref().starts_with("palette-mix(") {
+            dest.write_str(self.0.as_ref())
+        } else {
+            serialize_atom_identifier(&self.0, dest)
+        }
     }
 }
 
@@ -2083,6 +2177,75 @@ mod tests {
         parser
             .parse_entirely(|input| AbsoluteFontWeight::parse(&context, input))
             .map_err(|_| ())
+    }
+
+    fn parse_font_palette(css: &str) -> Result<FontPalette, ()> {
+        let url_data = UrlExtraData::from(Url::parse("https://example.invalid/").unwrap());
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            style_traits::ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input = ParserInput::new(css);
+        let mut parser = Parser::new(&mut input);
+        parser
+            .parse_entirely(|input| FontPalette::parse(&context, input))
+            .map_err(|_| ())
+    }
+
+    #[test]
+    fn palette_mix_parses_and_normalizes_weights() {
+        for (css, serialized) in [
+            (
+                "palette-mix(light 30%, dark)",
+                "palette-mix(light 30%, dark 70%)",
+            ),
+            (
+                "palette-mix(in srgb, light 50%, dark 50%)",
+                "palette-mix(in srgb, light, dark)",
+            ),
+            (
+                "palette-mix(palette-mix(in srgb, light 30%, normal) 20%, dark)",
+                "palette-mix(palette-mix(in srgb, light 30%, normal 70%) 20%, dark 80%)",
+            ),
+            ("palette-mix(in srgb, dark)", "palette-mix(in srgb, dark)"),
+            (
+                "palette-mix(in srgb, dark, light, --foo)",
+                "palette-mix(in srgb, dark, light, --foo)",
+            ),
+            (
+                "palette-mix(in srgb, dark 50%, light, --foo)",
+                "palette-mix(in srgb, dark 50%, light 25%, --foo 25%)",
+            ),
+            (
+                "palette-mix(in srgb, dark calc(50%), light)",
+                "palette-mix(in srgb, dark calc(50%), light)",
+            ),
+        ] {
+            assert_eq!(
+                parse_font_palette(css).unwrap().to_css_string(),
+                serialized,
+                "{css}"
+            );
+        }
+    }
+
+    #[test]
+    fn palette_mix_rejects_invalid_items() {
+        for css in [
+            "palette-mix(in oklab, dark -10%, light 40%)",
+            "palette-mix(in oklab, dark 150%, light 40%)",
+            "palette-mix(in oklab dark 60%, light 40%)",
+            "palette-mix(in oklab, dark 60% light 40%)",
+            "palette-mix(in oklab, dark 60%, , light 40%)",
+        ] {
+            assert!(parse_font_palette(css).is_err(), "{css}");
+        }
     }
 
     #[test]
