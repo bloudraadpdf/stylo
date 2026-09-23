@@ -1482,6 +1482,14 @@ mod image_tests {
     }
 
     #[test]
+    fn cross_fade_serializes_image_before_percentage() {
+        assert_eq!(
+            parse_image("cross-fade(25% red, blue 75%)").to_css_string(),
+            "cross-fade(red 25%, blue 75%)"
+        );
+    }
+
+    #[test]
     fn conic_stops_retain_mixed_angle_percentage_calculations() {
         for (specified, canonical) in [
             (
