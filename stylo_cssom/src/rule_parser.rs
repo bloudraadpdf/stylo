@@ -2005,6 +2005,14 @@ pub fn rule_block_declaration_value(
     block: &stylo_cssom_model::RuleBlock,
     property: &str,
 ) -> Option<crate::value_serialization::ResolvedValueSerialization> {
+    let property = if block.grammar()
+        == stylo_cssom_model::RuleDeclarationDomain::FontFaceDescriptor
+        && property.eq_ignore_ascii_case("font-width")
+    {
+        "font-stretch"
+    } else {
+        property
+    };
     block
         .shorthand_values()
         .iter()
@@ -2156,10 +2164,15 @@ pub fn mutate_non_style_rule_declaration(
             if property.is_empty() {
                 return None;
             }
+            let canonical = if property == "font-width" {
+                "font-stretch"
+            } else {
+                property.as_str()
+            };
             let mut declarations = block
                 .declarations()
                 .iter()
-                .filter(|declaration| !declaration.name().eq_ignore_ascii_case(&property))
+                .filter(|declaration| !declaration.name().eq_ignore_ascii_case(canonical))
                 .cloned()
                 .collect::<Vec<_>>();
             if !value.is_empty() {
@@ -2168,8 +2181,8 @@ pub fn mutate_non_style_rule_declaration(
                 }
                 let probe =
                     ParsedCssRule::parse(&format!("@font-face {{ {property}: {value}; }}"))?;
-                let canonical_value = probe.declaration_value(&property)?;
-                declarations.push(RuleDeclaration::new(property, canonical_value));
+                let canonical_value = probe.declaration_value(canonical)?;
+                declarations.push(RuleDeclaration::new(canonical, canonical_value));
             }
             RuleDeclarationBlock::from_declarations(block.domain(), declarations)
         },
@@ -5018,6 +5031,37 @@ mod tests {
             declarations
                 .iter()
                 .any(|declaration| declaration.name() == "src")
+        );
+    }
+
+    #[test]
+    fn font_width_alias_canonicalizes_to_the_stretch_descriptor() {
+        let rule = ParsedCssRule::parse("@font-face { font-width: auto; }")
+            .expect("the width descriptor must parse");
+        assert_eq!(
+            rule.declaration_value("font-stretch").as_deref(),
+            Some("auto")
+        );
+        let node = rule.to_rule_node();
+        let updated = super::mutate_non_style_rule_declaration(
+            &node,
+            "font-width",
+            "75% 125%",
+            crate::declaration_parser::CssomDeclarationPriority::Normal,
+        )
+        .expect("the width alias must mutate the stretch descriptor");
+        assert_eq!(
+            updated
+                .payload()
+                .declaration_block()
+                .and_then(|block| {
+                    block
+                        .declarations()
+                        .iter()
+                        .find(|declaration| declaration.name() == "font-stretch")
+                })
+                .map(|declaration| declaration.value()),
+            Some("75% 125%")
         );
     }
 
