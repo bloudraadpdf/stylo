@@ -704,18 +704,19 @@ impl ColorFunction<SpecifiedColor> {
         }
 
         match self {
-            Self::Alpha(relative) => has_calc!(&relative.alpha),
-            Self::Rgb(_, c0, c1, c2, alpha)
-            | Self::Lab(_, c0, c1, c2, alpha)
+            Self::Lab(_, c0, c1, c2, alpha)
             | Self::Oklab(_, c0, c1, c2, alpha)
             | Self::Color(_, c0, c1, c2, alpha, _) => has_calc!(c0, c1, c2, alpha),
-            Self::Hsl(_, hue, c1, c2, alpha) | Self::Hwb(_, hue, c1, c2, alpha) => {
-                has_calc!(hue, c1, c2, alpha)
-            },
             Self::Lch(_, c0, c1, hue, alpha) | Self::Oklch(_, c0, c1, hue, alpha) => {
                 has_calc!(c0, c1, hue, alpha)
             },
-            Self::DeviceCmyk(..) | Self::BdSpot(..) | Self::BdDeviceN(..) => false,
+            Self::Alpha(..)
+            | Self::Rgb(..)
+            | Self::Hsl(..)
+            | Self::Hwb(..)
+            | Self::DeviceCmyk(..)
+            | Self::BdSpot(..)
+            | Self::BdDeviceN(..) => false,
         }
     }
 
