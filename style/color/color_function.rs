@@ -260,7 +260,7 @@ impl ColorFunction<AbsoluteColor> {
 
                 if use_color_syntax {
                     let origin_color = origin_color.as_ref().map(|origin| {
-                        let origin = origin.to_color_space_with_missing(ColorSpace::Srgb);
+                        let origin = origin.to_color_space(ColorSpace::Srgb);
                         // Because rgb(..) syntax have components in range [0..255), we have to
                         // map them.
                         // NOTE: The IS_LEGACY_SRGB flag is not added back to the color, because
@@ -331,7 +331,7 @@ impl ColorFunction<AbsoluteColor> {
 
                 let origin_color = origin_color
                     .as_ref()
-                    .map(|o| o.to_color_space_with_missing(ColorSpace::Hsl));
+                    .map(|o| o.to_color_space(ColorSpace::Hsl));
 
                 let mut result = AbsoluteColor::new(
                     ColorSpace::Hsl,
@@ -378,7 +378,7 @@ impl ColorFunction<AbsoluteColor> {
 
                 let origin_color = origin_color
                     .as_ref()
-                    .map(|o| o.to_color_space_with_missing(ColorSpace::Hwb));
+                    .map(|o| o.to_color_space(ColorSpace::Hwb));
 
                 let mut result = AbsoluteColor::new(
                     ColorSpace::Hwb,
@@ -405,7 +405,7 @@ impl ColorFunction<AbsoluteColor> {
 
                 let origin_color = origin_color
                     .as_ref()
-                    .map(|o| o.to_color_space_with_missing(ColorSpace::Lab));
+                    .map(|o| o.to_color_space(ColorSpace::Lab));
 
                 AbsoluteColor::new(
                     ColorSpace::Lab,
@@ -426,7 +426,7 @@ impl ColorFunction<AbsoluteColor> {
 
                 let origin_color = origin_color
                     .as_ref()
-                    .map(|o| o.to_color_space_with_missing(ColorSpace::Lch));
+                    .map(|o| o.to_color_space(ColorSpace::Lch));
 
                 AbsoluteColor::new(
                     ColorSpace::Lch,
@@ -447,7 +447,7 @@ impl ColorFunction<AbsoluteColor> {
 
                 let origin_color = origin_color
                     .as_ref()
-                    .map(|o| o.to_color_space_with_missing(ColorSpace::Oklab));
+                    .map(|o| o.to_color_space(ColorSpace::Oklab));
 
                 AbsoluteColor::new(
                     ColorSpace::Oklab,
@@ -468,7 +468,7 @@ impl ColorFunction<AbsoluteColor> {
 
                 let origin_color = origin_color
                     .as_ref()
-                    .map(|o| o.to_color_space_with_missing(ColorSpace::Oklch));
+                    .map(|o| o.to_color_space(ColorSpace::Oklch));
 
                 AbsoluteColor::new(
                     ColorSpace::Oklch,
@@ -483,7 +483,7 @@ impl ColorFunction<AbsoluteColor> {
             },
             ColorFunction::Color(origin_color, r, g, b, alpha, color_space) => {
                 let origin_color = origin_color.as_ref().map(|o| {
-                    let mut result = o.to_color_space_with_missing(*color_space);
+                    let mut result = o.to_color_space(*color_space);
 
                     // If the origin color was a `rgb(..)` function, we should
                     // make sure it doesn't have the legacy flag any more so
@@ -1259,6 +1259,7 @@ impl<C: ColorFunctionCssContext> style_traits::ToCss for ColorFunction<C> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::color::parsing::ChannelKeyword;
 
     fn number(value: f32) -> ColorComponent<NumberOrPercentageComponent> {
         ColorComponent::Value(NumberOrPercentageComponent::Number(value))
@@ -1317,5 +1318,23 @@ mod tests {
 
         assert_eq!(color.c1(), Some(200.0));
         assert_eq!(color.c2(), Some(100.0));
+    }
+
+    #[test]
+    fn relative_origin_conversion_uses_missing_channels_as_zero() {
+        let origin = AbsoluteColor::new(ColorSpace::Lch, None::<f32>, 20.0, 180.0, 1.0);
+        let function = ColorFunction::Hsl(
+            Optional::Some(origin),
+            ColorComponent::ChannelKeyword(ChannelKeyword::H),
+            ColorComponent::ChannelKeyword(ChannelKeyword::S),
+            ColorComponent::ChannelKeyword(ChannelKeyword::L),
+            ColorComponent::AlphaOmitted,
+        );
+        let color = function
+            .resolve_to_absolute()
+            .expect("relative hsl resolves");
+        let rgb = color.to_color_space(ColorSpace::Srgb);
+        assert!(rgb.c0().expect("red channel") < 0.0);
+        assert!(rgb.c1().expect("green channel") > 0.0);
     }
 }
