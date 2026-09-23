@@ -225,9 +225,7 @@ pub struct GenericCrossFade<Image, Color, Percentage> {
 }
 
 /// An optional percent and a cross fade image.
-#[derive(
-    Clone, Debug, MallocSizeOf, PartialEq, ToComputedValue, ToResolvedValue, ToShmem, ToCss,
-)]
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToComputedValue, ToResolvedValue, ToShmem)]
 #[repr(C)]
 pub struct GenericCrossFadeElement<Image, Color, Percentage> {
     /// The percent of the final image that `image` will be.
@@ -235,6 +233,17 @@ pub struct GenericCrossFadeElement<Image, Color, Percentage> {
     /// A color or image that will be blended when cross-fade is
     /// evaluated.
     pub image: GenericCrossFadeImage<Image, Color>,
+}
+
+impl<I: ToCss, C: ToCss, P: ToCss> ToCss for GenericCrossFadeElement<I, C, P> {
+    fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        self.image.to_css(dest)?;
+        if let Some(percent) = self.percent.as_ref() {
+            dest.write_char(' ')?;
+            percent.to_css(dest)?;
+        }
+        Ok(())
+    }
 }
 
 /// An image or a color. `cross-fade` takes either when blending
