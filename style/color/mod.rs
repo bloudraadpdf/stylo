@@ -590,6 +590,8 @@ impl AbsoluteColor {
             (Srgb, Hwb) => convert::rgb_to_hwb(&components),
             (Hsl, Srgb) => convert::hsl_to_rgb(&components),
             (Hwb, Srgb) => convert::hwb_to_rgb(&components),
+            (Hwb, Hsl) => convert::rgb_to_hsl(&convert::hwb_to_rgb(&components)),
+            (Hsl, Hwb) => convert::rgb_to_hwb(&convert::hsl_to_rgb(&components)),
             (Lab, Lch) | (Oklab, Oklch) => convert::orthogonal_to_polar(
                 &components,
                 convert::epsilon_for_range(0.0, if color_space == Lch { 100.0 } else { 1.0 }),
@@ -679,5 +681,17 @@ impl From<PredefinedColorSpace> for ColorSpace {
             PredefinedColorSpace::XyzD50 => ColorSpace::XyzD50,
             PredefinedColorSpace::XyzD65 => ColorSpace::XyzD65,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AbsoluteColor, ColorSpace};
+
+    #[test]
+    fn hwb_to_hsl_to_srgb_keeps_zero_channel_exact() {
+        let hwb = AbsoluteColor::new(ColorSpace::Hwb, 180.0, None::<f32>, 25.0, 1.0);
+        let srgb = hwb.to_color_space(ColorSpace::Hsl).to_color_space(ColorSpace::Srgb);
+        assert_eq!(srgb.components.0, 0.0);
     }
 }
