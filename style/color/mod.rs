@@ -807,4 +807,23 @@ mod tests {
         let hwb = missing_lightness_and_chroma.to_color_space_with_missing(ColorSpace::Hwb);
         assert_eq!((hwb.c0(), hwb.c1(), hwb.c2()), (None, None, None));
     }
+
+    #[test]
+    fn conversion_carries_paired_achromatic_components() {
+        let hwb = AbsoluteColor::new(ColorSpace::Hwb, 180.0, None::<f32>, None::<f32>, 1.0);
+        let hsl = hwb.to_color_space_with_missing(ColorSpace::Hsl);
+        assert_eq!((hsl.c0(), hsl.c1(), hsl.c2()), (Some(180.0), None, None));
+
+        let lch = hwb.to_color_space_with_missing(ColorSpace::Lch);
+        assert_eq!((lch.c0(), lch.c1()), (None, None));
+        assert!(lch.c2().is_some());
+
+        let hsl = AbsoluteColor::new(ColorSpace::Hsl, 180.0, None::<f32>, None::<f32>, 1.0);
+        let hwb = hsl.to_color_space_with_missing(ColorSpace::Hwb);
+        assert_eq!((hwb.c0(), hwb.c1(), hwb.c2()), (None, None, None));
+
+        let lab = AbsoluteColor::new(ColorSpace::Lab, 50.0, None::<f32>, None::<f32>, 1.0);
+        let hsl = lab.to_color_space_with_missing(ColorSpace::Hsl);
+        assert_eq!(hsl.c1(), None);
+    }
 }
