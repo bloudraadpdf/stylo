@@ -668,7 +668,9 @@ impl AbsoluteColor {
         // Check the source as well: finite-precision RGB conversion can put a
         // color infinitesimally across the target's powerless threshold.
         let source_hue_powerless = match self.color_space {
-            Hsl => self.c1().is_some_and(|saturation| saturation <= 0.001),
+            Hsl => self
+                .c1()
+                .is_some_and(|saturation| saturation.abs() <= 0.001),
             Hwb => self
                 .c1()
                 .zip(self.c2())
@@ -678,7 +680,9 @@ impl AbsoluteColor {
             _ => false,
         };
         match color_space {
-            Hsl if source_hue_powerless || c1.is_some_and(|saturation| saturation <= 0.001) => {
+            Hsl if source_hue_powerless
+                || c1.is_some_and(|saturation| saturation.abs() <= 0.001) =>
+            {
                 c0 = None
             },
             Hwb if source_hue_powerless
@@ -740,5 +744,8 @@ mod tests {
 
         let lch = AbsoluteColor::new(ColorSpace::Lch, 20.0, 0.0, 180.0, 1.0);
         assert_eq!(lch.to_color_space(ColorSpace::Hsl).c0(), None);
+
+        let out_of_gamut = AbsoluteColor::new(ColorSpace::Lch, 0.0, 20.0, 180.0, 1.0);
+        assert!(out_of_gamut.to_color_space(ColorSpace::Hsl).c0().is_some());
     }
 }
