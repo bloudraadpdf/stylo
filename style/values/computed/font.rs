@@ -598,6 +598,42 @@ pub enum SingleFontFamily {
     FamilyName(FamilyName),
     /// Generic family name.
     Generic(GenericFontFamily),
+    #[cfg(feature = "servo")]
+    /// A writing-system-specific generic family.
+    ScriptSpecificGeneric(ScriptSpecificGenericFontFamily),
+}
+
+#[cfg(feature = "servo")]
+/// The writing-system-specific names in `generic()`.
+#[derive(
+    Clone, Copy, Debug, Eq, MallocSizeOf, PartialEq, ToComputedValue, ToResolvedValue, ToShmem,
+)]
+#[cfg_attr(feature = "servo", derive(Deserialize, Serialize, Hash))]
+pub enum ScriptSpecificGenericFontFamily {
+    /// Fang Song.
+    Fangsong,
+    /// Kai.
+    Kai,
+    /// Khmer Mul.
+    KhmerMul,
+    /// Nastaliq.
+    Nastaliq,
+}
+
+#[cfg(feature = "servo")]
+impl ToCss for ScriptSpecificGenericFontFamily {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: fmt::Write,
+    {
+        let name = match self {
+            Self::Fangsong => "fangsong",
+            Self::Kai => "kai",
+            Self::KhmerMul => "khmer-mul",
+            Self::Nastaliq => "nastaliq",
+        };
+        write!(dest, "generic({name})")
+    }
 }
 
 fn system_ui_enabled(_: &ParserContext) -> bool {
@@ -683,6 +719,24 @@ impl Parse for SingleFontFamily {
                 name: Atom::from(&*value),
                 syntax: FontFamilyNameSyntax::Quoted,
             }));
+        }
+
+        #[cfg(feature = "servo")]
+        if let Ok(generic) = input.try_parse(|input| -> Result<_, ParseError<'i>> {
+            input.expect_function_matching("generic")?;
+            input.parse_nested_block(|input| {
+                let name = input.expect_ident_cloned()?;
+                input.expect_exhausted()?;
+                match_ignore_ascii_case! { &name,
+                    "fangsong" => Ok(ScriptSpecificGenericFontFamily::Fangsong),
+                    "kai" => Ok(ScriptSpecificGenericFontFamily::Kai),
+                    "khmer-mul" => Ok(ScriptSpecificGenericFontFamily::KhmerMul),
+                    "nastaliq" => Ok(ScriptSpecificGenericFontFamily::Nastaliq),
+                    _ => Err(input.new_error_for_next_token()),
+                }
+            })
+        }) {
+            return Ok(SingleFontFamily::ScriptSpecificGeneric(generic));
         }
 
         if let Ok(generic) = input.try_parse(|i| GenericFontFamily::parse(context, i)) {
@@ -783,6 +837,12 @@ impl FontFamilyList {
                     // Target position for the first generic is in front of the first
                     // non-whitelisted icon font family we find.
                     if target_index.is_none() && !fam.is_known_icon_font_family() {
+                        target_index = Some(i);
+                    }
+                },
+                #[cfg(feature = "servo")]
+                SingleFontFamily::ScriptSpecificGeneric(_) => {
+                    if target_index.is_none() {
                         target_index = Some(i);
                     }
                 },
