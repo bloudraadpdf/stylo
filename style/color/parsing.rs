@@ -1038,6 +1038,40 @@ mod specified_color_tests {
     }
 
     #[test]
+    fn relative_color_accepts_trigonometry_of_origin_channels() {
+        let url_data = UrlExtraData::from(
+            url::Url::parse("https://example.invalid/").expect("test URL parses"),
+        );
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        for source in [
+            "hsl(from hsl(50 50 50) h s calc((sin(l) + 1) * 50))",
+            "hsl(from hsl(50 50 50) h s calc((sin(sin(l)) + 1) * 50))",
+            "hsl(from hsl(50 50 50) h s calc((sin(asin(sin(l))) + 1) * 50))",
+            "hsl(from hsl(50 50 50) h s calc((sin(clamp(0, l, 50)) + 1) * 50))",
+            "hsl(from hsl(50 50 50) h s calc((sin(l * 1) + 1) * 50))",
+            "hsl(from hsl(50 50 50) h s calc((sin(l * (50rad / 50)) + 1) * 50))",
+            "hsl(from hsl(50 50 50) h s calc((sin(l * (50rad / (50deg * (180 / pi)))) + 1) * 50))",
+        ] {
+            let mut input = ParserInput::new(source);
+            assert!(
+                Parser::new(&mut input)
+                    .parse_entirely(|parser| parse_color_with(&context, parser))
+                    .is_ok(),
+                "{source}"
+            );
+        }
+    }
+
+    #[test]
     fn direct_rgb_missing_components_serialize_as_legacy_zeroes() {
         let url_data = UrlExtraData::from(
             url::Url::parse("https://example.invalid/").expect("test URL parses"),

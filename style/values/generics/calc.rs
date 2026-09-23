@@ -151,6 +151,35 @@ pub enum RoundingStrategy {
     ToZero,
 }
 
+/// Trigonometric calculation deferred until its color channels resolve.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    MallocSizeOf,
+    PartialEq,
+    Serialize,
+    ToAnimatedZero,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+)]
+pub enum TrigonometricFunction {
+    /// `sin()`.
+    Sin,
+    /// `cos()`.
+    Cos,
+    /// `tan()`.
+    Tan,
+    /// `asin()`.
+    Asin,
+    /// `acos()`.
+    Acos,
+    /// `atan()`.
+    Atan,
+}
+
 /// This determines the order in which we serialize members of a calc() sum.
 ///
 /// See https://drafts.csswg.org/css-values-4/#sort-a-calculations-children
@@ -324,6 +353,8 @@ pub enum GenericCalcNode<L> {
     Abs(Box<GenericCalcNode<L>>),
     /// A `sign()` function.
     Sign(Box<GenericCalcNode<L>>),
+    /// A trigonometric function with an unresolved argument.
+    Trigonometric(Box<GenericCalcNode<L>>, TrigonometricFunction),
     /// A `progress()` function.
     Progress {
         /// The current value.
@@ -386,6 +417,11 @@ impl CalcUnits {
     /// Returns true if this unit is allowed to be summed with the given unit, otherwise false.
     #[inline]
     fn can_sum_with(&self, other: Self) -> bool {
+        if (*self == Self::COLOR_COMPONENT || self.is_empty())
+            && (other == Self::COLOR_COMPONENT || other.is_empty())
+        {
+            return true;
+        }
         if !self.is_empty()
             && !other.is_empty()
             && Self::LENGTH_PERCENTAGE.contains(*self)
@@ -467,6 +503,16 @@ pub trait CalcNodeLeaf: Clone + Sized + PartialEq + ToCss + ToTyped {
 
     /// Create a new leaf with a number value.
     fn new_number(value: f32) -> Self;
+
+    /// Create an angle result for an inverse trigonometric function.
+    fn new_angle_radians(_value: f32) -> Result<Self, ()> {
+        Err(())
+    }
+
+    /// Return an angle in radians when this leaf represents one.
+    fn as_angle_radians(&self) -> Option<f32> {
+        None
+    }
 
     /// Returns a float value if the leaf is a number.
     fn as_number(&self) -> Option<f32>;
@@ -600,7 +646,7 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 let mut unit = None;
                 for child in children.iter() {
                     let child_unit = child.unit()?;
-                    if child_unit.is_empty() {
+                    if child_unit.is_empty() || child_unit == CalcUnits::COLOR_COMPONENT {
                         // Numbers are always allowed in a product, so continue with the next.
                         continue;
                     }
@@ -667,6 +713,28 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 // child units make sense.
                 let _ = child.unit()?;
                 CalcUnits::empty()
+            },
+            CalcNode::Trigonometric(ref child, operation) => {
+                let unit = child.unit()?;
+                match operation {
+                    TrigonometricFunction::Sin
+                    | TrigonometricFunction::Cos
+                    | TrigonometricFunction::Tan
+                        if unit.is_empty()
+                            || unit == CalcUnits::ANGLE
+                            || unit == CalcUnits::COLOR_COMPONENT =>
+                    {
+                        CalcUnits::empty()
+                    },
+                    TrigonometricFunction::Asin
+                    | TrigonometricFunction::Acos
+                    | TrigonometricFunction::Atan
+                        if unit.is_empty() || unit == CalcUnits::COLOR_COMPONENT =>
+                    {
+                        CalcUnits::ANGLE
+                    },
+                    _ => return Err(()),
+                }
             },
             CalcNode::Progress {
                 value, start, end, ..
@@ -782,6 +850,7 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
             CalcNode::Sign(ref mut child) => {
                 child.negate();
             },
+            CalcNode::Trigonometric(..) => wrap_self_in_negate(self),
             CalcNode::Progress { .. } => {
                 wrap_self_in_negate(self);
             },
@@ -900,7 +969,9 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                     }
                     Ok(())
                 },
-                CalcNode::Abs(child) | CalcNode::Sign(child) => map_internal(child, op),
+                CalcNode::Abs(child)
+                | CalcNode::Sign(child)
+                | CalcNode::Trigonometric(child, _) => map_internal(child, op),
                 CalcNode::Progress {
                     value, start, end, ..
                 } => {
@@ -992,6 +1063,9 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
             Self::Hypot(ref c) => CalcNode::Hypot(map_children(c, map)),
             Self::Abs(ref c) => CalcNode::Abs(Box::new(c.map_leaves_internal(map))),
             Self::Sign(ref c) => CalcNode::Sign(Box::new(c.map_leaves_internal(map))),
+            Self::Trigonometric(ref c, operation) => {
+                CalcNode::Trigonometric(Box::new(c.map_leaves_internal(map)), operation)
+            },
             Self::Progress {
                 ref value,
                 ref start,
@@ -1296,6 +1370,36 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 let result = c.resolve_internal(leaf_to_output_fn)?;
                 Ok(L::sign_from(&result)?)
             },
+            Self::Trigonometric(ref c, operation) => {
+                let result = c.resolve_internal(leaf_to_output_fn)?;
+                match operation {
+                    TrigonometricFunction::Sin
+                    | TrigonometricFunction::Cos
+                    | TrigonometricFunction::Tan => {
+                        let radians = result
+                            .as_angle_radians()
+                            .or_else(|| result.as_number())
+                            .ok_or(())?;
+                        Ok(L::new_number(match operation {
+                            TrigonometricFunction::Sin => radians.sin(),
+                            TrigonometricFunction::Cos => radians.cos(),
+                            TrigonometricFunction::Tan => radians.tan(),
+                            _ => unreachable!(),
+                        }))
+                    },
+                    TrigonometricFunction::Asin
+                    | TrigonometricFunction::Acos
+                    | TrigonometricFunction::Atan => {
+                        let number = result.as_number().ok_or(())?;
+                        L::new_angle_radians(match operation {
+                            TrigonometricFunction::Asin => number.asin(),
+                            TrigonometricFunction::Acos => number.acos(),
+                            TrigonometricFunction::Atan => number.atan(),
+                            _ => unreachable!(),
+                        })
+                    },
+                }
+            },
             Self::Progress {
                 value,
                 start,
@@ -1339,7 +1443,11 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
         }
         match self {
             Self::Leaf(_) | Self::Anchor(_) | Self::AnchorSize(_) => (),
-            Self::Negate(child) | Self::Invert(child) | Self::Abs(child) | Self::Sign(child) => {
+            Self::Negate(child)
+            | Self::Invert(child)
+            | Self::Abs(child)
+            | Self::Sign(child)
+            | Self::Trigonometric(child, _) => {
                 child.map_node_internal(mapping_fn)?;
             },
             Self::Sum(children)
@@ -1461,7 +1569,9 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
             Self::Negate(ref mut value) | Self::Invert(ref mut value) => {
                 value.visit_depth_first_internal(f);
             },
-            Self::Abs(ref mut value) | Self::Sign(ref mut value) => {
+            Self::Abs(ref mut value)
+            | Self::Sign(ref mut value)
+            | Self::Trigonometric(ref mut value, _) => {
                 value.visit_depth_first_internal(f);
             },
             Self::Leaf(..) | Self::Anchor(..) | Self::AnchorSize(..) => {},
@@ -1919,6 +2029,7 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
             Self::Leaf(ref mut l) => {
                 l.simplify();
             },
+            Self::Trigonometric(..) => {},
             Self::Anchor(ref mut f) => {
                 if let GenericAnchorSide::Percentage(ref mut n) = f.side {
                     n.simplify_and_sort();
@@ -1984,6 +2095,17 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
             },
             Self::Sign(_) => {
                 dest.write_str("sign(")?;
+                true
+            },
+            Self::Trigonometric(_, operation) => {
+                dest.write_str(match operation {
+                    TrigonometricFunction::Sin => "sin(",
+                    TrigonometricFunction::Cos => "cos(",
+                    TrigonometricFunction::Tan => "tan(",
+                    TrigonometricFunction::Asin => "asin(",
+                    TrigonometricFunction::Acos => "acos(",
+                    TrigonometricFunction::Atan => "atan(",
+                })?;
                 true
             },
             Self::Progress { clamping, .. } => {
@@ -2140,7 +2262,7 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 dest.write_str(", ")?;
                 end.to_css_impl(dest, ArgumentLevel::ArgumentRoot)?;
             },
-            Self::Abs(ref v) | Self::Sign(ref v) => {
+            Self::Abs(ref v) | Self::Sign(ref v) | Self::Trigonometric(ref v, _) => {
                 v.to_css_impl(dest, ArgumentLevel::ArgumentRoot)?
             },
             Self::Leaf(ref l) => l.to_css(dest)?,
