@@ -1383,7 +1383,7 @@ mod tests {
     }
 
     #[test]
-    fn relative_origin_conversion_uses_missing_channels_as_zero() {
+    fn relative_origin_conversion_carries_analogous_missing_lightness() {
         let origin = AbsoluteColor::new(ColorSpace::Lch, None::<f32>, 20.0, 180.0, 1.0);
         let function = ColorFunction::Hsl(
             Optional::Some(origin),
@@ -1395,13 +1395,11 @@ mod tests {
         let color = function
             .resolve_to_absolute()
             .expect("relative hsl resolves");
-        let rgb = color.to_color_space(ColorSpace::Srgb);
-        assert!(rgb.c0().expect("red channel") < 0.0);
-        assert!(rgb.c1().expect("green channel") > 0.0);
+        assert_eq!(color.c2(), None);
     }
 
     #[test]
-    fn relative_origin_keeps_numeric_hue_below_powerless_threshold() {
+    fn relative_origin_marks_converted_powerless_hue_missing() {
         let origin = AbsoluteColor::new(ColorSpace::Lch, 20.0, 0.0015, 180.0, 1.0);
         let function = ColorFunction::Oklch(
             Optional::Some(origin),
@@ -1414,11 +1412,11 @@ mod tests {
             .resolve_to_absolute()
             .expect("relative oklch resolves");
         assert!(color.c1().expect("chroma") > 0.0);
-        assert!(color.c2().expect("hue") > 0.0);
+        assert_eq!(color.c2(), None);
     }
 
     #[test]
-    fn relative_srgb_origin_uses_chromium_lab_conversion() {
+    fn relative_srgb_neutral_has_missing_lch_hue() {
         let origin = AbsoluteColor::new(ColorSpace::Srgb, 0.5, 0.5, 0.5, 1.0);
         let function = ColorFunction::Lch(
             Optional::Some(origin),
@@ -1431,12 +1429,12 @@ mod tests {
             .resolve_to_absolute()
             .expect("relative lch resolves");
         assert!((color.c0().expect("lightness") - 53.3883).abs() < 0.001);
-        assert!((color.c1().expect("chroma") - 0.0112553).abs() < 0.001);
-        assert!((color.c2().expect("hue") - 356.6).abs() < 0.1);
+        assert!(color.c1().expect("chroma") < 0.0015);
+        assert_eq!(color.c2(), None);
     }
 
     #[test]
-    fn relative_lab_origin_keeps_chromium_oklch_neutral_hue() {
+    fn relative_lab_missing_axes_carry_to_oklch() {
         let origin = AbsoluteColor::new(ColorSpace::Lab, 50.0, None::<f32>, None::<f32>, 1.0);
         let function = ColorFunction::Oklch(
             Optional::Some(origin),
@@ -1448,13 +1446,13 @@ mod tests {
         let color = function
             .resolve_to_absolute()
             .expect("relative oklch resolves");
-        assert!((color.c0().expect("lightness") - 0.568964).abs() < 0.001);
-        assert!((color.c1().expect("chroma") - 0.000014436).abs() < 0.00001);
-        assert!((color.c2().expect("hue") - 112.966).abs() < 0.2);
+        assert!(color.c0().expect("lightness") > 0.0);
+        assert_eq!(color.c1(), None);
+        assert_eq!(color.c2(), None);
     }
 
     #[test]
-    fn relative_oklab_neutral_has_zero_chroma_and_hue() {
+    fn relative_oklab_missing_axes_carry_to_oklch() {
         let origin = AbsoluteColor::new(ColorSpace::Oklab, 0.5, None::<f32>, None::<f32>, 1.0);
         let function = ColorFunction::Oklch(
             Optional::Some(origin),
@@ -1466,7 +1464,7 @@ mod tests {
         let color = function
             .resolve_to_absolute()
             .expect("relative oklch resolves");
-        assert_eq!(color.c1(), Some(0.0));
-        assert_eq!(color.c2(), Some(0.0));
+        assert_eq!(color.c1(), None);
+        assert_eq!(color.c2(), None);
     }
 }
