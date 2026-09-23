@@ -5074,6 +5074,7 @@ pub mod mask {
 
     use super::*;
     use crate::parser::Parse;
+    use crate::properties::longhands;
     use crate::properties::longhands::{
         mask_clip, mask_composite, mask_mode, mask_origin, mask_position_x, mask_position_y,
         mask_repeat,
@@ -5226,6 +5227,15 @@ pub mod mask {
            mask_origin: mask_origin::SpecifiedValue(mask_origin.into()),
            mask_clip: mask_clip::SpecifiedValue(mask_clip.into()),
            mask_composite: mask_composite::SpecifiedValue(mask_composite.into()),
+
+           // The 'mask' shorthand resets 'mask-border' to its initial value.
+           // See https://drafts.fxtf.org/css-masking-1/#the-mask
+           mask_border_mode: longhands::mask_border_mode::get_initial_specified_value(),
+           mask_border_outset: longhands::mask_border_outset::get_initial_specified_value(),
+           mask_border_repeat: longhands::mask_border_repeat::get_initial_specified_value(),
+           mask_border_slice: longhands::mask_border_slice::get_initial_specified_value(),
+           mask_border_source: longhands::mask_border_source::get_initial_specified_value(),
+           mask_border_width: longhands::mask_border_width::get_initial_specified_value(),
         })
     }
 
@@ -5237,6 +5247,23 @@ pub mod mask {
             use crate::properties::longhands::mask_clip::single_value::computed_value::T as Clip;
             use crate::properties::longhands::mask_origin::single_value::computed_value::T as Origin;
             use style_traits::values::SequenceWriter;
+
+            // A mask-border longhand away from its initial value cannot be
+            // represented by the shorthand, which then serialises as empty.
+            if *self.mask_border_mode != longhands::mask_border_mode::get_initial_specified_value()
+                || *self.mask_border_outset
+                    != longhands::mask_border_outset::get_initial_specified_value()
+                || *self.mask_border_repeat
+                    != longhands::mask_border_repeat::get_initial_specified_value()
+                || *self.mask_border_slice
+                    != longhands::mask_border_slice::get_initial_specified_value()
+                || *self.mask_border_source
+                    != longhands::mask_border_source::get_initial_specified_value()
+                || *self.mask_border_width
+                    != longhands::mask_border_width::get_initial_specified_value()
+            {
+                return Ok(());
+            }
 
             let len = self.mask_image.0.len();
             if len == 0 {

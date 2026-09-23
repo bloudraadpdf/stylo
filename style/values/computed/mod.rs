@@ -1305,6 +1305,12 @@ impl NonNegativeNumberOrPercentage {
     pub fn hundred_percent() -> Self {
         NonNegative(NumberOrPercentage::Percentage(Percentage::hundred()))
     }
+
+    /// Returns the `0` value.
+    #[inline]
+    pub fn zero() -> Self {
+        NonNegative(NumberOrPercentage::Number(0.))
+    }
 }
 
 /// A type used for opacity.

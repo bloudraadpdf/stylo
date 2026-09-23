@@ -96,6 +96,15 @@ impl BorderImageSlice {
             fill: false,
         }
     }
+
+    /// Returns the `0` value, the initial value of `mask-border-slice`.
+    #[inline]
+    pub fn zero() -> Self {
+        GenericBorderImageSlice {
+            offsets: Rect::all(NonNegativeNumberOrPercentage::new_number(0.)),
+            fill: false,
+        }
+    }
 }
 
 /// https://drafts.csswg.org/css-borders-4/#typedef-line-width
