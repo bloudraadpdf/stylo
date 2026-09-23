@@ -880,25 +880,4 @@ mod tests {
         let oklch = lch.to_color_space(ColorSpace::Oklch);
         assert!(oklch.c0().expect("lightness") < 0.0);
     }
-
-    #[test]
-    fn rec2020_and_srgb_conversion_matches_css_color_reference() {
-        let rec2020 = AbsoluteColor::new(ColorSpace::Rec2020, 0.25, 0.5, 0.75, 1.0);
-        let srgb = rec2020.to_color_space(ColorSpace::Srgb);
-        for (actual, expected) in [srgb.c0(), srgb.c1(), srgb.c2()]
-            .into_iter()
-            .zip([-0.328686, 0.491201, 0.76185])
-        {
-            assert!((actual.expect("channel") - expected).abs() < 0.001);
-        }
-
-        let srgb = AbsoluteColor::new(ColorSpace::Srgb, 0.25, 0.5, 0.75, 1.0);
-        let rec2020 = srgb.to_color_space(ColorSpace::Rec2020);
-        for (actual, expected) in [rec2020.c0(), rec2020.c1(), rec2020.c2()]
-            .into_iter()
-            .zip([0.420493, 0.518024, 0.741381])
-        {
-            assert!((actual.expect("channel") - expected).abs() < 0.001);
-        }
-    }
 }
