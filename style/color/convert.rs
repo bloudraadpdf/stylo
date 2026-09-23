@@ -643,9 +643,6 @@ impl ColorSpaceConversion for ProphotoRgb {
 pub struct Rec2020;
 
 impl Rec2020 {
-    const ALPHA: f32 = 1.09929682680944;
-    const BETA: f32 = 0.018053968510807;
-
     #[rustfmt::skip]
     const TO_XYZ: Transform = Transform::new(
         0.6369580483012913,  0.26270021201126703,  0.0,                  0.0,
@@ -667,15 +664,8 @@ impl ColorSpaceConversion for Rec2020 {
     const WHITE_POINT: WhitePoint = WhitePoint::D65;
 
     fn to_linear_light(from: &ColorComponents) -> ColorComponents {
-        from.clone().map(|value| {
-            let abs = value.abs();
-
-            if abs < Self::BETA * 4.5 {
-                value / 4.5
-            } else {
-                value.signum() * ((abs + Self::ALPHA - 1.0) / Self::ALPHA).powf(1.0 / 0.45)
-            }
-        })
+        from.clone()
+            .map(|value| value.signum() * value.abs().powf(2.4))
     }
 
     fn to_xyz(from: &ColorComponents) -> ColorComponents {
@@ -687,15 +677,8 @@ impl ColorSpaceConversion for Rec2020 {
     }
 
     fn to_gamma_encoded(from: &ColorComponents) -> ColorComponents {
-        from.clone().map(|v| {
-            let abs = v.abs();
-
-            if abs > Self::BETA {
-                v.signum() * (Self::ALPHA * abs.powf(0.45) - (Self::ALPHA - 1.0))
-            } else {
-                4.5 * v
-            }
-        })
+        from.clone()
+            .map(|value| value.signum() * value.abs().powf(1.0 / 2.4))
     }
 }
 
