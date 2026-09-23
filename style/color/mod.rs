@@ -563,23 +563,22 @@ impl AbsoluteColor {
             return self.clone();
         }
 
-        // Conversion functions doesn't handle NAN component values, so they are
-        // converted to 0.0. They do however need to know if a component is
-        // missing, so we use NAN as the marker for that.
-        macro_rules! missing_to_nan {
+        // Missing components act as zero while converting between color spaces.
+        // Interpolation carries analogous missing components forward separately.
+        macro_rules! missing_to_zero {
             ($c:expr) => {{
                 if let Some(v) = $c {
                     crate::values::normalize(v)
                 } else {
-                    f32::NAN
+                    0.0
                 }
             }};
         }
 
         let components = ColorComponents(
-            missing_to_nan!(self.c0()),
-            missing_to_nan!(self.c1()),
-            missing_to_nan!(self.c2()),
+            missing_to_zero!(self.c0()),
+            missing_to_zero!(self.c1()),
+            missing_to_zero!(self.c2()),
         );
 
         let result = match (self.color_space, color_space) {
@@ -747,5 +746,14 @@ mod tests {
 
         let out_of_gamut = AbsoluteColor::new(ColorSpace::Lch, 0.0, 20.0, 180.0, 1.0);
         assert!(out_of_gamut.to_color_space(ColorSpace::Hsl).c0().is_some());
+    }
+
+    #[test]
+    fn missing_lightness_is_zero_during_cross_space_conversion() {
+        let lch = AbsoluteColor::new(ColorSpace::Lch, None::<f32>, 20.0, 180.0, 1.0);
+        let hsl = lch.to_color_space(ColorSpace::Hsl);
+        assert!(hsl.c0().is_some());
+        assert!(hsl.c1().is_some());
+        assert!(hsl.c2().is_some());
     }
 }
