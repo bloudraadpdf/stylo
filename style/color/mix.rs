@@ -326,6 +326,16 @@ impl AbsoluteColor {
             return;
         }
 
+        // With neither lightness nor chroma specified, a cylindrical color
+        // supplies no white or black component to an HWB interpolation.
+        if matches!(source.color_space, S::Lch | S::Oklch)
+            && self.color_space == S::Hwb
+            && source.flags.contains(F::C0_IS_NONE | F::C1_IS_NONE)
+        {
+            self.flags.insert(all_components);
+            return;
+        }
+
         // Reds             r, x
         // Greens           g, y
         // Blues            b, z
