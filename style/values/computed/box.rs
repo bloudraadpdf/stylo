@@ -152,6 +152,8 @@ pub enum UnsupportedFloatOffsetCalculation {
     Anchor,
     /// An `anchor-size()` function requires anchor-positioning context.
     AnchorSize,
+    /// Deferred color-channel trigonometry is not a float offset.
+    Trigonometric,
 }
 
 /// A semantics-preserving computed `float-offset`.

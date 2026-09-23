@@ -1013,6 +1013,9 @@ fn fold_float_offset_calc_node<F: crate::values::computed::box_::FloatOffsetCalc
             let value = fold_float_offset_calc_node(value, fold)?;
             Ok(fold.sign(value))
         },
+        GenericCalcNode::Trigonometric(_, _) => {
+            Err(crate::values::computed::box_::UnsupportedFloatOffsetCalculation::Trigonometric)
+        },
         GenericCalcNode::Progress {
             value,
             start,

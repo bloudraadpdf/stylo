@@ -13,7 +13,7 @@ use crate::stylesheets::CssRuleType;
 use crate::values::computed::{Context, ToComputedValue};
 use crate::values::generics::calc::{
     self as generic, CalcNodeLeaf, CalcUnits, MinMaxOp, ModRemOp, PositivePercentageBasis,
-    ProgressClamping, RoundingStrategy, SortKey,
+    ProgressClamping, RoundingStrategy, SortKey, TrigonometricFunction,
 };
 use crate::values::generics::length::GenericAnchorSizeFunction;
 use crate::values::generics::position::{
@@ -414,6 +414,17 @@ impl generic::CalcNodeLeaf for Leaf {
 
     fn new_number(value: f32) -> Self {
         Self::Number(value)
+    }
+
+    fn new_angle_radians(value: f32) -> Result<Self, ()> {
+        Ok(Self::Angle(AngleDimension::Rad(value)))
+    }
+
+    fn as_angle_radians(&self) -> Option<f32> {
+        match self {
+            Self::Angle(angle) => Some(angle.radians()),
+            _ => None,
+        }
     }
 
     fn compare(&self, other: &Self, basis: PositivePercentageBasis) -> Option<cmp::Ordering> {
@@ -1003,32 +1014,42 @@ impl CalcNode {
                     Ok(Self::MinMax(arguments.into(), op))
                 },
                 MathFunction::Sin | MathFunction::Cos | MathFunction::Tan => {
-                    let a = Self::parse_angle_argument(context, input)?;
-
-                    let number = match function {
-                        MathFunction::Sin => a.sin(),
-                        MathFunction::Cos => a.cos(),
-                        MathFunction::Tan => a.tan(),
-                        _ => unsafe {
-                            debug_unreachable!("We just checked!");
-                        },
+                    let units = if allowed.includes(CalcUnits::COLOR_COMPONENT) {
+                        CalcUnits::ANGLE | CalcUnits::COLOR_COMPONENT
+                    } else {
+                        CalcUnits::ANGLE
                     };
-
-                    Ok(Self::Leaf(Leaf::Number(number)))
+                    let argument = Self::parse_argument(context, input, AllowParse::new(units))?;
+                    let operation = match function {
+                        MathFunction::Sin => TrigonometricFunction::Sin,
+                        MathFunction::Cos => TrigonometricFunction::Cos,
+                        MathFunction::Tan => TrigonometricFunction::Tan,
+                        _ => unreachable!(),
+                    };
+                    let node = Self::Trigonometric(Box::new(argument), operation);
+                    node.unit().map_err(|()| {
+                        input.new_custom_error(StyleParseErrorKind::UnspecifiedError)
+                    })?;
+                    Ok(node.resolve().map(Self::Leaf).unwrap_or(node))
                 },
                 MathFunction::Asin | MathFunction::Acos | MathFunction::Atan => {
-                    let a = Self::parse_number_argument(context, input)?;
-
-                    let radians = match function {
-                        MathFunction::Asin => a.asin(),
-                        MathFunction::Acos => a.acos(),
-                        MathFunction::Atan => a.atan(),
-                        _ => unsafe {
-                            debug_unreachable!("We just checked!");
-                        },
+                    let units = if allowed.includes(CalcUnits::COLOR_COMPONENT) {
+                        CalcUnits::COLOR_COMPONENT
+                    } else {
+                        CalcUnits::empty()
                     };
-
-                    Ok(Self::Leaf(Leaf::Angle(AngleDimension::Rad(radians))))
+                    let argument = Self::parse_argument(context, input, AllowParse::new(units))?;
+                    let operation = match function {
+                        MathFunction::Asin => TrigonometricFunction::Asin,
+                        MathFunction::Acos => TrigonometricFunction::Acos,
+                        MathFunction::Atan => TrigonometricFunction::Atan,
+                        _ => unreachable!(),
+                    };
+                    let node = Self::Trigonometric(Box::new(argument), operation);
+                    node.unit().map_err(|()| {
+                        input.new_custom_error(StyleParseErrorKind::UnspecifiedError)
+                    })?;
+                    Ok(node.resolve().map(Self::Leaf).unwrap_or(node))
                 },
                 MathFunction::Atan2 => {
                     let allow_all = allowed.new_including(CalcUnits::ALL);
@@ -1157,17 +1178,6 @@ impl CalcNode {
         })
     }
 
-    fn parse_angle_argument<'i, 't>(
-        context: &ParserContext,
-        input: &mut Parser<'i, 't>,
-    ) -> Result<CSSFloat, ParseError<'i>> {
-        let argument = Self::parse_argument(context, input, AllowParse::new(CalcUnits::ANGLE))?;
-        argument
-            .to_number()
-            .or_else(|()| Ok(argument.to_angle()?.radians()))
-            .map_err(|()| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
-    }
-
     fn parse_number_argument<'i, 't>(
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
@@ -1282,6 +1292,13 @@ impl CalcNode {
                                     }
                                     return InPlaceDivisionResult::Merged;
                                 }
+                            } else if let (Ok(left_angle), Ok(right_angle)) =
+                                (left.to_angle(), right.to_angle())
+                            {
+                                *left = CalcNode::Leaf(Leaf::Number(
+                                    left_angle.radians() / right_angle.radians(),
+                                ));
+                                return InPlaceDivisionResult::Merged;
                             } else {
                                 // Color components are valid denominators, but they can't resolve
                                 // at parse time.
