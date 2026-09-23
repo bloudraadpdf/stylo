@@ -438,19 +438,70 @@ impl SystemColor {
     #[cfg(feature = "servo")]
     #[inline]
     fn compute(&self, cx: &Context) -> ComputedColor {
-        let background = cx.device().default_background_color();
-        let foreground = cx.device().default_color();
+        let dark = cx.device().is_dark_color_scheme(cx.builder.color_scheme);
+        let background = if dark {
+            AbsoluteColor::srgb_legacy(18, 18, 18, 1.0)
+        } else {
+            cx.device().default_background_color()
+        };
+        let foreground = if dark {
+            AbsoluteColor::srgb_legacy(245, 245, 245, 1.0)
+        } else {
+            cx.device().default_color()
+        };
         let accent = AbsoluteColor::srgb_legacy(0, 120, 212, 1.0);
         let accent_text = AbsoluteColor::WHITE;
-        let highlight = AbsoluteColor::srgb_legacy(51, 144, 255, 1.0);
+        let highlight = if dark {
+            AbsoluteColor::srgb_legacy(54, 90, 172, 1.0)
+        } else {
+            AbsoluteColor::srgb_legacy(51, 144, 255, 1.0)
+        };
         let highlight_text = AbsoluteColor::WHITE;
-        let button_face = AbsoluteColor::srgb_legacy(240, 240, 240, 1.0);
-        let button_border = AbsoluteColor::srgb_legacy(118, 118, 118, 1.0);
-        let light_shadow = AbsoluteColor::srgb_legacy(211, 211, 211, 1.0);
-        let dark_shadow = AbsoluteColor::srgb_legacy(64, 64, 64, 1.0);
-        let disabled_text = AbsoluteColor::srgb_legacy(128, 128, 128, 1.0);
-        let info_background = AbsoluteColor::srgb_legacy(255, 255, 225, 1.0);
-        let mark = AbsoluteColor::srgb_legacy(255, 255, 0, 1.0);
+        let button_face = if dark {
+            AbsoluteColor::srgb_legacy(56, 56, 56, 1.0)
+        } else {
+            AbsoluteColor::srgb_legacy(240, 240, 240, 1.0)
+        };
+        let button_border = if dark {
+            AbsoluteColor::srgb_legacy(154, 154, 154, 1.0)
+        } else {
+            AbsoluteColor::srgb_legacy(118, 118, 118, 1.0)
+        };
+        let light_shadow = if dark {
+            AbsoluteColor::srgb_legacy(104, 104, 104, 1.0)
+        } else {
+            AbsoluteColor::srgb_legacy(211, 211, 211, 1.0)
+        };
+        let dark_shadow = if dark {
+            AbsoluteColor::srgb_legacy(32, 32, 32, 1.0)
+        } else {
+            AbsoluteColor::srgb_legacy(64, 64, 64, 1.0)
+        };
+        let disabled_text = if dark {
+            AbsoluteColor::srgb_legacy(173, 173, 173, 1.0)
+        } else {
+            AbsoluteColor::srgb_legacy(128, 128, 128, 1.0)
+        };
+        let info_background = if dark {
+            AbsoluteColor::srgb_legacy(52, 51, 42, 1.0)
+        } else {
+            AbsoluteColor::srgb_legacy(255, 255, 225, 1.0)
+        };
+        let mark = if dark {
+            AbsoluteColor::srgb_legacy(143, 117, 0, 1.0)
+        } else {
+            AbsoluteColor::srgb_legacy(255, 255, 0, 1.0)
+        };
+        let link = if dark {
+            AbsoluteColor::srgb_legacy(129, 217, 254, 1.0)
+        } else {
+            AbsoluteColor::srgb_legacy(0, 0, 255, 1.0)
+        };
+        let visited = if dark {
+            AbsoluteColor::srgb_legacy(208, 168, 255, 1.0)
+        } else {
+            AbsoluteColor::srgb_legacy(85, 26, 139, 1.0)
+        };
 
         let absolute = match self.modern_equivalent() {
             Self::Canvas
@@ -472,9 +523,8 @@ impl SystemColor {
             | Self::MozComboboxtext
             | Self::MozOddtreerow
             | Self::Marktext => foreground,
-            // Keep the fixed print palette consistent with the Servo UA link colour.
-            Self::Linktext => AbsoluteColor::srgb_legacy(0, 0, 255, 1.0),
-            Self::Visitedtext => AbsoluteColor::srgb_legacy(85, 26, 139, 1.0),
+            Self::Linktext => link,
+            Self::Visitedtext => visited,
             Self::Activetext => AbsoluteColor::srgb_legacy(255, 0, 0, 1.0),
             Self::Accentcolor => accent,
             Self::Accentcolortext => accent_text,
