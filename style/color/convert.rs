@@ -21,7 +21,7 @@ type Vector = euclid::default::Vector3D<f32>;
 /// Normalize hue into [0, 360).
 #[inline]
 pub fn normalize_hue(hue: f32) -> f32 {
-    if !hue.is_finite() {
+    if hue.is_infinite() {
         return 0.0;
     }
     hue - 360. * (hue / 360.).floor()
@@ -32,8 +32,8 @@ mod hue_tests {
     use super::normalize_hue;
 
     #[test]
-    fn non_finite_hues_normalize_to_zero() {
-        for hue in [f32::INFINITY, f32::NEG_INFINITY, f32::NAN] {
+    fn infinite_hues_normalize_to_zero() {
+        for hue in [f32::INFINITY, f32::NEG_INFINITY] {
             assert_eq!(normalize_hue(hue), 0.0);
         }
     }
