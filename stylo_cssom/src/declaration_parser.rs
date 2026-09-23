@@ -748,17 +748,10 @@ pub fn parse_inline_style_property_declarations(
     // A relative color can depend on channels of its origin even when those
     // channels are powerless. Serializing its nested HSL/HWB origin through
     // the declaration block can replace it with legacy sRGB and lose that
-    // distinction before the cascade computes the value.
+    // distinction before the cascade computes the value. Color mixes also
+    // need authored colors: serializing a powerless HSL hue as RGB erases it.
     if backing_property.eq_ignore_ascii_case("color")
-        && block.0.declaration_importance_iter().any(|(declaration, _)| {
-            matches!(
-                declaration,
-                PropertyDeclaration::Color(style::values::specified::ColorPropertyValue(
-                    style::values::specified::Color::ColorFunction(function)
-                ))
-                    if function.has_origin_color()
-            )
-        })
+        && inline_color_needs_authored_cascade_value(&block)
         && let Some(declaration) = declarations.first_mut()
     {
         declaration.value = specified_style_value_from_css(value, base_url)?;
@@ -1023,20 +1016,14 @@ pub fn inline_style_cssom_backing_value<'a>(property: &str, value: &'a str) -> O
 #[must_use]
 pub fn inline_style_cssom_authored_value(property: &str, value: Option<String>) -> Option<String> {
     value.map(|value| {
-        // Keep authored relative-color channels for the cascade, but expose
-        // Stylo's canonical origin serialization to CSSOM readers.
+        // Keep authored color channels for the cascade, but expose Stylo's
+        // canonical serialization to CSSOM readers.
         if property.eq_ignore_ascii_case("color")
-            && value.as_bytes().windows(4).any(|word| word.eq_ignore_ascii_case(b"from"))
+            && (value.as_bytes().windows(4).any(|word| word.eq_ignore_ascii_case(b"from"))
+                || value.as_bytes().windows(10).any(|word| word.eq_ignore_ascii_case(b"color-mix(")))
         {
             let block = parse_inline_style_block(&format!("color: {value}"));
-            if block.0.declaration_importance_iter().any(|(declaration, _)| {
-                matches!(
-                    declaration,
-                    PropertyDeclaration::Color(style::values::specified::ColorPropertyValue(
-                        style::values::specified::Color::ColorFunction(function)
-                    )) if function.has_origin_color()
-                )
-            }) {
+            if inline_color_needs_authored_cascade_value(&block) {
                 if let Some(serialized) = inline_style_get_property_value(&block, "color") {
                     return serialized;
                 }
@@ -1050,6 +1037,22 @@ pub fn inline_style_cssom_authored_value(property: &str, value: Option<String>) 
         match keyword {
             Some(keyword) => keyword.to_owned(),
             None => value,
+        }
+    })
+}
+
+fn inline_color_needs_authored_cascade_value(block: &InlineStyleBlock) -> bool {
+    block.0.declaration_importance_iter().any(|(declaration, _)| {
+        match declaration {
+            PropertyDeclaration::Color(style::values::specified::ColorPropertyValue(color)) => {
+                match color {
+                    style::values::specified::Color::ColorFunction(function) =>
+                        function.has_origin_color(),
+                    style::values::specified::Color::ColorMix(_) => true,
+                    _ => false,
+                }
+            },
+            _ => false,
         }
     })
 }
@@ -1706,6 +1709,27 @@ mod tests {
         assert_eq!(
             inline_style_cssom_authored_value("color", cascade_value).as_deref(),
             Some("rgb(from rgba(51, 102, 153, 0.8) r g b / alpha)"),
+        );
+    }
+
+    #[test]
+    fn cssom_color_mix_keeps_authored_hsl_hue_for_the_cascade() {
+        let authored = "color-mix(in hsl, hsl(180 0 50%), hsl(11 33 44))";
+        let declarations = parse_inline_style_property_declarations(
+            "color",
+            authored,
+            CssomDeclarationPriority::Normal,
+            &Arc::from("about:blank"),
+        )
+        .expect("color mix must parse");
+        assert_eq!(
+            crate::specified::projected_specified_property_value(&declarations, "color")
+                .as_deref(),
+            Some(authored),
+        );
+        assert_eq!(
+            inline_style_cssom_authored_value("color", Some(authored.to_owned())).as_deref(),
+            Some("color-mix(in hsl, rgb(128, 128, 128), rgb(149, 89, 75))"),
         );
     }
 
