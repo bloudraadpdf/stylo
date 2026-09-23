@@ -749,6 +749,10 @@ impl Parse for FamilyName {
             Ok(SingleFontFamily::Generic(_)) => {
                 Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
             },
+            #[cfg(feature = "servo")]
+            Ok(SingleFontFamily::ScriptSpecificGeneric(_)) => {
+                Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
+            },
             Err(e) => Err(e),
         }
     }

@@ -4,7 +4,7 @@ use style::{
     parser::Parse,
     properties::PropertyDeclaration,
     stylesheets::supports_rule::{
-        Declaration as SupportsDeclaration, parse_condition_or_declaration,
+        parse_condition_or_declaration, Declaration as SupportsDeclaration,
     },
 };
 
@@ -180,4 +180,46 @@ pub use style::values::specified::TransformBox;
 pub fn keyword_is(source: &str, expected: &str) -> bool {
     crate::registration::single_identifier(source)
         .is_some_and(|value| value.eq_ignore_ascii_case(expected))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_font_shorthand;
+    use style::properties::PropertyDeclaration;
+    use style::values::computed::font::{ScriptSpecificGenericFontFamily, SingleFontFamily};
+    use style::values::specified::FontFamily;
+
+    #[test]
+    fn font_shorthand_accepts_script_specific_generics() {
+        for (source, expected) in [
+            (
+                "generic(fangsong)",
+                ScriptSpecificGenericFontFamily::Fangsong,
+            ),
+            ("generic(kai)", ScriptSpecificGenericFontFamily::Kai),
+            (
+                "generic(khmer-mul)",
+                ScriptSpecificGenericFontFamily::KhmerMul,
+            ),
+            (
+                "generic(nastaliq)",
+                ScriptSpecificGenericFontFamily::Nastaliq,
+            ),
+        ] {
+            let declarations = parse_font_shorthand(&format!("25px {source}"))
+                .expect("the script-specific generic is valid in the font shorthand");
+            let family = declarations
+                .iter()
+                .find_map(|declaration| match declaration {
+                    PropertyDeclaration::FontFamily(FontFamily::Values(families)) => {
+                        families.iter().next()
+                    },
+                    _ => None,
+                });
+            assert_eq!(
+                family,
+                Some(&SingleFontFamily::ScriptSpecificGeneric(expected))
+            );
+        }
+    }
 }
