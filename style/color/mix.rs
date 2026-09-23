@@ -312,7 +312,7 @@ impl AbsoluteColor {
     /// Calculate the flags that should be carried forward a color before converting
     /// it to the interpolation color space according to:
     /// <https://drafts.csswg.org/css-color-4/#interpolation-missing>
-    fn carry_forward_analogous_missing_components(&mut self, source: &AbsoluteColor) {
+    pub(crate) fn carry_forward_analogous_missing_components(&mut self, source: &AbsoluteColor) {
         use ColorFlags as F;
         use ColorSpace as S;
 
@@ -320,10 +320,17 @@ impl AbsoluteColor {
             return;
         }
 
+        let all_components = F::C0_IS_NONE | F::C1_IS_NONE | F::C2_IS_NONE;
+        if source.flags.contains(all_components) {
+            self.flags.insert(all_components);
+            return;
+        }
+
         // Reds             r, x
         // Greens           g, y
         // Blues            b, z
         if source.color_space.is_rgb_or_xyz_like() && self.color_space.is_rgb_or_xyz_like() {
+            self.flags |= source.flags & all_components;
             return;
         }
 
@@ -377,6 +384,16 @@ impl AbsoluteColor {
         {
             self.flags |= source.flags & F::C1_IS_NONE;
             self.flags |= source.flags & F::C2_IS_NONE;
+        } else if matches!(source.color_space, S::Lab | S::Oklab)
+            && matches!(self.color_space, S::Lch | S::Oklch)
+            && source.flags.contains(F::C1_IS_NONE | F::C2_IS_NONE)
+        {
+            self.flags.insert(F::C1_IS_NONE);
+        } else if matches!(source.color_space, S::Lch | S::Oklch)
+            && matches!(self.color_space, S::Lab | S::Oklab)
+            && source.flags.contains(F::C1_IS_NONE)
+        {
+            self.flags.insert(F::C1_IS_NONE | F::C2_IS_NONE);
         }
     }
 }
@@ -419,9 +436,7 @@ fn mix_with_weights(
 }
 
 fn convert_for_mix(color: &AbsoluteColor, color_space: ColorSpace) -> AbsoluteColor {
-    let mut converted = color.to_color_space(color_space);
-    converted.carry_forward_analogous_missing_components(color);
-    converted
+    color.to_color_space_with_missing(color_space)
 }
 
 fn interpolate_premultiplied_component(
