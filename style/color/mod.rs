@@ -350,6 +350,27 @@ impl AbsoluteColor {
         c3: impl Into<ComponentDetails>,
         alpha: impl Into<ComponentDetails>,
     ) -> Self {
+        Self::new_impl(color_space, c1, c2, c3, alpha, true)
+    }
+
+    pub(crate) fn new_unclamped(
+        color_space: ColorSpace,
+        c1: impl Into<ComponentDetails>,
+        c2: impl Into<ComponentDetails>,
+        c3: impl Into<ComponentDetails>,
+        alpha: impl Into<ComponentDetails>,
+    ) -> Self {
+        Self::new_impl(color_space, c1, c2, c3, alpha, false)
+    }
+
+    pub(crate) fn new_impl(
+        color_space: ColorSpace,
+        c1: impl Into<ComponentDetails>,
+        c2: impl Into<ComponentDetails>,
+        c3: impl Into<ComponentDetails>,
+        alpha: impl Into<ComponentDetails>,
+        clamp_components: bool,
+    ) -> Self {
         let mut flags = ColorFlags::empty();
 
         macro_rules! cd {
@@ -371,17 +392,17 @@ impl AbsoluteColor {
         let alpha = cd!(alpha, ColorFlags::ALPHA_IS_NONE);
 
         // Lightness for Lab and Lch is clamped to [0..100].
-        if matches!(color_space, ColorSpace::Lab | ColorSpace::Lch) {
+        if clamp_components && matches!(color_space, ColorSpace::Lab | ColorSpace::Lch) {
             components.0 = components.0.clamp(0.0, 100.0);
         }
 
         // Lightness for Oklab and Oklch is clamped to [0..1].
-        if matches!(color_space, ColorSpace::Oklab | ColorSpace::Oklch) {
+        if clamp_components && matches!(color_space, ColorSpace::Oklab | ColorSpace::Oklch) {
             components.0 = components.0.clamp(0.0, 1.0);
         }
 
         // Chroma must not be less than 0.
-        if matches!(color_space, ColorSpace::Lch | ColorSpace::Oklch) {
+        if clamp_components && matches!(color_space, ColorSpace::Lch | ColorSpace::Oklch) {
             components.1 = components.1.max(0.0);
         }
 
@@ -734,7 +755,7 @@ impl AbsoluteColor {
             _ => {},
         }
 
-        Self::new(color_space, c0, c1, c2, self.alpha())
+        Self::new_unclamped(color_space, c0, c1, c2, self.alpha())
     }
 
     /// Convert an origin used for interpolation or relative channel references.
@@ -851,5 +872,12 @@ mod tests {
             assert_eq!(converted.c1(), Some(0.0), "{origin:?}");
             assert_eq!(converted.c2(), None, "{origin:?}");
         }
+    }
+
+    #[test]
+    fn out_of_gamut_conversion_keeps_negative_oklch_lightness() {
+        let lch = AbsoluteColor::new(ColorSpace::Lch, 0.0, 20.0, 180.0, 1.0);
+        let oklch = lch.to_color_space(ColorSpace::Oklch);
+        assert!(oklch.c0().expect("lightness") < 0.0);
     }
 }
