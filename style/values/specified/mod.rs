@@ -893,23 +893,76 @@ impl Parse for NonNegativeNumberOrPercentage {
 }
 
 /// The value of Opacity is <alpha-value>, which is "<number> | <percentage>".
-/// However, we serialize the specified value as number, so it's ok to store
-/// the Opacity as Number.
-#[derive(
-    Clone, Debug, MallocSizeOf, PartialEq, PartialOrd, SpecifiedValueInfo, ToCss, ToShmem, ToTyped,
-)]
-pub struct Opacity(Number);
+/// Bare percentages serialize as numbers, while calculated percentages retain
+/// their percentage unit in the specified value.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToShmem)]
+pub enum Opacity {
+    /// An authored number or a bare percentage converted to a number.
+    Literal(CSSFloat),
+    /// A calculated number retains its math expression.
+    CalculatedNumber(Box<Number>),
+    /// A calculated percentage retains its unit until computed-value time.
+    CalculatedPercentage(Box<Percentage>),
+}
+
+impl ToCss for Opacity {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        match self {
+            Self::Literal(value) => Number::new(*value).to_css(dest),
+            Self::CalculatedNumber(number) => number.to_css(dest),
+            Self::CalculatedPercentage(percentage) => percentage.to_css(dest),
+        }
+    }
+}
+
+impl ToTyped for Opacity {
+    fn to_typed(&self) -> Option<TypedValue> {
+        match self {
+            Self::Literal(value) => Number::new(*value).to_typed(),
+            Self::CalculatedNumber(number) => number.to_typed(),
+            Self::CalculatedPercentage(percentage) => percentage.to_typed(),
+        }
+    }
+}
+
+impl PartialOrd for Opacity {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.as_number().partial_cmp(&other.as_number())
+    }
+}
+
+impl Opacity {
+    fn as_number(&self) -> Number {
+        match self {
+            Self::Literal(value) => Number::new(*value),
+            Self::CalculatedNumber(number) => (**number).clone(),
+            Self::CalculatedPercentage(percentage) => percentage.to_number(),
+        }
+    }
+}
 
 impl Parse for Opacity {
-    /// Opacity accepts <number> | <percentage>, so we parse it as NumberOrPercentage,
-    /// and then convert into an Number if it's a Percentage.
-    /// https://drafts.csswg.org/cssom/#serializing-css-values
     fn parse<'i, 't>(
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        let number = NumberOrPercentage::parse(context, input)?.to_number();
-        Ok(Opacity(number))
+        use self::percentage::ToPercentage;
+
+        Ok(match NumberOrPercentage::parse(context, input)? {
+            NumberOrPercentage::Number(number) if number.was_calc() => {
+                Self::CalculatedNumber(Box::new(number))
+            },
+            NumberOrPercentage::Number(number) => Self::Literal(number.value),
+            NumberOrPercentage::Percentage(percentage) if percentage.is_calc() => {
+                Self::CalculatedPercentage(Box::new(percentage))
+            },
+            NumberOrPercentage::Percentage(percentage) => {
+                Self::Literal(percentage.to_number().value)
+            },
+        })
     }
 }
 
@@ -918,7 +971,7 @@ impl ToComputedValue for Opacity {
 
     #[inline]
     fn to_computed_value(&self, context: &Context) -> CSSFloat {
-        let value = self.0.to_computed_value(context);
+        let value = self.as_number().to_computed_value(context);
         if context.for_smil_animation {
             // SMIL expects to be able to interpolate between out-of-range
             // opacity values.
@@ -930,7 +983,7 @@ impl ToComputedValue for Opacity {
 
     #[inline]
     fn from_computed_value(computed: &CSSFloat) -> Self {
-        Opacity(Number::from_computed_value(computed))
+        Opacity::Literal(*computed)
     }
 }
 
@@ -1724,6 +1777,33 @@ mod tests {
         parser
             .parse_entirely(|input| Integer::parse_non_negative(&context, input))
             .ok()
+    }
+
+    #[test]
+    fn opacity_preserves_calculated_percentage_in_specified_serialization() {
+        let url_data = UrlExtraData::from(Url::parse("https://example.invalid/").unwrap());
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+
+        for (source, expected) in [
+            ("50%", "0.5"),
+            ("calc(25% * 2)", "calc(50%)"),
+            ("min(-40%, 50%)", "calc(-40%)"),
+        ] {
+            let mut input = ParserInput::new(source);
+            let opacity = Parser::new(&mut input)
+                .parse_entirely(|input| Opacity::parse(&context, input))
+                .expect("valid opacity parses");
+            assert_eq!(opacity.to_css_string(), expected);
+        }
     }
 
     #[test]
