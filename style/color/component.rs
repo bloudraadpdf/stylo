@@ -18,6 +18,7 @@ use crate::{
         computed,
         generics::calc::{CalcUnits, GenericCalcNode},
         specified::calc::{AllowParse, Leaf},
+        specified::length::{FontBaseSize, LineHeightBase, NoCalcLength},
     },
 };
 use cssparser::{color::OPAQUE, Parser, Token};
@@ -212,6 +213,15 @@ impl<ValueType: ColorComponentType> ColorComponent<ValueType> {
         };
 
         let computed = node.map_leaves(|leaf| match leaf {
+            Leaf::Length(length) => Leaf::Length(NoCalcLength::from_px(
+                length
+                    .to_computed_value_in_calc(
+                        context,
+                        FontBaseSize::CurrentStyle,
+                        LineHeightBase::CurrentStyle,
+                    )
+                    .px(),
+            )),
             Leaf::SiblingIndex => Leaf::Number(context.sibling_index()),
             Leaf::SiblingCount => Leaf::Number(context.sibling_count()),
             _ => leaf.clone(),
