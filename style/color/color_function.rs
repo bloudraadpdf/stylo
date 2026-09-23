@@ -701,20 +701,20 @@ impl ColorFunction<SpecifiedColor> {
         macro_rules! has_calc {
             ($($component:expr),+ $(,)?) => {{
                 let mut has_calc = false;
-                let mut finite = true;
+                let mut has_nan = false;
                 $(
                     if let ColorComponent::Calc(node) = $component {
                         has_calc = true;
                         let _ = node.map_leaves(|leaf| {
                             if let crate::values::specified::calc::Leaf::Number(value)
                             | crate::values::specified::calc::Leaf::Percentage(value) = leaf {
-                                finite &= value.is_finite();
+                                has_nan |= value.is_nan();
                             }
                             leaf.clone()
                         });
                     }
                 )+
-                has_calc && finite
+                has_calc && !has_nan
             }};
         }
 
