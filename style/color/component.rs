@@ -61,6 +61,21 @@ impl<ValueType> ColorComponent<ValueType> {
         }
     }
 
+    /// Substitute a valid sibling count for parse-time channel validation.
+    pub fn with_siblings_as_one(&self) -> Self
+    where
+        ValueType: ColorComponentType + Clone,
+    {
+        match self {
+            Self::SiblingIndex | Self::SiblingCount => Self::Value(ValueType::from_value(1.0)),
+            Self::Calc(node) => Self::Calc(Box::new(node.map_leaves(|leaf| match leaf {
+                Leaf::SiblingIndex | Leaf::SiblingCount => Leaf::Number(1.0),
+                _ => leaf.clone(),
+            }))),
+            _ => self.clone(),
+        }
+    }
+
     /// Return true if the component is "none".
     #[inline]
     pub fn is_none(&self) -> bool {

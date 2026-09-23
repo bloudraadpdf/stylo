@@ -196,7 +196,10 @@ fn parse_color_function<'i, 't>(
         // Validate the channels and calc expressions by trying to resolve them against
         // transparent.
         // FIXME(emilio, bug 1925572): This could avoid cloning, or be done earlier.
-        let Some(abs) = color.map_origin_color(|_| Some(AbsoluteColor::TRANSPARENT_BLACK)) else {
+        let Some(abs) = color
+            .with_siblings_as_one()
+            .map_origin_color(|_| Some(AbsoluteColor::TRANSPARENT_BLACK))
+        else {
             return Err(arguments.new_custom_error(StyleParseErrorKind::UnspecifiedError));
         };
         if abs.resolve_to_absolute().is_err() {
@@ -1000,6 +1003,35 @@ mod specified_color_tests {
                 Parser::new(&mut input)
                     .parse_entirely(|parser| parse_color_with(&context, parser))
                     .is_err(),
+                "{source}"
+            );
+        }
+    }
+
+    #[test]
+    fn relative_color_accepts_element_dependent_sibling_index() {
+        let url_data = UrlExtraData::from(
+            url::Url::parse("https://example.invalid/").expect("test URL parses"),
+        );
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        for source in [
+            "hsl(from red h s sibling-index())",
+            "hsl(from light-dark(currentcolor, red) h s sibling-index())",
+        ] {
+            let mut input = ParserInput::new(source);
+            assert!(
+                Parser::new(&mut input)
+                    .parse_entirely(|parser| parse_color_with(&context, parser))
+                    .is_ok(),
                 "{source}"
             );
         }

@@ -802,6 +802,42 @@ impl ColorFunction<SpecifiedColor> {
 }
 
 impl<Color> ColorFunction<Color> {
+    /// Replace element-dependent tree counts before parse-time channel validation.
+    pub fn with_siblings_as_one(&self) -> Self
+    where
+        Color: Clone,
+    {
+        macro_rules! map {
+            ($variant:ident, $origin:expr, $c0:expr, $c1:expr, $c2:expr, $alpha:expr) => {
+                Self::$variant(
+                    $origin.clone(),
+                    $c0.with_siblings_as_one(),
+                    $c1.with_siblings_as_one(),
+                    $c2.with_siblings_as_one(),
+                    $alpha.with_siblings_as_one(),
+                )
+            };
+        }
+        match self {
+            Self::Rgb(origin, c0, c1, c2, alpha) => map!(Rgb, origin, c0, c1, c2, alpha),
+            Self::Hsl(origin, c0, c1, c2, alpha) => map!(Hsl, origin, c0, c1, c2, alpha),
+            Self::Hwb(origin, c0, c1, c2, alpha) => map!(Hwb, origin, c0, c1, c2, alpha),
+            Self::Lab(origin, c0, c1, c2, alpha) => map!(Lab, origin, c0, c1, c2, alpha),
+            Self::Lch(origin, c0, c1, c2, alpha) => map!(Lch, origin, c0, c1, c2, alpha),
+            Self::Oklab(origin, c0, c1, c2, alpha) => map!(Oklab, origin, c0, c1, c2, alpha),
+            Self::Oklch(origin, c0, c1, c2, alpha) => map!(Oklch, origin, c0, c1, c2, alpha),
+            Self::Color(origin, c0, c1, c2, alpha, space) => Self::Color(
+                origin.clone(),
+                c0.with_siblings_as_one(),
+                c1.with_siblings_as_one(),
+                c2.with_siblings_as_one(),
+                alpha.with_siblings_as_one(),
+                *space,
+            ),
+            _ => self.clone(),
+        }
+    }
+
     /// Map colour dependencies to another type. Return None from `f` if the
     /// conversion fails.
     pub fn map_origin_color<U>(
