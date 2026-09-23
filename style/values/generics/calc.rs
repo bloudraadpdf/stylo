@@ -355,6 +355,8 @@ pub enum GenericCalcNode<L> {
     Sign(Box<GenericCalcNode<L>>),
     /// A trigonometric function with an unresolved argument.
     Trigonometric(Box<GenericCalcNode<L>>, TrigonometricFunction),
+    /// A power function with unresolved numeric arguments.
+    Pow(Box<GenericCalcNode<L>>, Box<GenericCalcNode<L>>),
     /// A `progress()` function.
     Progress {
         /// The current value.
@@ -736,6 +738,14 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                     _ => return Err(()),
                 }
             },
+            CalcNode::Pow(ref base, ref exponent) => {
+                let numeric =
+                    |unit: CalcUnits| unit.is_empty() || unit == CalcUnits::COLOR_COMPONENT;
+                if !numeric(base.unit()?) || !numeric(exponent.unit()?) {
+                    return Err(());
+                }
+                CalcUnits::empty()
+            },
             CalcNode::Progress {
                 value, start, end, ..
             } => {
@@ -851,6 +861,7 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 child.negate();
             },
             CalcNode::Trigonometric(..) => wrap_self_in_negate(self),
+            CalcNode::Pow(..) => wrap_self_in_negate(self),
             CalcNode::Progress { .. } => {
                 wrap_self_in_negate(self);
             },
@@ -972,6 +983,10 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 CalcNode::Abs(child)
                 | CalcNode::Sign(child)
                 | CalcNode::Trigonometric(child, _) => map_internal(child, op),
+                CalcNode::Pow(base, exponent) => {
+                    map_internal(base, op)?;
+                    map_internal(exponent, op)
+                },
                 CalcNode::Progress {
                     value, start, end, ..
                 } => {
@@ -1066,6 +1081,10 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
             Self::Trigonometric(ref c, operation) => {
                 CalcNode::Trigonometric(Box::new(c.map_leaves_internal(map)), operation)
             },
+            Self::Pow(ref base, ref exponent) => CalcNode::Pow(
+                Box::new(base.map_leaves_internal(map)),
+                Box::new(exponent.map_leaves_internal(map)),
+            ),
             Self::Progress {
                 ref value,
                 ref start,
@@ -1400,6 +1419,17 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                     },
                 }
             },
+            Self::Pow(ref base, ref exponent) => {
+                let base = base
+                    .resolve_internal(leaf_to_output_fn)?
+                    .as_number()
+                    .ok_or(())?;
+                let exponent = exponent
+                    .resolve_internal(leaf_to_output_fn)?
+                    .as_number()
+                    .ok_or(())?;
+                Ok(L::new_number(base.powf(exponent)))
+            },
             Self::Progress {
                 value,
                 start,
@@ -1449,6 +1479,10 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
             | Self::Sign(child)
             | Self::Trigonometric(child, _) => {
                 child.map_node_internal(mapping_fn)?;
+            },
+            Self::Pow(base, exponent) => {
+                base.map_node_internal(mapping_fn)?;
+                exponent.map_node_internal(mapping_fn)?;
             },
             Self::Sum(children)
             | Self::Product(children)
@@ -1573,6 +1607,10 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
             | Self::Sign(ref mut value)
             | Self::Trigonometric(ref mut value, _) => {
                 value.visit_depth_first_internal(f);
+            },
+            Self::Pow(ref mut base, ref mut exponent) => {
+                base.visit_depth_first_internal(f);
+                exponent.visit_depth_first_internal(f);
             },
             Self::Leaf(..) | Self::Anchor(..) | Self::AnchorSize(..) => {},
         }
@@ -2030,6 +2068,7 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 l.simplify();
             },
             Self::Trigonometric(..) => {},
+            Self::Pow(..) => {},
             Self::Anchor(ref mut f) => {
                 if let GenericAnchorSide::Percentage(ref mut n) = f.side {
                     n.simplify_and_sort();
@@ -2106,6 +2145,10 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                     TrigonometricFunction::Acos => "acos(",
                     TrigonometricFunction::Atan => "atan(",
                 })?;
+                true
+            },
+            Self::Pow(..) => {
+                dest.write_str("pow(")?;
                 true
             },
             Self::Progress { clamping, .. } => {
@@ -2264,6 +2307,11 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
             },
             Self::Abs(ref v) | Self::Sign(ref v) | Self::Trigonometric(ref v, _) => {
                 v.to_css_impl(dest, ArgumentLevel::ArgumentRoot)?
+            },
+            Self::Pow(ref base, ref exponent) => {
+                base.to_css_impl(dest, ArgumentLevel::ArgumentRoot)?;
+                dest.write_str(", ")?;
+                exponent.to_css_impl(dest, ArgumentLevel::ArgumentRoot)?;
             },
             Self::Leaf(ref l) => l.to_css(dest)?,
             Self::Anchor(ref f) => f.to_css(dest)?,
