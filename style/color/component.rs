@@ -160,7 +160,7 @@ impl<ValueType: ColorComponentType> ColorComponent<ValueType> {
             ColorComponent::ChannelKeyword(channel_keyword) => match origin_color {
                 Some(origin_color) => {
                     let value = origin_color.get_component_by_channel_keyword(*channel_keyword)?;
-                    Some(ValueType::from_value(value.unwrap_or(0.0)))
+                    value.map(ValueType::from_value)
                 },
                 None => return Err(()),
             },
@@ -261,5 +261,18 @@ impl<ValueType> ToAnimatedValue for ColorComponent<ValueType> {
 
     fn from_animated_value(animated: Self::AnimatedValue) -> Self {
         animated
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AbsoluteColor, ChannelKeyword, ColorComponent};
+    use crate::color::ColorSpace;
+
+    #[test]
+    fn direct_relative_channel_preserves_missing_origin_component() {
+        let origin = AbsoluteColor::new(ColorSpace::Hsl, None::<f32>, 50.0, 50.0, 1.0);
+        let channel = ColorComponent::<f32>::ChannelKeyword(ChannelKeyword::H);
+        assert_eq!(channel.resolve(Some(&origin)), Ok(None));
     }
 }
