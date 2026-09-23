@@ -128,7 +128,15 @@ pub fn rgb_to_hsl(from: &ColorComponents) -> ColorComponents {
 
 #[cfg(test)]
 mod hsl_tests {
-    use super::{rgb_to_hsl, ColorComponents};
+    use super::{hsl_to_rgb, rgb_to_hsl, ColorComponents};
+
+    #[test]
+    fn hsl_to_rgb_matches_css_color_example() {
+        assert_eq!(
+            hsl_to_rgb(&ColorComponents(120.0, 100.0, 75.0)),
+            ColorComponents(0.5, 1.0, 0.5)
+        );
+    }
 
     #[test]
     fn out_of_gamut_rgb_rotates_negative_saturation() {
