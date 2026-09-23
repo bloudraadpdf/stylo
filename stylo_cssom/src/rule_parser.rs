@@ -2214,6 +2214,18 @@ pub fn replace_position_try_rule_declarations(
     Some(node.clone().with_cssom_declaration_block(block))
 }
 
+pub fn replace_font_face_rule_declarations(
+    node: &stylo_cssom_model::RuleNode,
+    declarations: &str,
+) -> Option<stylo_cssom_model::RuleNode> {
+    if node.grammar() != stylo_cssom_model::RuleGrammar::FontFace {
+        return None;
+    }
+    let parsed = ParsedCssRule::parse(&format!("@font-face {{ {declarations} }}"))?;
+    let block = parsed.to_rule_node().payload().declaration_block()?.clone();
+    Some(node.clone().with_cssom_declaration_block(block))
+}
+
 pub fn replace_page_or_margin_rule_declarations(
     node: &stylo_cssom_model::RuleNode,
     declarations: &str,
