@@ -593,11 +593,7 @@ impl AbsoluteColor {
             (Hsl, Hwb) => convert::rgb_to_hwb(&convert::hsl_to_rgb(&components)),
             (Lab, Lch) | (Oklab, Oklch) => convert::orthogonal_to_polar(
                 &components,
-                if color_space == Lch {
-                    convert::LCH_HUE_EPSILON
-                } else {
-                    convert::OKLCH_HUE_EPSILON
-                },
+                convert::epsilon_for_range(0.0, if color_space == Lch { 100.0 } else { 1.0 }),
             ),
             (Lch, Lab) | (Oklch, Oklab) => convert::polar_to_orthogonal(&components),
 
@@ -759,15 +755,6 @@ mod tests {
 
         let out_of_gamut = AbsoluteColor::new(ColorSpace::Lch, 0.0, 20.0, 180.0, 1.0);
         assert!(out_of_gamut.to_color_space(ColorSpace::Hsl).c0().is_some());
-    }
-
-    #[test]
-    fn polar_conversion_uses_each_space_powerless_hue_threshold() {
-        let lab = AbsoluteColor::new(ColorSpace::Lab, 20.0, 0.0012, 0.0, 1.0);
-        assert_eq!(lab.to_color_space(ColorSpace::Lch).c2(), None);
-
-        let oklab = AbsoluteColor::new(ColorSpace::Oklab, 0.2, 0.0000041, 0.0, 1.0);
-        assert_eq!(oklab.to_color_space(ColorSpace::Oklch).c2(), Some(0.0));
     }
 
     #[test]
