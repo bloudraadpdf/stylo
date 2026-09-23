@@ -790,6 +790,12 @@ impl Color {
 impl Color {
     fn to_css_as_mix_item<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
         if let Self::Absolute(absolute) = self {
+            if matches!(
+                absolute.color.color_space,
+                ColorSpace::Hsl | ColorSpace::Hwb
+            ) {
+                return absolute.color.clone().into_srgb_legacy().to_css(dest);
+            }
             if absolute
                 .color
                 .flags
