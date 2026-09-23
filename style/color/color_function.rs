@@ -1122,9 +1122,27 @@ impl<C: ColorFunctionCssContext> style_traits::ToCss for ColorFunction<C> {
 
         match self {
             Self::Alpha(..) => unreachable!("handled above"),
-            Self::Rgb(_, c0, c1, c2, alpha) => {
-                serialize_components!(c0, c1, c2);
-                serialize_alpha!(alpha);
+            Self::Rgb(origin, c0, c1, c2, alpha) => {
+                if C::SPECIFIED && origin.is_none() {
+                    serialize_canonical_components!(
+                        c0,
+                        c1,
+                        c2,
+                        alpha,
+                        |value: &NumberOrPercentageComponent| value
+                            .to_number(255.0)
+                            .clamp(0.0, 255.0),
+                        |value: &NumberOrPercentageComponent| value
+                            .to_number(255.0)
+                            .clamp(0.0, 255.0),
+                        |value: &NumberOrPercentageComponent| value
+                            .to_number(255.0)
+                            .clamp(0.0, 255.0)
+                    );
+                } else {
+                    serialize_components!(c0, c1, c2);
+                    serialize_alpha!(alpha);
+                }
             },
             Self::Hsl(origin, c0, c1, c2, alpha) => {
                 if C::SPECIFIED && origin.is_none() {
