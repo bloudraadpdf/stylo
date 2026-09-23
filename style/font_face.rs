@@ -351,6 +351,11 @@ fn sort_range<T: PartialOrd>(a: T, b: T) -> (T, T) {
 }
 
 impl FontWeightRange {
+    /// Whether this descriptor leaves the font's weight axis unconstrained.
+    pub fn is_auto(&self) -> bool {
+        self.2
+    }
+
     /// Returns a computed font-stretch range.
     pub fn compute(&self) -> ComputedFontWeightRange {
         let (min, max) = sort_range(self.0.compute().value(), self.1.compute().value());
@@ -419,6 +424,11 @@ impl ToCss for FontStretchRange {
 pub struct ComputedFontStretchRange(FontStretch, FontStretch);
 
 impl FontStretchRange {
+    /// Whether this descriptor leaves the font's width axis unconstrained.
+    pub fn is_auto(&self) -> bool {
+        self.2
+    }
+
     /// Returns a computed font-stretch range.
     pub fn compute(&self) -> ComputedFontStretchRange {
         fn compute_stretch(s: &SpecifiedFontStretch) -> FontStretch {
