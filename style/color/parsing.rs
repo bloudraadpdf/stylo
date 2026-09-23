@@ -854,3 +854,40 @@ impl ColorComponent<NumberOrPercentageComponent> {
         }
     }
 }
+
+#[cfg(test)]
+mod specified_color_tests {
+    use super::parse_color_with;
+    use crate::context::QuirksMode;
+    use crate::parser::ParserContext;
+    use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
+    use cssparser::{Parser, ParserInput};
+    use style_traits::{ParsingMode, ToCss};
+
+    #[test]
+    fn absolute_lab_keeps_authored_calc_components() {
+        let url_data = UrlExtraData::from(
+            url::Url::parse("https://example.invalid/").expect("test URL parses"),
+        );
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input =
+            ParserInput::new("lab(calc(50 * 3) calc(0.5 - 1) calc(1.5) / calc(-0.5 + 1))");
+        let specified = Parser::new(&mut input)
+            .parse_entirely(|parser| parse_color_with(&context, parser))
+            .expect("valid Lab color parses");
+
+        assert_eq!(
+            specified.to_css_string(),
+            "lab(calc(150) calc(-0.5) calc(1.5) / calc(0.5))"
+        );
+    }
+}
