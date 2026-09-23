@@ -690,9 +690,33 @@ impl ColorFunction<SpecifiedColor> {
     /// time rather than eagerly collapsing to an absolute colour.
     pub fn should_preserve_as_function(&self) -> bool {
         self.has_origin_color()
+            || self.has_calc_component()
             || matches!(self, Self::DeviceCmyk(..))
             || matches!(self, Self::BdSpot(..))
             || matches!(self, Self::BdDeviceN(..))
+    }
+
+    fn has_calc_component(&self) -> bool {
+        macro_rules! has_calc {
+            ($($component:expr),+ $(,)?) => {
+                false $(|| matches!($component, ColorComponent::Calc(..)))+
+            };
+        }
+
+        match self {
+            Self::Alpha(relative) => has_calc!(&relative.alpha),
+            Self::Rgb(_, c0, c1, c2, alpha)
+            | Self::Lab(_, c0, c1, c2, alpha)
+            | Self::Oklab(_, c0, c1, c2, alpha)
+            | Self::Color(_, c0, c1, c2, alpha, _) => has_calc!(c0, c1, c2, alpha),
+            Self::Hsl(_, hue, c1, c2, alpha) | Self::Hwb(_, hue, c1, c2, alpha) => {
+                has_calc!(hue, c1, c2, alpha)
+            },
+            Self::Lch(_, c0, c1, hue, alpha) | Self::Oklch(_, c0, c1, hue, alpha) => {
+                has_calc!(c0, c1, hue, alpha)
+            },
+            Self::DeviceCmyk(..) | Self::BdSpot(..) | Self::BdDeviceN(..) => false,
+        }
     }
 
     /// Try to resolve the color function to an [`AbsoluteColor`] that does not
