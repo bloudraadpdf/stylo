@@ -1009,6 +1009,47 @@ mod specified_color_tests {
     }
 
     #[test]
+    fn color_math_rejects_incompatible_calculation_types() {
+        let url_data = UrlExtraData::from(
+            url::Url::parse("https://example.invalid/").expect("test URL parses"),
+        );
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        for source in [
+            "rgb(sign(0% - 0px) 0 0)",
+            "hsl(calc(0.56turn * -0.43turn) 47% 4884.6%)",
+        ] {
+            let mut input = ParserInput::new(source);
+            assert!(
+                Parser::new(&mut input)
+                    .parse_entirely(|parser| parse_color_with(&context, parser))
+                    .is_err(),
+                "{source}"
+            );
+        }
+        for source in [
+            "rgb(sign(20% - 10%) 0 0)",
+            "hsl(calc(0.56turn * -0.43) 47% 4884.6%)",
+        ] {
+            let mut input = ParserInput::new(source);
+            assert!(
+                Parser::new(&mut input)
+                    .parse_entirely(|parser| parse_color_with(&context, parser))
+                    .is_ok(),
+                "{source}"
+            );
+        }
+    }
+
+    #[test]
     fn relative_color_accepts_element_dependent_sibling_index() {
         let url_data = UrlExtraData::from(
             url::Url::parse("https://example.invalid/").expect("test URL parses"),

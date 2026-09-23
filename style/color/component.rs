@@ -169,6 +169,14 @@ impl<ValueType: ColorComponentType> ColorComponent<ValueType> {
                 let function = GenericCalcNode::math_function(context, name, location)?;
                 let mut node =
                     GenericCalcNode::parse(context, input, function, Self::calc_allow())?;
+                node.map_leaves(|leaf| match leaf {
+                    Leaf::Percentage(value) => Leaf::Number(*value),
+                    _ => leaf.clone(),
+                })
+                .unit()
+                .map_err(|()| {
+                    location.new_custom_error(style_traits::StyleParseErrorKind::UnspecifiedError)
+                })?;
 
                 // TODO(tlouw): We only have to simplify the node when we have to store it, but we
                 //              only know if we have to store it much later when the whole color
