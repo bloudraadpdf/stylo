@@ -21,7 +21,22 @@ type Vector = euclid::default::Vector3D<f32>;
 /// Normalize hue into [0, 360).
 #[inline]
 pub fn normalize_hue(hue: f32) -> f32 {
+    if !hue.is_finite() {
+        return 0.0;
+    }
     hue - 360. * (hue / 360.).floor()
+}
+
+#[cfg(test)]
+mod hue_tests {
+    use super::normalize_hue;
+
+    #[test]
+    fn non_finite_hues_normalize_to_zero() {
+        for hue in [f32::INFINITY, f32::NEG_INFINITY, f32::NAN] {
+            assert_eq!(normalize_hue(hue), 0.0);
+        }
+    }
 }
 
 /// Calculate the hue from RGB components and return it along with the min and
