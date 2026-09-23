@@ -141,11 +141,10 @@ pub fn rgb_to_hwb(from: &ColorComponents) -> ColorComponents {
     ColorComponents(hue, whiteness * 100.0, blackness * 100.0)
 }
 
-/// Calculate an epsilon for a specified range.
-#[inline]
-pub fn epsilon_for_range(min: f32, max: f32) -> f32 {
-    (max - min) / 1.0e5
-}
+/// CSS Color 4 powerless-hue threshold for LCH.
+pub const LCH_HUE_EPSILON: f32 = 0.0015;
+/// CSS Color 4 powerless-hue threshold for OKLCH.
+pub const OKLCH_HUE_EPSILON: f32 = 0.000004;
 
 /// Convert from the rectangular orthogonal to the cylindrical polar coordinate
 /// system. This is used to convert (ok)lab to (ok)lch.
@@ -156,14 +155,8 @@ pub fn orthogonal_to_polar(from: &ColorComponents, e: f32) -> ColorComponents {
 
     let chroma = (a * a + b * b).sqrt();
 
-    let hue = if a.abs() < e && b.abs() < e {
-        // For extremely small values of a and b ... the reported hue angle
-        // swinging about wildly and being essentially random ... this means
-        // the hue is powerless, and treated as missing when converted into LCH
-        // or Oklch.
-        f32::NAN
-    } else if chroma.abs() < e {
-        // Very small chroma values make the hue component powerless.
+    let hue = if chroma <= e {
+        // A hue at or below the color space's chroma threshold is powerless.
         f32::NAN
     } else {
         normalize_hue(b.atan2(a).to_degrees())
@@ -959,7 +952,7 @@ impl ColorSpaceConversion for Lch {
         let lab = Lab::from_xyz(&from);
 
         // Then convert the Lab to LCH.
-        orthogonal_to_polar(&lab, epsilon_for_range(0.0, 100.0))
+        orthogonal_to_polar(&lab, LCH_HUE_EPSILON)
     }
 
     fn to_gamma_encoded(from: &ColorComponents) -> ColorComponents {
@@ -1057,7 +1050,7 @@ impl ColorSpaceConversion for Oklch {
         let lab = Oklab::from_xyz(&from);
 
         // Then convert Oklab to OkLCH.
-        orthogonal_to_polar(&lab, epsilon_for_range(0.0, 1.0))
+        orthogonal_to_polar(&lab, OKLCH_HUE_EPSILON)
     }
 
     fn to_gamma_encoded(from: &ColorComponents) -> ColorComponents {
