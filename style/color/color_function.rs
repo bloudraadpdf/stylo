@@ -698,32 +698,39 @@ impl ColorFunction<SpecifiedColor> {
     }
 
     fn has_calc_component(&self) -> bool {
+        fn has_nan_calc<T>(component: &ColorComponent<T>) -> bool {
+            let ColorComponent::Calc(node) = component else {
+                return false;
+            };
+            let mut has_nan = false;
+            let _ = node.map_leaves(|leaf| {
+                if let crate::values::specified::calc::Leaf::Number(value)
+                | crate::values::specified::calc::Leaf::Percentage(value) = leaf
+                {
+                    has_nan |= value.is_nan();
+                }
+                leaf.clone()
+            });
+            has_nan
+        }
+
         macro_rules! has_calc {
-            ($preserve_nan:expr; $($component:expr),+ $(,)?) => {{
-                let mut has_calc = false;
-                let mut has_nan = false;
-                $(
-                    if let ColorComponent::Calc(node) = $component {
-                        has_calc = true;
-                        let _ = node.map_leaves(|leaf| {
-                            if let crate::values::specified::calc::Leaf::Number(value)
-                            | crate::values::specified::calc::Leaf::Percentage(value) = leaf {
-                                has_nan |= value.is_nan();
-                            }
-                            leaf.clone()
-                        });
-                    }
-                )+
-                has_calc && (!has_nan || $preserve_nan)
+            ($($component:expr),+ $(,)?) => {{
+                let has_calc = $(matches!($component, ColorComponent::Calc(_)))||+;
+                has_calc && !($(has_nan_calc($component))||+)
             }};
         }
 
         match self {
             Self::Lab(_, c0, c1, c2, alpha)
             | Self::Oklab(_, c0, c1, c2, alpha)
-            | Self::Color(_, c0, c1, c2, alpha, _) => has_calc!(false; c0, c1, c2, alpha),
+            | Self::Color(_, c0, c1, c2, alpha, _) => has_calc!(c0, c1, c2, alpha),
             Self::Lch(_, c0, c1, hue, alpha) | Self::Oklch(_, c0, c1, hue, alpha) => {
-                has_calc!(true; c0, c1, hue, alpha)
+                has_calc!(c0, c1, hue, alpha)
+                    || (has_nan_calc(hue)
+                        && !has_nan_calc(c0)
+                        && !has_nan_calc(c1)
+                        && !has_nan_calc(alpha))
             },
             Self::Alpha(..)
             | Self::Rgb(..)

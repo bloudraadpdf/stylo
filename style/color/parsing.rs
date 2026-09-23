@@ -915,7 +915,7 @@ mod specified_color_tests {
     }
 
     #[test]
-    fn lch_nan_hues_remain_calculations_at_specified_value_time() {
+    fn lch_nan_hues_remain_specified_while_other_nan_channels_resolve() {
         let url_data = UrlExtraData::from(
             url::Url::parse("https://example.invalid/").expect("test URL parses"),
         );
@@ -930,17 +930,32 @@ mod specified_color_tests {
             None,
         );
 
-        for (source, expected) in [
-            ("lch(50 10 calc(NaN))", "lch(50 10 calc(NaN))"),
-            ("lch(50 10 calc(0 / 0))", "lch(50 10 calc(NaN))"),
-            ("oklch(0.5 0.1 calc(NaN))", "oklch(0.5 0.1 calc(NaN))"),
-            ("oklch(0.5 0.1 calc(0 / 0))", "oklch(0.5 0.1 calc(NaN))"),
+        for (source, expected, preserves_function) in [
+            ("lch(50 10 calc(NaN))", "lch(50 10 calc(NaN))", true),
+            ("lch(50 10 calc(0 / 0))", "lch(50 10 calc(NaN))", true),
+            ("oklch(0.5 0.1 calc(NaN))", "oklch(0.5 0.1 calc(NaN))", true),
+            (
+                "oklch(0.5 0.1 calc(0 / 0))",
+                "oklch(0.5 0.1 calc(NaN))",
+                true,
+            ),
+            ("lch(calc(NaN) 0 0)", "lch(calc(NaN) 0 0)", false),
+            ("lch(calc(0 / 0) 0 0)", "lch(calc(NaN) 0 0)", false),
+            ("oklch(calc(NaN) 0 0)", "oklch(calc(NaN) 0 0)", false),
+            ("oklch(calc(0 / 0) 0 0)", "oklch(calc(NaN) 0 0)", false),
         ] {
             let mut input = ParserInput::new(source);
             let specified = Parser::new(&mut input)
                 .parse_entirely(|parser| parse_color_with(&context, parser))
                 .expect("NaN hue parses");
             assert_eq!(specified.to_css_string(), expected);
+            assert_eq!(
+                matches!(
+                    specified,
+                    crate::values::specified::color::Color::ColorFunction(..)
+                ),
+                preserves_function
+            );
         }
     }
 
