@@ -889,5 +889,16 @@ mod specified_color_tests {
             specified.to_css_string(),
             "lab(calc(150) calc(-0.5) calc(1.5) / calc(0.5))"
         );
+
+        for value in ["lab(calc(NaN) 0 0)", "lab(calc(0 / 0) 0 0)"] {
+            let mut input = ParserInput::new(value);
+            let specified = Parser::new(&mut input)
+                .parse_entirely(|parser| parse_color_with(&context, parser))
+                .expect("non-finite Lab color parses");
+            assert!(matches!(
+                specified,
+                crate::values::specified::color::Color::Absolute(..)
+            ));
+        }
     }
 }
