@@ -1388,6 +1388,23 @@ mod tests {
             .expect("relative oklch resolves");
         assert!((color.c0().expect("lightness") - 0.568964).abs() < 0.001);
         assert!((color.c1().expect("chroma") - 0.000014436).abs() < 0.00001);
-        assert!((color.c2().expect("hue") - 112.966).abs() < 3.0);
+        assert!((color.c2().expect("hue") - 112.966).abs() < 0.2);
+    }
+
+    #[test]
+    fn relative_oklab_neutral_has_zero_chroma_and_hue() {
+        let origin = AbsoluteColor::new(ColorSpace::Oklab, 0.5, None::<f32>, None::<f32>, 1.0);
+        let function = ColorFunction::Oklch(
+            Optional::Some(origin),
+            ColorComponent::ChannelKeyword(ChannelKeyword::L),
+            ColorComponent::ChannelKeyword(ChannelKeyword::C),
+            ColorComponent::ChannelKeyword(ChannelKeyword::H),
+            ColorComponent::AlphaOmitted,
+        );
+        let color = function
+            .resolve_to_absolute()
+            .expect("relative oklch resolves");
+        assert_eq!(color.c1(), Some(0.0));
+        assert_eq!(color.c2(), Some(0.0));
     }
 }

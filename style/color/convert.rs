@@ -334,17 +334,17 @@ pub fn chromium_relative_convert(
     let xyz = match (d50, target_d50) {
         (true, false) => mul(
             [
-                [0.955537, -0.02306, 0.0632184],
-                [-0.0283153, 1.00995, 0.021026],
-                [0.0123088, -0.0205005, 1.33019],
+                [0.955536642372, -0.0230600428408, 0.0632184],
+                [-0.028315326077, 1.00995119209, 0.02102599441206],
+                [0.0123087720603, -0.0205005298023, 1.33019464916],
             ],
             xyz,
         ),
         (false, true) => mul(
             [
-                [1.04786, 0.0229073, -0.0501622],
-                [0.0295704, 0.990476, -0.0170615],
-                [-0.00924047, 0.0150529, 0.751971],
+                [1.04785725819, 0.0229073242144, -0.0501622186265],
+                [0.0295704465661, 0.990475642372, -0.0170615130385],
+                [-0.00924047279397, 0.0150529223517, 0.7519709403954],
             ],
             xyz,
         ),
@@ -357,9 +357,14 @@ pub fn chromium_relative_convert(
     };
     if matches!(target, Lch | Oklch) {
         let chroma = result[1].hypot(result[2]);
-        let hue = result[2].atan2(result[1]).to_degrees().rem_euclid(360.0);
-        result[1] = chroma;
-        result[2] = hue;
+        if chroma < 1.0e-12 {
+            result[1] = 0.0;
+            result[2] = 0.0;
+        } else {
+            let hue = result[2].atan2(result[1]).to_degrees().rem_euclid(360.0);
+            result[1] = chroma;
+            result[2] = hue;
+        }
     }
     Some(ColorComponents(
         result[0] as f32,
