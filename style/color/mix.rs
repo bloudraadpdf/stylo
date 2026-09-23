@@ -254,7 +254,15 @@ pub fn mix_many(
                 | ColorFlags::C2_IS_NONE
                 | ColorFlags::ALPHA_IS_NONE,
         );
-        if result.is_legacy_syntax() && !has_missing_component {
+        let source_has_missing_component = items.iter().any(|item| {
+            item.color.flags.intersects(
+                ColorFlags::C0_IS_NONE
+                    | ColorFlags::C1_IS_NONE
+                    | ColorFlags::C2_IS_NONE
+                    | ColorFlags::ALPHA_IS_NONE,
+            )
+        });
+        if result.is_legacy_syntax() && !(has_missing_component && source_has_missing_component) {
             result.to_color_space(ColorSpace::Srgb)
         } else {
             result
@@ -685,5 +693,18 @@ mod tests {
             flags,
         );
         assert_eq!(numeric.color_space, ColorSpace::Srgb);
+
+        let gray = mix_many(
+            ColorInterpolationMethod {
+                space: ColorSpace::Hsl,
+                hue: super::HueInterpolationMethod::Shorter,
+            },
+            [ColorMixItem::new(
+                AbsoluteColor::srgb_legacy(128, 128, 128, 1.0),
+                1.0,
+            )],
+            flags,
+        );
+        assert_eq!(gray.color_space, ColorSpace::Srgb);
     }
 }
