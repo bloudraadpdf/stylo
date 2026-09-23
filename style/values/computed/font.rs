@@ -752,7 +752,8 @@ impl Parse for SingleFontFamily {
             //  The keywords ‘initial’ and ‘default’ are reserved for future use
             //  and must also be quoted when used as font names.
             //  UAs must not consider these keywords as matching the <family-name> type."
-            "inherit" | "initial" | "unset" | "revert" | "default" => true,
+            "inherit" | "initial" | "unset" | "revert" | "revert-layer" | "revert-rule" |
+            "default" => true,
             _ => false,
         };
 
@@ -1581,6 +1582,37 @@ mod tests {
     use crate::values::animated::{Animate, Procedure};
     use crate::values::generics::NonNegative;
     use style_traits::ToCss;
+
+    #[cfg(feature = "servo")]
+    #[test]
+    fn css_wide_keywords_are_not_unquoted_family_names() {
+        use crate::context::QuirksMode;
+        use crate::parser::{Parse, ParserContext};
+        use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
+        use crate::values::specified::font::FontFamily;
+        use cssparser::{Parser, ParserInput};
+        use style_traits::ParsingMode;
+
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        for keyword in ["revert-layer", "revert-rule"] {
+            let css = format!("FirstName, LastName, {keyword}");
+            let mut input = ParserInput::new(&css);
+            let mut parser = Parser::new(&mut input);
+            assert!(parser
+                .parse_entirely(|input| FontFamily::parse(&context, input))
+                .is_err());
+        }
+    }
 
     fn ex_height(value: f32) -> FontSizeAdjust {
         FontSizeAdjust::ExHeight(FontSizeAdjustFactor::Number(NonNegative(value)))
