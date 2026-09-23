@@ -45,6 +45,22 @@ pub enum ColorComponent<ValueType> {
 }
 
 impl<ValueType> ColorComponent<ValueType> {
+    /// Whether this component refers to a channel of a relative origin.
+    pub fn contains_color_channel(&self) -> bool {
+        match self {
+            Self::ChannelKeyword(_) => true,
+            Self::Calc(node) => {
+                let mut contains_channel = false;
+                let _ = node.map_leaves(|leaf| {
+                    contains_channel |= matches!(leaf, Leaf::ColorComponent(_));
+                    leaf.clone()
+                });
+                contains_channel
+            },
+            _ => false,
+        }
+    }
+
     /// Return true if the component is "none".
     #[inline]
     pub fn is_none(&self) -> bool {
