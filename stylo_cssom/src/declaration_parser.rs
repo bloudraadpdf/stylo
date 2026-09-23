@@ -750,6 +750,8 @@ pub fn parse_inline_style_property_declarations(
     // the declaration block can replace it with legacy sRGB and lose that
     // distinction before the cascade computes the value. Color mixes also
     // need authored colors: serializing a powerless HSL hue as RGB erases it.
+    // Direct RGB missing channels also serialize as zero for specified CSSOM,
+    // but must remain missing when the cascade computes the color.
     if backing_property.eq_ignore_ascii_case("color")
         && inline_color_needs_authored_cascade_value(&block)
         && let Some(declaration) = declarations.first_mut()
@@ -1019,8 +1021,12 @@ pub fn inline_style_cssom_authored_value(property: &str, value: Option<String>) 
         // Keep authored color channels for the cascade, but expose Stylo's
         // canonical serialization to CSSOM readers.
         if property.eq_ignore_ascii_case("color")
-            && (value.as_bytes().windows(4).any(|word| word.eq_ignore_ascii_case(b"from"))
-                || value.as_bytes().windows(10).any(|word| word.eq_ignore_ascii_case(b"color-mix(")))
+            && (value.as_bytes().windows(4).any(|word| {
+                word.eq_ignore_ascii_case(b"from") || word.eq_ignore_ascii_case(b"none")
+            }) || value
+                .as_bytes()
+                .windows(10)
+                .any(|word| word.eq_ignore_ascii_case(b"color-mix(")))
         {
             let block = parse_inline_style_block(&format!("color: {value}"));
             if inline_color_needs_authored_cascade_value(&block) {
@@ -1046,6 +1052,10 @@ fn inline_color_needs_authored_cascade_value(block: &InlineStyleBlock) -> bool {
         match declaration {
             PropertyDeclaration::Color(style::values::specified::ColorPropertyValue(color)) => {
                 match color {
+                    style::values::specified::Color::Absolute(absolute) => absolute
+                        .color
+                        .flags
+                        .contains(style::color::ColorFlags::SERIALIZE_AS_LEGACY_SRGB),
                     style::values::specified::Color::ColorFunction(function) =>
                         function.has_origin_color(),
                     style::values::specified::Color::ColorMix(mix) =>
@@ -1689,6 +1699,25 @@ pub fn inline_style_declarations_with_importance(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cssom_direct_rgb_keeps_missing_channels_for_the_cascade() {
+        let authored = "rgb(none 50 100 / none)";
+        let declarations = parse_inline_style_property_declarations(
+            "color",
+            authored,
+            CssomDeclarationPriority::Normal,
+            &Arc::from("about:blank"),
+        )
+        .expect("direct RGB must parse");
+        let cascade_value =
+            crate::specified::projected_specified_property_value(&declarations, "color");
+        assert_eq!(cascade_value.as_deref(), Some(authored));
+        assert_eq!(
+            inline_style_cssom_authored_value("color", cascade_value).as_deref(),
+            Some("rgba(0, 50, 100, 0)"),
+        );
+    }
 
     #[test]
     fn cssom_relative_color_keeps_hsl_origin_channels_for_the_cascade() {
