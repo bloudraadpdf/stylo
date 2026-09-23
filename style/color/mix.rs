@@ -456,8 +456,7 @@ fn mix_with_weights(
         &outcomes,
     );
 
-    let mut result =
-        AbsoluteColor::new_unclamped(color_space, result[0], result[1], result[2], result[3]);
+    let mut result = AbsoluteColor::new(color_space, result[0], result[1], result[2], result[3]);
     result.flags = result_flags;
     result
 }
