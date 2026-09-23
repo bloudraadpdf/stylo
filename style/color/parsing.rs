@@ -901,4 +901,42 @@ mod specified_color_tests {
             ));
         }
     }
+
+    #[test]
+    fn deferred_hsl_and_hwb_serialize_static_channels_as_numbers() {
+        let url_data = UrlExtraData::from(
+            url::Url::parse("https://example.invalid/").expect("test URL parses"),
+        );
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+
+        for (source, expected) in [
+            (
+                "hsl(0deg 0% 0% / calc(50% + (sign(1em - 10px) * 10%)))",
+                "hsl(0 0 0 / calc(50% + (10% * sign(1em - 10px))))",
+            ),
+            (
+                "hwb(120deg 30% 50% / calc(50% + (sign(1em - 10px) * 10%)))",
+                "hwb(120 30 50 / calc(50% + (10% * sign(1em - 10px))))",
+            ),
+            (
+                "hsl(calc(50deg + (sign(1em - 10px) * 10deg)) -100% 300% / 50%)",
+                "hsl(calc(50deg + (10deg * sign(1em - 10px))) 0 300 / 0.5)",
+            ),
+        ] {
+            let mut input = ParserInput::new(source);
+            let specified = Parser::new(&mut input)
+                .parse_entirely(|parser| parse_color_with(&context, parser))
+                .expect("valid color parses");
+            assert_eq!(specified.to_css_string(), expected);
+        }
+    }
 }

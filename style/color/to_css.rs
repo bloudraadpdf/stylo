@@ -125,14 +125,8 @@ impl ToCss for AbsoluteColor {
                     ModernComponent(&self.c0()).to_css(dest)?;
                     dest.write_char(' ')?;
                     ModernComponent(&self.c1()).to_css(dest)?;
-                    if self.c1().is_some() {
-                        dest.write_char('%')?;
-                    }
                     dest.write_char(' ')?;
                     ModernComponent(&self.c2()).to_css(dest)?;
-                    if self.c2().is_some() {
-                        dest.write_char('%')?;
-                    }
                     serialize_color_alpha(dest, self.alpha(), false)?;
                     dest.write_char(')')
                 } else if self.flags.contains(ColorFlags::IS_LEGACY_SRGB) {
@@ -209,7 +203,7 @@ impl ToCss for AbsoluteColor {
 
 #[cfg(test)]
 mod tests {
-    use super::{AbsoluteColor, ColorSpace, ToCss, legacy_srgb_channel};
+    use super::{legacy_srgb_channel, AbsoluteColor, ColorSpace, ToCss};
 
     #[test]
     fn extrapolated_six_digit_timing_rounds_legacy_half_channel_up() {
@@ -222,10 +216,10 @@ mod tests {
     #[test]
     fn hsl_and_hwb_keep_missing_components_when_serialized() {
         let hsl = AbsoluteColor::new(ColorSpace::Hsl, None::<f32>, 50.0, 50.0, 1.0);
-        assert_eq!(hsl.to_css_string(), "hsl(none 50% 50%)");
+        assert_eq!(hsl.to_css_string(), "hsl(none 50 50)");
 
         let hwb = AbsoluteColor::new(ColorSpace::Hwb, 180.0, None::<f32>, 25.0, None::<f32>);
-        assert_eq!(hwb.to_css_string(), "hwb(180 none 25% / none)");
+        assert_eq!(hwb.to_css_string(), "hwb(180 none 25 / none)");
     }
 }
 
