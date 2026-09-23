@@ -745,6 +745,24 @@ pub fn parse_inline_style_property_declarations(
     let backing_value = inline_style_get_property_value(&block, backing_property)?;
     let mut declarations =
         specified_declarations_from_inline_style_block(&block, base_url.clone()).to_vec();
+    // A relative color can depend on channels of its origin even when those
+    // channels are powerless. Serializing its nested HSL/HWB origin through
+    // the declaration block can replace it with legacy sRGB and lose that
+    // distinction before the cascade computes the value.
+    if backing_property.eq_ignore_ascii_case("color")
+        && block.0.declaration_importance_iter().any(|(declaration, _)| {
+            matches!(
+                declaration,
+                PropertyDeclaration::Color(style::values::specified::ColorPropertyValue(
+                    style::values::specified::Color::ColorFunction(function)
+                ))
+                    if function.has_origin_color()
+            )
+        })
+        && let Some(declaration) = declarations.first_mut()
+    {
+        declaration.value = specified_style_value_from_css(value, base_url)?;
+    }
     if let Some(shorthand) =
         stylo_cssom_model::property_schema(&backing_property.to_ascii_lowercase())
             .filter(|schema| inline_shorthand_serializes(schema))
@@ -1636,6 +1654,22 @@ pub fn inline_style_declarations_with_importance(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cssom_relative_color_keeps_hsl_origin_channels_for_the_cascade() {
+        let authored = "hsl(from hsl(180 0 50%) h s l)";
+        let declarations = parse_inline_style_property_declarations(
+            "color",
+            authored,
+            CssomDeclarationPriority::Normal,
+            &Arc::from("about:blank"),
+        )
+        .expect("relative color must parse");
+        assert_eq!(
+            crate::specified::projected_specified_property_value(&declarations, "color"),
+            Some(authored.to_owned())
+        );
+    }
 
     #[test]
     fn inline_style_backing_values_preserve_authored_property_grammar() {
