@@ -917,6 +917,31 @@ mod specified_color_tests {
     }
 
     #[test]
+    fn relative_currentcolor_preserves_explicit_opaque_alpha() {
+        let url_data = UrlExtraData::from(
+            url::Url::parse("https://example.invalid/").expect("test URL parses"),
+        );
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input = ParserInput::new("rgb(from currentcolor r g b / 1)");
+        let specified = Parser::new(&mut input)
+            .parse_entirely(|parser| parse_color_with(&context, parser))
+            .expect("relative RGB parses");
+        assert_eq!(
+            specified.to_css_string(),
+            "rgb(from currentcolor r g b / 1)"
+        );
+    }
+
+    #[test]
     fn direct_rgb_missing_components_serialize_as_legacy_zeroes() {
         let url_data = UrlExtraData::from(
             url::Url::parse("https://example.invalid/").expect("test URL parses"),
