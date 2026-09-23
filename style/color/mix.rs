@@ -254,15 +254,7 @@ pub fn mix_many(
                 | ColorFlags::C2_IS_NONE
                 | ColorFlags::ALPHA_IS_NONE,
         );
-        let source_has_missing_component = items.iter().any(|item| {
-            item.color.flags.intersects(
-                ColorFlags::C0_IS_NONE
-                    | ColorFlags::C1_IS_NONE
-                    | ColorFlags::C2_IS_NONE
-                    | ColorFlags::ALPHA_IS_NONE,
-            )
-        });
-        if result.is_legacy_syntax() && !(has_missing_component && source_has_missing_component) {
+        if result.is_legacy_syntax() && !has_missing_component {
             result.to_color_space(ColorSpace::Srgb)
         } else {
             result
@@ -730,6 +722,24 @@ mod tests {
             )],
             flags,
         );
-        assert_eq!(gray.color_space, ColorSpace::Srgb);
+        assert_eq!(gray.color_space, ColorSpace::Hsl);
+        assert_eq!(gray.c0(), None);
+    }
+
+    #[test]
+    fn hsl_mix_keeps_hue_missing_after_powerless_hwb_conversion() {
+        let mixed = mix_many(
+            ColorInterpolationMethod {
+                space: ColorSpace::Hsl,
+                hue: super::HueInterpolationMethod::Shorter,
+            },
+            [ColorMixItem::new(
+                AbsoluteColor::new(ColorSpace::Hwb, 180.0, 100.0, 25.0, 1.0),
+                1.0,
+            )],
+            ColorMixFlags::NORMALIZE_WEIGHTS | ColorMixFlags::RESULT_IN_MODERN_SYNTAX,
+        );
+        assert_eq!(mixed.color_space, ColorSpace::Hsl);
+        assert_eq!(mixed.c0(), None);
     }
 }
