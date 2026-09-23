@@ -66,13 +66,6 @@ impl ColorMix {
                     percentage = try_parse_percentage(input);
                 }
 
-                if percentage
-                    .as_ref()
-                    .is_some_and(|value| value.resolve().is_none())
-                {
-                    return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
-                }
-
                 items.push((color, percentage));
 
                 if input.try_parse(|i| i.expect_comma()).is_err() {
@@ -85,7 +78,7 @@ impl ColorMix {
             let (mut sum_specified, mut missing) = (0.0, 0);
             for (_, percentage) in items.iter() {
                 if let Some(p) = percentage {
-                    sum_specified += p.resolve().unwrap();
+                    sum_specified += p.resolve().unwrap_or(0.0);
                 } else {
                     missing += 1;
                 }
@@ -1106,6 +1099,8 @@ impl Color {
                 use crate::values::computed::percentage::Percentage;
 
                 let mut items = ColorMixItemList::with_capacity(mix.items().len());
+                let mut explicit_sum = 0.0;
+                let mut implied_count = 0;
                 for item in mix.items() {
                     let compute_percentage = |percentage: &crate::values::specified::Percentage| {
                         Some(match context {
@@ -1115,16 +1110,32 @@ impl Color {
                     };
                     let percentage = match &item.percentage {
                         GenericColorMixPercentage::Explicit(value) => {
-                            GenericColorMixPercentage::Explicit(compute_percentage(value)?)
+                            let computed = compute_percentage(value)?;
+                            explicit_sum += computed.0;
+                            GenericColorMixPercentage::Explicit(computed)
                         },
-                        GenericColorMixPercentage::Implied(value) => {
-                            GenericColorMixPercentage::Implied(compute_percentage(value)?)
+                        GenericColorMixPercentage::Implied(_) => {
+                            implied_count += 1;
+                            GenericColorMixPercentage::Implied(Percentage(0.0))
                         },
                     };
                     items.push(GenericColorMixItem {
                         color: item.color.to_computed_color(context)?,
                         percentage,
                     });
+                }
+
+                if implied_count > 0 {
+                    let implied = if implied_count == items.len() {
+                        1.0 / items.len() as f32
+                    } else {
+                        (1.0 - explicit_sum.min(1.0)) / implied_count as f32
+                    };
+                    for item in &mut items {
+                        if let GenericColorMixPercentage::Implied(value) = &mut item.percentage {
+                            *value = Percentage(implied);
+                        }
+                    }
                 }
 
                 ComputedColor::from_color_mix(

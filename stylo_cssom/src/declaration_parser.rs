@@ -1819,6 +1819,23 @@ mod tests {
     }
 
     #[test]
+    fn cssom_color_mix_accepts_contextual_calc_percentages() {
+        for authored in [
+            "color-mix(in hsl, red calc(50% * sign(100em - 1px)), blue)",
+            "color-mix(in srgb, red calc(50% + (sign(100em - 1px) * 10%)), blue)",
+        ] {
+            assert!(
+                inline_style_get_property_value(
+                    &parse_inline_style_block(&format!("color: {authored}")),
+                    "color",
+                )
+                .is_some(),
+                "{authored} must remain a valid declared color",
+            );
+        }
+    }
+
+    #[test]
     fn inline_style_backing_values_preserve_authored_property_grammar() {
         for value in ["both", "end", "normal", "start"] {
             assert_eq!(
