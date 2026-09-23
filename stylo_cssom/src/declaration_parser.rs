@@ -1796,6 +1796,29 @@ mod tests {
     }
 
     #[test]
+    fn cssom_rgb_with_unresolved_calc_canonicalizes_static_channels() {
+        for (authored, expected) in [
+            (
+                "rgb(calc(50% + (sign(1em - 10px) * 10%)) 0% 0% / 50%)",
+                "rgb(calc(50% + (10% * sign(1em - 10px))) 0 0 / 0.5)",
+            ),
+            (
+                "rgba(calc(50 + (sign(1em - 10px) * 10)) 400 -400 / 0.5)",
+                "rgb(calc(50 + (10 * sign(1em - 10px))) 255 0 / 0.5)",
+            ),
+        ] {
+            assert_eq!(
+                inline_style_get_property_value(
+                    &parse_inline_style_block(&format!("color: {authored}")),
+                    "color"
+                )
+                .as_deref(),
+                Some(expected),
+            );
+        }
+    }
+
+    #[test]
     fn inline_style_backing_values_preserve_authored_property_grammar() {
         for value in ["both", "end", "normal", "start"] {
             assert_eq!(
