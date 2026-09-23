@@ -1709,6 +1709,37 @@ pub fn inline_style_declarations_with_importance(
 mod tests {
     use super::*;
 
+    /// CSSOM getPropertyValue returns the empty string for a shorthand whose
+    /// longhands are not all present, including the longhands a shorthand only
+    /// resets.
+    #[test]
+    fn a_projected_mask_shorthand_needs_every_reset_longhand() {
+        let declarations = parse_inline_style_property_declarations(
+            "mask",
+            "initial",
+            CssomDeclarationPriority::Normal,
+            &Arc::from("about:blank"),
+        )
+        .expect("the mask shorthand must parse");
+        assert_eq!(
+            crate::specified::projected_specified_property_value(&declarations, "mask").as_deref(),
+            Some("initial")
+        );
+
+        let kept = declarations
+            .into_iter()
+            .filter(|declaration| {
+                !matches!(&declaration.property,
+                    stylo_cssom_model::SpecifiedPropertyName::Standard(property)
+                        if property.schema().name == "mask-border-mode")
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            crate::specified::projected_specified_property_value(&kept, "mask"),
+            None
+        );
+    }
+
     #[test]
     fn cssom_timing_functions_keep_authored_bezier_precision_for_the_cascade() {
         let authored = "cubic-bezier(0, 0.2333333333333333, 1, 0.2333333333333333)";
