@@ -699,7 +699,7 @@ impl ColorFunction<SpecifiedColor> {
 
     fn has_calc_component(&self) -> bool {
         macro_rules! has_calc {
-            ($($component:expr),+ $(,)?) => {{
+            ($preserve_nan:expr; $($component:expr),+ $(,)?) => {{
                 let mut has_calc = false;
                 let mut has_nan = false;
                 $(
@@ -714,16 +714,16 @@ impl ColorFunction<SpecifiedColor> {
                         });
                     }
                 )+
-                has_calc && !has_nan
+                has_calc && (!has_nan || $preserve_nan)
             }};
         }
 
         match self {
             Self::Lab(_, c0, c1, c2, alpha)
             | Self::Oklab(_, c0, c1, c2, alpha)
-            | Self::Color(_, c0, c1, c2, alpha, _) => has_calc!(c0, c1, c2, alpha),
+            | Self::Color(_, c0, c1, c2, alpha, _) => has_calc!(false; c0, c1, c2, alpha),
             Self::Lch(_, c0, c1, hue, alpha) | Self::Oklch(_, c0, c1, hue, alpha) => {
-                has_calc!(c0, c1, hue, alpha)
+                has_calc!(true; c0, c1, hue, alpha)
             },
             Self::Alpha(..)
             | Self::Rgb(..)
