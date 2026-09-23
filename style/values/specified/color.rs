@@ -141,7 +141,7 @@ impl ToCss for Absolute {
         if let Some(ref authored) = self.authored {
             dest.write_str(authored)
         } else {
-            self.color.to_css(dest)
+            self.color.to_css_as_specified(dest)
         }
     }
 }

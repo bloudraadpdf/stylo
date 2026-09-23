@@ -900,7 +900,23 @@ fn serialize_static_component<W: Write, T: style_traits::ToCss>(
     }
 }
 
-impl<C: style_traits::ToCss> style_traits::ToCss for ColorFunction<C> {
+trait ColorFunctionCssContext: ToCss {
+    const SPECIFIED: bool;
+}
+
+impl ColorFunctionCssContext for SpecifiedColor {
+    const SPECIFIED: bool = true;
+}
+
+impl ColorFunctionCssContext for ComputedColor {
+    const SPECIFIED: bool = false;
+}
+
+impl ColorFunctionCssContext for AbsoluteColor {
+    const SPECIFIED: bool = false;
+}
+
+impl<C: ColorFunctionCssContext> style_traits::ToCss for ColorFunction<C> {
     fn to_css<W>(&self, dest: &mut style_traits::CssWriter<W>) -> std::fmt::Result
     where
         W: std::fmt::Write,
@@ -1083,15 +1099,25 @@ impl<C: style_traits::ToCss> style_traits::ToCss for ColorFunction<C> {
                 serialize_components!(c0, c1, c2);
                 serialize_alpha!(alpha);
             },
-            Self::Hsl(_, c0, c1, c2, alpha) => {
-                serialize_hsl_hwb!(c0, c1, c2, alpha, |value: &NumberOrPercentageComponent| {
-                    value.to_number(100.0).max(0.0)
-                });
+            Self::Hsl(origin, c0, c1, c2, alpha) => {
+                if C::SPECIFIED && origin.is_none() {
+                    serialize_hsl_hwb!(c0, c1, c2, alpha, |value: &NumberOrPercentageComponent| {
+                        value.to_number(100.0).max(0.0)
+                    });
+                } else {
+                    serialize_components!(c0, c1, c2);
+                    serialize_alpha!(alpha);
+                }
             },
-            Self::Hwb(_, c0, c1, c2, alpha) => {
-                serialize_hsl_hwb!(c0, c1, c2, alpha, |value: &NumberOrPercentageComponent| {
-                    value.to_number(100.0)
-                });
+            Self::Hwb(origin, c0, c1, c2, alpha) => {
+                if C::SPECIFIED && origin.is_none() {
+                    serialize_hsl_hwb!(c0, c1, c2, alpha, |value: &NumberOrPercentageComponent| {
+                        value.to_number(100.0)
+                    });
+                } else {
+                    serialize_components!(c0, c1, c2);
+                    serialize_alpha!(alpha);
+                }
             },
             Self::Lab(_, c0, c1, c2, alpha) => {
                 serialize_components!(c0, c1, c2);

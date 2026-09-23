@@ -117,18 +117,7 @@ impl ToCss for AbsoluteColor {
                         | ColorFlags::C2_IS_NONE
                         | ColorFlags::ALPHA_IS_NONE,
                 ) {
-                    dest.write_str(if self.color_space == ColorSpace::Hsl {
-                        "hsl("
-                    } else {
-                        "hwb("
-                    })?;
-                    ModernComponent(&self.c0()).to_css(dest)?;
-                    dest.write_char(' ')?;
-                    ModernComponent(&self.c1()).to_css(dest)?;
-                    dest.write_char(' ')?;
-                    ModernComponent(&self.c2()).to_css(dest)?;
-                    serialize_color_alpha(dest, self.alpha(), false)?;
-                    dest.write_char(')')
+                    self.serialize_hsl_hwb(dest, true)
                 } else if self.flags.contains(ColorFlags::IS_LEGACY_SRGB) {
                     self.into_srgb_legacy().to_css(dest)
                 } else {
@@ -216,14 +205,55 @@ mod tests {
     #[test]
     fn hsl_and_hwb_keep_missing_components_when_serialized() {
         let hsl = AbsoluteColor::new(ColorSpace::Hsl, None::<f32>, 50.0, 50.0, 1.0);
-        assert_eq!(hsl.to_css_string(), "hsl(none 50 50)");
+        assert_eq!(hsl.to_css_string(), "hsl(none 50% 50%)");
 
         let hwb = AbsoluteColor::new(ColorSpace::Hwb, 180.0, None::<f32>, 25.0, None::<f32>);
-        assert_eq!(hwb.to_css_string(), "hwb(180 none 25 / none)");
+        assert_eq!(hwb.to_css_string(), "hwb(180 none 25% / none)");
     }
 }
 
 impl AbsoluteColor {
+    fn serialize_hsl_hwb<W: Write>(
+        &self,
+        dest: &mut CssWriter<W>,
+        include_percent: bool,
+    ) -> fmt::Result {
+        dest.write_str(if self.color_space == ColorSpace::Hsl {
+            "hsl("
+        } else {
+            "hwb("
+        })?;
+        ModernComponent(&self.c0()).to_css(dest)?;
+        dest.write_char(' ')?;
+        ModernComponent(&self.c1()).to_css(dest)?;
+        if include_percent && self.c1().is_some() {
+            dest.write_char('%')?;
+        }
+        dest.write_char(' ')?;
+        ModernComponent(&self.c2()).to_css(dest)?;
+        if include_percent && self.c2().is_some() {
+            dest.write_char('%')?;
+        }
+        serialize_color_alpha(dest, self.alpha(), false)?;
+        dest.write_char(')')
+    }
+
+    /// Serialize an absolute specified color.
+    pub fn to_css_as_specified<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        if matches!(self.color_space, ColorSpace::Hsl | ColorSpace::Hwb)
+            && self.flags.intersects(
+                ColorFlags::C0_IS_NONE
+                    | ColorFlags::C1_IS_NONE
+                    | ColorFlags::C2_IS_NONE
+                    | ColorFlags::ALPHA_IS_NONE,
+            )
+        {
+            self.serialize_hsl_hwb(dest, false)
+        } else {
+            self.to_css(dest)
+        }
+    }
+
     /// Write a string to `dest` that represents a color as an author would
     /// enter it.
     /// NOTE: The format of the output is NOT according to any specification,
