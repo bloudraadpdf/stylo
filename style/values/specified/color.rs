@@ -438,6 +438,11 @@ impl SystemColor {
     #[cfg(feature = "servo")]
     #[inline]
     fn compute(&self, cx: &Context) -> ComputedColor {
+        if cx.for_non_inherited_property {
+            cx.rule_cache_conditions
+                .borrow_mut()
+                .set_color_scheme_dependency(cx.builder.color_scheme);
+        }
         let dark = cx.device().is_dark_color_scheme(cx.builder.color_scheme);
         let background = if dark {
             AbsoluteColor::srgb_legacy(18, 18, 18, 1.0)
