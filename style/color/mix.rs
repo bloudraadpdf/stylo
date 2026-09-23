@@ -257,7 +257,11 @@ pub fn mix_many(
                 | ColorFlags::ALPHA_IS_NONE,
         );
         if result.is_legacy_syntax() && !has_missing_component {
-            result.to_color_space(ColorSpace::Srgb)
+            let mut modern = result.to_color_space(ColorSpace::Srgb);
+            modern
+                .flags
+                .remove(ColorFlags::IS_LEGACY_SRGB | ColorFlags::SERIALIZE_AS_LEGACY_SRGB);
+            modern
         } else {
             result
         }
@@ -682,6 +686,26 @@ mod tests {
     use super::{mix_many, ColorInterpolationMethod, ColorMixItem};
     use crate::color::{AbsoluteColor, ColorSpace};
     use crate::values::generics::color::ColorMixFlags;
+    use style_traits::ToCss;
+
+    #[test]
+    fn single_legacy_item_in_modern_srgb_mix_serializes_in_the_mixing_space() {
+        for (weight, expected) in [
+            (1.0, "color(srgb 1 0 0)"),
+            (0.5, "color(srgb 1 0 0 / 0.5)"),
+            (0.0, "color(srgb 1 0 0 / 0)"),
+        ] {
+            let mixed = mix_many(
+                ColorInterpolationMethod::srgb(),
+                [ColorMixItem::new(
+                    AbsoluteColor::srgb_legacy(255, 0, 0, 1.0),
+                    weight,
+                )],
+                ColorMixFlags::NORMALIZE_WEIGHTS | ColorMixFlags::RESULT_IN_MODERN_SYNTAX,
+            );
+            assert_eq!(mixed.to_css_string(), expected);
+        }
+    }
 
     #[test]
     fn modern_hsl_mix_keeps_missing_hue() {
