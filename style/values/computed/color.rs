@@ -63,6 +63,15 @@ impl Color {
         }
     }
 
+    /// Resolve contrast against an absolute background at computed-value time.
+    /// Keep colors depending on currentcolor unresolved for inherited values.
+    pub fn from_contrast_color(background: Self) -> Self {
+        match background {
+            Self::Absolute(color) => Self::Absolute(Self::contrasting_color(&color)),
+            other => Self::ContrastColor(Box::new(other)),
+        }
+    }
+
     /// Combine this complex color with the given foreground color into an
     /// absolute color.
     pub fn resolve_to_absolute(&self, current_color: &AbsoluteColor) -> AbsoluteColor {
@@ -88,16 +97,17 @@ impl Color {
                     mix.flags,
                 )
             },
-            Self::ContrastColor(ref c) => {
-                let bg_color = c.resolve_to_absolute(current_color);
-                if Self::contrast_ratio(&bg_color, &AbsoluteColor::BLACK)
-                    > Self::contrast_ratio(&bg_color, &AbsoluteColor::WHITE)
-                {
-                    AbsoluteColor::BLACK
-                } else {
-                    AbsoluteColor::WHITE
-                }
-            },
+            Self::ContrastColor(ref c) => Self::contrasting_color(&c.resolve_to_absolute(current_color)),
+        }
+    }
+
+    fn contrasting_color(background: &AbsoluteColor) -> AbsoluteColor {
+        if Self::contrast_ratio(background, &AbsoluteColor::BLACK)
+            > Self::contrast_ratio(background, &AbsoluteColor::WHITE)
+        {
+            AbsoluteColor::BLACK
+        } else {
+            AbsoluteColor::WHITE
         }
     }
 

@@ -1060,7 +1060,7 @@ impl Color {
                 )
             },
             Color::ContrastColor(ref c) => {
-                ComputedColor::ContrastColor(Box::new(c.to_computed_color(context)?))
+                ComputedColor::from_contrast_color(c.to_computed_color(context)?)
             },
             Color::System(system) => system.compute(context?),
             #[cfg(feature = "gecko")]
