@@ -1023,6 +1023,25 @@ pub fn inline_style_cssom_backing_value<'a>(property: &str, value: &'a str) -> O
 #[must_use]
 pub fn inline_style_cssom_authored_value(property: &str, value: Option<String>) -> Option<String> {
     value.map(|value| {
+        // Keep authored relative-color channels for the cascade, but expose
+        // Stylo's canonical origin serialization to CSSOM readers.
+        if property.eq_ignore_ascii_case("color")
+            && value.as_bytes().windows(4).any(|word| word.eq_ignore_ascii_case(b"from"))
+        {
+            let block = parse_inline_style_block(&format!("color: {value}"));
+            if block.0.declaration_importance_iter().any(|(declaration, _)| {
+                matches!(
+                    declaration,
+                    PropertyDeclaration::Color(style::values::specified::ColorPropertyValue(
+                        style::values::specified::Color::ColorFunction(function)
+                    )) if function.has_origin_color()
+                )
+            }) {
+                if let Some(serialized) = inline_style_get_property_value(&block, "color") {
+                    return serialized;
+                }
+            }
+        }
         let keyword = match (property.to_ascii_lowercase().as_str(), value.as_str()) {
             ("flow-tolerance", "infinite") => Some("normal"),
             ("flow-tolerance", "auto") => Some("infinite"),
@@ -1668,6 +1687,25 @@ mod tests {
         assert_eq!(
             crate::specified::projected_specified_property_value(&declarations, "color"),
             Some(authored.to_owned())
+        );
+    }
+
+    #[test]
+    fn cssom_relative_color_serializes_a_canonical_origin() {
+        let authored = "rgb(from rgb(20%, 40%, 60%, 80%) r g b / alpha)";
+        let declarations = parse_inline_style_property_declarations(
+            "color",
+            authored,
+            CssomDeclarationPriority::Normal,
+            &Arc::from("about:blank"),
+        )
+        .expect("relative color must parse");
+        let cascade_value =
+            crate::specified::projected_specified_property_value(&declarations, "color");
+        assert_eq!(cascade_value.as_deref(), Some(authored));
+        assert_eq!(
+            inline_style_cssom_authored_value("color", cascade_value).as_deref(),
+            Some("rgb(from rgba(51, 102, 153, 0.8) r g b / alpha)"),
         );
     }
 
