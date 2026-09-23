@@ -676,18 +676,48 @@ impl AbsoluteColor {
         let c1 = nan_to_missing!(result.1);
         let mut c2 = nan_to_missing!(result.2);
 
-        // A converted hue is missing only when it is powerless in the
-        // destination space. An authored hue retains its value.
+        // Check the source because finite-precision conversion can cross the
+        // target's powerless threshold.
+        let source_hue_powerless = match self.color_space {
+            Hsl => self
+                .c1()
+                .is_some_and(|saturation| saturation.abs() <= 0.001),
+            Hwb => self
+                .c1()
+                .zip(self.c2())
+                .is_some_and(|(white, black)| white + black >= 99.999),
+            Lch => self
+                .c1()
+                .is_some_and(|chroma| chroma <= convert::LCH_HUE_EPSILON),
+            Oklch => self
+                .c1()
+                .is_some_and(|chroma| chroma <= convert::OKLCH_HUE_EPSILON),
+            _ => false,
+        };
         match color_space {
-            Hsl if c1.is_some_and(|saturation| saturation.abs() <= 0.001) => c0 = None,
-            Hwb if c1
-                .zip(c2)
-                .is_some_and(|(white, black)| white + black >= 99.999) =>
+            Hsl if source_hue_powerless
+                || c1.is_some_and(|saturation| saturation.abs() <= 0.001) =>
             {
                 c0 = None
             },
-            Lch if c1.is_some_and(|chroma| chroma <= convert::LCH_HUE_EPSILON) => c2 = None,
-            Oklch if c1.is_some_and(|chroma| chroma <= convert::OKLCH_HUE_EPSILON) => c2 = None,
+            Hwb if source_hue_powerless
+                || c1
+                    .zip(c2)
+                    .is_some_and(|(white, black)| white + black >= 99.999) =>
+            {
+                c0 = None
+            },
+            Lch if source_hue_powerless
+                || c1.is_some_and(|chroma| chroma <= convert::LCH_HUE_EPSILON) =>
+            {
+                c2 = None
+            },
+            Oklch
+                if source_hue_powerless
+                    || c1.is_some_and(|chroma| chroma <= convert::OKLCH_HUE_EPSILON) =>
+            {
+                c2 = None
+            },
             _ => {},
         }
 
@@ -736,7 +766,7 @@ mod tests {
     #[test]
     fn conversion_to_hsl_marks_powerless_hue_missing() {
         let boundary = AbsoluteColor::new(ColorSpace::Hwb, 180.0, 49.999, 50.0, 1.0);
-        assert!(boundary.to_color_space(ColorSpace::Hsl).c0().is_some());
+        assert_eq!(boundary.to_color_space(ColorSpace::Hsl).c0(), None);
 
         let hwb = AbsoluteColor::new(ColorSpace::Hwb, 180.0, 100.0, 25.0, 1.0);
         let hsl = hwb.to_color_space(ColorSpace::Hsl);

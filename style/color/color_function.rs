@@ -1399,7 +1399,7 @@ mod tests {
     }
 
     #[test]
-    fn relative_origin_uses_target_powerless_threshold() {
+    fn relative_origin_keeps_powerless_source_hue_missing() {
         let origin = AbsoluteColor::new(ColorSpace::Lch, 20.0, 0.0015, 180.0, 1.0);
         let function = ColorFunction::Oklch(
             Optional::Some(origin),
@@ -1412,7 +1412,7 @@ mod tests {
             .resolve_to_absolute()
             .expect("relative oklch resolves");
         assert!(color.c1().expect("chroma") > 0.000004);
-        assert!(color.c2().is_some());
+        assert_eq!(color.c2(), None);
     }
 
     #[test]
