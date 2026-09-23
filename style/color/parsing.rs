@@ -915,7 +915,7 @@ mod specified_color_tests {
     }
 
     #[test]
-    fn lab_and_oklab_nan_hues_compute_to_zero() {
+    fn lch_nan_hues_remain_calculations_at_specified_value_time() {
         let url_data = UrlExtraData::from(
             url::Url::parse("https://example.invalid/").expect("test URL parses"),
         );
@@ -931,10 +931,10 @@ mod specified_color_tests {
         );
 
         for (source, expected) in [
-            ("lch(50 10 calc(NaN))", "lch(50 10 0)"),
-            ("lch(50 10 calc(0 / 0))", "lch(50 10 0)"),
-            ("oklch(0.5 0.1 calc(NaN))", "oklch(0.5 0.1 0)"),
-            ("oklch(0.5 0.1 calc(0 / 0))", "oklch(0.5 0.1 0)"),
+            ("lch(50 10 calc(NaN))", "lch(50 10 calc(NaN))"),
+            ("lch(50 10 calc(0 / 0))", "lch(50 10 calc(NaN))"),
+            ("oklch(0.5 0.1 calc(NaN))", "oklch(0.5 0.1 calc(NaN))"),
+            ("oklch(0.5 0.1 calc(0 / 0))", "oklch(0.5 0.1 calc(NaN))"),
         ] {
             let mut input = ParserInput::new(source);
             let specified = Parser::new(&mut input)
