@@ -223,7 +223,16 @@ impl ToComputedValue for specified::Image {
             Self::PaintWorklet(w) => Image::PaintWorklet(w.to_computed_value(context)),
             Self::CrossFade(f) => Image::CrossFade(f.to_computed_value(context)),
             Self::ImageSet(s) => Image::ImageSet(s.to_computed_value(context)),
-            Self::LightDark(ld) => ld.compute(context),
+            Self::LightDark(ld) => match ld.compute(context) {
+                // CSS Color 5: `none` in the image form has a transparent
+                // image computed value, distinct from the `none` image value.
+                Image::None => Image::Image(Box::new(generic::ImageImage {
+                    tag: None,
+                    src: None,
+                    fallback: Some(Color::TRANSPARENT_BLACK),
+                })),
+                image => image,
+            },
             // CSS Images 4 §3.1: lower the `image()` payload component-wise.
             // Direction-tag resolution happens at use-time against the
             // element's resolved `direction`, so the tag itself is
