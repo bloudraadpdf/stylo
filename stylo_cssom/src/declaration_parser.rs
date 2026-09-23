@@ -745,6 +745,15 @@ pub fn parse_inline_style_property_declarations(
     let backing_value = inline_style_get_property_value(&block, backing_property)?;
     let mut declarations =
         specified_declarations_from_inline_style_block(&block, base_url.clone()).to_vec();
+    // Bézier control points can lose significant digits when the parsed
+    // declaration is serialized before it reaches the animation cascade.
+    // Preserve the authored timing function for that second parse.
+    if (backing_property.eq_ignore_ascii_case("animation-timing-function")
+        || backing_property.eq_ignore_ascii_case("transition-timing-function"))
+        && let Some(declaration) = declarations.first_mut()
+    {
+        declaration.value = specified_style_value_from_css(value, base_url)?;
+    }
     // A relative color can depend on channels of its origin even when those
     // channels are powerless. Serializing its nested HSL/HWB origin through
     // the declaration block can replace it with legacy sRGB and lose that
@@ -1699,6 +1708,22 @@ pub fn inline_style_declarations_with_importance(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cssom_timing_functions_keep_authored_bezier_precision_for_the_cascade() {
+        let authored = "cubic-bezier(0, 0.2333333333333333, 1, 0.2333333333333333)";
+        for property in ["animation-timing-function", "transition-timing-function"] {
+            let declarations = parse_inline_style_property_declarations(
+                property,
+                authored,
+                CssomDeclarationPriority::Normal,
+                &Arc::from("about:blank"),
+            )
+            .expect("timing function must parse");
+            let cascade_value = crate::specified::projected_specified_property_value(&declarations, property);
+            assert_eq!(cascade_value.as_deref(), Some(authored));
+        }
+    }
 
     #[test]
     fn cssom_direct_rgb_keeps_missing_channels_for_the_cascade() {
