@@ -15,7 +15,7 @@ use crate::values::computed::font::{FamilyName, FontStretch};
 use crate::values::generics::font::FontStyle as GenericFontStyle;
 use crate::values::specified::font::{
     AbsoluteFontWeight, FontFeatureSettings, FontStretch as SpecifiedFontStretch,
-    FontVariationSettings, MetricsOverride, SpecifiedFontStyle,
+    FontStretchKeyword, FontVariationSettings, MetricsOverride, SpecifiedFontStyle,
 };
 use crate::values::specified::url::SpecifiedUrl;
 use crate::values::specified::{Angle, NonNegativePercentage};
@@ -353,13 +353,20 @@ impl FontWeightRange {
 ///
 /// https://drafts.csswg.org/css-fonts-4/#descdef-font-face-font-stretch
 #[derive(Clone, Debug, PartialEq, ToShmem)]
-pub struct FontStretchRange(pub SpecifiedFontStretch, pub SpecifiedFontStretch);
+pub struct FontStretchRange(pub SpecifiedFontStretch, pub SpecifiedFontStretch, bool);
 
 impl Parse for FontStretchRange {
     fn parse<'i, 't>(
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
+        if input
+            .try_parse(|input| input.expect_ident_matching("auto"))
+            .is_ok()
+        {
+            let normal = SpecifiedFontStretch::Keyword(FontStretchKeyword::Normal);
+            return Ok(Self(normal.clone(), normal, true));
+        }
         fn is_resolvable(value: &SpecifiedFontStretch) -> bool {
             match value {
                 SpecifiedFontStretch::Stretch(percentage) => percentage.0.resolve().is_some(),
@@ -375,7 +382,7 @@ impl Parse for FontStretchRange {
         if !is_resolvable(&first) || !is_resolvable(&second) {
             return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
         }
-        Ok(Self(first, second))
+        Ok(Self(first, second, false))
     }
 }
 
@@ -384,6 +391,9 @@ impl ToCss for FontStretchRange {
     where
         W: fmt::Write,
     {
+        if self.2 {
+            return dest.write_str("auto");
+        }
         self.0.to_css(dest)?;
         if self.0 != self.1 {
             dest.write_char(' ')?;
@@ -683,6 +693,11 @@ macro_rules! font_face_descriptors_common {
                input: &mut Parser<'i, 't>,
                _declaration_start: &ParserState,
             ) -> Result<(), ParseError<'i>> {
+                if name.eq_ignore_ascii_case("font-width") {
+                    let value = input.parse_entirely(|input| FontStretchRange::parse(self.context, input))?;
+                    self.rule.stretch = Some(value);
+                    return Ok(());
+                }
                 match_ignore_ascii_case! { &*name,
                     $(
                         $name if is_descriptor_enabled!($name) => {
