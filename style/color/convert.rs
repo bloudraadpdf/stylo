@@ -82,37 +82,17 @@ fn rgb_to_hue_min_max(red: f32, green: f32, blue: f32) -> (f32, f32, f32) {
 /// https://drafts.csswg.org/css-color-4/#hsl-to-rgb
 #[inline]
 pub fn hsl_to_rgb(from: &ColorComponents) -> ColorComponents {
-    fn hue_to_rgb(t1: f32, t2: f32, hue: f32) -> f32 {
-        let hue = normalize_hue(hue);
-
-        if hue * 6.0 < 360.0 {
-            t1 + (t2 - t1) * hue / 60.0
-        } else if hue * 2.0 < 360.0 {
-            t2
-        } else if hue * 3.0 < 720.0 {
-            t1 + (t2 - t1) * (240.0 - hue) / 60.0
-        } else {
-            t1
-        }
-    }
-
-    // Convert missing components to 0.0.
     let ColorComponents(hue, saturation, lightness) = from.map(normalize);
     let saturation = saturation / 100.0;
     let lightness = lightness / 100.0;
-
-    let t2 = if lightness <= 0.5 {
-        lightness * (saturation + 1.0)
-    } else {
-        lightness + saturation - lightness * saturation
+    let hue = normalize_hue(hue) / 30.0;
+    let chroma = saturation * lightness.min(1.0 - lightness);
+    let channel = |offset: f32| {
+        let k = (offset + hue) % 12.0;
+        lightness - chroma * (-1.0_f32).max((k - 3.0).min((9.0 - k).min(1.0)))
     };
-    let t1 = lightness * 2.0 - t2;
 
-    ColorComponents(
-        hue_to_rgb(t1, t2, hue + 120.0),
-        hue_to_rgb(t1, t2, hue),
-        hue_to_rgb(t1, t2, hue - 120.0),
-    )
+    ColorComponents(channel(0.0), channel(8.0), channel(4.0))
 }
 
 /// Convert from RGB notation to HSL notation.
