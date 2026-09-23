@@ -56,6 +56,11 @@ impl TextAlignLast {
     pub fn keyword(self) -> specified::TextAlignLastKeyword {
         self.keyword
     }
+
+    /// Whether CSSOM must retain the authored match-parent keyword.
+    pub fn is_match_parent(self) -> bool {
+        self.match_parent
+    }
 }
 
 impl ToCss for TextAlignLast {

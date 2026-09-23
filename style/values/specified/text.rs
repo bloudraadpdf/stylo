@@ -314,6 +314,8 @@ mod tests {
                 .to_css_string(),
             "match-parent"
         );
+        let computed = computed::text::TextAlignLast::new(TextAlignLastKeyword::Start, true);
+        assert_eq!(TextAlignLast::from_computed_value(&computed), TextAlignLast::MatchParent);
     }
 
     #[test]
@@ -809,7 +811,11 @@ impl ToComputedValue for TextAlignLast {
     }
 
     fn from_computed_value(computed: &Self::ComputedValue) -> Self {
-        Self::Keyword(computed.keyword())
+        if computed.is_match_parent() {
+            Self::MatchParent
+        } else {
+            Self::Keyword(computed.keyword())
+        }
     }
 }
 
