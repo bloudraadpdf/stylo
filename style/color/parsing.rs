@@ -929,6 +929,20 @@ mod specified_color_tests {
                 "color(from rebeccapurple srgb 50% g b / alpha)",
                 "color(from rebeccapurple srgb 50% g b / alpha)",
             ),
+            ("lab(calc(50%) 50% 0.5)", "lab(calc(50%) 62.5 0.5)"),
+            ("lab(200 calc(50%) 0.5)", "lab(100 calc(50%) 0.5)"),
+            ("lch(calc(50%) 50% 0.5)", "lch(calc(50%) 75 0.5)"),
+            ("lch(calc(50%) -100 0.5)", "lch(calc(50%) 0 0.5)"),
+            ("oklab(calc(50%) 50% 0.5)", "oklab(calc(50%) 0.2 0.5)"),
+            ("oklch(calc(50%) 50% 0.5)", "oklch(calc(50%) 0.2 0.5)"),
+            (
+                "lab(calc(50 + (sign(1em - 10px) * 10)) 30 50 / 50%)",
+                "lab(calc(50 + (10 * sign(1em - 10px))) 30 50 / 0.5)",
+            ),
+            (
+                "lch(60 30 50deg / calc(50% + (sign(1em - 10px) * 10%)))",
+                "lch(60 30 50 / calc(50% + (10% * sign(1em - 10px))))",
+            ),
             (
                 "hsl(0deg 0% 0% / calc(50% + (sign(1em - 10px) * 10%)))",
                 "hsl(0 0 0 / calc(50% + (10% * sign(1em - 10px))))",
