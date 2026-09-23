@@ -2020,7 +2020,10 @@ mod tree_counting_tests {
             .parse_entirely(|input| specified::Color::parse(&context(), input))
             .expect("tree-counting colour components must survive until computed-value time");
 
-        assert_eq!(value.to_css_string(), css);
+        assert_eq!(
+            value.to_css_string(),
+            "hsl(calc(50deg * sibling-index()) 50 50)"
+        );
     }
 
     #[test]

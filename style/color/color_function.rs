@@ -18,6 +18,7 @@ use crate::values::{
     specified::color::Color as SpecifiedColor,
 };
 use cssparser::color::{clamp_floor_256_f32, OPAQUE};
+use style_traits::ToCss;
 
 /// moegoe F2 — one `(colorant-name, tint)` pair inside a
 /// [`ColorFunction::BdDeviceN`] colour function.
@@ -888,6 +889,17 @@ impl ColorFunction<ComputedColor> {
     }
 }
 
+fn serialize_static_component<W: Write, T: style_traits::ToCss>(
+    component: &ColorComponent<T>,
+    dest: &mut style_traits::CssWriter<W>,
+    canonical_value: impl FnOnce(&T) -> f32,
+) -> std::fmt::Result {
+    match component {
+        ColorComponent::Value(value) => canonical_value(value).to_css(dest),
+        _ => component.to_css(dest),
+    }
+}
+
 impl<C: style_traits::ToCss> style_traits::ToCss for ColorFunction<C> {
     fn to_css<W>(&self, dest: &mut style_traits::CssWriter<W>) -> std::fmt::Result
     where
@@ -1049,6 +1061,22 @@ impl<C: style_traits::ToCss> style_traits::ToCss for ColorFunction<C> {
             }};
         }
 
+        macro_rules! serialize_hsl_hwb {
+            ($hue:expr, $second:expr, $third:expr, $alpha:expr, $second_value:expr) => {{
+                serialize_static_component($hue, dest, |value| normalize_hue(value.degrees()))?;
+                dest.write_str(" ")?;
+                serialize_static_component($second, dest, $second_value)?;
+                dest.write_str(" ")?;
+                serialize_static_component($third, dest, |value| value.to_number(100.0))?;
+                if !is_opaque && !matches!($alpha, ColorComponent::AlphaOmitted) {
+                    dest.write_str(" / ")?;
+                    serialize_static_component($alpha, dest, |value| {
+                        value.to_number(OPAQUE).clamp(0.0, OPAQUE)
+                    })?;
+                }
+            }};
+        }
+
         match self {
             Self::Alpha(..) => unreachable!("handled above"),
             Self::Rgb(_, c0, c1, c2, alpha) => {
@@ -1056,12 +1084,14 @@ impl<C: style_traits::ToCss> style_traits::ToCss for ColorFunction<C> {
                 serialize_alpha!(alpha);
             },
             Self::Hsl(_, c0, c1, c2, alpha) => {
-                serialize_components!(c0, c1, c2);
-                serialize_alpha!(alpha);
+                serialize_hsl_hwb!(c0, c1, c2, alpha, |value: &NumberOrPercentageComponent| {
+                    value.to_number(100.0).max(0.0)
+                });
             },
             Self::Hwb(_, c0, c1, c2, alpha) => {
-                serialize_components!(c0, c1, c2);
-                serialize_alpha!(alpha);
+                serialize_hsl_hwb!(c0, c1, c2, alpha, |value: &NumberOrPercentageComponent| {
+                    value.to_number(100.0)
+                });
             },
             Self::Lab(_, c0, c1, c2, alpha) => {
                 serialize_components!(c0, c1, c2);
