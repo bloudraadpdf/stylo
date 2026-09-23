@@ -592,80 +592,102 @@ impl AbsoluteColor {
             missing_to_zero!(self.c2()),
         );
 
-        let result = match (self.color_space, color_space) {
-            // We have simplified conversions that do not need to convert to XYZ
-            // first. This improves performance, because it skips at least 2
-            // matrix multiplications and reduces float rounding errors.
-            (Srgb, Hsl) => convert::rgb_to_hsl(&components),
-            (Srgb, Hwb) => convert::rgb_to_hwb(&components),
-            (Hsl, Srgb) => convert::hsl_to_rgb(&components),
-            (Hwb, Srgb) => convert::hwb_to_rgb(&components),
-            (Hwb, Hsl) => convert::rgb_to_hsl(&convert::hwb_to_rgb(&components)),
-            (Hsl, Hwb) => convert::rgb_to_hwb(&convert::hsl_to_rgb(&components)),
-            (Lab, Lch) | (Oklab, Oklch) => convert::orthogonal_to_polar(
-                &components,
-                if keep_numeric_hue {
-                    0.0
-                } else {
-                    convert::epsilon_for_range(0.0, if color_space == Lch { 100.0 } else { 1.0 })
-                },
-            ),
-            (Lch, Lab) | (Oklch, Oklab) => convert::polar_to_orthogonal(&components),
-
-            // All other conversions need to convert to XYZ first.
-            _ => {
-                let (xyz, white_point) = match self.color_space {
-                    Lab => convert::to_xyz::<convert::Lab>(&components),
-                    Lch => convert::to_xyz::<convert::Lch>(&components),
-                    Oklab => convert::to_xyz::<convert::Oklab>(&components),
-                    Oklch => convert::to_xyz::<convert::Oklch>(&components),
-                    Srgb => convert::to_xyz::<convert::Srgb>(&components),
-                    Hsl => convert::to_xyz::<convert::Hsl>(&components),
-                    Hwb => convert::to_xyz::<convert::Hwb>(&components),
-                    SrgbLinear => convert::to_xyz::<convert::SrgbLinear>(&components),
-                    DisplayP3 => convert::to_xyz::<convert::DisplayP3>(&components),
-                    DisplayP3Linear => convert::to_xyz::<convert::DisplayP3Linear>(&components),
-                    A98Rgb => convert::to_xyz::<convert::A98Rgb>(&components),
-                    ProphotoRgb => convert::to_xyz::<convert::ProphotoRgb>(&components),
-                    Rec2020 => convert::to_xyz::<convert::Rec2020>(&components),
-                    Rec2100Pq => convert::to_xyz::<convert::Rec2100Pq>(&components),
-                    Rec2100Hlg => convert::to_xyz::<convert::Rec2100Hlg>(&components),
-                    Rec2100Linear => convert::to_xyz::<convert::Rec2100Linear>(&components),
-                    XyzD50 => convert::to_xyz::<convert::XyzD50>(&components),
-                    XyzD65 => convert::to_xyz::<convert::XyzD65>(&components),
-                };
-
-                match color_space {
-                    Lab => convert::from_xyz::<convert::Lab>(&xyz, white_point),
-                    Lch if keep_numeric_hue => convert::orthogonal_to_polar(
-                        &convert::from_xyz::<convert::Lab>(&xyz, white_point),
-                        0.0,
-                    ),
-                    Lch => convert::from_xyz::<convert::Lch>(&xyz, white_point),
-                    Oklab => convert::from_xyz::<convert::Oklab>(&xyz, white_point),
-                    Oklch if keep_numeric_hue => convert::orthogonal_to_polar(
-                        &convert::from_xyz::<convert::Oklab>(&xyz, white_point),
-                        0.0,
-                    ),
-                    Oklch => convert::from_xyz::<convert::Oklch>(&xyz, white_point),
-                    Srgb => convert::from_xyz::<convert::Srgb>(&xyz, white_point),
-                    Hsl => convert::from_xyz::<convert::Hsl>(&xyz, white_point),
-                    Hwb => convert::from_xyz::<convert::Hwb>(&xyz, white_point),
-                    SrgbLinear => convert::from_xyz::<convert::SrgbLinear>(&xyz, white_point),
-                    DisplayP3 => convert::from_xyz::<convert::DisplayP3>(&xyz, white_point),
-                    DisplayP3Linear => {
-                        convert::from_xyz::<convert::DisplayP3Linear>(&xyz, white_point)
+        let result = if keep_numeric_hue
+            && matches!(self.color_space, Srgb | Hsl | Hwb)
+            && matches!(color_space, Lab | Lch)
+        {
+            let rgb = match self.color_space {
+                Hsl => convert::hsl_to_rgb(&components),
+                Hwb => convert::hwb_to_rgb(&components),
+                _ => components,
+            };
+            let lab = convert::chromium_rgb_to_lab(&rgb);
+            if color_space == Lch {
+                convert::orthogonal_to_polar(&lab, 0.0)
+            } else {
+                lab
+            }
+        } else {
+            match (self.color_space, color_space) {
+                // We have simplified conversions that do not need to convert to XYZ
+                // first. This improves performance, because it skips at least 2
+                // matrix multiplications and reduces float rounding errors.
+                (Srgb, Hsl) => convert::rgb_to_hsl(&components),
+                (Srgb, Hwb) => convert::rgb_to_hwb(&components),
+                (Hsl, Srgb) => convert::hsl_to_rgb(&components),
+                (Hwb, Srgb) => convert::hwb_to_rgb(&components),
+                (Hwb, Hsl) => convert::rgb_to_hsl(&convert::hwb_to_rgb(&components)),
+                (Hsl, Hwb) => convert::rgb_to_hwb(&convert::hsl_to_rgb(&components)),
+                (Lab, Lch) | (Oklab, Oklch) => convert::orthogonal_to_polar(
+                    &components,
+                    if keep_numeric_hue {
+                        0.0
+                    } else {
+                        convert::epsilon_for_range(
+                            0.0,
+                            if color_space == Lch { 100.0 } else { 1.0 },
+                        )
                     },
-                    A98Rgb => convert::from_xyz::<convert::A98Rgb>(&xyz, white_point),
-                    ProphotoRgb => convert::from_xyz::<convert::ProphotoRgb>(&xyz, white_point),
-                    Rec2020 => convert::from_xyz::<convert::Rec2020>(&xyz, white_point),
-                    Rec2100Pq => convert::from_xyz::<convert::Rec2100Pq>(&xyz, white_point),
-                    Rec2100Hlg => convert::from_xyz::<convert::Rec2100Hlg>(&xyz, white_point),
-                    Rec2100Linear => convert::from_xyz::<convert::Rec2100Linear>(&xyz, white_point),
-                    XyzD50 => convert::from_xyz::<convert::XyzD50>(&xyz, white_point),
-                    XyzD65 => convert::from_xyz::<convert::XyzD65>(&xyz, white_point),
-                }
-            },
+                ),
+                (Lch, Lab) | (Oklch, Oklab) => convert::polar_to_orthogonal(&components),
+
+                // All other conversions need to convert to XYZ first.
+                _ => {
+                    let (xyz, white_point) = match self.color_space {
+                        Lab => convert::to_xyz::<convert::Lab>(&components),
+                        Lch => convert::to_xyz::<convert::Lch>(&components),
+                        Oklab => convert::to_xyz::<convert::Oklab>(&components),
+                        Oklch => convert::to_xyz::<convert::Oklch>(&components),
+                        Srgb => convert::to_xyz::<convert::Srgb>(&components),
+                        Hsl => convert::to_xyz::<convert::Hsl>(&components),
+                        Hwb => convert::to_xyz::<convert::Hwb>(&components),
+                        SrgbLinear => convert::to_xyz::<convert::SrgbLinear>(&components),
+                        DisplayP3 => convert::to_xyz::<convert::DisplayP3>(&components),
+                        DisplayP3Linear => convert::to_xyz::<convert::DisplayP3Linear>(&components),
+                        A98Rgb => convert::to_xyz::<convert::A98Rgb>(&components),
+                        ProphotoRgb => convert::to_xyz::<convert::ProphotoRgb>(&components),
+                        Rec2020 => convert::to_xyz::<convert::Rec2020>(&components),
+                        Rec2100Pq => convert::to_xyz::<convert::Rec2100Pq>(&components),
+                        Rec2100Hlg => convert::to_xyz::<convert::Rec2100Hlg>(&components),
+                        Rec2100Linear => convert::to_xyz::<convert::Rec2100Linear>(&components),
+                        XyzD50 => convert::to_xyz::<convert::XyzD50>(&components),
+                        XyzD65 => convert::to_xyz::<convert::XyzD65>(&components),
+                    };
+
+                    match color_space {
+                        Lab => convert::from_xyz::<convert::Lab>(&xyz, white_point),
+                        Lch if keep_numeric_hue => convert::orthogonal_to_polar(
+                            &convert::from_xyz::<convert::Lab>(&xyz, white_point),
+                            0.0,
+                        ),
+                        Lch => convert::from_xyz::<convert::Lch>(&xyz, white_point),
+                        Oklab => convert::from_xyz::<convert::Oklab>(&xyz, white_point),
+                        Oklch if keep_numeric_hue => convert::orthogonal_to_polar(
+                            &convert::from_xyz::<convert::Oklab>(&xyz, white_point),
+                            0.0,
+                        ),
+                        Oklch => convert::from_xyz::<convert::Oklch>(&xyz, white_point),
+                        Srgb => convert::from_xyz::<convert::Srgb>(&xyz, white_point),
+                        Hsl => convert::from_xyz::<convert::Hsl>(&xyz, white_point),
+                        Hwb => convert::from_xyz::<convert::Hwb>(&xyz, white_point),
+                        SrgbLinear => convert::from_xyz::<convert::SrgbLinear>(&xyz, white_point),
+                        DisplayP3 => convert::from_xyz::<convert::DisplayP3>(&xyz, white_point),
+                        DisplayP3Linear => {
+                            convert::from_xyz::<convert::DisplayP3Linear>(&xyz, white_point)
+                        },
+                        A98Rgb => convert::from_xyz::<convert::A98Rgb>(&xyz, white_point),
+                        ProphotoRgb => convert::from_xyz::<convert::ProphotoRgb>(&xyz, white_point),
+                        Rec2020 => convert::from_xyz::<convert::Rec2020>(&xyz, white_point),
+                        Rec2100Pq => convert::from_xyz::<convert::Rec2100Pq>(&xyz, white_point),
+                        Rec2100Hlg => convert::from_xyz::<convert::Rec2100Hlg>(&xyz, white_point),
+                        Rec2100Linear => {
+                            convert::from_xyz::<convert::Rec2100Linear>(&xyz, white_point)
+                        },
+                        XyzD50 => convert::from_xyz::<convert::XyzD50>(&xyz, white_point),
+                        XyzD65 => convert::from_xyz::<convert::XyzD65>(&xyz, white_point),
+                    }
+                },
+            }
         };
 
         // A NAN value coming from a conversion function means the the component
