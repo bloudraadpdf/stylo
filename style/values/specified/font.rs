@@ -1661,6 +1661,22 @@ impl FontPalette {
     pub fn dark() -> Self {
         Self(atom!("dark"))
     }
+
+    pub(crate) fn mixed_with(&self, other: &Self, other_weight: f64) -> Self {
+        let first = self.to_css_string();
+        let second = other.to_css_string();
+        let percentage = other_weight * 100.0;
+        let css = if (percentage - 50.0).abs() < f64::EPSILON {
+            format!("palette-mix(in oklab, {first}, {second})")
+        } else {
+            format!(
+                "palette-mix(in oklab, {first} {}%, {second} {}%)",
+                100.0 - percentage,
+                percentage
+            )
+        };
+        Self(Atom::from(css.as_str()))
+    }
 }
 
 impl Parse for FontPalette {
