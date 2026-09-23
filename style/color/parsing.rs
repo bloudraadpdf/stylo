@@ -889,6 +889,10 @@ mod specified_color_tests {
                 .parse_entirely(|parser| parse_color_with(&context, parser))
                 .expect("direct RGB with missing components parses");
             assert_eq!(specified.to_css_string(), expected);
+            let computed = specified
+                .to_computed_color(None)
+                .expect("direct RGB computes");
+            assert!(computed.to_css_string().starts_with("color(srgb "));
         }
     }
 
