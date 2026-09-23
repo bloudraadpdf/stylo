@@ -214,6 +214,9 @@ bitflags! {
         /// Marks that this color is in the legacy color format. This flag is
         /// only valid for the `Srgb` color space.
         const IS_LEGACY_SRGB = 1 << 4;
+        /// Serialize a modern direct rgb() with missing channels in legacy form
+        /// without changing how its missing channels participate in interpolation.
+        const SERIALIZE_AS_LEGACY_SRGB = 1 << 5;
     }
 }
 

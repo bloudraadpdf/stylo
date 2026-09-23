@@ -287,7 +287,7 @@ impl ColorFunction<AbsoluteColor> {
                         alpha!(alpha, origin_color.as_ref()),
                     );
                     if origin_color.is_none() {
-                        result.flags.insert(ColorFlags::IS_LEGACY_SRGB);
+                        result.flags.insert(ColorFlags::SERIALIZE_AS_LEGACY_SRGB);
                     }
                     result
                 } else {
@@ -1262,7 +1262,8 @@ mod tests {
         assert_eq!(color.c0(), None);
         assert_eq!(color.c1(), Some(1.0));
         assert_eq!(color.c2(), None);
-        assert!(color.is_legacy_syntax());
+        assert!(!color.is_legacy_syntax());
+        assert!(color.flags.contains(ColorFlags::SERIALIZE_AS_LEGACY_SRGB));
     }
 
     #[test]

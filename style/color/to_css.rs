@@ -94,7 +94,11 @@ impl ToCss for AbsoluteColor {
         W: Write,
     {
         match self.color_space {
-            ColorSpace::Srgb if self.flags.contains(ColorFlags::IS_LEGACY_SRGB) => {
+            ColorSpace::Srgb
+                if self.flags.intersects(
+                    ColorFlags::IS_LEGACY_SRGB | ColorFlags::SERIALIZE_AS_LEGACY_SRGB,
+                ) =>
+            {
                 // The "none" keyword is not supported in the rgb/rgba legacy syntax.
                 let has_alpha = self.alpha != OPAQUE;
 
