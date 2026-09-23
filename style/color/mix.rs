@@ -173,7 +173,6 @@ pub fn mix_many(
 ) -> AbsoluteColor {
     let items = items.into_iter().collect::<ColorMixItemList<_>>();
 
-    // Match the behavior when the sum of weights equal 0.
     if items.is_empty() {
         return AbsoluteColor::TRANSPARENT_BLACK.to_color_space(interpolation.space);
     }
@@ -185,9 +184,9 @@ pub fn mix_many(
         // https://drafts.csswg.org/css-color-5/#color-mix-percent-norm
         let sum: f32 = items.iter().map(|item| item.weight).sum();
         if sum == 0.0 {
-            return AbsoluteColor::TRANSPARENT_BLACK.to_color_space(interpolation.space);
-        }
-        if (sum - 1.0).abs() > f32::EPSILON {
+            // The colors are still mixed; only the resulting alpha is zero.
+            alpha_multiplier = 0.0;
+        } else if (sum - 1.0).abs() > f32::EPSILON {
             weight_scale = 1.0 / sum;
             if sum < 1.0 {
                 alpha_multiplier = sum;
@@ -203,14 +202,17 @@ pub fn mix_many(
     for item in rest {
         let weight = item.weight * weight_scale;
         let combined = accumulated_weight + weight;
-        if combined == 0.0 {
-            // If both are 0, this fold doesn't contribute anything to the result.
+        if combined == 0.0 && !normalize {
             continue;
         }
         let right = convert_for_mix(&item.color, interpolation.space);
 
         let (left_weight, right_weight) = if normalize {
-            (accumulated_weight / combined, weight / combined)
+            if combined == 0.0 {
+                (0.5, 0.5)
+            } else {
+                (accumulated_weight / combined, weight / combined)
+            }
         } else {
             (accumulated_weight, weight)
         };
@@ -741,5 +743,29 @@ mod tests {
         );
         assert_eq!(mixed.color_space, ColorSpace::Hsl);
         assert_eq!(mixed.c0(), None);
+    }
+
+    #[test]
+    fn zero_weight_items_keep_the_mixed_channels_with_zero_alpha() {
+        let interpolation = ColorInterpolationMethod {
+            space: ColorSpace::Srgb,
+            hue: super::HueInterpolationMethod::Shorter,
+        };
+        let red = AbsoluteColor::new(ColorSpace::Srgb, 1.0, 0.0, 0.0, 1.0);
+        let green = AbsoluteColor::new(ColorSpace::Srgb, 0.0, 1.0, 0.0, 1.0);
+        let blue = AbsoluteColor::new(ColorSpace::Srgb, 0.0, 0.0, 1.0, 1.0);
+        let mixed = mix_many(
+            interpolation,
+            [
+                ColorMixItem::new(red, 0.0),
+                ColorMixItem::new(green, 0.0),
+                ColorMixItem::new(blue, 0.0),
+            ],
+            ColorMixFlags::NORMALIZE_WEIGHTS,
+        );
+        assert_eq!(mixed.c0(), Some(0.25));
+        assert_eq!(mixed.c1(), Some(0.25));
+        assert_eq!(mixed.c2(), Some(0.5));
+        assert_eq!(mixed.alpha(), Some(0.0));
     }
 }
