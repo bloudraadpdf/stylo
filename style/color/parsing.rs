@@ -893,6 +893,47 @@ mod specified_color_tests {
     }
 
     #[test]
+    fn direct_rgb_missing_components_remain_missing_in_color_mix() {
+        let url_data = UrlExtraData::from(
+            url::Url::parse("https://example.invalid/").expect("test URL parses"),
+        );
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input =
+            ParserInput::new("color-mix(in srgb, rgb(none 50 100), color(srgb 0.11 0.33 0.44))");
+        let specified = Parser::new(&mut input)
+            .parse_entirely(|parser| {
+                <crate::values::specified::color::Color as crate::parser::Parse>::parse(
+                    &context, parser,
+                )
+            })
+            .expect("color mix parses");
+        let serialized = specified.to_css_string();
+        assert!(serialized.contains("color(srgb none"), "{serialized}");
+
+        let mut serialized_input = ParserInput::new(&serialized);
+        let reparsed = Parser::new(&mut serialized_input)
+            .parse_entirely(|parser| {
+                <crate::values::specified::color::Color as crate::parser::Parse>::parse(
+                    &context, parser,
+                )
+            })
+            .expect("serialized color mix reparses");
+        let color = reparsed
+            .resolve_to_absolute()
+            .expect("reparsed color mix resolves");
+        assert!((color.c0().expect("mixed red channel") - 0.11).abs() < 0.00001);
+    }
+
+    #[test]
     fn absolute_lab_keeps_authored_calc_components() {
         let url_data = UrlExtraData::from(
             url::Url::parse("https://example.invalid/").expect("test URL parses"),

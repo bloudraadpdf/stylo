@@ -133,10 +133,16 @@ impl<Color, Percentage> GenericColorMix<Color, Percentage> {
     }
 }
 
-impl<Color: ToCss, Percentage: ToCss + ToPercentage> ToCss for ColorMix<Color, Percentage> {
-    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+impl<Color, Percentage: ToCss + ToPercentage> GenericColorMix<Color, Percentage> {
+    /// Serialize the mix with a color writer chosen by the caller.
+    pub fn to_css_with_color<W, F>(
+        &self,
+        dest: &mut CssWriter<W>,
+        mut write_color: F,
+    ) -> fmt::Result
     where
         W: Write,
+        F: FnMut(&Color, &mut CssWriter<W>) -> fmt::Result,
     {
         dest.write_str("color-mix(")?;
 
@@ -167,7 +173,7 @@ impl<Color: ToCss, Percentage: ToCss + ToPercentage> ToCss for ColorMix<Color, P
                 dest.write_str(", ")?;
             }
 
-            item.color.to_css(dest)?;
+            write_color(&item.color, dest)?;
 
             let percentage = match &item.percentage {
                 GenericColorMixPercentage::Explicit(value) => Some(value),
@@ -183,6 +189,15 @@ impl<Color: ToCss, Percentage: ToCss + ToPercentage> ToCss for ColorMix<Color, P
         }
 
         dest.write_char(')')
+    }
+}
+
+impl<Color: ToCss, Percentage: ToCss + ToPercentage> ToCss for ColorMix<Color, Percentage> {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        self.to_css_with_color(dest, |color, dest| color.to_css(dest))
     }
 }
 
