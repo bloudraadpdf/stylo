@@ -560,6 +560,14 @@ impl AbsoluteColor {
 
     /// Convert this color to the specified color space.
     pub fn to_color_space(&self, color_space: ColorSpace) -> Self {
+        self.to_color_space_impl(color_space, false)
+    }
+
+    pub(crate) fn to_color_space_for_relative(&self, color_space: ColorSpace) -> Self {
+        self.to_color_space_impl(color_space, true)
+    }
+
+    fn to_color_space_impl(&self, color_space: ColorSpace, keep_numeric_hue: bool) -> Self {
         use ColorSpace::*;
 
         if self.color_space == color_space {
@@ -596,7 +604,11 @@ impl AbsoluteColor {
             (Hsl, Hwb) => convert::rgb_to_hwb(&convert::hsl_to_rgb(&components)),
             (Lab, Lch) | (Oklab, Oklch) => convert::orthogonal_to_polar(
                 &components,
-                convert::epsilon_for_range(0.0, if color_space == Lch { 100.0 } else { 1.0 }),
+                if keep_numeric_hue {
+                    0.0
+                } else {
+                    convert::epsilon_for_range(0.0, if color_space == Lch { 100.0 } else { 1.0 })
+                },
             ),
             (Lch, Lab) | (Oklch, Oklab) => convert::polar_to_orthogonal(&components),
 
@@ -625,8 +637,16 @@ impl AbsoluteColor {
 
                 match color_space {
                     Lab => convert::from_xyz::<convert::Lab>(&xyz, white_point),
+                    Lch if keep_numeric_hue => convert::orthogonal_to_polar(
+                        &convert::from_xyz::<convert::Lab>(&xyz, white_point),
+                        0.0,
+                    ),
                     Lch => convert::from_xyz::<convert::Lch>(&xyz, white_point),
                     Oklab => convert::from_xyz::<convert::Oklab>(&xyz, white_point),
+                    Oklch if keep_numeric_hue => convert::orthogonal_to_polar(
+                        &convert::from_xyz::<convert::Oklab>(&xyz, white_point),
+                        0.0,
+                    ),
                     Oklch => convert::from_xyz::<convert::Oklch>(&xyz, white_point),
                     Srgb => convert::from_xyz::<convert::Srgb>(&xyz, white_point),
                     Hsl => convert::from_xyz::<convert::Hsl>(&xyz, white_point),
@@ -681,24 +701,28 @@ impl AbsoluteColor {
             Oklch => self.c1().is_some_and(|chroma| chroma <= 0.000004),
             _ => false,
         };
-        match color_space {
-            Hsl if source_hue_powerless
-                || c1.is_some_and(|saturation| saturation.abs() <= 0.001) =>
-            {
-                c0 = None
-            },
-            Hwb if source_hue_powerless
-                || c1
-                    .zip(c2)
-                    .is_some_and(|(white, black)| white + black >= 99.999) =>
-            {
-                c0 = None
-            },
-            Lch if source_hue_powerless || c1.is_some_and(|chroma| chroma <= 0.0015) => c2 = None,
-            Oklch if source_hue_powerless || c1.is_some_and(|chroma| chroma <= 0.000004) => {
-                c2 = None
-            },
-            _ => {},
+        if !keep_numeric_hue {
+            match color_space {
+                Hsl if source_hue_powerless
+                    || c1.is_some_and(|saturation| saturation.abs() <= 0.001) =>
+                {
+                    c0 = None
+                },
+                Hwb if source_hue_powerless
+                    || c1
+                        .zip(c2)
+                        .is_some_and(|(white, black)| white + black >= 99.999) =>
+                {
+                    c0 = None
+                },
+                Lch if source_hue_powerless || c1.is_some_and(|chroma| chroma <= 0.0015) => {
+                    c2 = None
+                },
+                Oklch if source_hue_powerless || c1.is_some_and(|chroma| chroma <= 0.000004) => {
+                    c2 = None
+                },
+                _ => {},
+            }
         }
 
         Self::new(color_space, c0, c1, c2, self.alpha())
