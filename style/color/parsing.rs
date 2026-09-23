@@ -154,6 +154,44 @@ fn parse_color_function<'i, 't>(
         _ => return Err(arguments.new_unexpected_token_error(Token::Ident(name))),
     }?;
 
+    if !has_origin_color {
+        let contains_channel = match &color {
+            ColorFunction::Rgb(_, c0, c1, c2, alpha)
+            | ColorFunction::Lab(_, c0, c1, c2, alpha)
+            | ColorFunction::Oklab(_, c0, c1, c2, alpha)
+            | ColorFunction::Color(_, c0, c1, c2, alpha, _) => {
+                c0.contains_color_channel()
+                    || c1.contains_color_channel()
+                    || c2.contains_color_channel()
+                    || alpha.contains_color_channel()
+            },
+            ColorFunction::Hsl(_, hue, c1, c2, alpha)
+            | ColorFunction::Hwb(_, hue, c1, c2, alpha)
+            | ColorFunction::Lch(_, c1, c2, hue, alpha)
+            | ColorFunction::Oklch(_, c1, c2, hue, alpha) => {
+                hue.contains_color_channel()
+                    || c1.contains_color_channel()
+                    || c2.contains_color_channel()
+                    || alpha.contains_color_channel()
+            },
+            ColorFunction::DeviceCmyk(c, m, y, k, alpha, _) => {
+                c.contains_color_channel()
+                    || m.contains_color_channel()
+                    || y.contains_color_channel()
+                    || k.contains_color_channel()
+                    || alpha.contains_color_channel()
+            },
+            ColorFunction::BdSpot(_, tint, _) => tint.contains_color_channel(),
+            ColorFunction::BdDeviceN(pairs, _) => {
+                pairs.iter().any(|pair| pair.tint.contains_color_channel())
+            },
+            ColorFunction::Alpha(_) => false,
+        };
+        if contains_channel {
+            return Err(arguments.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+    }
+
     if has_origin_color && !matches!(color, ColorFunction::Alpha(..)) {
         // Validate the channels and calc expressions by trying to resolve them against
         // transparent.
@@ -939,6 +977,32 @@ mod specified_color_tests {
             specified.to_css_string(),
             "rgb(from currentcolor r g b / 1)"
         );
+    }
+
+    #[test]
+    fn color_channels_require_relative_origin() {
+        let url_data = UrlExtraData::from(
+            url::Url::parse("https://example.invalid/").expect("test URL parses"),
+        );
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        for source in ["rgb(0 0 0 / alpha)", "rgb(r 0 0)"] {
+            let mut input = ParserInput::new(source);
+            assert!(
+                Parser::new(&mut input)
+                    .parse_entirely(|parser| parse_color_with(&context, parser))
+                    .is_err(),
+                "{source}"
+            );
+        }
     }
 
     #[test]
