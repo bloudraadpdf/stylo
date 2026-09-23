@@ -380,20 +380,10 @@ impl ColorFunction<AbsoluteColor> {
                     ColorSpace::Hwb,
                     h.resolve(origin_color.as_ref())?
                         .map(|angle| normalize_hue(angle.degrees())),
-                    w.resolve(origin_color.as_ref())?.map(|w| {
-                        if use_rgb_sytax {
-                            w.to_number(WHITENESS_RANGE).clamp(0.0, WHITENESS_RANGE)
-                        } else {
-                            w.to_number(WHITENESS_RANGE)
-                        }
-                    }),
-                    b.resolve(origin_color.as_ref())?.map(|b| {
-                        if use_rgb_sytax {
-                            b.to_number(BLACKNESS_RANGE).clamp(0.0, BLACKNESS_RANGE)
-                        } else {
-                            b.to_number(BLACKNESS_RANGE)
-                        }
-                    }),
+                    w.resolve(origin_color.as_ref())?
+                        .map(|w| w.to_number(WHITENESS_RANGE)),
+                    b.resolve(origin_color.as_ref())?
+                        .map(|b| b.to_number(BLACKNESS_RANGE)),
                     alpha!(alpha, origin_color.as_ref()),
                 );
 
@@ -1108,5 +1098,22 @@ mod tests {
         assert_eq!(color.c0(), Some(60.0));
         assert_eq!(color.c1(), None);
         assert_eq!(color.c2(), Some(50.0));
+    }
+
+    #[test]
+    fn hwb_components_keep_out_of_range_values_for_achromatic_ratio() {
+        let function = ColorFunction::<AbsoluteColor>::Hwb(
+            Optional::None,
+            ColorComponent::Value(NumberOrAngleComponent::Angle(0.0)),
+            number(200.0),
+            number(100.0),
+            ColorComponent::AlphaOmitted,
+        );
+        let color = function
+            .resolve_to_absolute()
+            .expect("absolute hwb() must resolve");
+
+        assert_eq!(color.c1(), Some(200.0));
+        assert_eq!(color.c2(), Some(100.0));
     }
 }
