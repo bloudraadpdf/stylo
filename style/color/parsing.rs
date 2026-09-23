@@ -915,6 +915,36 @@ mod specified_color_tests {
     }
 
     #[test]
+    fn lab_and_oklab_nan_hues_compute_to_zero() {
+        let url_data = UrlExtraData::from(
+            url::Url::parse("https://example.invalid/").expect("test URL parses"),
+        );
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+
+        for (source, expected) in [
+            ("lch(50 10 calc(NaN))", "lch(50 10 0)"),
+            ("lch(50 10 calc(0 / 0))", "lch(50 10 0)"),
+            ("oklch(0.5 0.1 calc(NaN))", "oklch(0.5 0.1 0)"),
+            ("oklch(0.5 0.1 calc(0 / 0))", "oklch(0.5 0.1 0)"),
+        ] {
+            let mut input = ParserInput::new(source);
+            let specified = Parser::new(&mut input)
+                .parse_entirely(|parser| parse_color_with(&context, parser))
+                .expect("NaN hue parses");
+            assert_eq!(specified.to_css_string(), expected);
+        }
+    }
+
+    #[test]
     fn specified_color_functions_serialize_static_channels_as_numbers() {
         let url_data = UrlExtraData::from(
             url::Url::parse("https://example.invalid/").expect("test URL parses"),

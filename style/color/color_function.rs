@@ -432,7 +432,7 @@ impl ColorFunction<AbsoluteColor> {
                     c.resolve(origin_color.as_ref())?
                         .map(|c| c.to_number(CHROMA_RANGE)),
                     h.resolve(origin_color.as_ref())?
-                        .map(|angle| normalize_hue(angle.degrees())),
+                        .map(|angle| normalize_hue(normalize(angle.degrees()))),
                     alpha!(alpha, origin_color.as_ref()),
                 )
             },
@@ -474,7 +474,7 @@ impl ColorFunction<AbsoluteColor> {
                     c.resolve(origin_color.as_ref())?
                         .map(|c| c.to_number(CHROMA_RANGE)),
                     h.resolve(origin_color.as_ref())?
-                        .map(|angle| normalize_hue(angle.degrees())),
+                        .map(|angle| normalize_hue(normalize(angle.degrees()))),
                     alpha!(alpha, origin_color.as_ref()),
                 )
             },
