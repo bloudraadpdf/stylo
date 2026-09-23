@@ -1027,6 +1027,7 @@ impl Color {
                 }
 
                 $color.alpha = normalize($color.alpha);
+                $color.flags.remove(ColorFlags::SERIALIZE_AS_LEGACY_SRGB);
             }};
         }
 
