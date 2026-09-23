@@ -592,3 +592,13 @@ fn native_all_expands_pending_values_into_the_new_longhands() {
         .unwrap();
     assert_eq!(shorthand, "var(--reset)");
 }
+
+#[test]
+fn mask_does_not_serialize_when_a_reset_longhand_is_missing() {
+    let mut block = block("mask:initial");
+    let removed = PropertyId::parse_enabled_for_all_content("mask-border-mode").unwrap();
+    let first = block.first_declaration_to_remove(&removed).unwrap();
+    block.remove_property(&removed, first);
+
+    assert_eq!(serialized_value(&block, "mask"), "");
+}
