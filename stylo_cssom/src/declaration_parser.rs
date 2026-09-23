@@ -1048,12 +1048,25 @@ fn inline_color_needs_authored_cascade_value(block: &InlineStyleBlock) -> bool {
                 match color {
                     style::values::specified::Color::ColorFunction(function) =>
                         function.has_origin_color(),
-                    style::values::specified::Color::ColorMix(_) => true,
+                    style::values::specified::Color::ColorMix(mix) =>
+                        color_mix_contains_authored_hsl_or_hwb(mix),
                     _ => false,
                 }
             },
             _ => false,
         }
+    })
+}
+
+fn color_mix_contains_authored_hsl_or_hwb(mix: &style::values::specified::color::ColorMix) -> bool {
+    mix.items().iter().any(|item| match &item.color {
+        style::values::specified::Color::Absolute(absolute) => matches!(
+            absolute.color.color_space,
+            style::color::ColorSpace::Hsl | style::color::ColorSpace::Hwb
+        ),
+        style::values::specified::Color::ColorMix(nested) =>
+            color_mix_contains_authored_hsl_or_hwb(nested),
+        _ => false,
     })
 }
 
@@ -1730,6 +1743,26 @@ mod tests {
         assert_eq!(
             inline_style_cssom_authored_value("color", Some(authored.to_owned())).as_deref(),
             Some("color-mix(in hsl, rgb(128, 128, 128), rgb(149, 89, 75))"),
+        );
+    }
+
+    #[test]
+    fn cssom_color_mix_without_authored_hsl_uses_canonical_projection() {
+        let authored =
+            "color-mix(in lch, color(display-p3 0.1893689 0.18937814 0.18937561), lch(11 33 44))";
+        let declarations = parse_inline_style_property_declarations(
+            "color",
+            authored,
+            CssomDeclarationPriority::Normal,
+            &Arc::from("about:blank"),
+        )
+        .expect("color mix must parse");
+        let canonical =
+            inline_style_get_property_value(&parse_inline_style_block(&format!("color: {authored}")), "color");
+        assert_ne!(canonical.as_deref(), Some(authored));
+        assert_eq!(
+            crate::specified::projected_specified_property_value(&declarations, "color"),
+            canonical,
         );
     }
 
