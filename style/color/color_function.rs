@@ -1080,8 +1080,12 @@ impl<C: ColorFunctionCssContext> style_traits::ToCss for ColorFunction<C> {
             dest.write_str(" ")?;
         }
 
-        let is_opaque = if let ColorComponent::Value(value) = *alpha {
-            value.to_number(OPAQUE) == OPAQUE
+        let is_opaque = if origin_color.is_none() {
+            if let ColorComponent::Value(value) = *alpha {
+                value.to_number(OPAQUE) == OPAQUE
+            } else {
+                false
+            }
         } else {
             false
         };
