@@ -334,6 +334,19 @@ impl AbsoluteColor {
             return;
         }
 
+        if source.color_space == S::Hwb && source.flags.contains(F::C1_IS_NONE | F::C2_IS_NONE) {
+            match self.color_space {
+                S::Hsl => self.flags.insert(F::C1_IS_NONE | F::C2_IS_NONE),
+                S::Lch | S::Oklch => self.flags.insert(F::C0_IS_NONE | F::C1_IS_NONE),
+                _ => {},
+            }
+        } else if source.color_space == S::Hsl
+            && self.color_space == S::Hwb
+            && source.flags.contains(F::C1_IS_NONE | F::C2_IS_NONE)
+        {
+            self.flags.insert(F::C1_IS_NONE | F::C2_IS_NONE);
+        }
+
         // Reds             r, x
         // Greens           g, y
         // Blues            b, z
@@ -394,6 +407,11 @@ impl AbsoluteColor {
             self.flags |= source.flags & F::C2_IS_NONE;
         } else if matches!(source.color_space, S::Lab | S::Oklab)
             && matches!(self.color_space, S::Lch | S::Oklch)
+            && source.flags.contains(F::C1_IS_NONE | F::C2_IS_NONE)
+        {
+            self.flags.insert(F::C1_IS_NONE);
+        } else if matches!(source.color_space, S::Lab | S::Oklab)
+            && self.color_space == S::Hsl
             && source.flags.contains(F::C1_IS_NONE | F::C2_IS_NONE)
         {
             self.flags.insert(F::C1_IS_NONE);
