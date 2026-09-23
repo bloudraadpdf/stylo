@@ -260,7 +260,7 @@ impl ColorFunction<AbsoluteColor> {
 
                 if use_color_syntax {
                     let origin_color = origin_color.as_ref().map(|origin| {
-                        let origin = origin.to_color_space(ColorSpace::Srgb);
+                        let origin = origin.to_color_space_for_relative(ColorSpace::Srgb);
                         // Because rgb(..) syntax have components in range [0..255), we have to
                         // map them.
                         // NOTE: The IS_LEGACY_SRGB flag is not added back to the color, because
@@ -331,7 +331,7 @@ impl ColorFunction<AbsoluteColor> {
 
                 let origin_color = origin_color
                     .as_ref()
-                    .map(|o| o.to_color_space(ColorSpace::Hsl));
+                    .map(|o| o.to_color_space_for_relative(ColorSpace::Hsl));
 
                 let mut result = AbsoluteColor::new(
                     ColorSpace::Hsl,
@@ -378,7 +378,7 @@ impl ColorFunction<AbsoluteColor> {
 
                 let origin_color = origin_color
                     .as_ref()
-                    .map(|o| o.to_color_space(ColorSpace::Hwb));
+                    .map(|o| o.to_color_space_for_relative(ColorSpace::Hwb));
 
                 let mut result = AbsoluteColor::new(
                     ColorSpace::Hwb,
@@ -405,7 +405,7 @@ impl ColorFunction<AbsoluteColor> {
 
                 let origin_color = origin_color
                     .as_ref()
-                    .map(|o| o.to_color_space(ColorSpace::Lab));
+                    .map(|o| o.to_color_space_for_relative(ColorSpace::Lab));
 
                 AbsoluteColor::new(
                     ColorSpace::Lab,
@@ -426,7 +426,7 @@ impl ColorFunction<AbsoluteColor> {
 
                 let origin_color = origin_color
                     .as_ref()
-                    .map(|o| o.to_color_space(ColorSpace::Lch));
+                    .map(|o| o.to_color_space_for_relative(ColorSpace::Lch));
 
                 AbsoluteColor::new(
                     ColorSpace::Lch,
@@ -447,7 +447,7 @@ impl ColorFunction<AbsoluteColor> {
 
                 let origin_color = origin_color
                     .as_ref()
-                    .map(|o| o.to_color_space(ColorSpace::Oklab));
+                    .map(|o| o.to_color_space_for_relative(ColorSpace::Oklab));
 
                 AbsoluteColor::new(
                     ColorSpace::Oklab,
@@ -468,7 +468,7 @@ impl ColorFunction<AbsoluteColor> {
 
                 let origin_color = origin_color
                     .as_ref()
-                    .map(|o| o.to_color_space(ColorSpace::Oklch));
+                    .map(|o| o.to_color_space_for_relative(ColorSpace::Oklch));
 
                 AbsoluteColor::new(
                     ColorSpace::Oklch,
@@ -483,7 +483,7 @@ impl ColorFunction<AbsoluteColor> {
             },
             ColorFunction::Color(origin_color, r, g, b, alpha, color_space) => {
                 let origin_color = origin_color.as_ref().map(|o| {
-                    let mut result = o.to_color_space(*color_space);
+                    let mut result = o.to_color_space_for_relative(*color_space);
 
                     // If the origin color was a `rgb(..)` function, we should
                     // make sure it doesn't have the legacy flag any more so
@@ -1336,5 +1336,22 @@ mod tests {
         let rgb = color.to_color_space(ColorSpace::Srgb);
         assert!(rgb.c0().expect("red channel") < 0.0);
         assert!(rgb.c1().expect("green channel") > 0.0);
+    }
+
+    #[test]
+    fn relative_origin_keeps_numeric_hue_below_powerless_threshold() {
+        let origin = AbsoluteColor::new(ColorSpace::Lch, 20.0, 0.0015, 180.0, 1.0);
+        let function = ColorFunction::Oklch(
+            Optional::Some(origin),
+            ColorComponent::ChannelKeyword(ChannelKeyword::L),
+            ColorComponent::ChannelKeyword(ChannelKeyword::C),
+            ColorComponent::ChannelKeyword(ChannelKeyword::H),
+            ColorComponent::AlphaOmitted,
+        );
+        let color = function
+            .resolve_to_absolute()
+            .expect("relative oklch resolves");
+        assert!(color.c1().expect("chroma") > 0.0);
+        assert!(color.c2().expect("hue") > 0.0);
     }
 }
