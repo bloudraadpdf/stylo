@@ -1088,6 +1088,17 @@ impl<C: ColorFunctionCssContext> style_traits::ToCss for ColorFunction<C> {
             }};
         }
 
+        macro_rules! serialize_canonical_components {
+            ($first:expr, $second:expr, $third:expr, $alpha:expr, $first_value:expr, $second_value:expr, $third_value:expr) => {{
+                serialize_static_component($first, dest, $first_value)?;
+                dest.write_str(" ")?;
+                serialize_static_component($second, dest, $second_value)?;
+                dest.write_str(" ")?;
+                serialize_static_component($third, dest, $third_value)?;
+                serialize_canonical_alpha!($alpha);
+            }};
+        }
+
         macro_rules! serialize_hsl_hwb {
             ($hue:expr, $second:expr, $third:expr, $alpha:expr, $second_value:expr) => {{
                 serialize_static_component($hue, dest, |value| normalize_hue(value.degrees()))?;
@@ -1125,21 +1136,73 @@ impl<C: ColorFunctionCssContext> style_traits::ToCss for ColorFunction<C> {
                     serialize_alpha!(alpha);
                 }
             },
-            Self::Lab(_, c0, c1, c2, alpha) => {
-                serialize_components!(c0, c1, c2);
-                serialize_alpha!(alpha);
+            Self::Lab(origin, c0, c1, c2, alpha) => {
+                if C::SPECIFIED && origin.is_none() {
+                    serialize_canonical_components!(
+                        c0,
+                        c1,
+                        c2,
+                        alpha,
+                        |value: &NumberOrPercentageComponent| value
+                            .to_number(100.0)
+                            .clamp(0.0, 100.0),
+                        |value: &NumberOrPercentageComponent| value.to_number(125.0),
+                        |value: &NumberOrPercentageComponent| value.to_number(125.0)
+                    );
+                } else {
+                    serialize_components!(c0, c1, c2);
+                    serialize_alpha!(alpha);
+                }
             },
-            Self::Lch(_, c0, c1, c2, alpha) => {
-                serialize_components!(c0, c1, c2);
-                serialize_alpha!(alpha);
+            Self::Lch(origin, c0, c1, c2, alpha) => {
+                if C::SPECIFIED && origin.is_none() {
+                    serialize_canonical_components!(
+                        c0,
+                        c1,
+                        c2,
+                        alpha,
+                        |value: &NumberOrPercentageComponent| value
+                            .to_number(100.0)
+                            .clamp(0.0, 100.0),
+                        |value: &NumberOrPercentageComponent| value.to_number(150.0).max(0.0),
+                        |value: &NumberOrAngleComponent| normalize_hue(value.degrees())
+                    );
+                } else {
+                    serialize_components!(c0, c1, c2);
+                    serialize_alpha!(alpha);
+                }
             },
-            Self::Oklab(_, c0, c1, c2, alpha) => {
-                serialize_components!(c0, c1, c2);
-                serialize_alpha!(alpha);
+            Self::Oklab(origin, c0, c1, c2, alpha) => {
+                if C::SPECIFIED && origin.is_none() {
+                    serialize_canonical_components!(
+                        c0,
+                        c1,
+                        c2,
+                        alpha,
+                        |value: &NumberOrPercentageComponent| value.to_number(1.0).clamp(0.0, 1.0),
+                        |value: &NumberOrPercentageComponent| value.to_number(0.4),
+                        |value: &NumberOrPercentageComponent| value.to_number(0.4)
+                    );
+                } else {
+                    serialize_components!(c0, c1, c2);
+                    serialize_alpha!(alpha);
+                }
             },
-            Self::Oklch(_, c0, c1, c2, alpha) => {
-                serialize_components!(c0, c1, c2);
-                serialize_alpha!(alpha);
+            Self::Oklch(origin, c0, c1, c2, alpha) => {
+                if C::SPECIFIED && origin.is_none() {
+                    serialize_canonical_components!(
+                        c0,
+                        c1,
+                        c2,
+                        alpha,
+                        |value: &NumberOrPercentageComponent| value.to_number(1.0).clamp(0.0, 1.0),
+                        |value: &NumberOrPercentageComponent| value.to_number(0.4).max(0.0),
+                        |value: &NumberOrAngleComponent| normalize_hue(value.degrees())
+                    );
+                } else {
+                    serialize_components!(c0, c1, c2);
+                    serialize_alpha!(alpha);
+                }
             },
             Self::Color(origin, c0, c1, c2, alpha, color_space) => {
                 color_space.to_css(dest)?;
