@@ -245,10 +245,16 @@ pub fn mix_many(
     result.flags = accumulated_color.flags;
 
     if flags.contains(ColorMixFlags::RESULT_IN_MODERN_SYNTAX) {
-        // If the result *MUST* be in modern syntax, then make sure it is in a
-        // color space that allows the modern syntax. So hsl and hwb will be
-        // converted to srgb.
-        if result.is_legacy_syntax() {
+        // HSL and HWB results with missing components already serialize in
+        // modern syntax. Converting them to sRGB would erase the missing
+        // components that later interpolation needs to retain.
+        let has_missing_component = result.flags.intersects(
+            ColorFlags::C0_IS_NONE
+                | ColorFlags::C1_IS_NONE
+                | ColorFlags::C2_IS_NONE
+                | ColorFlags::ALPHA_IS_NONE,
+        );
+        if result.is_legacy_syntax() && !has_missing_component {
             result.to_color_space(ColorSpace::Srgb)
         } else {
             result
@@ -642,4 +648,42 @@ fn interpolate_premultiplied(
     result[3] = alpha.interpolated;
 
     (result, flags)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{mix_many, ColorInterpolationMethod, ColorMixItem};
+    use crate::color::{AbsoluteColor, ColorSpace};
+    use crate::values::generics::color::ColorMixFlags;
+
+    #[test]
+    fn modern_hsl_mix_keeps_missing_hue() {
+        let flags = ColorMixFlags::NORMALIZE_WEIGHTS | ColorMixFlags::RESULT_IN_MODERN_SYNTAX;
+        let mixed = mix_many(
+            ColorInterpolationMethod {
+                space: ColorSpace::Hsl,
+                hue: super::HueInterpolationMethod::Shorter,
+            },
+            [ColorMixItem::new(
+                AbsoluteColor::new(ColorSpace::Hsl, None::<f32>, 50.0, 50.0, 1.0),
+                1.0,
+            )],
+            flags,
+        );
+        assert_eq!(mixed.color_space, ColorSpace::Hsl);
+        assert_eq!(mixed.c0(), None);
+
+        let numeric = mix_many(
+            ColorInterpolationMethod {
+                space: ColorSpace::Hsl,
+                hue: super::HueInterpolationMethod::Shorter,
+            },
+            [ColorMixItem::new(
+                AbsoluteColor::new(ColorSpace::Hsl, 180.0, 50.0, 50.0, 1.0),
+                1.0,
+            )],
+            flags,
+        );
+        assert_eq!(numeric.color_space, ColorSpace::Srgb);
+    }
 }
