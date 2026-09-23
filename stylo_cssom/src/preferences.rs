@@ -93,6 +93,11 @@ const REQUIRED_SERVO_STYLE_PREFS: &[RequiredServoStylePref] = &[
         rationale: "masonry keyword parsing for grid-template diagnostics",
     },
     RequiredServoStylePref {
+        name: "layout.css.light-dark.images.enabled",
+        value: true,
+        rationale: "CSS Color 5 image light-dark() parsing and computed image selection",
+    },
+    RequiredServoStylePref {
         name: "layout.variable_fonts.enabled",
         value: true,
         rationale: "CSS Fonts 4 font-variation-settings parsing and computed values",
