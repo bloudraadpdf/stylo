@@ -1643,7 +1643,6 @@ pub enum FontSynthesisStyle {
     MallocSizeOf,
     PartialEq,
     SpecifiedValueInfo,
-    ToComputedValue,
     ToResolvedValue,
     ToShmem,
     ToTyped,
@@ -1652,18 +1651,38 @@ pub enum FontSynthesisStyle {
 #[repr(C)]
 /// Allows authors to choose a palette from those supported by a color font
 /// (and potentially @font-palette-values overrides).
-pub struct FontPalette(Atom);
+pub struct FontPalette(Atom, #[cfg(feature = "servo")] Option<Atom>);
 
 #[allow(missing_docs)]
 impl FontPalette {
+    fn computed_css(&self) -> String {
+        #[cfg(feature = "servo")]
+        if let Some(css) = &self.1 {
+            return css.as_ref().to_owned();
+        }
+        self.to_css_string()
+    }
+
+    fn with_computed_css(css: Atom, computed_css: Option<Atom>) -> Self {
+        #[cfg(feature = "servo")]
+        {
+            Self(css, computed_css)
+        }
+        #[cfg(feature = "gecko")]
+        {
+            let _ = computed_css;
+            Self(css)
+        }
+    }
+
     pub fn normal() -> Self {
-        Self(atom!("normal"))
+        Self::with_computed_css(atom!("normal"), None)
     }
     pub fn light() -> Self {
-        Self(atom!("light"))
+        Self::with_computed_css(atom!("light"), None)
     }
     pub fn dark() -> Self {
-        Self(atom!("dark"))
+        Self::with_computed_css(atom!("dark"), None)
     }
 
     pub(crate) fn mixed_with(&self, other: &Self, other_weight: f64) -> Self {
@@ -1679,7 +1698,26 @@ impl FontPalette {
                 percentage
             )
         };
-        Self(Atom::from(css.as_str()))
+        Self::with_computed_css(Atom::from(css.as_str()), None)
+    }
+}
+
+impl ToComputedValue for FontPalette {
+    type ComputedValue = Self;
+
+    fn to_computed_value(&self, _context: &Context) -> Self::ComputedValue {
+        #[cfg(feature = "servo")]
+        {
+            Self::with_computed_css(self.1.clone().unwrap_or_else(|| self.0.clone()), None)
+        }
+        #[cfg(feature = "gecko")]
+        {
+            self.clone()
+        }
+    }
+
+    fn from_computed_value(computed: &Self::ComputedValue) -> Self {
+        computed.clone()
     }
 }
 
@@ -1755,6 +1793,7 @@ impl Parse for FontPalette {
                         .1
                         .as_ref()
                         .is_none_or(|value| value.resolve() == Some(1.0));
+                let computed_items = items.clone();
                 let mut serialized = String::from("palette-mix(");
                 if !interpolation.is_default() {
                     serialized.push_str(&interpolation.to_css_string());
@@ -1775,7 +1814,41 @@ impl Parse for FontPalette {
                     }
                 }
                 serialized.push(')');
-                Ok(Self(Atom::from(serialized.as_str())))
+                let computed_equal_weights = computed_items.len() == 2
+                    && computed_items.iter().all(|(_, percentage)| {
+                        percentage
+                            .as_ref()
+                            .is_none_or(|value| value.resolve() == Some(0.5))
+                    });
+                let computed_single_hundred = computed_items.len() == 1
+                    && computed_items[0]
+                        .1
+                        .as_ref()
+                        .is_none_or(|value| value.resolve() == Some(1.0));
+                let mut computed_serialized = String::from("palette-mix(");
+                if !interpolation.is_default() {
+                    computed_serialized.push_str(&interpolation.to_css_string());
+                    computed_serialized.push_str(", ");
+                }
+                for (index, (palette, percentage)) in computed_items.into_iter().enumerate() {
+                    if index > 0 {
+                        computed_serialized.push_str(", ");
+                    }
+                    computed_serialized.push_str(&palette.computed_css());
+                    if !all_missing && !computed_equal_weights && !computed_single_hundred {
+                        let value = percentage
+                            .as_ref()
+                            .and_then(Percentage::resolve)
+                            .unwrap_or(implied);
+                        computed_serialized.push(' ');
+                        computed_serialized.push_str(&Percentage::new(value).to_css_string());
+                    }
+                }
+                computed_serialized.push(')');
+                Ok(Self::with_computed_css(
+                    Atom::from(serialized.as_str()),
+                    Some(Atom::from(computed_serialized.as_str())),
+                ))
             });
         }
         let location = input.current_source_location();
@@ -1785,7 +1858,7 @@ impl Parse for FontPalette {
             "light" => Ok(Self::light()),
             "dark" => Ok(Self::dark()),
             _ => if ident.starts_with("--") {
-                Ok(Self(Atom::from(ident.as_ref())))
+                Ok(Self::with_computed_css(Atom::from(ident.as_ref()), None))
             } else {
                 Err(location.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(ident.clone())))
             },
@@ -2253,6 +2326,19 @@ mod tests {
                 "{css}"
             );
         }
+    }
+
+    #[test]
+    fn palette_mix_keeps_specified_calc_and_computes_its_weight() {
+        let palette = parse_font_palette("palette-mix(in srgb, dark calc(10%), light)").unwrap();
+        assert_eq!(
+            palette.to_css_string(),
+            "palette-mix(in srgb, dark calc(10%), light)"
+        );
+        assert_eq!(
+            palette.computed_css(),
+            "palette-mix(in srgb, dark 10%, light 90%)"
+        );
     }
 
     #[test]
