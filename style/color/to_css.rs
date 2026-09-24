@@ -34,6 +34,20 @@ fn legacy_srgb_channel(value: f32) -> u8 {
 /// floating point values.
 struct ModernComponent<'a>(&'a Option<f32>);
 
+fn serialize_direct_rgb_channel<W: Write>(
+    value: Option<f32>,
+    dest: &mut CssWriter<W>,
+) -> fmt::Result {
+    if let Some(value) = value {
+        let byte = (value * 255.0).round();
+        if (0.0..=255.0).contains(&byte) && (value * 255.0 - byte).abs() < 0.00001 {
+            let decimal = format!("{:.8}", f64::from(byte) / 255.0);
+            return dest.write_str(decimal.trim_end_matches('0').trim_end_matches('.'));
+        }
+    }
+    ModernComponent(&value).to_css(dest)
+}
+
 impl<'a> ToCss for ModernComponent<'a> {
     fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
     where
@@ -180,11 +194,11 @@ impl ToCss for AbsoluteColor {
                 dest.write_str("color(")?;
                 self.color_space.to_css(dest)?;
                 dest.write_char(' ')?;
-                ModernComponent(&self.c0()).to_css(dest)?;
+                self.serialize_modern_channel(self.c0(), dest)?;
                 dest.write_char(' ')?;
-                ModernComponent(&self.c1()).to_css(dest)?;
+                self.serialize_modern_channel(self.c1(), dest)?;
                 dest.write_char(' ')?;
-                ModernComponent(&self.c2()).to_css(dest)?;
+                self.serialize_modern_channel(self.c2(), dest)?;
 
                 serialize_color_alpha(dest, self.alpha(), false)?;
 
@@ -214,9 +228,34 @@ mod tests {
         let hwb = AbsoluteColor::new(ColorSpace::Hwb, 180.0, None::<f32>, 25.0, None::<f32>);
         assert_eq!(hwb.to_css_string(), "hwb(180 none 25% / none)");
     }
+
+    #[test]
+    fn direct_rgb_missing_components_keep_byte_precision() {
+        let mut color = AbsoluteColor::new(
+            ColorSpace::Srgb,
+            128.0 / 255.0,
+            None::<f32>,
+            None::<f32>,
+            1.0,
+        );
+        color.flags.insert(super::ColorFlags::DIRECT_RGB_CHANNELS);
+        assert_eq!(color.to_css_string(), "color(srgb 0.50196078 none none)");
+    }
 }
 
 impl AbsoluteColor {
+    fn serialize_modern_channel<W: Write>(
+        &self,
+        value: Option<f32>,
+        dest: &mut CssWriter<W>,
+    ) -> fmt::Result {
+        if self.flags.contains(ColorFlags::DIRECT_RGB_CHANNELS) {
+            serialize_direct_rgb_channel(value, dest)
+        } else {
+            ModernComponent(&value).to_css(dest)
+        }
+    }
+
     fn serialize_hsl_hwb<W: Write>(
         &self,
         dest: &mut CssWriter<W>,
