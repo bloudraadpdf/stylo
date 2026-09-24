@@ -15,8 +15,8 @@ pub fn composite(
     let source = source.to_color_space(ColorSpace::Srgb);
     let [br, bg, bb, ba] = *backdrop.raw_components();
     let [sr, sg, sb, sa] = *source.raw_components();
-    let b = [br, bg, bb];
-    let s = [sr, sg, sb];
+    let b = [br.clamp(0.0, 1.0), bg.clamp(0.0, 1.0), bb.clamp(0.0, 1.0)];
+    let s = [sr.clamp(0.0, 1.0), sg.clamp(0.0, 1.0), sb.clamp(0.0, 1.0)];
     let blended = blend(b, s, mode);
     let alpha = sa + ba * (1.0 - sa);
     let mut result = [0.0; 3];
@@ -158,5 +158,13 @@ mod tests {
             blend([0.25; 3], [0.75; 3], ColorLayerBlendMode::Overlay),
             [0.375; 3]
         );
+    }
+
+    #[test]
+    fn maps_input_layers_to_the_blending_gamut() {
+        let backdrop = AbsoluteColor::new(ColorSpace::Srgb, 0.75, -0.1, 0.53, 1.0);
+        let source = AbsoluteColor::new(ColorSpace::Srgb, 1.0, 1.0, 0.0, 0.5);
+        let result = composite(&backdrop, &source, ColorLayerBlendMode::Normal);
+        assert_eq!(result.components.1, 0.5);
     }
 }
