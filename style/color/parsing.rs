@@ -9,7 +9,7 @@
 use super::{
     color_function::{ColorFunction, RelativeAlphaColor},
     component::{ColorComponent, ColorComponentType},
-    AbsoluteColor, ColorSpace,
+    AbsoluteColor, ColorFloat, ColorSpace,
 };
 use crate::derives::*;
 use crate::{
@@ -679,16 +679,16 @@ fn parse_bd_device_n<'i, 't>(
 #[repr(u8)]
 pub enum NumberOrPercentageComponent {
     /// `<number>`.
-    Number(f32),
+    Number(ColorFloat),
     /// `<percentage>`
     /// The value as a float, divided by 100 so that the nominal range is 0.0 to 1.0.
-    Percentage(f32),
+    Percentage(ColorFloat),
 }
 
 impl NumberOrPercentageComponent {
     /// Return the value as a number. Percentages will be adjusted to the range
     /// [0..percent_basis].
-    pub fn to_number(&self, percentage_basis: f32) -> f32 {
+    pub fn to_number(&self, percentage_basis: ColorFloat) -> ColorFloat {
         match *self {
             Self::Number(value) => value,
             Self::Percentage(unit_value) => unit_value * percentage_basis,
@@ -697,7 +697,7 @@ impl NumberOrPercentageComponent {
 }
 
 impl ColorComponentType for NumberOrPercentageComponent {
-    fn from_value(value: f32) -> Self {
+    fn from_value(value: ColorFloat) -> Self {
         Self::Number(value)
     }
 
@@ -707,18 +707,31 @@ impl ColorComponentType for NumberOrPercentageComponent {
 
     fn try_from_token(token: &Token) -> Result<Self, ()> {
         Ok(match *token {
-            Token::Number { value, .. } => Self::Number(value),
-            Token::Percentage { unit_value, .. } => Self::Percentage(unit_value),
+            Token::Number { value, .. } => Self::Number(ColorFloat::from(value)),
+            Token::Percentage { unit_value, .. } => Self::Percentage(ColorFloat::from(unit_value)),
             _ => {
                 return Err(());
             },
         })
     }
 
+    fn try_from_token_with_raw(token: &Token, raw: &str) -> Result<Self, ()> {
+        match token {
+            Token::Number { .. } => raw.parse().map(Self::Number).map_err(|_| ()),
+            Token::Percentage { .. } => raw
+                .strip_suffix('%')
+                .ok_or(())?
+                .parse::<ColorFloat>()
+                .map(|value| Self::Percentage(value / 100.0))
+                .map_err(|_| ()),
+            _ => Self::try_from_token(token),
+        }
+    }
+
     fn try_from_leaf(leaf: &Leaf) -> Result<Self, ()> {
         Ok(match *leaf {
-            Leaf::Percentage(unit_value) => Self::Percentage(unit_value),
-            Leaf::Number(value) => Self::Number(value),
+            Leaf::Percentage(unit_value) => Self::Percentage(ColorFloat::from(unit_value)),
+            Leaf::Number(value) => Self::Number(ColorFloat::from(value)),
             _ => return Err(()),
         })
     }
@@ -729,16 +742,16 @@ impl ColorComponentType for NumberOrPercentageComponent {
 #[repr(u8)]
 pub enum NumberOrAngleComponent {
     /// `<number>`.
-    Number(f32),
+    Number(ColorFloat),
     /// `<angle>`
     /// The value as a number of degrees.
-    Angle(f32),
+    Angle(ColorFloat),
 }
 
 impl NumberOrAngleComponent {
     /// Return the angle in degrees. `NumberOrAngle::Number` is returned as
     /// degrees, because it is the canonical unit.
-    pub fn degrees(&self) -> f32 {
+    pub fn degrees(&self) -> ColorFloat {
         match *self {
             Self::Number(value) => value,
             Self::Angle(degrees) => degrees,
@@ -747,7 +760,7 @@ impl NumberOrAngleComponent {
 }
 
 impl ColorComponentType for NumberOrAngleComponent {
-    fn from_value(value: f32) -> Self {
+    fn from_value(value: ColorFloat) -> Self {
         Self::Number(value)
     }
 
@@ -757,14 +770,14 @@ impl ColorComponentType for NumberOrAngleComponent {
 
     fn try_from_token(token: &Token) -> Result<Self, ()> {
         Ok(match *token {
-            Token::Number { value, .. } => Self::Number(value),
+            Token::Number { value, .. } => Self::Number(ColorFloat::from(value)),
             Token::Dimension {
                 value, ref unit, ..
             } => {
                 let degrees = crate::values::specified::angle::AngleDimension::parse(value, unit)
                     .map(|angle| angle.degrees())?;
 
-                NumberOrAngleComponent::Angle(degrees)
+                NumberOrAngleComponent::Angle(ColorFloat::from(degrees))
             },
             _ => {
                 return Err(());
@@ -772,10 +785,17 @@ impl ColorComponentType for NumberOrAngleComponent {
         })
     }
 
+    fn try_from_token_with_raw(token: &Token, raw: &str) -> Result<Self, ()> {
+        match token {
+            Token::Number { .. } => raw.parse().map(Self::Number).map_err(|_| ()),
+            _ => Self::try_from_token(token),
+        }
+    }
+
     fn try_from_leaf(leaf: &Leaf) -> Result<Self, ()> {
         Ok(match *leaf {
-            Leaf::Angle(angle) => Self::Angle(angle.degrees()),
-            Leaf::Number(value) => Self::Number(value),
+            Leaf::Angle(angle) => Self::Angle(ColorFloat::from(angle.degrees())),
+            Leaf::Number(value) => Self::Number(ColorFloat::from(value)),
             _ => return Err(()),
         })
     }
@@ -783,8 +803,8 @@ impl ColorComponentType for NumberOrAngleComponent {
 
 /// The raw f32 here is for <number>.
 impl ColorComponentType for f32 {
-    fn from_value(value: f32) -> Self {
-        value
+    fn from_value(value: ColorFloat) -> Self {
+        value as f32
     }
 
     fn units() -> CalcUnits {
@@ -934,6 +954,32 @@ mod specified_color_tests {
     use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
     use cssparser::{Parser, ParserInput};
     use style_traits::{ParsingMode, ToCss};
+
+    #[cfg(not(feature = "gecko"))]
+    #[test]
+    fn near_neutral_p3_components_keep_authored_precision() {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input = ParserInput::new(
+            "color(display-p3 0.08610937692934956 0.08610188202042188 0.08610387292083356)",
+        );
+        let specified = Parser::new(&mut input)
+            .parse_entirely(|parser| parse_color_with(&context, parser))
+            .expect("P3 color parses");
+        let color = specified.resolve_to_absolute().expect("P3 color resolves");
+        assert_eq!(color.components.0, 0.08610937692934956);
+        let oklch = color.to_color_space(crate::color::ColorSpace::Oklch);
+        assert!((oklch.components.1 - 0.000004).abs() < 0.0000001);
+    }
 
     #[test]
     fn custom_profile_color_remains_typed_and_round_trips() {

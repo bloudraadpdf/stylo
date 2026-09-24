@@ -18,7 +18,7 @@ use crate::values::generics::color::{
     GenericColorMixItem, GenericColorMixPercentage, GenericColorOrAuto, GenericLightDark,
 };
 use crate::values::specified::Percentage;
-use crate::values::{normalize, CustomIdent};
+use crate::values::CustomIdent;
 use cssparser::{match_ignore_ascii_case, BasicParseErrorKind, ParseErrorKind, Parser, Token};
 use std::fmt::{self, Write};
 use std::io::Write as IoWrite;
@@ -947,7 +947,7 @@ impl Color {
                 for item in mix.items() {
                     items.push(mix::ColorMixItem::new(
                         item.color.resolve_to_absolute()?,
-                        item.percentage.value().resolve()?,
+                        crate::color::ColorFloat::from(item.percentage.value().resolve()?),
                     ))
                 }
 
@@ -1065,15 +1065,26 @@ impl Color {
                     $color.color_space,
                     ColorSpace::Lab | ColorSpace::Oklab | ColorSpace::Lch | ColorSpace::Oklch
                 ) {
-                    $color.components.0 = normalize($color.components.0);
+                    $color.components.0 = if $color.components.0.is_nan() {
+                        0.0
+                    } else {
+                        $color.components.0
+                    };
                 }
 
                 // Computed RGB and XYZ components can not be NaN.
                 if !$color.is_legacy_syntax() && $color.color_space.is_rgb_or_xyz_like() {
-                    $color.components = $color.components.map(normalize);
+                    $color.components =
+                        $color
+                            .components
+                            .map(|value| if value.is_nan() { 0.0 } else { value });
                 }
 
-                $color.alpha = normalize($color.alpha);
+                $color.alpha = if $color.alpha.is_nan() {
+                    0.0
+                } else {
+                    $color.alpha
+                };
                 $color.flags.remove(ColorFlags::SERIALIZE_AS_LEGACY_SRGB);
             }};
         }

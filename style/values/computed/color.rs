@@ -4,7 +4,7 @@
 
 //! Computed color values.
 
-use crate::color::AbsoluteColor;
+use crate::color::{AbsoluteColor, ColorFloat};
 use crate::values::animated::ToAnimatedZero;
 use crate::values::computed::percentage::Percentage;
 use crate::values::generics::color::{
@@ -110,7 +110,7 @@ impl Color {
                     mix.items().iter().map(|item| {
                         mix::ColorMixItem::new(
                             item.color.resolve_to_absolute(current_color),
-                            item.percentage.value().to_percentage(),
+                            ColorFloat::from(item.percentage.value().to_percentage()),
                         )
                     }),
                     mix.flags,
@@ -145,19 +145,19 @@ impl Color {
         }
     }
 
-    fn contrast_ratio(a: &AbsoluteColor, b: &AbsoluteColor) -> f32 {
+    fn contrast_ratio(a: &AbsoluteColor, b: &AbsoluteColor) -> ColorFloat {
         // TODO: This just implements the WCAG 2.1 algorithm,
         // https://www.w3.org/TR/WCAG21/#dfn-contrast-ratio
         // Consider using a more sophisticated contrast algorithm, e.g. see
         // https://apcacontrast.com
-        let compute = |c| -> f32 {
+        let compute = |c: ColorFloat| -> ColorFloat {
             if c <= 0.04045 {
                 c / 12.92
             } else {
-                f32::powf((c + 0.055) / 1.055, 2.4)
+                ColorFloat::powf((c + 0.055) / 1.055, 2.4)
             }
         };
-        let luminance = |r, g, b| -> f32 { 0.2126 * r + 0.7152 * g + 0.0722 * b };
+        let luminance = |r, g, b| -> ColorFloat { 0.2126 * r + 0.7152 * g + 0.0722 * b };
         let a = a.into_srgb_legacy();
         let b = b.into_srgb_legacy();
         let a = a.raw_components();

@@ -216,7 +216,7 @@ impl<Percentage> ColorMix<GenericColor<Percentage>, Percentage> {
         for item in self.items.iter() {
             items.push(mix::ColorMixItem::new(
                 *item.color.as_absolute()?,
-                item.percentage.value().to_percentage(),
+                crate::color::ColorFloat::from(item.percentage.value().to_percentage()),
             ))
         }
 

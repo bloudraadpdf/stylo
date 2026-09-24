@@ -10,15 +10,24 @@ use super::{
     component::ColorComponent,
     convert::normalize_hue,
     parsing::{NumberOrAngleComponent, NumberOrPercentageComponent},
-    AbsoluteColor, ColorFlags, ColorSpace,
+    AbsoluteColor, ColorFlags, ColorFloat, ColorSpace,
 };
 use crate::derives::*;
 use crate::values::{
-    computed::color::Color as ComputedColor, generics::Optional, normalize,
+    computed::color::Color as ComputedColor, generics::Optional,
     specified::color::Color as SpecifiedColor,
 };
 use cssparser::color::{clamp_floor_256_f32, OPAQUE};
 use style_traits::ToCss;
+
+#[inline]
+fn normalize_color(value: ColorFloat) -> ColorFloat {
+    if value.is_nan() {
+        0.0
+    } else {
+        value
+    }
+}
 
 /// moegoe F2 — one `(colorant-name, tint)` pair inside a
 /// [`ColorFunction::BdDeviceN`] colour function.
@@ -239,10 +248,10 @@ impl ColorFunction<AbsoluteColor> {
         // Values 4 §10.12 clamps infinities from a top-level calculation to
         // the channel's allowed range. Color 5 retains finite out-of-range
         // components in relative colors.
-        fn lightness(value: f32, maximum: f32) -> f32 {
-            if value == f32::INFINITY {
+        fn lightness(value: ColorFloat, maximum: ColorFloat) -> ColorFloat {
+            if value == ColorFloat::INFINITY {
                 maximum
-            } else if value == f32::NEG_INFINITY {
+            } else if value == ColorFloat::NEG_INFINITY {
                 0.0
             } else {
                 value
@@ -251,9 +260,9 @@ impl ColorFunction<AbsoluteColor> {
 
         macro_rules! alpha {
             ($alpha:expr, $origin_color:expr) => {{
-                $alpha
-                    .resolve($origin_color)?
-                    .map(|value| normalize(value.to_number(1.0)).clamp(0.0, OPAQUE))
+                $alpha.resolve($origin_color)?.map(|value| {
+                    normalize_color(value.to_number(1.0)).clamp(0.0, ColorFloat::from(OPAQUE))
+                })
             }};
         }
 
@@ -318,7 +327,8 @@ impl ColorFunction<AbsoluteColor> {
                         Ok(clamp_floor_256_f32(
                             component
                                 .resolve(origin_color)?
-                                .map_or(0.0, |value| value.to_number(u8::MAX as f32)),
+                                .map_or(0.0, |value| value.to_number(u8::MAX as ColorFloat))
+                                as f32,
                         ))
                     }
 
@@ -334,8 +344,8 @@ impl ColorFunction<AbsoluteColor> {
             },
             ColorFunction::Hsl(origin_color, h, s, l, alpha) => {
                 // Percent reference range for S and L: 0% = 0.0, 100% = 100.0
-                const LIGHTNESS_RANGE: f32 = 100.0;
-                const SATURATION_RANGE: f32 = 100.0;
+                const LIGHTNESS_RANGE: ColorFloat = 100.0;
+                const SATURATION_RANGE: ColorFloat = 100.0;
 
                 // If the origin color:
                 // - was *NOT* specified, then we stick with the old way of serializing the
@@ -392,8 +402,8 @@ impl ColorFunction<AbsoluteColor> {
                     && !alpha.is_none();
 
                 // Percent reference range for W and B: 0% = 0.0, 100% = 100.0
-                const WHITENESS_RANGE: f32 = 100.0;
-                const BLACKNESS_RANGE: f32 = 100.0;
+                const WHITENESS_RANGE: ColorFloat = 100.0;
+                const BLACKNESS_RANGE: ColorFloat = 100.0;
 
                 let origin_color = origin_color
                     .as_ref()
@@ -419,8 +429,8 @@ impl ColorFunction<AbsoluteColor> {
             ColorFunction::Lab(origin_color, l, a, b, alpha) => {
                 // for L: 0% = 0.0, 100% = 100.0
                 // for a and b: -100% = -125, 100% = 125
-                const LIGHTNESS_RANGE: f32 = 100.0;
-                const A_B_RANGE: f32 = 125.0;
+                const LIGHTNESS_RANGE: ColorFloat = 100.0;
+                const A_B_RANGE: ColorFloat = 125.0;
 
                 let origin_color = origin_color
                     .as_ref()
@@ -441,8 +451,8 @@ impl ColorFunction<AbsoluteColor> {
             ColorFunction::Lch(origin_color, l, c, h, alpha) => {
                 // for L: 0% = 0.0, 100% = 100.0
                 // for C: 0% = 0, 100% = 150
-                const LIGHTNESS_RANGE: f32 = 100.0;
-                const CHROMA_RANGE: f32 = 150.0;
+                const LIGHTNESS_RANGE: ColorFloat = 100.0;
+                const CHROMA_RANGE: ColorFloat = 150.0;
 
                 let origin_color = origin_color
                     .as_ref()
@@ -455,7 +465,7 @@ impl ColorFunction<AbsoluteColor> {
                     c.resolve(origin_color.as_ref())?
                         .map(|c| c.to_number(CHROMA_RANGE)),
                     h.resolve(origin_color.as_ref())?
-                        .map(|angle| normalize_hue(normalize(angle.degrees()))),
+                        .map(|angle| normalize_hue(normalize_color(angle.degrees()))),
                     alpha!(alpha, origin_color.as_ref()),
                     origin_color.is_none(),
                 )
@@ -463,8 +473,8 @@ impl ColorFunction<AbsoluteColor> {
             ColorFunction::Oklab(origin_color, l, a, b, alpha) => {
                 // for L: 0% = 0.0, 100% = 1.0
                 // for a and b: -100% = -0.4, 100% = 0.4
-                const LIGHTNESS_RANGE: f32 = 1.0;
-                const A_B_RANGE: f32 = 0.4;
+                const LIGHTNESS_RANGE: ColorFloat = 1.0;
+                const A_B_RANGE: ColorFloat = 0.4;
 
                 let origin_color = origin_color
                     .as_ref()
@@ -485,8 +495,8 @@ impl ColorFunction<AbsoluteColor> {
             ColorFunction::Oklch(origin_color, l, c, h, alpha) => {
                 // for L: 0% = 0.0, 100% = 1.0
                 // for C: 0% = 0.0 100% = 0.4
-                const LIGHTNESS_RANGE: f32 = 1.0;
-                const CHROMA_RANGE: f32 = 0.4;
+                const LIGHTNESS_RANGE: ColorFloat = 1.0;
+                const CHROMA_RANGE: ColorFloat = 0.4;
 
                 let origin_color = origin_color
                     .as_ref()
@@ -499,7 +509,7 @@ impl ColorFunction<AbsoluteColor> {
                     c.resolve(origin_color.as_ref())?
                         .map(|c| c.to_number(CHROMA_RANGE)),
                     h.resolve(origin_color.as_ref())?
-                        .map(|angle| normalize_hue(normalize(angle.degrees()))),
+                        .map(|angle| normalize_hue(normalize_color(angle.degrees()))),
                     alpha!(alpha, origin_color.as_ref()),
                     origin_color.is_none(),
                 )
@@ -982,10 +992,10 @@ impl ColorFunction<ComputedColor> {
 fn serialize_static_component<W: Write, T: style_traits::ToCss>(
     component: &ColorComponent<T>,
     dest: &mut style_traits::CssWriter<W>,
-    canonical_value: impl FnOnce(&T) -> f32,
+    canonical_value: impl FnOnce(&T) -> ColorFloat,
 ) -> std::fmt::Result {
     match component {
-        ColorComponent::Value(value) => canonical_value(value).to_css(dest),
+        ColorComponent::Value(value) => write!(dest, "{}", canonical_value(value)),
         _ => component.to_css(dest),
     }
 }
@@ -1035,7 +1045,7 @@ impl<C: ColorFunctionCssContext> style_traits::ToCss for ColorFunction<C> {
     {
         if let Self::DeviceCmyk(c, m, y, k, alpha, fallback) = self {
             let is_opaque = if let ColorComponent::Value(value) = *alpha {
-                value.to_number(OPAQUE) == OPAQUE
+                value.to_number(ColorFloat::from(OPAQUE)) == ColorFloat::from(OPAQUE)
             } else {
                 false
             };
@@ -1177,7 +1187,7 @@ impl<C: ColorFunctionCssContext> style_traits::ToCss for ColorFunction<C> {
 
         let is_opaque = if origin_color.is_none() {
             if let ColorComponent::Value(value) = *alpha {
-                value.to_number(OPAQUE) == OPAQUE
+                value.to_number(ColorFloat::from(OPAQUE)) == ColorFloat::from(OPAQUE)
             } else {
                 false
             }
@@ -1213,7 +1223,9 @@ impl<C: ColorFunctionCssContext> style_traits::ToCss for ColorFunction<C> {
                 if !is_opaque && !matches!($alpha, ColorComponent::AlphaOmitted) {
                     dest.write_str(" / ")?;
                     serialize_static_component($alpha, dest, |value| {
-                        value.to_number(OPAQUE).clamp(0.0, OPAQUE)
+                        value
+                            .to_number(ColorFloat::from(OPAQUE))
+                            .clamp(0.0, ColorFloat::from(OPAQUE))
                     })?;
                 }
             }};
@@ -1384,7 +1396,7 @@ mod tests {
     use crate::color::parsing::ChannelKeyword;
 
     fn number(value: f32) -> ColorComponent<NumberOrPercentageComponent> {
-        ColorComponent::Value(NumberOrPercentageComponent::Number(value))
+        ColorComponent::Value(NumberOrPercentageComponent::Number(ColorFloat::from(value)))
     }
 
     #[test]

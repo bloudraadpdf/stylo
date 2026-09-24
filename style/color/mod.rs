@@ -21,6 +21,14 @@ pub use color_function::*;
 use component::ColorComponent;
 use cssparser::color::PredefinedColorSpace;
 
+/// Precision for CSS color channels. Gecko's C++ color ABI uses `float`,
+/// while Servo-style consumers can retain the precision of authored numbers.
+#[cfg(feature = "gecko")]
+pub type ColorFloat = f32;
+/// Precision for CSS color channels outside Gecko's C++ ABI.
+#[cfg(not(feature = "gecko"))]
+pub type ColorFloat = f64;
+
 /// Number of color-mix items to reserve on the stack to avoid heap allocations.
 pub const PRE_ALLOCATED_COLOR_MIX_ITEMS: usize = 3;
 
@@ -31,12 +39,12 @@ pub type ColorMixItemList<T> = smallvec::SmallVec<[T; PRE_ALLOCATED_COLOR_MIX_IT
 #[derive(Copy, Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
 #[cfg_attr(feature = "servo", derive(Deserialize, Serialize))]
 #[repr(C)]
-pub struct ColorComponents(pub f32, pub f32, pub f32);
+pub struct ColorComponents(pub ColorFloat, pub ColorFloat, pub ColorFloat);
 
 impl ColorComponents {
     /// Apply a function to each of the 3 components of the color.
     #[must_use]
-    pub fn map(self, f: impl Fn(f32) -> f32) -> Self {
+    pub fn map(self, f: impl Fn(ColorFloat) -> ColorFloat) -> Self {
         Self(f(self.0), f(self.1), f(self.2))
     }
 }
@@ -231,7 +239,7 @@ pub struct AbsoluteColor {
     /// The 3 components that make up colors in any color space.
     pub components: ColorComponents,
     /// The alpha component of the color.
-    pub alpha: f32,
+    pub alpha: ColorFloat,
     /// The current color space that the components represent.
     pub color_space: ColorSpace,
     /// Extra flags used durring serialization of this color.
@@ -250,8 +258,14 @@ macro_rules! color_components_as {
         // This macro is not an inline function, because we can't use the
         // generic  type ($t) in a constant expression as per:
         // https://github.com/rust-lang/rust/issues/76560
-        const_assert_eq!(std::mem::size_of::<$t>(), std::mem::size_of::<[f32; 4]>());
-        const_assert_eq!(std::mem::align_of::<$t>(), std::mem::align_of::<[f32; 4]>());
+        const_assert_eq!(
+            std::mem::size_of::<$t>(),
+            std::mem::size_of::<[ColorFloat; 4]>()
+        );
+        const_assert_eq!(
+            std::mem::align_of::<$t>(),
+            std::mem::align_of::<[ColorFloat; 4]>()
+        );
         const_assert!(std::mem::size_of::<AbsoluteColor>() >= std::mem::size_of::<$t>());
         const_assert_eq!(
             std::mem::align_of::<AbsoluteColor>(),
@@ -264,12 +278,12 @@ macro_rules! color_components_as {
 
 /// Holds details about each component passed into creating a new [`AbsoluteColor`].
 pub struct ComponentDetails {
-    value: f32,
+    value: ColorFloat,
     is_none: bool,
 }
 
-impl From<f32> for ComponentDetails {
-    fn from(value: f32) -> Self {
+impl From<ColorFloat> for ComponentDetails {
+    fn from(value: ColorFloat) -> Self {
         Self {
             value,
             is_none: false,
@@ -277,17 +291,24 @@ impl From<f32> for ComponentDetails {
     }
 }
 
+#[cfg(not(feature = "gecko"))]
+impl From<f32> for ComponentDetails {
+    fn from(value: f32) -> Self {
+        Self::from(f64::from(value))
+    }
+}
+
 impl From<u8> for ComponentDetails {
     fn from(value: u8) -> Self {
         Self {
-            value: value as f32 / 255.0,
+            value: ColorFloat::from(value) / 255.0,
             is_none: false,
         }
     }
 }
 
-impl From<Option<f32>> for ComponentDetails {
-    fn from(value: Option<f32>) -> Self {
+impl From<Option<ColorFloat>> for ComponentDetails {
+    fn from(value: Option<ColorFloat>) -> Self {
         if let Some(value) = value {
             Self {
                 value,
@@ -302,11 +323,18 @@ impl From<Option<f32>> for ComponentDetails {
     }
 }
 
+#[cfg(not(feature = "gecko"))]
+impl From<Option<f32>> for ComponentDetails {
+    fn from(value: Option<f32>) -> Self {
+        Self::from(value.map(f64::from))
+    }
+}
+
 impl From<ColorComponent<f32>> for ComponentDetails {
     fn from(value: ColorComponent<f32>) -> Self {
         if let ColorComponent::Value(value) = value {
             Self {
-                value,
+                value: ColorFloat::from(value),
                 is_none: false,
             }
         } else {
@@ -438,7 +466,7 @@ impl AbsoluteColor {
     }
 
     /// Create a new [`AbsoluteColor`] from rgba legacy syntax values in the sRGB color space.
-    pub fn srgb_legacy(red: u8, green: u8, blue: u8, alpha: f32) -> Self {
+    pub fn srgb_legacy(red: u8, green: u8, blue: u8, alpha: impl Into<ComponentDetails>) -> Self {
         let mut result = Self::new(ColorSpace::Srgb, red, green, blue, alpha);
         result.flags = ColorFlags::IS_LEGACY_SRGB;
         result
@@ -446,8 +474,8 @@ impl AbsoluteColor {
 
     /// Return all the components of the color in an array.  (Includes alpha)
     #[inline]
-    pub fn raw_components(&self) -> &[f32; 4] {
-        unsafe { color_components_as!(self, [f32; 4]) }
+    pub fn raw_components(&self) -> &[ColorFloat; 4] {
+        unsafe { color_components_as!(self, [ColorFloat; 4]) }
     }
 
     /// Returns true if this color is in the legacy color syntax.
@@ -469,7 +497,7 @@ impl AbsoluteColor {
 
     /// Return an optional first component.
     #[inline]
-    pub fn c0(&self) -> Option<f32> {
+    pub fn c0(&self) -> Option<ColorFloat> {
         if self.flags.contains(ColorFlags::C0_IS_NONE) {
             None
         } else {
@@ -479,7 +507,7 @@ impl AbsoluteColor {
 
     /// Return an optional second component.
     #[inline]
-    pub fn c1(&self) -> Option<f32> {
+    pub fn c1(&self) -> Option<ColorFloat> {
         if self.flags.contains(ColorFlags::C1_IS_NONE) {
             None
         } else {
@@ -489,7 +517,7 @@ impl AbsoluteColor {
 
     /// Return an optional second component.
     #[inline]
-    pub fn c2(&self) -> Option<f32> {
+    pub fn c2(&self) -> Option<ColorFloat> {
         if self.flags.contains(ColorFlags::C2_IS_NONE) {
             None
         } else {
@@ -499,7 +527,7 @@ impl AbsoluteColor {
 
     /// Return an optional alpha component.
     #[inline]
-    pub fn alpha(&self) -> Option<f32> {
+    pub fn alpha(&self) -> Option<ColorFloat> {
         if self.flags.contains(ColorFlags::ALPHA_IS_NONE) {
             None
         } else {
@@ -511,7 +539,7 @@ impl AbsoluteColor {
     pub fn get_component_by_channel_keyword(
         &self,
         channel_keyword: ChannelKeyword,
-    ) -> Result<Option<f32>, ()> {
+    ) -> Result<Option<ColorFloat>, ()> {
         if channel_keyword == ChannelKeyword::Alpha {
             return Ok(self.alpha());
         }
@@ -602,7 +630,11 @@ impl AbsoluteColor {
         macro_rules! missing_to_zero {
             ($c:expr) => {{
                 if let Some(v) = $c {
-                    crate::values::normalize(v)
+                    if v.is_nan() {
+                        0.0
+                    } else {
+                        v
+                    }
                 } else {
                     0.0
                 }

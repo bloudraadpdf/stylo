@@ -25,8 +25,8 @@ impl Animate for AbsoluteColor {
         Ok(mix::mix_many(
             ColorInterpolationMethod::best_interpolation_between(self, other),
             [
-                mix::ColorMixItem::new(*self, left_weight as f32),
-                mix::ColorMixItem::new(*other, right_weight as f32),
+                mix::ColorMixItem::new(*self, left_weight as crate::color::ColorFloat),
+                mix::ColorMixItem::new(*other, right_weight as crate::color::ColorFloat),
             ],
             ColorMixFlags::empty(),
         ))

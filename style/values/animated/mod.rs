@@ -474,6 +474,7 @@ trivial_to_animated_value!(Angle);
 trivial_to_animated_value!(ComputedUrl);
 trivial_to_animated_value!(bool);
 trivial_to_animated_value!(f32);
+trivial_to_animated_value!(f64);
 trivial_to_animated_value!(i32);
 trivial_to_animated_value!(u32);
 trivial_to_animated_value!(usize);

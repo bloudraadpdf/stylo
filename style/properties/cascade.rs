@@ -492,7 +492,7 @@ fn tweak_when_ignoring_colors(
         }
     }
 
-    fn alpha_channel(color: &Color, context: &computed::Context) -> f32 {
+    fn alpha_channel(color: &Color, context: &computed::Context) -> crate::color::ColorFloat {
         // We assume here currentColor is opaque.
         color
             .to_computed_value(context)
@@ -677,7 +677,7 @@ fn synthesise_bd_color_function_companion(
             // coverage), matching the parser's default and
             // `resolve_bd_spot_color` in `moegoe-css`.
             let tint_value: f32 = match tint {
-                ColorComponent::Value(value) => value.to_number(1.0).clamp(0.0, 1.0),
+                ColorComponent::Value(value) => value.to_number(1.0).clamp(0.0, 1.0) as f32,
                 _ => 1.0,
             };
             PropertyDeclaration::BdColorFunction(Box::new(SpecifiedBdColorFunction::Spot {
@@ -703,7 +703,9 @@ fn synthesise_bd_color_function_companion(
             // does not resolve drops the companion to `None` so the
             // sRGB collapse runs as a fail-safe.
             let resolve = |comp: &ColorComponent<NumberOrPercentageComponent>| -> Option<f32> {
-                comp.resolve(None).ok()?.map(|value| value.to_number(1.0))
+                comp.resolve(None)
+                    .ok()?
+                    .map(|value| value.to_number(1.0) as f32)
             };
             let (cy, ma, ye, ke) = match (resolve(c), resolve(m), resolve(y), resolve(k)) {
                 (Some(cy), Some(ma), Some(ye), Some(ke)) => (cy, ma, ye, ke),
@@ -736,7 +738,9 @@ fn synthesise_bd_color_function_companion(
             // colorant would render against a stale tint and
             // produce a wrong PDF colour.
             let resolve = |comp: &ColorComponent<NumberOrPercentageComponent>| -> Option<f32> {
-                comp.resolve(None).ok()?.map(|value| value.to_number(1.0))
+                comp.resolve(None)
+                    .ok()?
+                    .map(|value| value.to_number(1.0) as f32)
             };
             use crate::values::specified::bd_color_function::BdDeviceNCompanionComponent;
             let mut resolved_pairs: Vec<BdDeviceNCompanionComponent> =
