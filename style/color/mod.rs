@@ -590,6 +590,56 @@ impl AbsoluteColor {
         self.to_color_space_with_missing(color_space)
     }
 
+    /// CSS Color 4 §11.2 prepares powerless polar channels before conversion.
+    /// The numeric channel is zeroed only when positive and within its epsilon.
+    fn prepared_source_components(&self) -> ([Option<f32>; 3], bool) {
+        use ColorSpace::*;
+
+        let powerless = match self.color_space {
+            Hsl => self
+                .c1()
+                .is_some_and(|saturation| saturation.abs() <= 0.001),
+            Hwb => self
+                .c1()
+                .zip(self.c2())
+                .is_some_and(|(white, black)| white + black >= 99.999),
+            Lch => self
+                .c1()
+                .is_some_and(|chroma| chroma <= convert::LCH_HUE_EPSILON),
+            Oklch => self
+                .c1()
+                .is_some_and(|chroma| chroma <= convert::OKLCH_HUE_EPSILON),
+            _ => false,
+        };
+        let mut source = [self.c0(), self.c1(), self.c2()];
+        if powerless {
+            match self.color_space {
+                Hsl => {
+                    source[0] = None;
+                    if source[1].is_some_and(|saturation| saturation > 0.0) {
+                        source[1] = Some(0.0);
+                    }
+                },
+                Hwb => {
+                    source[0] = None;
+                    if let (Some(white), Some(black)) = (source[1], source[2]) {
+                        if white + black < 100.0 {
+                            source[2] = Some(100.0 - white);
+                        }
+                    }
+                },
+                Lch | Oklch => {
+                    source[2] = None;
+                    if source[1].is_some_and(|chroma| chroma > 0.0) {
+                        source[1] = Some(0.0);
+                    }
+                },
+                _ => {},
+            }
+        }
+        (source, powerless)
+    }
+
     fn to_color_space_impl(&self, color_space: ColorSpace) -> Self {
         use ColorSpace::*;
 
@@ -609,10 +659,11 @@ impl AbsoluteColor {
             }};
         }
 
+        let (source, source_hue_powerless) = self.prepared_source_components();
         let components = ColorComponents(
-            missing_to_zero!(self.c0()),
-            missing_to_zero!(self.c1()),
-            missing_to_zero!(self.c2()),
+            missing_to_zero!(source[0]),
+            missing_to_zero!(source[1]),
+            missing_to_zero!(source[2]),
         );
 
         let result = match (self.color_space, color_space) {
@@ -714,22 +765,6 @@ impl AbsoluteColor {
 
         // Check the source because finite-precision conversion can cross the
         // target's powerless threshold.
-        let source_hue_powerless = match self.color_space {
-            Hsl => self
-                .c1()
-                .is_some_and(|saturation| saturation.abs() <= 0.001),
-            Hwb => self
-                .c1()
-                .zip(self.c2())
-                .is_some_and(|(white, black)| white + black >= 99.999),
-            Lch => self
-                .c1()
-                .is_some_and(|chroma| chroma <= convert::LCH_HUE_EPSILON),
-            Oklch => self
-                .c1()
-                .is_some_and(|chroma| chroma <= convert::OKLCH_HUE_EPSILON),
-            _ => false,
-        };
         match color_space {
             Hsl if source_hue_powerless
                 || c1.is_some_and(|saturation| saturation.abs() <= 0.001) =>
@@ -828,7 +863,9 @@ mod tests {
     #[test]
     fn conversion_to_hsl_marks_powerless_hue_missing() {
         let boundary = AbsoluteColor::new(ColorSpace::Hwb, 180.0, 49.999, 50.0, 1.0);
-        assert_eq!(boundary.to_color_space(ColorSpace::Hsl).c0(), None);
+        let converted_boundary = boundary.to_color_space(ColorSpace::Hsl);
+        assert_eq!(converted_boundary.c0(), None);
+        assert_eq!(converted_boundary.c1(), Some(0.0));
 
         let hwb = AbsoluteColor::new(ColorSpace::Hwb, 180.0, 100.0, 25.0, 1.0);
         let hsl = hwb.to_color_space(ColorSpace::Hsl);
