@@ -857,16 +857,7 @@ impl AbsoluteColor {
     /// Its missing components are carried to analogous channels after the
     /// numeric conversion has treated them as zero.
     pub(crate) fn to_color_space_with_missing(&self, color_space: ColorSpace) -> Self {
-        let mut converted = if self.color_space == color_space {
-            let (source, powerless) = self.prepared_source_components();
-            if powerless {
-                Self::new_unclamped(color_space, source[0], source[1], source[2], self.alpha())
-            } else {
-                *self
-            }
-        } else {
-            self.to_color_space(color_space)
-        };
+        let mut converted = self.to_color_space(color_space);
         converted.carry_forward_analogous_missing_components(self);
         converted
     }
@@ -926,15 +917,11 @@ mod tests {
     }
 
     #[test]
-    fn same_space_interpolation_prepares_powerless_chroma() {
+    fn same_space_interpolation_preserves_authored_powerless_chroma() {
         let lch = AbsoluteColor::new(ColorSpace::Lch, 20.0, 0.0015, 180.0, 1.0);
-        let prepared = lch.to_color_space_with_missing(ColorSpace::Lch);
-        assert_eq!(prepared.c1(), Some(0.0));
-        assert_eq!(prepared.c2(), None);
-
-        let authored = lch.to_color_space(ColorSpace::Lch);
-        assert_eq!(authored.c1(), Some(0.0015));
-        assert_eq!(authored.c2(), Some(180.0));
+        let same_space = lch.to_color_space_with_missing(ColorSpace::Lch);
+        assert_eq!(same_space.c1(), Some(0.0015));
+        assert_eq!(same_space.c2(), Some(180.0));
     }
 
     #[test]
