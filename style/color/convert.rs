@@ -250,11 +250,13 @@ fn transform(from: &ColorComponents, mat: &Transform) -> ColorComponents {
 }
 
 fn xyz_d65_to_xyz_d50(from: &ColorComponents) -> ColorComponents {
+    // Linear Bradford adaptation derived from CSS Color 4's D65 and D50
+    // chromaticities. The source white maps exactly to the destination white.
     #[rustfmt::skip]
     const MAT: Transform = Transform::new(
-         1.0479298208405488,    0.029627815688159344, -0.009243058152591178, 0.0,
-         0.022946793341019088,  0.990434484573249,     0.015055144896577895, 0.0,
-        -0.05019222954313557,  -0.01707382502938514,   0.7518742899580008,   0.0,
+         1.0479297925449969,    0.02962780877005599,  -0.009243040646204504, 0.0,
+         0.022946870601609624,  0.9904344267538798,    0.015055191490298152, 0.0,
+        -0.050192266289205215, -0.017073799063418823,  0.7518742814281372,   0.0,
          0.0,                   0.0,                   0.0,                  1.0,
     );
 
@@ -264,13 +266,67 @@ fn xyz_d65_to_xyz_d50(from: &ColorComponents) -> ColorComponents {
 fn xyz_d50_to_xyz_d65(from: &ColorComponents) -> ColorComponents {
     #[rustfmt::skip]
     const MAT: Transform = Transform::new(
-         0.9554734527042182,   -0.028369706963208136,  0.012314001688319899, 0.0,
-        -0.023098536874261423,  1.0099954580058226,   -0.020507696433477912, 0.0,
-         0.0632593086610217,    0.021041398966943008,  1.3303659366080753,   0.0,
+         0.955473421488075,    -0.0283697093338637,    0.012314014864481995, 0.0,
+        -0.023098454948764655,  1.0099953980813041,   -0.020507649298898974, 0.0,
+         0.06325924320057069,   0.021041441191917316,  1.3303659262421239,   0.0,
          0.0,                   0.0,                   0.0,                  1.0,
     );
 
     transform(from, &MAT)
+}
+
+#[cfg(all(test, feature = "servo"))]
+mod bradford_tests {
+    use super::{xyz_d50_to_xyz_d65, xyz_d65_to_xyz_d50, WhitePoint};
+    use crate::color::{AbsoluteColor, ColorSpace};
+
+    #[test]
+    fn adaptation_maps_css_color_whitepoints() {
+        let d50 = WhitePoint::D50.values();
+        let converted = xyz_d65_to_xyz_d50(&WhitePoint::D65.values());
+        for (actual, expected) in [
+            (converted.0, d50.0),
+            (converted.1, d50.1),
+            (converted.2, d50.2),
+        ] {
+            assert!((actual - expected).abs() < 1e-12, "{actual} != {expected}");
+        }
+
+        let d65 = WhitePoint::D65.values();
+        let converted = xyz_d50_to_xyz_d65(&d50);
+        for (actual, expected) in [
+            (converted.0, d65.0),
+            (converted.1, d65.1),
+            (converted.2, d65.2),
+        ] {
+            assert!((actual - expected).abs() < 1e-12, "{actual} != {expected}");
+        }
+    }
+
+    #[test]
+    fn p3_neutral_boundary_uses_precise_adaptation() {
+        let p3 = AbsoluteColor::new(
+            ColorSpace::DisplayP3,
+            0.1893689,
+            0.18937814,
+            0.18937561,
+            1.0,
+        );
+        let lch = p3.to_color_space(ColorSpace::Lch);
+        assert_eq!(lch.c1(), Some(0.0));
+        assert_eq!(lch.c2(), None);
+
+        let p3 = AbsoluteColor::new(
+            ColorSpace::DisplayP3,
+            0.18936885,
+            0.18937816,
+            0.18937561,
+            1.0,
+        );
+        let lch = p3.to_color_space(ColorSpace::Lch);
+        assert!((lch.c1().expect("chroma") - 0.00151062156).abs() < 1e-9);
+        assert!((lch.c2().expect("hue") - 180.02568063).abs() < 1e-5);
+    }
 }
 
 /// A reference white that is used during color conversion.
