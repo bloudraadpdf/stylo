@@ -41,6 +41,9 @@ fn serialize_direct_rgb_channel<W: Write>(
     if let Some(value) = value {
         let byte = (value * 255.0).round();
         if (0.0..=255.0).contains(&byte) && (value * 255.0 - byte).abs() < 0.00001 {
+            if byte == 0.0 {
+                return dest.write_str("0");
+            }
             let decimal = format!("{:.8}", f64::from(byte) / 255.0);
             return dest.write_str(decimal.trim_end_matches('0').trim_end_matches('.'));
         }
@@ -239,6 +242,8 @@ mod tests {
             1.0,
         );
         assert_eq!(color.to_css_string(), "color(srgb 0.50196078 none none)");
+        let zero = AbsoluteColor::new(ColorSpace::Srgb, -0.0, -0.0, -0.0, 0.0);
+        assert_eq!(zero.to_css_string(), "color(srgb 0 0 0 / 0)");
     }
 }
 
