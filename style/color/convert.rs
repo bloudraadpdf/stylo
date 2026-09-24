@@ -1086,7 +1086,47 @@ impl ColorSpaceConversion for Lch {
 /// https://drafts.csswg.org/css-color-4/#specifying-oklab-oklch
 pub struct Oklab;
 
+#[cfg(all(test, feature = "servo"))]
+mod oklab_precision_tests {
+    use super::{ColorComponents, ColorSpaceConversion, Oklab, WhitePoint};
+    use crate::color::{AbsoluteColor, ColorSpace};
+
+    #[test]
+    fn d65_white_remains_neutral_in_oklab() {
+        let ColorComponents(lightness, a, b) = Oklab::from_xyz(&WhitePoint::D65.values());
+        assert!((lightness - 1.0).abs() < 1e-10);
+        assert!(a.abs() < 1e-10);
+        assert!(b.abs() < 1e-10);
+    }
+
+    #[test]
+    fn near_neutral_p3_hues_preserve_input_precision() {
+        let first = AbsoluteColor::new(
+            ColorSpace::DisplayP3,
+            0.08610937692934956,
+            0.08610188202042188,
+            0.08610387292083356,
+            1.0,
+        );
+        let first = first.to_color_space(ColorSpace::Oklch);
+        let hue = first.c2().expect("hue");
+        assert!(hue < 0.01 || hue > 359.99);
+
+        let second = AbsoluteColor::new(
+            ColorSpace::DisplayP3,
+            0.0860989,
+            0.08610658,
+            0.08610454,
+            1.0,
+        );
+        let second = second.to_color_space(ColorSpace::Oklch);
+        assert!((second.c2().expect("hue") - 179.99967542).abs() < 0.01);
+    }
+}
+
 impl Oklab {
+    // The LMS-to-Oklab matrix is normalized so neutral LMS (1, 1, 1) maps
+    // to Oklab (1, 0, 0). Its inverse is recomputed at f64 precision.
     #[rustfmt::skip]
     const XYZ_TO_LMS: Transform = Transform::new(
          0.8190224432164319,  0.0329836671980271,  0.048177199566046255, 0.0,
@@ -1099,7 +1139,7 @@ impl Oklab {
     const LMS_TO_OKLAB: Transform = Transform::new(
          0.2104542553,  1.9779984951,  0.0259040371, 0.0,
          0.7936177850, -2.4285922050,  0.7827717662, 0.0,
-        -0.0040720468,  0.4505937099, -0.8086757660, 0.0,
+        -0.0040720403,  0.4505937099, -0.8086758033, 0.0,
          0.0,           0.0,           0.0,          1.0,
     );
 
@@ -1113,9 +1153,9 @@ impl Oklab {
 
     #[rustfmt::skip]
     const OKLAB_TO_LMS: Transform = Transform::new(
-        0.99999999845051981432,  1.0000000088817607767,    1.0000000546724109177,   0.0,
-        0.39633779217376785678, -0.1055613423236563494,   -0.089484182094965759684, 0.0,
-        0.21580375806075880339, -0.063854174771705903402, -1.2914855378640917399,   0.0,
+        1.0,                  1.0,                  1.0,                 0.0,
+        0.3963377920351139, -0.10556134152887928, -0.08948417720265003, 0.0,
+        0.21580375605962776,-0.06385416330104089, -1.2914854672554674,  0.0,
         0.0,                     0.0,                      0.0,                     1.0,
     );
 }
