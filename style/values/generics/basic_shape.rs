@@ -524,6 +524,10 @@ pub enum GenericShapeRadius<LengthPercentage> {
     ClosestSide,
     #[animation(error)]
     FarthestSide,
+    #[animation(error)]
+    ClosestCorner,
+    #[animation(error)]
+    FarthestCorner,
 }
 
 pub use self::GenericShapeRadius as ShapeRadius;
