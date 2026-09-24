@@ -790,9 +790,20 @@ impl AbsoluteColor {
             Srgb => components.0 == components.1 && components.1 == components.2,
             _ => false,
         };
-        if source_is_neutral && matches!(color_space, Lch | Oklch) && c1.is_some() {
-            c1 = Some(0.0);
-            c2 = None;
+        if source_is_neutral {
+            match color_space {
+                Lab | Oklab => {
+                    // Neutral source colors lie on the lightness axis; do not
+                    // retain matrix-rounding residue in its orthogonal axes.
+                    c1 = Some(0.0);
+                    c2 = Some(0.0);
+                },
+                Lch | Oklch if c1.is_some() => {
+                    c1 = Some(0.0);
+                    c2 = None;
+                },
+                _ => {},
+            }
         }
 
         // Check the source because finite-precision conversion can cross the
@@ -922,6 +933,14 @@ mod tests {
         let same_space = lch.to_color_space_with_missing(ColorSpace::Lch);
         assert_eq!(same_space.c1(), Some(0.0015));
         assert_eq!(same_space.c2(), Some(180.0));
+    }
+
+    #[test]
+    fn neutral_srgb_conversion_has_zero_oklab_axes() {
+        let white = AbsoluteColor::new(ColorSpace::Srgb, 1.0, 1.0, 1.0, 1.0);
+        let converted = white.to_color_space(ColorSpace::Oklab);
+        assert_eq!(converted.c1(), Some(0.0));
+        assert_eq!(converted.c2(), Some(0.0));
     }
 
     #[test]
