@@ -181,6 +181,12 @@ fn parse_color_function<'i, 't>(
                     || k.contains_color_channel()
                     || alpha.contains_color_channel()
             },
+            ColorFunction::CustomProfile(_, components, alpha) => {
+                components
+                    .iter()
+                    .any(ColorComponent::contains_color_channel)
+                    || alpha.contains_color_channel()
+            },
             ColorFunction::BdSpot(_, tint, _) => tint.contains_color_channel(),
             ColorFunction::BdDeviceN(pairs, _) => {
                 pairs.iter().any(|pair| pair.tint.contains_color_channel())
@@ -420,6 +426,30 @@ fn parse_color_with_color_space<'i, 't>(
     arguments: &mut Parser<'i, 't>,
     origin_color: Option<SpecifiedColor>,
 ) -> Result<ColorFunction<SpecifiedColor>, ParseError<'i>> {
+    let start = arguments.state();
+    if let Ok(name) = arguments.try_parse(Parser::expect_ident_cloned) {
+        if name.starts_with("--") {
+            if origin_color.is_some() {
+                return Err(arguments.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+            }
+            let mut components = Vec::new();
+            while let Ok(component) =
+                arguments.try_parse(|input| parse_number_or_percentage(context, input, true))
+            {
+                components.push(component);
+            }
+            if components.is_empty() {
+                return Err(arguments.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+            }
+            let alpha = parse_modern_alpha(context, arguments)?;
+            return Ok(ColorFunction::CustomProfile(
+                name.as_ref().into(),
+                components,
+                alpha,
+            ));
+        }
+    }
+    arguments.reset(&start);
     let color_space = parse_color_space_for_color_function(arguments)?;
 
     let c1 = parse_number_or_percentage(context, arguments, true)?;
@@ -904,6 +934,26 @@ mod specified_color_tests {
     use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
     use cssparser::{Parser, ParserInput};
     use style_traits::{ParsingMode, ToCss};
+
+    #[test]
+    fn custom_profile_color_remains_typed_and_round_trips() {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input = ParserInput::new("color(--foo 0.6 0 0 / 50%)");
+        let specified = Parser::new(&mut input)
+            .parse_entirely(|parser| parse_color_with(&context, parser))
+            .expect("custom profile color parses");
+        assert_eq!(specified.to_css_string(), "color(--foo 0.6 0 0 / 50%)");
+    }
 
     #[test]
     fn relative_hsl_origin_serializes_as_chromium_rgb() {

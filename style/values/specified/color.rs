@@ -1119,7 +1119,10 @@ impl Color {
                 // `TRANSPARENT_BLACK` (see `resolve_to_absolute` for
                 // the fail-closed contract) and the colorant name
                 // would be unrecoverable.
-                if matches!(&color_function, ColorFunction::BdSpot(..)) {
+                if matches!(
+                    &color_function,
+                    ColorFunction::BdSpot(..) | ColorFunction::CustomProfile(..)
+                ) {
                     let color_function = color_function
                         .map_origin_color(|origin_color| origin_color.to_computed_color(context))?;
                     return Some(ComputedColor::ColorFunction(Box::new(color_function)));
