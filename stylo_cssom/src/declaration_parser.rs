@@ -1862,6 +1862,11 @@ mod tests {
             let block = parse_inline_style_block(&format!("color: {value}"));
             assert!(inline_style_get_property_value(&block, "color").is_some(), "{mode}");
         }
+        let normal = parse_inline_style_block("color: color-layers(normal, red, blue)");
+        assert_eq!(
+            inline_style_get_property_value(&normal, "color").as_deref(),
+            Some("color-layers(red, blue)"),
+        );
     }
 
     #[test]

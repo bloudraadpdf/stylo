@@ -272,9 +272,14 @@ pub struct GenericColorLayers<Color> {
 impl<Color: ToCss> ToCss for GenericColorLayers<Color> {
     fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
         dest.write_str("color-layers(")?;
-        self.blend_mode.to_css(dest)?;
-        for color in self.colors.iter() {
+        if self.blend_mode != ColorLayerBlendMode::Normal {
+            self.blend_mode.to_css(dest)?;
             dest.write_str(", ")?;
+        }
+        for (index, color) in self.colors.iter().enumerate() {
+            if index != 0 {
+                dest.write_str(", ")?;
+            }
             color.to_css(dest)?;
         }
         dest.write_char(')')
