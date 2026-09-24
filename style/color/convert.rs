@@ -12,20 +12,28 @@
 //! NOTE: Matrices has to be transposed from the examples in the spec for use
 //! with the `euclid` library.
 
-use crate::color::ColorComponents;
-use crate::values::normalize;
+use crate::color::{ColorComponents, ColorFloat};
 
-type Transform = euclid::default::Transform3D<f32>;
-type Vector = euclid::default::Vector3D<f32>;
+#[inline]
+fn normalize(value: ColorFloat) -> ColorFloat {
+    if value.is_nan() {
+        0.0
+    } else {
+        value
+    }
+}
+
+type Transform = euclid::default::Transform3D<ColorFloat>;
+type Vector = euclid::default::Vector3D<ColorFloat>;
 
 /// Chroma at or below this value has a powerless LCH hue.
-pub const LCH_HUE_EPSILON: f32 = 0.0015;
+pub const LCH_HUE_EPSILON: ColorFloat = 0.0015;
 /// Chroma at or below this value has a powerless OkLCH hue.
-pub const OKLCH_HUE_EPSILON: f32 = 0.000004;
+pub const OKLCH_HUE_EPSILON: ColorFloat = 0.000004;
 
 /// Normalize hue into [0, 360).
 #[inline]
-pub fn normalize_hue(hue: f32) -> f32 {
+pub fn normalize_hue(hue: ColorFloat) -> ColorFloat {
     if hue.is_infinite() {
         return 0.0;
     }
@@ -34,11 +42,13 @@ pub fn normalize_hue(hue: f32) -> f32 {
 
 #[cfg(test)]
 mod hue_tests {
-    use super::{normalize_hue, orthogonal_to_polar, ColorComponents, OKLCH_HUE_EPSILON};
+    use super::{
+        normalize_hue, orthogonal_to_polar, ColorComponents, ColorFloat, OKLCH_HUE_EPSILON,
+    };
 
     #[test]
     fn infinite_hues_normalize_to_zero() {
-        for hue in [f32::INFINITY, f32::NEG_INFINITY] {
+        for hue in [ColorFloat::INFINITY, ColorFloat::NEG_INFINITY] {
             assert_eq!(normalize_hue(hue), 0.0);
         }
     }
@@ -64,7 +74,11 @@ mod hue_tests {
 /// Calculate the hue from RGB components and return it along with the min and
 /// max RGB values.
 #[inline]
-fn rgb_to_hue_min_max(red: f32, green: f32, blue: f32) -> (f32, f32, f32) {
+fn rgb_to_hue_min_max(
+    red: ColorFloat,
+    green: ColorFloat,
+    blue: ColorFloat,
+) -> (ColorFloat, ColorFloat, ColorFloat) {
     let max = red.max(green).max(blue);
     let min = red.min(green).min(blue);
 
@@ -79,7 +93,7 @@ fn rgb_to_hue_min_max(red: f32, green: f32, blue: f32) -> (f32, f32, f32) {
             (red - green) / delta + 4.0
         }
     } else {
-        f32::NAN
+        ColorFloat::NAN
     };
 
     (hue, min, max)
@@ -94,9 +108,9 @@ pub fn hsl_to_rgb(from: &ColorComponents) -> ColorComponents {
     let lightness = lightness / 100.0;
     let hue = normalize_hue(hue) / 30.0;
     let chroma = saturation * lightness.min(1.0 - lightness);
-    let channel = |offset: f32| {
+    let channel = |offset: ColorFloat| {
         let k = (offset + hue) % 12.0;
-        lightness - chroma * (-1.0_f32).max((k - 3.0).min((9.0 - k).min(1.0)))
+        lightness - chroma * (-1.0_f64 as ColorFloat).max((k - 3.0).min((9.0 - k).min(1.0)))
     };
 
     ColorComponents(channel(0.0), channel(8.0), channel(4.0))
@@ -190,13 +204,13 @@ pub fn rgb_to_hwb(from: &ColorComponents) -> ColorComponents {
 /// system. This is used to convert (ok)lab to (ok)lch.
 /// <https://drafts.csswg.org/css-color-4/#lab-to-lch>
 #[inline]
-pub fn orthogonal_to_polar(from: &ColorComponents, e: f32) -> ColorComponents {
+pub fn orthogonal_to_polar(from: &ColorComponents, e: ColorFloat) -> ColorComponents {
     let ColorComponents(lightness, a, b) = *from;
 
     let chroma = (a * a + b * b).sqrt();
 
     let hue = if chroma <= e {
-        f32::NAN
+        ColorFloat::NAN
     } else {
         normalize_hue(b.atan2(a).to_degrees())
     };
@@ -617,7 +631,7 @@ impl ColorSpaceConversion for ProphotoRgb {
 
     fn to_linear_light(from: &ColorComponents) -> ColorComponents {
         from.clone().map(|value| {
-            const ET2: f32 = 16.0 / 512.0;
+            const ET2: ColorFloat = 16.0 / 512.0;
 
             let abs = value.abs();
 
@@ -638,7 +652,7 @@ impl ColorSpaceConversion for ProphotoRgb {
     }
 
     fn to_gamma_encoded(from: &ColorComponents) -> ColorComponents {
-        const ET: f32 = 1.0 / 512.0;
+        const ET: ColorFloat = 1.0 / 512.0;
 
         from.clone().map(|v| {
             let abs = v.abs();
@@ -697,13 +711,14 @@ impl ColorSpaceConversion for Rec2020 {
 
 #[cfg(test)]
 mod rec2020_tests {
-    use super::{ColorComponents, ColorSpaceConversion, Rec2020};
+    use super::{ColorComponents, ColorFloat, ColorSpaceConversion, Rec2020};
 
     #[test]
     fn display_referred_transfer_uses_gamma_two_point_four() {
         let encoded = ColorComponents(0.25, 0.5, 0.75);
         let linear = Rec2020::to_linear_light(&encoded);
-        for (actual, source) in [(linear.0, 0.25_f32), (linear.1, 0.5), (linear.2, 0.75)] {
+        for (actual, source) in [(linear.0, 0.25), (linear.1, 0.5), (linear.2, 0.75)] {
+            let source: ColorFloat = source;
             assert!((actual - source.powf(2.4)).abs() < 0.000001);
         }
         let round_trip = Rec2020::to_gamma_encoded(&linear);
@@ -726,11 +741,11 @@ pub struct Rec2100Pq;
 
 impl Rec2100Pq {
     // SMPTE ST 2084 constants.
-    const M1: f32 = 2610.0 / 16384.0;
-    const M2: f32 = 2523.0 / 4096.0 * 128.0;
-    const C1: f32 = 3424.0 / 4096.0;
-    const C2: f32 = 2413.0 / 4096.0 * 32.0;
-    const C3: f32 = 2392.0 / 4096.0 * 32.0;
+    const M1: ColorFloat = 2610.0 / 16384.0;
+    const M2: ColorFloat = 2523.0 / 4096.0 * 128.0;
+    const C1: ColorFloat = 3424.0 / 4096.0;
+    const C2: ColorFloat = 2413.0 / 4096.0 * 32.0;
+    const C3: ColorFloat = 2392.0 / 4096.0 * 32.0;
 }
 
 impl ColorSpaceConversion for Rec2100Pq {
@@ -779,9 +794,9 @@ pub struct Rec2100Hlg;
 
 impl Rec2100Hlg {
     // ARIB STD-B67 constants for the HLG OETF.
-    const A: f32 = 0.17883277;
-    const B: f32 = 0.28466892; // 1 - 4 * A
-    const C: f32 = 0.55991073; // 0.5 - A * ln(4 * A)
+    const A: ColorFloat = 0.17883277;
+    const B: ColorFloat = 0.28466892; // 1 - 4 * A
+    const C: ColorFloat = 0.55991073; // 0.5 - A * ln(4 * A)
 }
 
 impl ColorSpaceConversion for Rec2100Hlg {
@@ -901,8 +916,8 @@ impl ColorSpaceConversion for XyzD65 {
 pub struct Lab;
 
 impl Lab {
-    const KAPPA: f32 = 24389.0 / 27.0;
-    const EPSILON: f32 = 216.0 / 24389.0;
+    const KAPPA: ColorFloat = 24389.0 / 27.0;
+    const EPSILON: ColorFloat = 216.0 / 24389.0;
 }
 
 impl ColorSpaceConversion for Lab {

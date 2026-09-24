@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+use super::ColorFloat;
 use super::{AbsoluteColor, ColorSpace};
 use crate::values::generics::color::ColorLayerBlendMode;
 
@@ -29,7 +30,7 @@ pub fn composite(
     AbsoluteColor::new(ColorSpace::Srgb, result[0], result[1], result[2], alpha)
 }
 
-fn blend(b: [f32; 3], s: [f32; 3], mode: ColorLayerBlendMode) -> [f32; 3] {
+fn blend(b: [ColorFloat; 3], s: [ColorFloat; 3], mode: ColorLayerBlendMode) -> [ColorFloat; 3] {
     use ColorLayerBlendMode::*;
     match mode {
         Hue => set_lum(set_sat(s, sat(b)), lum(b)),
@@ -46,7 +47,7 @@ fn blend(b: [f32; 3], s: [f32; 3], mode: ColorLayerBlendMode) -> [f32; 3] {
     }
 }
 
-fn blend_channel(b: f32, s: f32, mode: ColorLayerBlendMode) -> f32 {
+fn blend_channel(b: ColorFloat, s: ColorFloat, mode: ColorLayerBlendMode) -> ColorFloat {
     use ColorLayerBlendMode::*;
     match mode {
         Normal => s,
@@ -79,19 +80,29 @@ fn blend_channel(b: f32, s: f32, mode: ColorLayerBlendMode) -> f32 {
     }
 }
 
-fn lum(c: [f32; 3]) -> f32 {
+fn lum(c: [ColorFloat; 3]) -> ColorFloat {
     0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2]
 }
 
-fn sat(c: [f32; 3]) -> f32 {
-    c.iter().copied().fold(f32::NEG_INFINITY, f32::max)
-        - c.iter().copied().fold(f32::INFINITY, f32::min)
+fn sat(c: [ColorFloat; 3]) -> ColorFloat {
+    c.iter()
+        .copied()
+        .fold(ColorFloat::NEG_INFINITY, ColorFloat::max)
+        - c.iter()
+            .copied()
+            .fold(ColorFloat::INFINITY, ColorFloat::min)
 }
 
-fn clip_color(mut c: [f32; 3]) -> [f32; 3] {
+fn clip_color(mut c: [ColorFloat; 3]) -> [ColorFloat; 3] {
     let l = lum(c);
-    let n = c.iter().copied().fold(f32::INFINITY, f32::min);
-    let x = c.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+    let n = c
+        .iter()
+        .copied()
+        .fold(ColorFloat::INFINITY, ColorFloat::min);
+    let x = c
+        .iter()
+        .copied()
+        .fold(ColorFloat::NEG_INFINITY, ColorFloat::max);
     if n < 0.0 {
         for component in &mut c {
             *component = l + (*component - l) * l / (l - n);
@@ -105,7 +116,7 @@ fn clip_color(mut c: [f32; 3]) -> [f32; 3] {
     c
 }
 
-fn set_lum(mut c: [f32; 3], l: f32) -> [f32; 3] {
+fn set_lum(mut c: [ColorFloat; 3], l: ColorFloat) -> [ColorFloat; 3] {
     let difference = l - lum(c);
     for component in &mut c {
         *component += difference;
@@ -113,7 +124,7 @@ fn set_lum(mut c: [f32; 3], l: f32) -> [f32; 3] {
     clip_color(c)
 }
 
-fn set_sat(mut c: [f32; 3], saturation: f32) -> [f32; 3] {
+fn set_sat(mut c: [ColorFloat; 3], saturation: ColorFloat) -> [ColorFloat; 3] {
     let mut indices = [0, 1, 2];
     indices.sort_by(|&left, &right| c[left].total_cmp(&c[right]));
     let [min, mid, max] = indices;

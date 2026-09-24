@@ -4,7 +4,7 @@
 
 //! Color mixing/interpolation.
 
-use super::{AbsoluteColor, ColorFlags, ColorSpace};
+use super::{AbsoluteColor, ColorFlags, ColorFloat, ColorSpace};
 use crate::color::ColorMixItemList;
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
@@ -154,13 +154,13 @@ pub struct ColorMixItem {
     /// The color being mixed.
     pub color: AbsoluteColor,
     /// How much this color contributes to the final mix.
-    pub weight: f32,
+    pub weight: ColorFloat,
 }
 
 impl ColorMixItem {
     /// Create a new color item for mixing.
     #[inline]
-    pub fn new(color: AbsoluteColor, weight: f32) -> Self {
+    pub fn new(color: AbsoluteColor, weight: ColorFloat) -> Self {
         Self { color, weight }
     }
 }
@@ -182,11 +182,11 @@ pub fn mix_many(
     let mut alpha_multiplier = 1.0;
     if normalize {
         // https://drafts.csswg.org/css-color-5/#color-mix-percent-norm
-        let sum: f32 = items.iter().map(|item| item.weight).sum();
+        let sum: ColorFloat = items.iter().map(|item| item.weight).sum();
         if sum == 0.0 {
             // The colors are still mixed; only the resulting alpha is zero.
             alpha_multiplier = 0.0;
-        } else if (sum - 1.0).abs() > f32::EPSILON {
+        } else if (sum - 1.0).abs() > ColorFloat::EPSILON {
             weight_scale = 1.0 / sum;
             if sum < 1.0 {
                 alpha_multiplier = sum;
@@ -427,9 +427,9 @@ impl AbsoluteColor {
 /// Mix two colors already in the interpolation color space.
 fn mix_with_weights(
     left: &AbsoluteColor,
-    left_weight: f32,
+    left_weight: ColorFloat,
     right: &AbsoluteColor,
-    right_weight: f32,
+    right_weight: ColorFloat,
     hue_interpolation: HueInterpolationMethod,
 ) -> AbsoluteColor {
     debug_assert!(right.color_space == left.color_space);
@@ -466,23 +466,27 @@ fn convert_for_mix(color: &AbsoluteColor, color_space: ColorSpace) -> AbsoluteCo
 }
 
 fn interpolate_premultiplied_component(
-    left: f32,
-    left_weight: f32,
-    left_alpha: f32,
-    right: f32,
-    right_weight: f32,
-    right_alpha: f32,
-) -> f32 {
+    left: ColorFloat,
+    left_weight: ColorFloat,
+    left_alpha: ColorFloat,
+    right: ColorFloat,
+    right_weight: ColorFloat,
+    right_alpha: ColorFloat,
+) -> ColorFloat {
     left * left_weight * left_alpha + right * right_weight * right_alpha
 }
 
 // Normalize hue into [0, 360)
 #[inline]
-fn normalize_hue(v: f32) -> f32 {
+fn normalize_hue(v: ColorFloat) -> ColorFloat {
     v - 360. * (v / 360.).floor()
 }
 
-fn adjust_hue(left: &mut f32, right: &mut f32, hue_interpolation: HueInterpolationMethod) {
+fn adjust_hue(
+    left: &mut ColorFloat,
+    right: &mut ColorFloat,
+    hue_interpolation: HueInterpolationMethod,
+) {
     // Adjust the hue angle as per
     // https://drafts.csswg.org/css-color/#hue-interpolation.
     //
@@ -545,32 +549,32 @@ fn adjust_hue(left: &mut f32, right: &mut f32, hue_interpolation: HueInterpolati
 }
 
 fn interpolate_hue(
-    mut left: f32,
-    left_weight: f32,
-    mut right: f32,
-    right_weight: f32,
+    mut left: ColorFloat,
+    left_weight: ColorFloat,
+    mut right: ColorFloat,
+    right_weight: ColorFloat,
     hue_interpolation: HueInterpolationMethod,
-) -> f32 {
+) -> ColorFloat {
     adjust_hue(&mut left, &mut right, hue_interpolation);
     left * left_weight + right * right_weight
 }
 
 struct InterpolatedAlpha {
     /// The adjusted left alpha value.
-    left: f32,
+    left: ColorFloat,
     /// The adjusted right alpha value.
-    right: f32,
+    right: ColorFloat,
     /// The interpolated alpha value.
-    interpolated: f32,
+    interpolated: ColorFloat,
     /// Whether the alpha component should be `none`.
     is_none: bool,
 }
 
 fn interpolate_alpha(
-    left: f32,
-    left_weight: f32,
-    right: f32,
-    right_weight: f32,
+    left: ColorFloat,
+    left_weight: ColorFloat,
+    right: ColorFloat,
+    right_weight: ColorFloat,
     outcome: ComponentMixOutcome,
 ) -> InterpolatedAlpha {
     // <https://drafts.csswg.org/css-color-4/#interpolation-missing>
@@ -613,14 +617,14 @@ fn interpolate_alpha(
 }
 
 fn interpolate_premultiplied(
-    left: &[f32; 4],
-    left_weight: f32,
-    right: &[f32; 4],
-    right_weight: f32,
+    left: &[ColorFloat; 4],
+    left_weight: ColorFloat,
+    right: &[ColorFloat; 4],
+    right_weight: ColorFloat,
     hue_index: Option<usize>,
     hue_interpolation: HueInterpolationMethod,
     outcomes: &[ComponentMixOutcome; 4],
-) -> ([f32; 4], ColorFlags) {
+) -> ([ColorFloat; 4], ColorFlags) {
     let alpha = interpolate_alpha(left[3], left_weight, right[3], right_weight, outcomes[3]);
     let mut flags = if alpha.is_none {
         ColorFlags::ALPHA_IS_NONE
@@ -750,7 +754,7 @@ mod tests {
                 hue: super::HueInterpolationMethod::Shorter,
             },
             [ColorMixItem::new(
-                AbsoluteColor::new(ColorSpace::Hsl, None::<f32>, 50.0, 50.0, 1.0),
+                AbsoluteColor::new(ColorSpace::Hsl, None::<super::ColorFloat>, 50.0, 50.0, 1.0),
                 1.0,
             )],
             flags,

@@ -112,13 +112,19 @@ pub trait ColorComponentType: Sized + Clone {
     //              stating that all the values coming from color components are
     //              numbers and that each has their own rules dependeing on types.
     /// Construct a new component from a single value.
-    fn from_value(value: f32) -> Self;
+    fn from_value(value: super::ColorFloat) -> Self;
 
     /// Return the [CalcUnits] flags that the impl can handle.
     fn units() -> CalcUnits;
 
     /// Try to create a new component from the given token.
     fn try_from_token(token: &Token) -> Result<Self, ()>;
+
+    /// Parse the original token text when a color component needs more
+    /// precision than cssparser's floating-point token field retains.
+    fn try_from_token_with_raw(token: &Token, _raw: &str) -> Result<Self, ()> {
+        Self::try_from_token(token)
+    }
 
     /// Try to create a new component from the given [CalcNodeLeaf] that was
     /// resolved from a [CalcNode].
@@ -143,7 +149,7 @@ impl<ValueType: ColorComponentType> ColorComponent<ValueType> {
         let location = input.current_source_location();
         let start = input.state();
 
-        match *input.next()? {
+        match input.next()?.clone() {
             Token::Ident(ref value) if allow_none && value.eq_ignore_ascii_case("none") => {
                 Ok(ColorComponent::None)
             },
@@ -186,9 +192,11 @@ impl<ValueType: ColorComponentType> ColorComponent<ValueType> {
 
                 Ok(Self::Calc(Box::new(node)))
             },
-            ref t => ValueType::try_from_token(t)
-                .map(Self::Value)
-                .map_err(|_| location.new_unexpected_token_error(t.clone())),
+            ref t => {
+                ValueType::try_from_token_with_raw(t, input.slice_from(start.position()).trim())
+                    .map(Self::Value)
+                    .map_err(|_| location.new_unexpected_token_error(t.clone()))
+            },
         }
     }
 
@@ -211,7 +219,7 @@ impl<ValueType: ColorComponentType> ColorComponent<ValueType> {
                             Some(origin_color) => {
                                 let value = origin_color
                                     .get_component_by_channel_keyword(*channel_keyword)?;
-                                Leaf::Number(value.unwrap_or(0.0))
+                                Leaf::Number(value.unwrap_or(0.0) as f32)
                             },
                             None => return Err(()),
                         },
@@ -232,7 +240,7 @@ impl<ValueType: ColorComponentType> ColorComponent<ValueType> {
                     // syntax).
                     origin_color.alpha().map(ValueType::from_value)
                 } else {
-                    Some(ValueType::from_value(OPAQUE))
+                    Some(ValueType::from_value(super::ColorFloat::from(OPAQUE)))
                 }
             },
         })
@@ -242,10 +250,14 @@ impl<ValueType: ColorComponentType> ColorComponent<ValueType> {
     pub fn to_computed_value(&self, context: &computed::Context) -> Self {
         let node = match self {
             Self::SiblingIndex => {
-                return Self::Value(ValueType::from_value(context.sibling_index()))
+                return Self::Value(ValueType::from_value(super::ColorFloat::from(
+                    context.sibling_index(),
+                )))
             },
             Self::SiblingCount => {
-                return Self::Value(ValueType::from_value(context.sibling_count()))
+                return Self::Value(ValueType::from_value(super::ColorFloat::from(
+                    context.sibling_count(),
+                )))
             },
             Self::Calc(node) => node,
             _ => return self.clone(),

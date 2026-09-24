@@ -6,19 +6,35 @@
 
 use super::{
     parsing::{NumberOrAngleComponent, NumberOrPercentageComponent},
-    AbsoluteColor, ColorFlags, ColorSpace,
+    AbsoluteColor, ColorFlags, ColorFloat, ColorSpace,
 };
-use crate::values::normalize;
 use cssparser::color::{clamp_floor_256_f32, serialize_color_alpha, OPAQUE};
 use std::fmt::{self, Write};
 use style_traits::{CssWriter, ToCss};
 
+#[inline]
+fn normalize_color(value: ColorFloat) -> ColorFloat {
+    if value.is_nan() {
+        0.0
+    } else {
+        value
+    }
+}
+
+fn serialize_color_alpha_wide<W: Write>(
+    dest: &mut CssWriter<W>,
+    alpha: Option<ColorFloat>,
+    legacy: bool,
+) -> fmt::Result {
+    serialize_color_alpha(dest, alpha.map(|value| value as f32), legacy)
+}
+
 /// Serializes a legacy sRGB channel without letting finite-precision
 /// interpolation move a mathematical half-integer below its rounding tie.
-fn legacy_srgb_channel(value: f32) -> u8 {
+fn legacy_srgb_channel(value: ColorFloat) -> u8 {
     // Six-significant-digit CSSOM serialization can move an extrapolated
     // timing-function result by less than 0.001 of an 8-bit channel.
-    const HALF_STEP_EPSILON: f32 = 0.001;
+    const HALF_STEP_EPSILON: ColorFloat = 0.001;
 
     let scaled = value * 255.0;
     let nearest_half_step = (scaled * 2.0).round() / 2.0;
@@ -27,15 +43,15 @@ fn legacy_srgb_channel(value: f32) -> u8 {
     } else {
         scaled
     };
-    clamp_floor_256_f32(rounding_input)
+    clamp_floor_256_f32(rounding_input as f32)
 }
 
 /// A [`ModernComponent`] can serialize to `none`, `nan`, `infinity` and
 /// floating point values.
-struct ModernComponent<'a>(&'a Option<f32>);
+struct ModernComponent<'a>(&'a Option<ColorFloat>);
 
 fn serialize_direct_rgb_channel<W: Write>(
-    value: Option<f32>,
+    value: Option<ColorFloat>,
     dest: &mut CssWriter<W>,
 ) -> fmt::Result {
     if let Some(value) = value {
@@ -58,7 +74,7 @@ impl<'a> ToCss for ModernComponent<'a> {
     {
         if let Some(value) = self.0 {
             if value.is_finite() {
-                value.to_css(dest)
+                write!(dest, "{value}")
             } else if value.is_nan() {
                 dest.write_str("calc(NaN)")
             } else {
@@ -80,11 +96,9 @@ impl ToCss for NumberOrPercentageComponent {
     where
         W: Write,
     {
-        use crate::values::computed::Percentage;
-
         match self {
-            Self::Number(number) => number.to_css(dest)?,
-            Self::Percentage(percentage) => Percentage(*percentage).to_css(dest)?,
+            Self::Number(number) => write!(dest, "{number}")?,
+            Self::Percentage(percentage) => write!(dest, "{}%", percentage * 100.0)?,
         }
         Ok(())
     }
@@ -95,11 +109,9 @@ impl ToCss for NumberOrAngleComponent {
     where
         W: Write,
     {
-        use crate::values::computed::Angle;
-
         match self {
-            Self::Number(number) => number.to_css(dest)?,
-            Self::Angle(degrees) => Angle::from_degrees(*degrees).to_css(dest)?,
+            Self::Number(number) => write!(dest, "{number}")?,
+            Self::Angle(degrees) => write!(dest, "{degrees}deg")?,
         }
         Ok(())
     }
@@ -117,7 +129,7 @@ impl ToCss for AbsoluteColor {
                 ) =>
             {
                 // The "none" keyword is not supported in the rgb/rgba legacy syntax.
-                let has_alpha = self.alpha != OPAQUE;
+                let has_alpha = self.alpha != ColorFloat::from(OPAQUE);
 
                 dest.write_str(if has_alpha { "rgba(" } else { "rgb(" })?;
                 legacy_srgb_channel(self.components.0).to_css(dest)?;
@@ -127,7 +139,7 @@ impl ToCss for AbsoluteColor {
                 legacy_srgb_channel(self.components.2).to_css(dest)?;
 
                 // Legacy syntax does not allow none components.
-                serialize_color_alpha(dest, Some(self.alpha), true)?;
+                serialize_color_alpha_wide(dest, Some(self.alpha), true)?;
 
                 dest.write_char(')')
             },
@@ -159,7 +171,7 @@ impl ToCss for AbsoluteColor {
                 ModernComponent(&self.c1()).to_css(dest)?;
                 dest.write_char(' ')?;
                 ModernComponent(&self.c2()).to_css(dest)?;
-                serialize_color_alpha(dest, self.alpha(), false)?;
+                serialize_color_alpha_wide(dest, self.alpha(), false)?;
                 dest.write_char(')')
             },
             _ => {
@@ -203,7 +215,7 @@ impl ToCss for AbsoluteColor {
                 dest.write_char(' ')?;
                 self.serialize_modern_channel(self.c2(), dest)?;
 
-                serialize_color_alpha(dest, self.alpha(), false)?;
+                serialize_color_alpha_wide(dest, self.alpha(), false)?;
 
                 dest.write_char(')')
             },
@@ -250,7 +262,7 @@ mod tests {
 impl AbsoluteColor {
     fn serialize_modern_channel<W: Write>(
         &self,
-        value: Option<f32>,
+        value: Option<ColorFloat>,
         dest: &mut CssWriter<W>,
     ) -> fmt::Result {
         if self.color_space == ColorSpace::Srgb {
@@ -281,7 +293,7 @@ impl AbsoluteColor {
         if include_percent && self.c2().is_some() {
             dest.write_char('%')?;
         }
-        serialize_color_alpha(dest, self.alpha(), false)?;
+        serialize_color_alpha_wide(dest, self.alpha(), false)?;
         dest.write_char(')')
     }
 
@@ -317,8 +329,8 @@ impl AbsoluteColor {
         }
         macro_rules! number {
             ($c:expr) => {{
-                if let Some(v) = $c.map(normalize) {
-                    precision!(v).to_css(dest)?;
+                if let Some(v) = $c.map(normalize_color) {
+                    write!(dest, "{}", precision!(v))?;
                 } else {
                     write!(dest, "none")?;
                 }
@@ -326,8 +338,8 @@ impl AbsoluteColor {
         }
         macro_rules! percentage {
             ($c:expr) => {{
-                if let Some(v) = $c.map(normalize) {
-                    precision!(v).to_css(dest)?;
+                if let Some(v) = $c.map(normalize_color) {
+                    write!(dest, "{}", precision!(v))?;
                     dest.write_char('%')?;
                 } else {
                     write!(dest, "none")?;
@@ -336,8 +348,8 @@ impl AbsoluteColor {
         }
         macro_rules! unit_percentage {
             ($c:expr) => {{
-                if let Some(v) = $c.map(normalize) {
-                    precision!(v * 100.0).to_css(dest)?;
+                if let Some(v) = $c.map(normalize_color) {
+                    write!(dest, "{}", precision!(v * 100.0))?;
                     dest.write_char('%')?;
                 } else {
                     write!(dest, "none")?;
@@ -346,8 +358,8 @@ impl AbsoluteColor {
         }
         macro_rules! angle {
             ($c:expr) => {{
-                if let Some(v) = $c.map(normalize) {
-                    precision!(v).to_css(dest)?;
+                if let Some(v) = $c.map(normalize_color) {
+                    write!(dest, "{}", precision!(v))?;
                     dest.write_str("deg")?;
                 } else {
                     write!(dest, "none")?;
@@ -363,7 +375,7 @@ impl AbsoluteColor {
                 unit_percentage!(self.c1());
                 dest.write_char(' ')?;
                 unit_percentage!(self.c2());
-                serialize_color_alpha(dest, self.alpha(), false)?;
+                serialize_color_alpha_wide(dest, self.alpha(), false)?;
                 dest.write_char(')')
             },
             ColorSpace::Hsl | ColorSpace::Hwb => {
@@ -377,7 +389,7 @@ impl AbsoluteColor {
                 percentage!(self.c1());
                 dest.write_char(' ')?;
                 percentage!(self.c2());
-                serialize_color_alpha(dest, self.alpha(), false)?;
+                serialize_color_alpha_wide(dest, self.alpha(), false)?;
                 dest.write_char(')')
             },
             ColorSpace::Lab | ColorSpace::Oklab => {
@@ -394,7 +406,7 @@ impl AbsoluteColor {
                 number!(self.c1());
                 dest.write_char(' ')?;
                 number!(self.c2());
-                serialize_color_alpha(dest, self.alpha(), false)?;
+                serialize_color_alpha_wide(dest, self.alpha(), false)?;
                 dest.write_char(')')
             },
             ColorSpace::Lch | ColorSpace::Oklch => {
@@ -407,7 +419,7 @@ impl AbsoluteColor {
                 number!(self.c1());
                 dest.write_char(' ')?;
                 angle!(self.c2());
-                serialize_color_alpha(dest, self.alpha(), false)?;
+                serialize_color_alpha_wide(dest, self.alpha(), false)?;
                 dest.write_char(')')
             },
             ColorSpace::SrgbLinear
@@ -429,7 +441,7 @@ impl AbsoluteColor {
                 number!(self.c1());
                 dest.write_char(' ')?;
                 number!(self.c2());
-                serialize_color_alpha(dest, self.alpha(), false)?;
+                serialize_color_alpha_wide(dest, self.alpha(), false)?;
                 dest.write_char(')')
             },
         }
