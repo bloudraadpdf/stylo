@@ -230,15 +230,14 @@ mod tests {
     }
 
     #[test]
-    fn direct_rgb_missing_components_keep_byte_precision() {
-        let mut color = AbsoluteColor::new(
+    fn modern_srgb_byte_components_keep_precision_on_round_trip() {
+        let color = AbsoluteColor::new(
             ColorSpace::Srgb,
             128.0 / 255.0,
             None::<f32>,
             None::<f32>,
             1.0,
         );
-        color.flags.insert(super::ColorFlags::DIRECT_RGB_CHANNELS);
         assert_eq!(color.to_css_string(), "color(srgb 0.50196078 none none)");
     }
 }
@@ -249,7 +248,7 @@ impl AbsoluteColor {
         value: Option<f32>,
         dest: &mut CssWriter<W>,
     ) -> fmt::Result {
-        if self.flags.contains(ColorFlags::DIRECT_RGB_CHANNELS) {
+        if self.color_space == ColorSpace::Srgb {
             serialize_direct_rgb_channel(value, dest)
         } else {
             ModernComponent(&value).to_css(dest)

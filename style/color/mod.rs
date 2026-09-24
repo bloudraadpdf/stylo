@@ -219,8 +219,6 @@ bitflags! {
         /// Serialize a modern direct rgb() with missing channels in legacy form
         /// without changing how its missing channels participate in interpolation.
         const SERIALIZE_AS_LEGACY_SRGB = 1 << 5;
-        /// Preserve the byte precision of direct rgb() channels serialized as color(srgb).
-        const DIRECT_RGB_CHANNELS = 1 << 6;
     }
 }
 
