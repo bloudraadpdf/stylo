@@ -52,6 +52,13 @@ mod hue_tests {
         assert!(result.1 > OKLCH_HUE_EPSILON);
         assert_eq!(result.2, 45.0);
     }
+
+    #[test]
+    fn powerless_hue_zeros_positive_chroma_after_conversion() {
+        let result = orthogonal_to_polar(&ColorComponents(0.5, 0.0000035, 0.0), OKLCH_HUE_EPSILON);
+        assert_eq!(result.1, 0.0);
+        assert!(result.2.is_nan());
+    }
 }
 
 /// Calculate the hue from RGB components and return it along with the min and
@@ -192,6 +199,12 @@ pub fn orthogonal_to_polar(from: &ColorComponents, e: f32) -> ColorComponents {
         f32::NAN
     } else {
         normalize_hue(b.atan2(a).to_degrees())
+    };
+
+    let chroma = if hue.is_nan() && chroma > 0.0 {
+        0.0
+    } else {
+        chroma
     };
 
     ColorComponents(lightness, chroma, hue)
