@@ -6,6 +6,8 @@
 
 /// cbindgen:ignore
 pub mod convert;
+/// CSS color layer compositing.
+pub mod layers;
 
 mod color_function;
 pub mod component;

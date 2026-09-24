@@ -1852,6 +1852,19 @@ mod tests {
     }
 
     #[test]
+    fn cssom_color_layers_accepts_specified_blend_modes() {
+        for mode in [
+            "normal", "multiply", "screen", "overlay", "darken", "lighten",
+            "color-dodge", "color-burn", "hard-light", "soft-light", "difference",
+            "exclusion", "hue", "saturation", "color", "luminosity",
+        ] {
+            let value = format!("color-layers({mode}, red, blue)");
+            let block = parse_inline_style_block(&format!("color: {value}"));
+            assert!(inline_style_get_property_value(&block, "color").is_some(), "{mode}");
+        }
+    }
+
+    #[test]
     fn cssom_rgb_with_unresolved_calc_canonicalizes_static_channels() {
         for (authored, expected) in [
             (
