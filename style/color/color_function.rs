@@ -10,6 +10,7 @@ use super::{
     component::ColorComponent,
     convert::normalize_hue,
     parsing::{NumberOrAngleComponent, NumberOrPercentageComponent},
+    to_css::write_canonical_color_number,
     AbsoluteColor, ColorFlags, ColorFloat, ColorSpace,
 };
 use crate::derives::*;
@@ -995,7 +996,7 @@ fn serialize_static_component<W: Write, T: style_traits::ToCss>(
     canonical_value: impl FnOnce(&T) -> ColorFloat,
 ) -> std::fmt::Result {
     match component {
-        ColorComponent::Value(value) => write!(dest, "{}", canonical_value(value)),
+        ColorComponent::Value(value) => write_canonical_color_number(canonical_value(value), dest),
         _ => component.to_css(dest),
     }
 }

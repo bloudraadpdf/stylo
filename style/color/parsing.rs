@@ -980,6 +980,35 @@ mod specified_color_tests {
         let oklch = color.to_color_space(crate::color::ColorSpace::Oklch);
         assert!((oklch.components.1 - 0.000004).abs() < 0.0000001);
 
+        let serialized = color.to_css_string();
+        let mut reparsed = ParserInput::new(&serialized);
+        let reparsed = Parser::new(&mut reparsed)
+            .parse_entirely(|parser| parse_color_with(&context, parser))
+            .expect("serialized P3 color parses")
+            .resolve_to_absolute()
+            .expect("serialized P3 color resolves");
+        let reparsed_hue = reparsed
+            .to_color_space(crate::color::ColorSpace::Oklch)
+            .c2()
+            .expect("near-neutral hue survives round-trip");
+        assert!(reparsed_hue < 0.01 || reparsed_hue > 359.99);
+
+        let hwb = crate::color::AbsoluteColor::new(
+            crate::color::ColorSpace::Hwb,
+            None::<f64>,
+            74.32059178886705,
+            25.67940821113295,
+            1.0,
+        );
+        let serialized = hwb.to_css_string();
+        let mut reparsed = ParserInput::new(&serialized);
+        let reparsed = Parser::new(&mut reparsed)
+            .parse_entirely(|parser| parse_color_with(&context, parser))
+            .expect("serialized HWB color parses")
+            .resolve_to_absolute()
+            .expect("serialized HWB color resolves");
+        assert_eq!(reparsed.to_css_string(), serialized);
+
         let mut with_comment =
             ParserInput::new("color(display-p3 /* channel */ 0.08610937692934956 0 0)");
         let specified = Parser::new(&mut with_comment)
