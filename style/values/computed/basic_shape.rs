@@ -125,12 +125,9 @@ fn animate_shape_radius(
                 .map(NonNegative)
                 .map(ShapeRadius::Length)
         },
-        (ShapeRadius::Length(_), ShapeRadius::ClosestSide | ShapeRadius::FarthestSide)
-        | (ShapeRadius::ClosestSide | ShapeRadius::FarthestSide, ShapeRadius::Length(_))
-        | (ShapeRadius::ClosestSide, ShapeRadius::ClosestSide)
-        | (ShapeRadius::FarthestSide, ShapeRadius::FarthestSide)
-        | (ShapeRadius::ClosestSide, ShapeRadius::FarthestSide)
-        | (ShapeRadius::FarthestSide, ShapeRadius::ClosestSide) => Err(()),
+        // A <radial-extent> keyword does not interpolate, so the shape falls
+        // back to a discrete animation.
+        _ => Err(()),
     }
 }
 
