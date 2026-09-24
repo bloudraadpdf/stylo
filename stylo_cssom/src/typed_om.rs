@@ -552,7 +552,7 @@ pub enum TypedOmParsedColor {
 }
 
 fn typed_om_color_channel(
-    value: Option<f32>,
+    value: Option<style::color::ColorFloat>,
     make: impl FnOnce(f64) -> TypedOmColorChannel,
 ) -> TypedOmColorChannel {
     value.map_or(TypedOmColorChannel::None, |value| make(f64::from(value)))

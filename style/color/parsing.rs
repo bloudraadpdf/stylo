@@ -979,6 +979,16 @@ mod specified_color_tests {
         assert_eq!(color.components.0, 0.08610937692934956);
         let oklch = color.to_color_space(crate::color::ColorSpace::Oklch);
         assert!((oklch.components.1 - 0.000004).abs() < 0.0000001);
+
+        let mut with_comment =
+            ParserInput::new("color(display-p3 /* channel */ 0.08610937692934956 0 0)");
+        let specified = Parser::new(&mut with_comment)
+            .parse_entirely(|parser| parse_color_with(&context, parser))
+            .expect("comment before precise component parses");
+        assert_eq!(
+            specified.resolve_to_absolute().unwrap().components.0,
+            0.08610937692934956,
+        );
     }
 
     #[test]
