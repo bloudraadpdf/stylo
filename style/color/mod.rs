@@ -757,6 +757,32 @@ impl AbsoluteColor {
             _ => {},
         }
 
+        // Color 4 §4.4.1 removes positive conversion noise when the target
+        // hue becomes missing. Negative components remain unchanged.
+        match color_space {
+            Hsl if c0.is_none() && c1.is_some_and(|s| s > 0.0 && s <= 0.001) => {
+                c1 = Some(0.0);
+            },
+            Lch if c2.is_none() && c1.is_some_and(|c| c > 0.0 && c <= convert::LCH_HUE_EPSILON) => {
+                c1 = Some(0.0);
+            },
+            Oklch
+                if c2.is_none()
+                    && c1.is_some_and(|c| c > 0.0 && c <= convert::OKLCH_HUE_EPSILON) =>
+            {
+                c1 = Some(0.0);
+            },
+            Hwb if c0.is_none() => {
+                if let (Some(white), Some(black)) = (c1, c2) {
+                    let sum = white + black;
+                    if (99.999..100.0).contains(&sum) {
+                        c2 = Some(100.0 - white);
+                    }
+                }
+            },
+            _ => {},
+        }
+
         Self::new_unclamped(color_space, c0, c1, c2, self.alpha())
     }
 
@@ -806,6 +832,11 @@ mod tests {
 
         let hwb = AbsoluteColor::new(ColorSpace::Hwb, 180.0, 100.0, 25.0, 1.0);
         let hsl = hwb.to_color_space(ColorSpace::Hsl);
+        assert_eq!(hsl.c0(), None);
+        assert_eq!(hsl.c1(), Some(0.0));
+
+        let nearly_neutral = AbsoluteColor::new(ColorSpace::Hwb, 180.0, 49.9995, 50.0, 1.0);
+        let hsl = nearly_neutral.to_color_space(ColorSpace::Hsl);
         assert_eq!(hsl.c0(), None);
         assert_eq!(hsl.c1(), Some(0.0));
 
