@@ -146,6 +146,7 @@ impl<ValueType: ColorComponentType> ColorComponent<ValueType> {
         input: &mut Parser<'i, 't>,
         allow_none: bool,
     ) -> Result<Self, ParseError<'i>> {
+        input.skip_whitespace();
         let location = input.current_source_location();
         let start = input.state();
 

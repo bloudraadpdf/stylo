@@ -1844,7 +1844,7 @@ mod tests {
         .expect("color mix must parse");
         let canonical =
             inline_style_get_property_value(&parse_inline_style_block(&format!("color: {authored}")), "color");
-        assert_ne!(canonical.as_deref(), Some(authored));
+        assert_eq!(canonical.as_deref(), Some(authored));
         assert_eq!(
             crate::specified::projected_specified_property_value(&declarations, "color"),
             canonical,
