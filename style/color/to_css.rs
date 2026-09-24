@@ -21,6 +21,44 @@ fn normalize_color(value: ColorFloat) -> ColorFloat {
     }
 }
 
+/// Keep CSSOM decimals stable when a color component came from an f32 calc or
+/// angle, while retaining enough digits for colors parsed directly as f64.
+pub(crate) fn write_canonical_color_number<W: Write>(
+    value: ColorFloat,
+    dest: &mut CssWriter<W>,
+) -> fmt::Result {
+    if value == 0.0 {
+        return dest.write_str("0");
+    }
+    #[cfg(feature = "gecko")]
+    {
+        return write!(dest, "{value}");
+    }
+    #[cfg(not(feature = "gecko"))]
+    {
+        if !value.is_finite() {
+            return write!(dest, "{value}");
+        }
+
+        let precision = if (value as f32) as ColorFloat == value {
+            if value.abs() >= 1.0 {
+                4
+            } else {
+                6
+            }
+        } else {
+            let magnitude = value.abs().log10().floor() as i32;
+            (14 - magnitude).clamp(0, 30) as usize
+        };
+        let decimal = format!("{value:.precision$}");
+        if decimal.contains('.') {
+            dest.write_str(decimal.trim_end_matches('0').trim_end_matches('.'))
+        } else {
+            dest.write_str(&decimal)
+        }
+    }
+}
+
 fn serialize_color_alpha_wide<W: Write>(
     dest: &mut CssWriter<W>,
     alpha: Option<ColorFloat>,
@@ -74,7 +112,7 @@ impl<'a> ToCss for ModernComponent<'a> {
     {
         if let Some(value) = self.0 {
             if value.is_finite() {
-                write!(dest, "{value}")
+                write_canonical_color_number(*value, dest)
             } else if value.is_nan() {
                 dest.write_str("calc(NaN)")
             } else {
@@ -256,6 +294,25 @@ mod tests {
         assert_eq!(color.to_css_string(), "color(srgb 0.50196078 none none)");
         let zero = AbsoluteColor::new(ColorSpace::Srgb, -0.0, -0.0, -0.0, 0.0);
         assert_eq!(zero.to_css_string(), "color(srgb 0 0 0 / 0)");
+    }
+
+    #[test]
+    fn modern_non_srgb_negative_zero_serializes_as_zero() {
+        let color = AbsoluteColor::new(ColorSpace::DisplayP3, -0.0, -0.0, -0.0, 0.0);
+        assert_eq!(color.to_css_string(), "color(display-p3 0 0 0 / 0)");
+    }
+
+    #[test]
+    #[cfg(feature = "servo")]
+    fn modern_serialization_suppresses_binary_decimal_noise() {
+        let calc = AbsoluteColor::new(ColorSpace::DisplayP3, 0.6_f32 as f64, 0.0, 0.0, 1.0);
+        assert_eq!(calc.to_css_string(), "color(display-p3 0.6 0 0)");
+
+        let percentage = AbsoluteColor::new(ColorSpace::Oklab, 0.2, 0.7 * 0.4, -0.8 * 0.4, 1.0);
+        assert_eq!(percentage.to_css_string(), "oklab(0.2 0.28 -0.32)");
+
+        let angle = AbsoluteColor::new(ColorSpace::Lch, 10.0, 20.0, 73.33859252929688, 1.0);
+        assert_eq!(angle.to_css_string(), "lch(10 20 73.3386)");
     }
 }
 
