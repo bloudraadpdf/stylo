@@ -8,7 +8,7 @@ use crate::color::AbsoluteColor;
 use crate::values::animated::ToAnimatedZero;
 use crate::values::computed::percentage::Percentage;
 use crate::values::generics::color::{
-    GenericCaretColor, GenericColor, GenericColorMix, GenericColorOrAuto,
+    GenericCaretColor, GenericColor, GenericColorLayers, GenericColorMix, GenericColorOrAuto,
 };
 use std::fmt::{self, Write};
 use style_traits::{CssWriter, ToCss};
@@ -24,6 +24,9 @@ pub type Color = GenericColor<Percentage>;
 /// A computed color-mix().
 pub type ColorMix = GenericColorMix<Color, Percentage>;
 
+/// A computed color-layers().
+pub type ColorLayers = GenericColorLayers<Color>;
+
 impl ToCss for Color {
     fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
     where
@@ -34,6 +37,7 @@ impl ToCss for Color {
             Self::ColorFunction(ref color_function) => color_function.to_css(dest),
             Self::CurrentColor => dest.write_str("currentcolor"),
             Self::ColorMix(ref m) => m.to_css(dest),
+            Self::ColorLayers(ref layers) => layers.to_css(dest),
             Self::ContrastColor(ref c) => {
                 dest.write_str("contrast-color(")?;
                 c.to_css(dest)?;
@@ -61,6 +65,21 @@ impl Color {
         } else {
             Self::ColorMix(Box::new(color_mix))
         }
+    }
+
+    /// Resolve color layers without currentcolor at computed-value time.
+    pub fn from_color_layers(layers: ColorLayers) -> Self {
+        let mut colors = layers.colors.iter().rev();
+        let Some(mut result) = colors.next().and_then(Self::as_absolute).copied() else {
+            return Self::ColorLayers(Box::new(layers));
+        };
+        for color in colors {
+            let Some(source) = color.as_absolute() else {
+                return Self::ColorLayers(Box::new(layers));
+            };
+            result = crate::color::layers::composite(&result, source, layers.blend_mode);
+        }
+        Self::Absolute(result)
     }
 
     /// Resolve contrast against an absolute background at computed-value time.
@@ -97,7 +116,22 @@ impl Color {
                     mix.flags,
                 )
             },
-            Self::ContrastColor(ref c) => Self::contrasting_color(&c.resolve_to_absolute(current_color)),
+            Self::ColorLayers(ref layers) => {
+                let mut colors = layers.colors.iter().rev();
+                let first = colors.next().expect("a parsed color-layers has a color");
+                let mut result = first.resolve_to_absolute(current_color);
+                for color in colors {
+                    result = crate::color::layers::composite(
+                        &result,
+                        &color.resolve_to_absolute(current_color),
+                        layers.blend_mode,
+                    );
+                }
+                result
+            },
+            Self::ContrastColor(ref c) => {
+                Self::contrasting_color(&c.resolve_to_absolute(current_color))
+            },
         }
     }
 

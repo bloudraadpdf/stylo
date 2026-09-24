@@ -26,6 +26,8 @@ pub enum GenericColor<Percentage> {
     CurrentColor,
     /// The color-mix() function.
     ColorMix(Box<GenericColorMix<Self, Percentage>>),
+    /// The color-layers() function.
+    ColorLayers(Box<GenericColorLayers<Self>>),
     /// The contrast-color() function.
     ContrastColor(Box<Self>),
 }
@@ -223,6 +225,61 @@ impl<Percentage> ColorMix<GenericColor<Percentage>, Percentage> {
 }
 
 pub use self::GenericColor as Color;
+
+/// A blend mode in color-layers().
+#[allow(missing_docs)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    ToAnimatedValue,
+    ToComputedValue,
+    ToCss,
+    ToShmem,
+)]
+#[repr(u8)]
+pub enum ColorLayerBlendMode {
+    Normal,
+    Multiply,
+    Screen,
+    Overlay,
+    Darken,
+    Lighten,
+    ColorDodge,
+    ColorBurn,
+    HardLight,
+    SoftLight,
+    Difference,
+    Exclusion,
+    Hue,
+    Saturation,
+    Color,
+    Luminosity,
+}
+
+/// A list of colors composited with a single blend mode.
+#[allow(missing_docs)]
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToAnimatedValue, ToComputedValue, ToShmem)]
+#[repr(C)]
+pub struct GenericColorLayers<Color> {
+    pub blend_mode: ColorLayerBlendMode,
+    pub colors: OwnedSlice<Color>,
+}
+
+impl<Color: ToCss> ToCss for GenericColorLayers<Color> {
+    fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        dest.write_str("color-layers(")?;
+        self.blend_mode.to_css(dest)?;
+        for color in self.colors.iter() {
+            dest.write_str(", ")?;
+            color.to_css(dest)?;
+        }
+        dest.write_char(')')
+    }
+}
 
 impl<Percentage> Color<Percentage> {
     /// If this color is absolute return it's value, otherwise return None.
