@@ -1315,6 +1315,38 @@ mod specified_color_tests {
     }
 
     #[test]
+    fn relative_lch_infinite_lightness_clamps_without_clamping_finite_values() {
+        let url_data = UrlExtraData::from(
+            url::Url::parse("https://example.invalid/").expect("test URL parses"),
+        );
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        for (source, expected) in [
+            ("lch(from red calc((49.44 - l) * infinity) 0 0)", 0.0),
+            ("lch(from blue calc((49.44 - l) * infinity) 0 0)", 100.0),
+            ("lch(from red 200 0 0)", 200.0),
+            ("lab(from red calc(infinity) 0 0)", 100.0),
+            ("oklab(from red calc(infinity) 0 0)", 1.0),
+            ("oklch(from red calc(-infinity) 0 0)", 0.0),
+        ] {
+            let mut input = ParserInput::new(source);
+            let specified = Parser::new(&mut input)
+                .parse_entirely(|parser| parse_color_with(&context, parser))
+                .expect("relative LCH color parses");
+            let absolute = specified.resolve_to_absolute().expect("color resolves");
+            assert_eq!(absolute.c0(), Some(expected), "{source}");
+        }
+    }
+
+    #[test]
     fn lch_nan_hues_remain_specified_while_other_nan_channels_resolve() {
         let url_data = UrlExtraData::from(
             url::Url::parse("https://example.invalid/").expect("test URL parses"),

@@ -236,6 +236,19 @@ pub enum ColorFunction<OriginColor> {
 impl ColorFunction<AbsoluteColor> {
     /// Try to resolve into a valid absolute color.
     pub fn resolve_to_absolute(&self) -> Result<AbsoluteColor, ()> {
+        // Values 4 §10.12 clamps infinities from a top-level calculation to
+        // the channel's allowed range. Color 5 retains finite out-of-range
+        // components in relative colors.
+        fn lightness(value: f32, maximum: f32) -> f32 {
+            if value == f32::INFINITY {
+                maximum
+            } else if value == f32::NEG_INFINITY {
+                0.0
+            } else {
+                value
+            }
+        }
+
         macro_rules! alpha {
             ($alpha:expr, $origin_color:expr) => {{
                 $alpha
@@ -416,7 +429,7 @@ impl ColorFunction<AbsoluteColor> {
                 AbsoluteColor::new_impl(
                     ColorSpace::Lab,
                     l.resolve(origin_color.as_ref())?
-                        .map(|l| l.to_number(LIGHTNESS_RANGE)),
+                        .map(|l| lightness(l.to_number(LIGHTNESS_RANGE), LIGHTNESS_RANGE)),
                     a.resolve(origin_color.as_ref())?
                         .map(|a| a.to_number(A_B_RANGE)),
                     b.resolve(origin_color.as_ref())?
@@ -438,7 +451,7 @@ impl ColorFunction<AbsoluteColor> {
                 AbsoluteColor::new_impl(
                     ColorSpace::Lch,
                     l.resolve(origin_color.as_ref())?
-                        .map(|l| l.to_number(LIGHTNESS_RANGE)),
+                        .map(|l| lightness(l.to_number(LIGHTNESS_RANGE), LIGHTNESS_RANGE)),
                     c.resolve(origin_color.as_ref())?
                         .map(|c| c.to_number(CHROMA_RANGE)),
                     h.resolve(origin_color.as_ref())?
@@ -460,7 +473,7 @@ impl ColorFunction<AbsoluteColor> {
                 AbsoluteColor::new_impl(
                     ColorSpace::Oklab,
                     l.resolve(origin_color.as_ref())?
-                        .map(|l| l.to_number(LIGHTNESS_RANGE)),
+                        .map(|l| lightness(l.to_number(LIGHTNESS_RANGE), LIGHTNESS_RANGE)),
                     a.resolve(origin_color.as_ref())?
                         .map(|a| a.to_number(A_B_RANGE)),
                     b.resolve(origin_color.as_ref())?
@@ -482,7 +495,7 @@ impl ColorFunction<AbsoluteColor> {
                 AbsoluteColor::new_impl(
                     ColorSpace::Oklch,
                     l.resolve(origin_color.as_ref())?
-                        .map(|l| l.to_number(LIGHTNESS_RANGE)),
+                        .map(|l| lightness(l.to_number(LIGHTNESS_RANGE), LIGHTNESS_RANGE)),
                     c.resolve(origin_color.as_ref())?
                         .map(|c| c.to_number(CHROMA_RANGE)),
                     h.resolve(origin_color.as_ref())?
