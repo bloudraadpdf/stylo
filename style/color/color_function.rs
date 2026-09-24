@@ -288,6 +288,7 @@ impl ColorFunction<AbsoluteColor> {
                     );
                     if origin_color.is_none() {
                         result.flags.insert(ColorFlags::SERIALIZE_AS_LEGACY_SRGB);
+                        result.flags.insert(ColorFlags::DIRECT_RGB_CHANNELS);
                     }
                     result
                 } else {
