@@ -1483,7 +1483,7 @@ mod tests {
         let color = function
             .resolve_to_absolute()
             .expect("relative oklch resolves");
-        assert!(color.c1().expect("chroma") > 0.000004);
+        assert_eq!(color.c1(), Some(0.0));
         assert_eq!(color.c2(), None);
     }
 
