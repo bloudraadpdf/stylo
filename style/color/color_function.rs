@@ -159,6 +159,12 @@ pub enum ColorFunction<OriginColor> {
         ColorComponent<NumberOrPercentageComponent>, // alpha
         ColorSpace,
     ),
+    /// CSS Color 5 custom color space, resolved against an `@color-profile` rule.
+    CustomProfile(
+        crate::Atom,
+        Vec<ColorComponent<NumberOrPercentageComponent>>,
+        ColorComponent<NumberOrPercentageComponent>,
+    ),
     /// A device-dependent CMYK colour with an optional fallback colour.
     DeviceCmyk(
         ColorComponent<NumberOrPercentageComponent>, // cyan
@@ -517,6 +523,7 @@ impl ColorFunction<AbsoluteColor> {
                 // pixels rather than a wrong colour.
                 AbsoluteColor::TRANSPARENT_BLACK
             },
+            ColorFunction::CustomProfile(..) => AbsoluteColor::TRANSPARENT_BLACK,
             ColorFunction::BdDeviceN(_pairs, fallback) => {
                 // F2 DeviceN colours: when no DeviceN-aware backend is
                 // resolving the value, fall back to the authored sRGB
@@ -578,6 +585,7 @@ impl ColorFunction<SpecifiedColor> {
             | Self::Oklab(origin_color, ..)
             | Self::Oklch(origin_color, ..)
             | Self::Color(origin_color, ..) => origin_color.is_some(),
+            Self::CustomProfile(..) => false,
             Self::DeviceCmyk(..) => false,
             Self::BdSpot(..) => false,
             Self::BdDeviceN(..) => false,
@@ -614,6 +622,7 @@ impl ColorFunction<SpecifiedColor> {
             | Self::Oklab(..)
             | Self::Oklch(..)
             | Self::Color(..)
+            | Self::CustomProfile(..)
             | Self::DeviceCmyk(..)
             | Self::BdSpot(..)
             | Self::BdDeviceN(..) => true,
@@ -668,6 +677,14 @@ impl ColorFunction<SpecifiedColor> {
                 alpha.to_computed_value(context),
                 *color_space,
             ),
+            Self::CustomProfile(name, components, alpha) => Self::CustomProfile(
+                name.clone(),
+                components
+                    .iter()
+                    .map(|component| component.to_computed_value(context))
+                    .collect(),
+                alpha.to_computed_value(context),
+            ),
             Self::DeviceCmyk(c, m, y, k, alpha, fallback) => Self::DeviceCmyk(
                 c.to_computed_value(context),
                 m.to_computed_value(context),
@@ -702,6 +719,7 @@ impl ColorFunction<SpecifiedColor> {
             || matches!(self, Self::DeviceCmyk(..))
             || matches!(self, Self::BdSpot(..))
             || matches!(self, Self::BdDeviceN(..))
+            || matches!(self, Self::CustomProfile(..))
     }
 
     fn has_calc_component(&self) -> bool {
@@ -732,6 +750,7 @@ impl ColorFunction<SpecifiedColor> {
             Self::Lab(_, c0, c1, c2, alpha)
             | Self::Oklab(_, c0, c1, c2, alpha)
             | Self::Color(_, c0, c1, c2, alpha, _) => has_calc!(c0, c1, c2, alpha),
+            Self::CustomProfile(..) => false,
             Self::Lch(_, c0, c1, hue, alpha) | Self::Oklch(_, c0, c1, hue, alpha) => {
                 has_calc!(c0, c1, hue, alpha)
                     || (has_nan_calc(hue)
@@ -777,6 +796,11 @@ impl ColorFunction<SpecifiedColor> {
                 // `resolve_to_absolute` from its sibling impls.
                 let absolute: ColorFunction<AbsoluteColor> =
                     ColorFunction::BdSpot(name.clone(), tint.clone(), *is_separation);
+                absolute.resolve_to_absolute()
+            },
+            Self::CustomProfile(name, components, alpha) => {
+                let absolute: ColorFunction<AbsoluteColor> =
+                    ColorFunction::CustomProfile(name.clone(), components.clone(), alpha.clone());
                 absolute.resolve_to_absolute()
             },
             Self::BdDeviceN(pairs, fallback) => {
@@ -886,6 +910,9 @@ impl<Color> ColorFunction<Color> {
                 alpha.clone(),
                 color_space.clone(),
             )),
+            ColorFunction::CustomProfile(name, components, alpha) => Some(
+                ColorFunction::CustomProfile(name.clone(), components.clone(), alpha.clone()),
+            ),
             ColorFunction::DeviceCmyk(c, m, y, k, alpha, fallback) => {
                 Some(ColorFunction::DeviceCmyk(
                     c.clone(),
@@ -1027,6 +1054,20 @@ impl<C: ColorFunctionCssContext> style_traits::ToCss for ColorFunction<C> {
             return dest.write_str(")");
         }
 
+        if let Self::CustomProfile(name, components, alpha) = self {
+            dest.write_str("color(")?;
+            crate::values::serialize_atom_identifier(name, dest)?;
+            for component in components {
+                dest.write_str(" ")?;
+                component.to_css(dest)?;
+            }
+            if !matches!(alpha, ColorComponent::AlphaOmitted) {
+                dest.write_str(" / ")?;
+                alpha.to_css(dest)?;
+            }
+            return dest.write_str(")");
+        }
+
         if let Self::BdSpot(name, tint, is_separation) = self {
             // F2 — serialise the authored spelling so OM round-trips match
             // input. Tint defaults to 1.0 and is elided when authored as the
@@ -1110,6 +1151,7 @@ impl<C: ColorFunctionCssContext> style_traits::ToCss for ColorFunction<C> {
                 (origin_color, alpha)
             },
             Self::DeviceCmyk(..) => unreachable!("handled above"),
+            Self::CustomProfile(..) => unreachable!("handled above"),
             Self::BdSpot(..) => unreachable!("handled above"),
             Self::BdDeviceN(..) => unreachable!("handled above"),
         };
@@ -1314,6 +1356,7 @@ impl<C: ColorFunctionCssContext> style_traits::ToCss for ColorFunction<C> {
                 }
             },
             Self::DeviceCmyk(..) => unreachable!("handled above"),
+            Self::CustomProfile(..) => unreachable!("handled above"),
             Self::BdSpot(..) => unreachable!("handled above"),
             Self::BdDeviceN(..) => unreachable!("handled above"),
         }
