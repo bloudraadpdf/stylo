@@ -758,7 +758,8 @@ pub fn parse_inline_style_property_declarations(
     // channels are powerless. Serializing its nested HSL/HWB origin through
     // the declaration block can replace it with legacy sRGB and lose that
     // distinction before the cascade computes the value. Color mixes also
-    // need authored colors: serializing a powerless HSL hue as RGB erases it.
+    // need authored inputs: serializing the mix before the cascade can erase
+    // missing components or round a chroma across its powerless threshold.
     // Direct RGB missing channels also serialize as zero for specified CSSOM,
     // but must remain missing when the cascade computes the color.
     if backing_property.eq_ignore_ascii_case("color")
@@ -1067,25 +1068,12 @@ fn inline_color_needs_authored_cascade_value(block: &InlineStyleBlock) -> bool {
                         .contains(style::color::ColorFlags::SERIALIZE_AS_LEGACY_SRGB),
                     style::values::specified::Color::ColorFunction(function) =>
                         function.has_origin_color(),
-                    style::values::specified::Color::ColorMix(mix) =>
-                        color_mix_contains_authored_hsl_or_hwb(mix),
+                    style::values::specified::Color::ColorMix(_) => true,
                     _ => false,
                 }
             },
             _ => false,
         }
-    })
-}
-
-fn color_mix_contains_authored_hsl_or_hwb(mix: &style::values::specified::color::ColorMix) -> bool {
-    mix.items().iter().any(|item| match &item.color {
-        style::values::specified::Color::Absolute(absolute) => matches!(
-            absolute.color.color_space,
-            style::color::ColorSpace::Hsl | style::color::ColorSpace::Hwb
-        ),
-        style::values::specified::Color::ColorMix(nested) =>
-            color_mix_contains_authored_hsl_or_hwb(nested),
-        _ => false,
     })
 }
 
@@ -1832,9 +1820,9 @@ mod tests {
     }
 
     #[test]
-    fn cssom_color_mix_without_authored_hsl_uses_canonical_projection() {
+    fn cssom_color_mix_keeps_near_neutral_p3_input_for_cascade() {
         let authored =
-            "color-mix(in lch, color(display-p3 0.1893689 0.18937814 0.18937561), lch(11 33 44))";
+            "color-mix(in lch, color(display-p3 0.18936885 0.18937816 0.18937561), lch(11 33 44))";
         let declarations = parse_inline_style_property_declarations(
             "color",
             authored,
@@ -1846,8 +1834,9 @@ mod tests {
             inline_style_get_property_value(&parse_inline_style_block(&format!("color: {authored}")), "color");
         assert_ne!(canonical.as_deref(), Some(authored));
         assert_eq!(
-            crate::specified::projected_specified_property_value(&declarations, "color"),
-            canonical,
+            crate::specified::projected_specified_property_value(&declarations, "color")
+                .as_deref(),
+            Some(authored),
         );
     }
 
