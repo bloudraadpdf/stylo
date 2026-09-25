@@ -4587,6 +4587,9 @@ mod tests {
             PropertyDeclaration::TextEmphasisColor(value) => {
                 PropertyDeclaration::TextEmphasisColor(value.clone())
             },
+            PropertyDeclaration::WebkitTextFillColor(value) => {
+                PropertyDeclaration::WebkitTextFillColor(value.clone())
+            },
             PropertyDeclaration::D(value) => PropertyDeclaration::D(value.clone()),
             PropertyDeclaration::X(value) => PropertyDeclaration::X(value.clone()),
             PropertyDeclaration::Y(value) => PropertyDeclaration::Y(value.clone()),

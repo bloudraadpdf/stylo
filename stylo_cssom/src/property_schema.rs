@@ -16,6 +16,15 @@ pub fn property_schema(name: &str) -> Option<&'static PropertySchemaRow> {
 }
 
 #[test]
+fn webkit_text_fill_color_has_computed_color_reification() {
+    let row = property_schema("-webkit-text-fill-color").expect("supported longhand has a schema");
+    assert_eq!(
+        row.computed_reification,
+        Some(stylo_cssom_model::ComputedStyleReificationClass::Color)
+    );
+}
+
+#[test]
 fn typed_declaration_adapter_has_exhaustive_native_ownership() {
     let source = include_str!("rule_parser.rs");
     let adapter = source
