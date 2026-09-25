@@ -659,18 +659,10 @@ impl Animate for ClipRect {
     #[inline]
     fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
         use crate::values::computed::LengthOrAuto;
-        let animate_component = |this: &LengthOrAuto, other: &LengthOrAuto| {
-            let result = this.animate(other, procedure)?;
-            if let Procedure::Interpolate { .. } = procedure {
-                return Ok(result);
-            }
-            if result.is_auto() {
-                // FIXME(emilio): Why? A couple SMIL tests fail without this,
-                // but it seems extremely fishy.
-                return Err(());
-            }
-            Ok(result)
-        };
+        // A component animates with its counterpart, so two `auto` components
+        // keep `auto` under every procedure: they carry no length to add.
+        let animate_component =
+            |this: &LengthOrAuto, other: &LengthOrAuto| this.animate(other, procedure);
 
         Ok(ClipRect {
             top: animate_component(&self.top, &other.top)?,

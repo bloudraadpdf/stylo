@@ -1393,3 +1393,38 @@ impl ClipRect {
         Rect::new(clip_origin, clip_size).translate(border_box.origin.to_vector())
     }
 }
+
+#[cfg(test)]
+mod clip_animation_tests {
+    use super::{ClipRect, Length, LengthOrAuto};
+    use crate::values::animated::{Animate, Procedure};
+
+    fn clip_rect(top: Option<f32>, left: Option<f32>) -> ClipRect {
+        let component = |value: Option<f32>| {
+            value.map_or(LengthOrAuto::Auto, |value| {
+                LengthOrAuto::LengthPercentage(Length::new(value))
+            })
+        };
+        ClipRect {
+            top: component(top),
+            right: LengthOrAuto::Auto,
+            bottom: LengthOrAuto::Auto,
+            left: component(left),
+        }
+    }
+
+    /// Web Animations 1 section 4.7.3: addition applies to each component, and
+    /// two `auto` components carry no length to add, so `auto` survives.
+    #[test]
+    fn addition_keeps_an_auto_component_of_a_clip_rect() {
+        assert_eq!(
+            clip_rect(Some(50.0), Some(50.0))
+                .animate(&clip_rect(Some(50.0), Some(50.0)), Procedure::Add),
+            Ok(clip_rect(Some(100.0), Some(100.0)))
+        );
+        assert_eq!(
+            clip_rect(Some(50.0), Some(50.0)).animate(&clip_rect(None, Some(50.0)), Procedure::Add),
+            Err(())
+        );
+    }
+}
