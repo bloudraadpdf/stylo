@@ -65,22 +65,38 @@ pub enum GenericFilter<Angle, Factor, Length, Shadow, U> {
     Contrast(#[animation(field_bound)] NonNegative<Factor>),
     /// `grayscale(<factor>)`
     #[css(function)]
-    Grayscale(#[animation(field_bound)] ZeroToOne<Factor>),
+    Grayscale(
+        #[animation(field_bound)]
+        #[compute(field_bound)]
+        ZeroToOne<Factor>,
+    ),
     /// `hue-rotate(<angle>)`
     #[css(function)]
     HueRotate(Angle),
     /// `invert(<factor>)`
     #[css(function)]
-    Invert(#[animation(field_bound)] ZeroToOne<Factor>),
+    Invert(
+        #[animation(field_bound)]
+        #[compute(field_bound)]
+        ZeroToOne<Factor>,
+    ),
     /// `opacity(<factor>)`
     #[css(function)]
-    Opacity(#[animation(field_bound)] ZeroToOne<Factor>),
+    Opacity(
+        #[animation(field_bound)]
+        #[compute(field_bound)]
+        ZeroToOne<Factor>,
+    ),
     /// `saturate(<factor>)`
     #[css(function)]
     Saturate(#[animation(field_bound)] NonNegative<Factor>),
     /// `sepia(<factor>)`
     #[css(function)]
-    Sepia(#[animation(field_bound)] ZeroToOne<Factor>),
+    Sepia(
+        #[animation(field_bound)]
+        #[compute(field_bound)]
+        ZeroToOne<Factor>,
+    ),
     /// `drop-shadow(...)`
     #[css(function)]
     DropShadow(Shadow),

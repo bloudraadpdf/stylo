@@ -6,6 +6,7 @@
 //! for both specified and computed values.
 
 use crate::derives::*;
+use crate::values::computed::{Context, ToComputedValue};
 use crate::Zero;
 use std::ops::Add;
 
@@ -136,13 +137,29 @@ pub struct GreaterThanOrEqualToOne<T>(pub T);
     PartialOrd,
     SpecifiedValueInfo,
     ToAnimatedZero,
-    ToComputedValue,
     ToCss,
     ToResolvedValue,
     ToShmem,
 )]
 #[repr(transparent)]
 pub struct ZeroToOne<T>(pub T);
+
+/// CSS Values 4 section 10.13 clamps a value to the range of its context from
+/// the computed value onwards, which is where the range of this wrapper holds.
+impl<T> ToComputedValue for ZeroToOne<T>
+where
+    T: ToComputedValue<ComputedValue = crate::values::CSSFloat>,
+{
+    type ComputedValue = ZeroToOne<crate::values::CSSFloat>;
+
+    fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
+        ZeroToOne(self.0.to_computed_value(context).clamp(0., 1.))
+    }
+
+    fn from_computed_value(computed: &Self::ComputedValue) -> Self {
+        ZeroToOne(T::from_computed_value(&computed.0))
+    }
+}
 
 /// A clip rect for clip and image-region
 #[allow(missing_docs)]
