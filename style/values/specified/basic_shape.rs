@@ -742,16 +742,19 @@ impl ToComputedValue for BasicShapeRect {
                 let y = xywh.y.to_computed_value(context);
                 let w = xywh.width.to_computed_value(context);
                 let h = xywh.height.to_computed_value(context);
-                // calc(100% - x - w).
+                // calc(100% - x - w), whose zero dimension reduces as CSS
+                // Values 4 section 5.6.1 requires of a computed mix.
                 let right = LengthPercentage::hundred_percent_minus_list(
                     &[&x, &w.0],
                     AllowedNumericType::All,
-                );
+                )
+                .reduce_zero_dimension();
                 // calc(100% - y - h).
                 let bottom = LengthPercentage::hundred_percent_minus_list(
                     &[&y, &h.0],
                     AllowedNumericType::All,
-                );
+                )
+                .reduce_zero_dimension();
 
                 ComputedInsetRect {
                     rect: Rect::new(y, right, bottom, x),
@@ -779,6 +782,7 @@ impl ToComputedValue for BasicShapeRect {
                         LengthPercentageOrAuto::Auto => LengthPercentage::zero_percent(),
                         LengthPercentageOrAuto::LengthPercentage(lp) => {
                             LengthPercentage::hundred_percent_minus(lp, AllowedNumericType::All)
+                                .reduce_zero_dimension()
                         },
                     }
                 }

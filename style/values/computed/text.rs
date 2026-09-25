@@ -88,9 +88,9 @@ pub type TextDecorationLength = GenericTextDecorationLength<LengthPercentage>;
 impl Animate for TextDecorationLength {
     fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
         match (self, other) {
-            (Self::LengthPercentage(from), Self::LengthPercentage(to)) => Ok(
-                Self::LengthPercentage(from.animate_as_percentage_dimension_mix(to, procedure)?),
-            ),
+            (Self::LengthPercentage(from), Self::LengthPercentage(to)) => {
+                Ok(Self::LengthPercentage(from.animate(to, procedure)?))
+            },
             (Self::Auto, Self::Auto) => Ok(Self::Auto),
             (Self::FromFont, Self::FromFont) => Ok(Self::FromFont),
             (Self::LengthPercentage(_), Self::Auto | Self::FromFont)
@@ -110,7 +110,7 @@ impl Animate for TextUnderlineOffset {
                 GenericLengthPercentageOrAuto::LengthPercentage(from),
                 GenericLengthPercentageOrAuto::LengthPercentage(to),
             ) => Ok(Self(GenericLengthPercentageOrAuto::LengthPercentage(
-                from.animate_as_percentage_dimension_mix(to, procedure)?,
+                from.animate(to, procedure)?,
             ))),
             (GenericLengthPercentageOrAuto::Auto, GenericLengthPercentageOrAuto::Auto) => {
                 Ok(Self::auto())
