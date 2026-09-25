@@ -357,10 +357,29 @@ impl LengthPercentage {
                     },
                 };
             },
-            _ => Self::new_calc_unchecked(Box::new(CalcLengthPercentage {
-                clamping_mode,
-                node,
-            })),
+            _ => {
+                // CSS Values 4 section 5.6.1: a percentage-dimension mix whose
+                // dimension component is zero computes to a percentage. A zero
+                // percentage component stays, because a percentage that resolves
+                // later cannot become a dimension.
+                if let CalcNode::Sum(terms) = &node {
+                    use CalcLengthPercentageLeaf::{
+                        Length as LengthLeaf, Percentage as PercentLeaf,
+                    };
+                    if let [CalcNode::Leaf(LengthLeaf(length)), CalcNode::Leaf(PercentLeaf(percent))]
+                    | [CalcNode::Leaf(PercentLeaf(percent)), CalcNode::Leaf(LengthLeaf(length))] =
+                        &**terms
+                    {
+                        if length.px() == 0.0 {
+                            return Self::new_percent(Percentage(clamping_mode.clamp(percent.0)));
+                        }
+                    }
+                }
+                Self::new_calc_unchecked(Box::new(CalcLengthPercentage {
+                    clamping_mode,
+                    node,
+                }))
+            },
         }
     }
 
@@ -1414,31 +1433,8 @@ impl specified::CalcLengthPercentage {
 /// https://drafts.csswg.org/css-transitions/#animtype-lpcalc
 /// https://drafts.csswg.org/css-values-4/#combine-math
 /// https://drafts.csswg.org/css-values-4/#combine-mixed
-#[derive(Clone, Copy)]
-enum InterpolationEndpointRepresentation {
-    ExactComputedValue,
-    CalculatedPercentageDimensionMix,
-}
-
-impl LengthPercentage {
-    fn animate_with_endpoint_representation(
-        &self,
-        other: &Self,
-        procedure: Procedure,
-        endpoint_representation: InterpolationEndpointRepresentation,
-    ) -> Result<Self, ()> {
-        if let (
-            Procedure::Interpolate { progress },
-            InterpolationEndpointRepresentation::ExactComputedValue,
-        ) = (procedure, endpoint_representation)
-        {
-            if progress == 0.0 {
-                return Ok(self.clone());
-            }
-            if progress == 1.0 {
-                return Ok(other.clone());
-            }
-        }
+impl Animate for LengthPercentage {
+    fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
         Ok(match (self.unpack(), other.unpack()) {
             (Unpacked::Length(one), Unpacked::Length(other)) => {
                 Self::new_length(one.animate(&other, procedure)?)
@@ -1466,56 +1462,8 @@ impl LengthPercentage {
                     CalcNode::Sum(vec![one, other].into()),
                     AllowedNumericType::All,
                 )
-                .reduce_zero_dimension()
             },
         })
-    }
-
-    /// Reduce a percentage-dimension mix as required by CSS Values 4 section 5.6.1.
-    pub(crate) fn reduce_zero_dimension(self) -> Self {
-        if let Unpacked::Calc(calc) = self.unpack() {
-            if let CalcNode::Sum(terms) = &calc.node {
-                use CalcLengthPercentageLeaf::{Length, Percentage};
-                match &**terms {
-                    [CalcNode::Leaf(Length(length)), CalcNode::Leaf(Percentage(percent))]
-                    | [CalcNode::Leaf(Percentage(percent)), CalcNode::Leaf(Length(length))]
-                        if length.px() == 0.0 =>
-                    {
-                        return Self::new_percent(crate::values::computed::Percentage(
-                            calc.clamping_mode.clamp(percent.0),
-                        ));
-                    },
-                    _ => {},
-                }
-            }
-        }
-        self
-    }
-
-    /// Interpolate a value whose property requires a mixed percentage and
-    /// dimension pair to remain in its calculated representation at an
-    /// interval endpoint.
-    pub(crate) fn animate_as_percentage_dimension_mix(
-        &self,
-        other: &Self,
-        procedure: Procedure,
-    ) -> Result<Self, ()> {
-        self.animate_with_endpoint_representation(
-            other,
-            procedure,
-            InterpolationEndpointRepresentation::CalculatedPercentageDimensionMix,
-        )
-    }
-}
-
-impl Animate for LengthPercentage {
-    #[inline]
-    fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
-        self.animate_with_endpoint_representation(
-            other,
-            procedure,
-            InterpolationEndpointRepresentation::ExactComputedValue,
-        )
     }
 }
 
@@ -1569,8 +1517,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn computed_sums_preserve_zero_terms_with_different_units() {
-        for (length, percentage) in [(0.0, 1.0), (20.0, 0.0), (0.0, 0.0)] {
+    fn a_computed_sum_keeps_a_zero_percentage_and_drops_a_zero_dimension() {
+        for (length, percentage, keeps_the_calc) in
+            [(0.0, 1.0, false), (20.0, 0.0, true), (0.0, 0.0, false)]
+        {
             for reverse in [false, true] {
                 let mut terms = vec![
                     CalcNode::Leaf(CalcLengthPercentageLeaf::Length(Length::new(length))),
@@ -1583,8 +1533,9 @@ mod tests {
                     CalcNode::Sum(terms.into()),
                     AllowedNumericType::All,
                 );
-                assert!(
+                assert_eq!(
                     matches!(value.unpack(), Unpacked::Calc(_)),
+                    keeps_the_calc,
                     "{length}px + {percentage}%"
                 );
             }
@@ -1592,27 +1543,15 @@ mod tests {
     }
 
     #[test]
-    fn mixed_length_percentage_interpolation_preserves_the_exact_end_value() {
-        let from = LengthPercentage::new_percent(Percentage(0.5));
-        let to = LengthPercentage::new_length(Length::new(20.0));
+    fn a_mixed_interpolation_endpoint_keeps_its_calculated_components() {
+        let percent = LengthPercentage::new_percent(Percentage(0.5));
+        let length = LengthPercentage::new_length(Length::new(20.0));
 
-        let sampled = from
-            .animate(&to, Procedure::Interpolate { progress: 1.0 })
+        let sampled = percent
+            .animate(&length, Procedure::Interpolate { progress: 1.0 })
             .expect("length-percentage endpoints must interpolate");
 
-        assert_eq!(sampled.to_css_string(), "20px");
-    }
-
-    #[test]
-    fn property_specific_mixed_interpolation_retains_calculated_endpoint() {
-        let from = LengthPercentage::new_length(Length::new(480.0));
-        let to = LengthPercentage::new_percent(Percentage(2.4));
-
-        let sampled = from
-            .animate_as_percentage_dimension_mix(&to, Procedure::Interpolate { progress: 0.0 })
-            .expect("mixed length-percentage endpoints must interpolate");
-
-        assert_eq!(sampled.to_css_string(), "calc(0% + 480px)");
+        assert_eq!(sampled.to_css_string(), "calc(0% + 20px)");
     }
 
     #[test]
@@ -1622,7 +1561,7 @@ mod tests {
             let dimension = LengthPercentage::new_length(Length::new(length));
             for (from, to, progress) in [(&dimension, &percent, 1.0), (&percent, &dimension, 0.0)] {
                 let sampled = from
-                    .animate_as_percentage_dimension_mix(to, Procedure::Interpolate { progress })
+                    .animate(to, Procedure::Interpolate { progress })
                     .unwrap();
                 assert_eq!(sampled.to_percentage(), Some(Percentage(2.4)));
                 assert_eq!(sampled.to_css_string(), "240%");
@@ -1642,9 +1581,7 @@ mod tests {
             )
         };
         for procedure in [Procedure::Interpolate { progress: 0.5 }, Procedure::Add] {
-            let sampled = mixed(20.0)
-                .animate_as_percentage_dimension_mix(&mixed(-20.0), procedure)
-                .unwrap();
+            let sampled = mixed(20.0).animate(&mixed(-20.0), procedure).unwrap();
             assert_eq!(
                 sampled.to_css_string(),
                 if matches!(procedure, Procedure::Add) {

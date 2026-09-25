@@ -315,7 +315,10 @@ mod tests {
             "match-parent"
         );
         let computed = computed::text::TextAlignLast::new(TextAlignLastKeyword::Start, true);
-        assert_eq!(TextAlignLast::from_computed_value(&computed), TextAlignLast::MatchParent);
+        assert_eq!(
+            TextAlignLast::from_computed_value(&computed),
+            TextAlignLast::MatchParent
+        );
     }
 
     #[test]
@@ -1694,9 +1697,9 @@ impl ToComputedValue for TextDecorationLength {
         match self {
             Self::Auto => Self::ComputedValue::Auto,
             Self::FromFont => Self::ComputedValue::FromFont,
-            Self::LengthPercentage(value) => Self::ComputedValue::LengthPercentage(
-                value.to_computed_value(context).reduce_zero_dimension(),
-            ),
+            Self::LengthPercentage(value) => {
+                Self::ComputedValue::LengthPercentage(value.to_computed_value(context))
+            },
         }
     }
 
@@ -1719,7 +1722,7 @@ impl ToComputedValue for TextUnderlineOffset {
         crate::values::generics::text::GenericTextUnderlineOffset(match &self.0 {
             Value::Auto => Value::Auto,
             Value::LengthPercentage(value) => {
-                Value::LengthPercentage(value.to_computed_value(context).reduce_zero_dimension())
+                Value::LengthPercentage(value.to_computed_value(context))
             },
         })
     }
