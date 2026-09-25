@@ -159,6 +159,14 @@ impl ::selectors::parser::PseudoElement for PseudoElement {
                 | Self::DetailsContent
         )
     }
+
+    fn is_before_or_after(&self) -> bool {
+        matches!(self, Self::Before | Self::After)
+    }
+
+    fn valid_after_before_or_after(&self) -> bool {
+        matches!(self, Self::Marker)
+    }
 }
 
 /// The number of eager pseudo-elements. Keep this in sync with cascade_type.
