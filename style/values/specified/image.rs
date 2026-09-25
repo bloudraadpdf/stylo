@@ -21,6 +21,7 @@ use crate::values::generics::position::Position as GenericPosition;
 use crate::values::generics::NonNegative;
 use crate::values::specified::position::{HorizontalPositionKeyword, VerticalPositionKeyword};
 use crate::values::specified::position::{Position, PositionComponent, PositionKeyword, Side};
+use crate::values::specified::effects::SpecifiedFilter;
 use crate::values::specified::url::SpecifiedUrl;
 use crate::values::specified::{
     Angle, AngleOrPercentage, Color, Length, LengthPercentage, NonNegativeLength,
@@ -42,10 +43,13 @@ fn gradient_color_interpolation_method_enabled() -> bool {
 
 /// Specified values for an image according to CSS-IMAGES.
 /// <https://drafts.csswg.org/css-images/#image-values>
-pub type Image = generic::Image<Gradient, SpecifiedUrl, Color, Percentage, Resolution>;
+pub type Image = generic::Image<Gradient, SpecifiedUrl, Color, Percentage, Resolution, SpecifiedFilter>;
 
 // Images should remain small, see https://github.com/servo/servo/pull/18430
 size_of_test!(Image, 16);
+
+/// A specified `filter()` image, per CSS Filter Effects 2 §12.
+pub type FilterImage = generic::FilterImage<Image, SpecifiedFilter>;
 
 /// Specified values for a CSS gradient.
 /// <https://drafts.csswg.org/css-images/#gradients>
@@ -259,12 +263,40 @@ impl Image {
                 Self::parse_with_cors_mode(context, input, cors_mode, flags)
             })?)),
             "image" => Self::Image(Box::new(ImageImage::parse_args(context, input, cors_mode)?)),
+            "filter" => Self::Filter(Box::new(FilterImage::parse_args(context, input, cors_mode, flags)?)),
             #[cfg(feature = "gecko")]
             "-moz-element" => Self::Element(Self::parse_element(input)?),
             #[cfg(feature = "gecko")]
             "-moz-symbolic-icon" if context.chrome_rules_enabled() => Self::MozSymbolicIcon(input.expect_ident()?.as_ref().into()),
             _ => return Err(input.new_custom_error(StyleParseErrorKind::UnexpectedFunction(function))),
         }))
+    }
+}
+
+impl FilterImage {
+    /// Parse the contents of `filter(...)` per CSS Filter Effects 2 §12.
+    ///
+    /// Grammar: `[ <image> | <string> ], <filter-value-list>`
+    fn parse_args<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+        cors_mode: CorsMode,
+        flags: ParseImageFlags,
+    ) -> Result<Self, ParseError<'i>> {
+        let image = if let Ok(url) = input.try_parse(|input| input.expect_string().map(|url| url.as_ref().to_owned())) {
+            generic::Image::Url(SpecifiedUrl::parse_from_string(url, context, cors_mode))
+        } else {
+            Image::parse_with_cors_mode(context, input, cors_mode, flags | ParseImageFlags::FORBID_NONE)?
+        };
+        input.expect_comma()?;
+        let mut filters = vec![SpecifiedFilter::parse(context, input)?];
+        while let Ok(filter) = input.try_parse(|input| SpecifiedFilter::parse(context, input)) {
+            filters.push(filter);
+        }
+        Ok(Self {
+            image,
+            filters: filters.into(),
+        })
     }
 }
 
