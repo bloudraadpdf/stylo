@@ -313,12 +313,11 @@ impl crate::values::animated::Animate for MasonrySlack {
         procedure: crate::values::animated::Procedure,
     ) -> Result<Self, ()> {
         match (self, other) {
-            (Self::LengthPercentage(from), Self::LengthPercentage(to)) => Ok(
-                Self::LengthPercentage(crate::values::generics::NonNegative(
-                    from.0
-                        .animate_as_percentage_dimension_mix(&to.0, procedure)?,
-                )),
-            ),
+            (Self::LengthPercentage(from), Self::LengthPercentage(to)) => {
+                Ok(Self::LengthPercentage(
+                    crate::values::generics::NonNegative(from.0.animate(&to.0, procedure)?),
+                ))
+            },
             (Self::Infinite, Self::Infinite) => Ok(Self::Infinite),
             (Self::Auto, Self::Auto) => Ok(Self::Auto),
             _ => Err(()),
