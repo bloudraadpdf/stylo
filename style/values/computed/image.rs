@@ -10,6 +10,7 @@
 use crate::derives::*;
 use crate::values::computed::percentage::Percentage;
 use crate::values::computed::position::Position;
+use crate::values::computed::effects::Filter;
 use crate::values::computed::url::ComputedUrl;
 use crate::values::computed::{Angle, Color, Context};
 use crate::values::computed::{
@@ -27,7 +28,7 @@ pub use specified::ImageRendering;
 
 /// Computed values for an image according to CSS-IMAGES.
 /// <https://drafts.csswg.org/css-images/#image-values>
-pub type Image = generic::GenericImage<Gradient, ComputedUrl, Color, Percentage, Resolution>;
+pub type Image = generic::GenericImage<Gradient, ComputedUrl, Color, Percentage, Resolution, Filter>;
 
 // Images should remain small, see https://github.com/servo/servo/pull/18430
 #[cfg(feature = "gecko")]
@@ -238,6 +239,9 @@ impl ToComputedValue for specified::Image {
             // element's resolved `direction`, so the tag itself is
             // preserved verbatim in the computed value.
             Self::Image(payload) => Image::Image(payload.to_computed_value(context)),
+            // CSS Filter Effects 2 §12: the image and every filter of a
+            // `filter()` compute on their own.
+            Self::Filter(payload) => Image::Filter(payload.to_computed_value(context)),
         }
     }
 
@@ -258,6 +262,7 @@ impl ToComputedValue for specified::Image {
             Image::ImageSet(s) => Self::ImageSet(ToComputedValue::from_computed_value(s)),
             Image::LightDark(_) => unreachable!("Shouldn't have computed image-set values"),
             Image::Image(payload) => Self::Image(ToComputedValue::from_computed_value(payload)),
+            Image::Filter(payload) => Self::Filter(ToComputedValue::from_computed_value(payload)),
         }
     }
 }

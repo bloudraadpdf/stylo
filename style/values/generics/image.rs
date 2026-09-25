@@ -15,13 +15,13 @@ use crate::values::serialize_atom_identifier;
 use crate::{Atom, Zero};
 use servo_arc::Arc;
 use std::fmt::{self, Write};
-use style_traits::{CssWriter, ToCss};
+use style_traits::{CssWriter, KeywordsCollectFn, SpecifiedValueInfo, ToCss};
 /// An `<image> | none` value.
 ///
 /// https://drafts.csswg.org/css-images/#image-values
 #[derive(Clone, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToResolvedValue, ToShmem, ToTyped)]
 #[repr(C, u8)]
-pub enum GenericImage<G, ImageUrl, Color, Percentage, Resolution> {
+pub enum GenericImage<G, ImageUrl, Color, Percentage, Resolution, Filter> {
     /// `none` variant.
     None,
 
@@ -77,9 +77,54 @@ pub enum GenericImage<G, ImageUrl, Color, Percentage, Resolution> {
     /// use-time against the element's computed `direction`; both
     /// computed and specified representations preserve the tag.
     Image(Box<GenericImageImage<ImageUrl, Color>>),
+
+    /// A CSS Filter Effects 2 §12 `filter()` notation.
+    ///
+    /// Grammar: `filter() = filter( [ <image> | <string> ], <filter-value-list> )`
+    ///
+    /// Boxed to keep `GenericImage` <= 16 bytes (see `size_of_test!` in
+    /// `style::values::specified::image`).
+    Filter(Box<GenericFilterImage<Self, Filter>>),
 }
 
 pub use self::GenericImage as Image;
+
+/// CSS Filter Effects 2 §12 `filter()`: an image and the filter chain that its
+/// used value applies to it.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToComputedValue, ToResolvedValue, ToShmem)]
+#[repr(C)]
+pub struct GenericFilterImage<Image, Filter> {
+    /// The image the filter chain reads.
+    pub image: Image,
+
+    /// The `<filter-value-list>`, which is never empty.
+    pub filters: crate::OwnedSlice<Filter>,
+}
+
+pub use self::GenericFilterImage as FilterImage;
+
+impl<I: ToCss, F: ToCss> ToCss for GenericFilterImage<I, F> {
+    fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        dest.write_str("filter(")?;
+        self.image.to_css(dest)?;
+        dest.write_str(", ")?;
+        for (index, filter) in self.filters.iter().enumerate() {
+            if index > 0 {
+                dest.write_char(' ')?;
+            }
+            filter.to_css(dest)?;
+        }
+        dest.write_char(')')
+    }
+}
+
+impl<I: SpecifiedValueInfo, F: SpecifiedValueInfo> SpecifiedValueInfo for GenericFilterImage<I, F> {
+    fn collect_completion_keywords(f: KeywordsCollectFn) {
+        f(&["filter"]);
+        I::collect_completion_keywords(f);
+        F::collect_completion_keywords(f);
+    }
+}
 
 /// CSS Images 4 §3.1 `<image-tags>` keyword.
 ///
@@ -554,22 +599,23 @@ impl ToCss for PaintWorklet {
     }
 }
 
-impl<G, U, C, P, Resolution> fmt::Debug for Image<G, U, C, P, Resolution>
+impl<G, U, C, P, Resolution, F> fmt::Debug for Image<G, U, C, P, Resolution, F>
 where
-    Image<G, U, C, P, Resolution>: ToCss,
+    Image<G, U, C, P, Resolution, F>: ToCss,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.to_css(&mut CssWriter::new(f))
     }
 }
 
-impl<G, U, C, P, Resolution> ToCss for Image<G, U, C, P, Resolution>
+impl<G, U, C, P, Resolution, F> ToCss for Image<G, U, C, P, Resolution, F>
 where
     G: ToCss,
     U: ToCss,
     C: ToCss,
     P: ToCss,
     Resolution: ToCss,
+    F: ToCss,
 {
     fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
     where
@@ -597,6 +643,7 @@ where
             Image::CrossFade(ref cf) => cf.to_css(dest),
             Image::LightDark(ref ld) => ld.to_css(dest),
             Image::Image(ref payload) => payload.to_css(dest),
+            Image::Filter(ref payload) => payload.to_css(dest),
         }
     }
 }
