@@ -65,13 +65,15 @@ pub type ColorMix = GenericColorMix<Color, Percentage>;
 impl Animate for Color {
     #[inline]
     fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
+        // A mix carries its weights as percentages, whose precision loses the
+        // sum of one that interpolation relies on. Absolute endpoints need no
+        // mix, so they keep the precision of the procedure.
+        if let (Some(left), Some(right)) = (self.as_absolute(), other.as_absolute()) {
+            return Ok(Self::Absolute(left.animate(right, procedure)?));
+        }
+
         let (left_weight, right_weight) = procedure.weights();
-        let interpolation = match (self.as_absolute(), other.as_absolute()) {
-            (Some(left), Some(right)) => {
-                ColorInterpolationMethod::best_interpolation_between(left, right)
-            },
-            (Some(_), None) | (None, Some(_)) | (None, None) => ColorInterpolationMethod::srgb(),
-        };
+        let interpolation = ColorInterpolationMethod::srgb();
 
         Ok(Self::from_color_mix(
             ColorMix::new(
@@ -118,6 +120,30 @@ impl ToAnimatedZero for Color {
 mod tests {
     use super::*;
     use crate::color::ColorSpace;
+
+    /// CSS Easing 1 allows an output progress outside [0, 1], so a huge
+    /// progress must still extrapolate towards the second colour.
+    #[test]
+    fn a_huge_progress_extrapolates_past_the_second_colour() {
+        let blue = Color::Absolute(AbsoluteColor::srgb_legacy(0, 0, 255, 1.0));
+        let green = Color::Absolute(AbsoluteColor::srgb_legacy(0, 128, 0, 1.0));
+
+        let result = blue
+            .animate(
+                &green,
+                Procedure::Interpolate {
+                    progress: 2_147_483_712.125,
+                },
+            )
+            .expect("absolute colors interpolate");
+        let components = result
+            .as_absolute()
+            .expect("absolute endpoints produce an absolute result")
+            .raw_components();
+
+        assert!(components[1] > 1.0, "{components:?}");
+        assert!(components[2] < 0.0, "{components:?}");
+    }
 
     #[test]
     fn computed_modern_colors_interpolate_in_default_oklab_space() {
