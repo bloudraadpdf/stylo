@@ -2447,9 +2447,9 @@ pub mod list_style {
 
             let mut writer = SequenceWriter::new(dest, " ");
             let type_is_disc = *self.list_style_type == ListStyleType::disc()
-                || matches!(self.list_style_type, ListStyleType::Custom(name) if name.0 == atom!("disc"));
+                || matches!(self.list_style_type, ListStyleType::Custom(name) if name.0.as_ref().eq_ignore_ascii_case("disc"));
             let type_is_outside =
-                matches!(self.list_style_type, ListStyleType::Custom(name) if name.0.as_ref() == "outside");
+                matches!(self.list_style_type, ListStyleType::Custom(name) if name.0.as_ref().eq_ignore_ascii_case("outside"));
             if *self.list_style_position != ListStylePosition::Outside || type_is_outside {
                 writer.item(self.list_style_position)?;
             }
@@ -6301,6 +6301,7 @@ mod list_style_tests {
             ("inside disc", "inside"),
             ("disc outside none", "outside"),
             ("outside outside", "outside outside"),
+            ("outside Outside", "outside Outside"),
         ] {
             let mut input = ParserInput::new(css);
             let mut parser = Parser::new(&mut input);
