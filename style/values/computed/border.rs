@@ -122,8 +122,18 @@ pub type BorderCornerRadius = GenericBorderCornerRadius<NonNegativeLengthPercent
 
 impl Animate for BorderCornerRadius {
     fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
-        let width = NonNegative(self.0.width.0.animate(&other.0.width.0, procedure)?);
-        let height = NonNegative(self.0.height.0.animate(&other.0.height.0, procedure)?);
+        let width = NonNegative(
+            self.0
+                .width
+                .0
+                .animate_as_percentage_dimension_mix(&other.0.width.0, procedure)?,
+        );
+        let height = NonNegative(
+            self.0
+                .height
+                .0
+                .animate_as_percentage_dimension_mix(&other.0.height.0, procedure)?,
+        );
         Ok(GenericBorderCornerRadius(Size2D::new(width, height)))
     }
 }

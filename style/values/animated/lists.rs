@@ -154,3 +154,36 @@ pub mod repeatable_list {
             .sum()
     }
 }
+
+/// Repeatable-list interpolation for position components whose percentage and
+/// dimension terms remain distinct throughout the interpolation interval.
+///
+/// <https://drafts.csswg.org/web-animations-1/#repeatable-list>
+pub mod repeatable_list_percentage_dimension_mix {
+    use crate::values::{
+        animated::Procedure, computed::LengthPercentage, distance::SquaredDistance,
+    };
+    use std::iter::FromIterator;
+
+    #[allow(missing_docs)]
+    pub fn animate<C>(
+        left: &[LengthPercentage],
+        right: &[LengthPercentage],
+        procedure: Procedure,
+    ) -> Result<C, ()>
+    where
+        C: FromIterator<LengthPercentage>,
+    {
+        super::animate_repeatable(left, right, procedure, |left, right, procedure| {
+            left.animate_as_percentage_dimension_mix(right, procedure)
+        })
+    }
+
+    #[allow(missing_docs)]
+    pub fn squared_distance(
+        left: &[LengthPercentage],
+        right: &[LengthPercentage],
+    ) -> Result<SquaredDistance, ()> {
+        super::repeatable_list::squared_distance(left, right)
+    }
+}
