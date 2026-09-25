@@ -656,6 +656,21 @@ impl Animation {
         }
     }
 
+    /// How far this animation has run at `time`, measured in iterations. A zero
+    /// iteration duration gives a zero active duration, so the animation steps
+    /// from the phase before its interval to the phase after it at its start
+    /// (Web Animations 1 section 4.8.3).
+    fn elapsed_iterations(&self, time: f64) -> f64 {
+        if self.duration == 0. {
+            return if time < self.started_at {
+                f64::NEG_INFINITY
+            } else {
+                f64::INFINITY
+            };
+        }
+        (time - self.started_at) / self.duration
+    }
+
     /// Whether or not this animation has finished at the provided time. This does
     /// not take into account canceling i.e. when an animation or transition is
     /// canceled due to changes in the style.
@@ -667,9 +682,7 @@ impl Animation {
         let progress = match self.state {
             AnimationState::Finished => return true,
             AnimationState::Paused(progress) => progress,
-            AnimationState::Running | AnimationState::Pending => {
-                (time - self.started_at) / self.duration
-            },
+            AnimationState::Running | AnimationState::Pending => self.elapsed_iterations(time),
             AnimationState::Canceled => return false,
         };
 
@@ -755,7 +768,7 @@ impl Animation {
 
         let total_progress = match self.state {
             AnimationState::Running | AnimationState::Pending | AnimationState::Finished => {
-                (now - self.started_at) / self.duration
+                self.elapsed_iterations(now)
             },
             AnimationState::Paused(progress) => progress,
             AnimationState::Canceled => return,
@@ -1701,10 +1714,10 @@ pub fn maybe_start_animations<E>(
         };
 
         debug!("maybe_start_animations: name={}", name);
+        // Web Animations 1 section 4.8.3 gives a zero iteration duration a zero
+        // active duration, so the animation still fills with the value of the
+        // phase it holds.
         let duration = style.animation_duration_mod(i).seconds() as f64;
-        if duration == 0. {
-            continue;
-        }
 
         let keyframe_animation = match context.stylist.lookup_keyframes(name, element) {
             Some(animation) => animation,
@@ -1838,6 +1851,18 @@ mod tests {
 
         assert!(!animation.has_ended(0.));
         assert!(animation.has_ended(0.05));
+    }
+
+    /// Web Animations 1 section 4.8.3: an animation whose iteration duration is
+    /// zero holds the phase after its active interval from its start.
+    #[test]
+    fn a_zero_duration_animation_ends_where_it_starts() {
+        let mut animation = pending_animation();
+        animation.duration = 0.;
+
+        assert!(!animation.has_ended(-1.));
+        assert!(animation.has_ended(0.));
+        assert!(animation.has_ended(1.));
     }
 
     #[test]
