@@ -83,7 +83,7 @@ fn animate_shape_length(
     to: &LengthPercentage,
     procedure: Procedure,
 ) -> Result<LengthPercentage, ()> {
-    from.animate(to, procedure)
+    from.animate_as_percentage_dimension_mix(to, procedure)
 }
 
 fn animate_shape_position(
