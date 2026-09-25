@@ -264,8 +264,12 @@ impl Animate for f64 {
     #[inline]
     fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
         let (self_weight, other_weight) = procedure.weights();
+        // An endpoint that carries no weight contributes nothing, so an
+        // infinite endpoint must not reach the multiplication that would give
+        // a NaN for a weight of zero.
+        let weighted = |value: f64, weight: f64| if weight == 0. { 0. } else { value * weight };
 
-        let ret = *self * self_weight + *other * other_weight;
+        let ret = weighted(*self, self_weight) + weighted(*other, other_weight);
         Ok(ret.min(f64::MAX).max(f64::MIN))
     }
 }
@@ -596,5 +600,24 @@ where
             .map(|v| v.to_animated_zero())
             .collect::<Result<Vec<_>, _>>()?;
         Ok(crate::ArcSlice::from_iter(v.into_iter()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Animate, Procedure};
+
+    /// CSS Values 4 section 10.12 clamps an infinity to the range of its
+    /// context, so an endpoint without weight leaves the other endpoint alone.
+    #[test]
+    fn an_endpoint_without_weight_keeps_the_other_endpoint() {
+        assert_eq!(
+            0.0f32.animate(&f32::INFINITY, Procedure::Interpolate { progress: 0. }),
+            Ok(0.0)
+        );
+        assert_eq!(
+            f32::INFINITY.animate(&0.0, Procedure::Interpolate { progress: 1. }),
+            Ok(0.0)
+        );
     }
 }
