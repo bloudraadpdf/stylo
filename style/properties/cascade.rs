@@ -1489,6 +1489,7 @@ impl<'b> Cascade<'b> {
         // would as well.  It matches the same rules, so it is the right thing
         // to do anyways, even if it's only used on inherited properties.
         let bits_to_copy = ComputedValueFlags::HAS_AUTHOR_SPECIFIED_BORDER_BACKGROUND
+            | ComputedValueFlags::HAS_AUTHOR_SPECIFIED_BACKGROUND_COLOR
             | ComputedValueFlags::HAS_AUTHOR_SPECIFIED_BD_FLOAT_DISPLACE
             | ComputedValueFlags::DEPENDS_ON_SELF_FONT_METRICS
             | ComputedValueFlags::DEPENDS_ON_INHERITED_FONT_METRICS
