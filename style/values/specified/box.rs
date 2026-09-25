@@ -1606,8 +1606,12 @@ fn change_bits_for_longhand(longhand: LonghandId) -> WillChangeBits {
         LonghandId::MixBlendMode => {
             WillChangeBits::STACKING_CONTEXT_UNCONDITIONAL | WillChangeBits::BACKDROP_ROOT
         },
-        LonghandId::Isolation | LonghandId::MaskImage => {
-            WillChangeBits::STACKING_CONTEXT_UNCONDITIONAL
+        LonghandId::Isolation => WillChangeBits::STACKING_CONTEXT_UNCONDITIONAL,
+        // Filter Effects 2 section 3 forms a backdrop root at an element whose
+        // `mask`, `mask-image`, `mask-border` or `clip-path` carries a value
+        // other than `none`, so anticipating one forms the root as well.
+        LonghandId::MaskImage | LonghandId::MaskBorderSource => {
+            WillChangeBits::STACKING_CONTEXT_UNCONDITIONAL | WillChangeBits::BACKDROP_ROOT
         },
         LonghandId::ClipPath => {
             WillChangeBits::STACKING_CONTEXT_UNCONDITIONAL | WillChangeBits::BACKDROP_ROOT
