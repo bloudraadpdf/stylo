@@ -7984,10 +7984,12 @@ spec = "https://drafts.fxtf.org/compositing/#background-blend-mode"
 affects = "paint"
 
 [background-blend-mode.keyword]
+# Compositing 2 gives the property the value of `mix-blend-mode`, which the
+# same specification extends with `plus-lighter`.
 values = [
   "normal", "multiply", "screen", "overlay", "darken", "lighten",
   "color-dodge", "color-burn", "hard-light", "soft-light", "difference",
-  "exclusion", "hue", "saturation", "color", "luminosity"
+  "exclusion", "hue", "saturation", "color", "luminosity", "plus-lighter"
 ]
 gecko_enum_prefix = "StyleBlend"
 gecko_inexhaustive = true
