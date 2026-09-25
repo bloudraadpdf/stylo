@@ -923,6 +923,7 @@ pub fn parse_typed_om_image(input: TypedOmImageInput<'_>) -> Option<TypedOmImage
         StyloImage::None => return None,
         StyloImage::Gradient(_)
         | StyloImage::CrossFade(_)
+        | StyloImage::Filter(_)
         | StyloImage::ImageSet(_)
         | StyloImage::PaintWorklet(_)
         | StyloImage::LightDark(_) => None,
