@@ -601,7 +601,9 @@ impl Content {
             return Ok(ListStyleType::Decimal);
         }
         let style = ListStyleType::parse(context, input)?;
-        if matches!(style, ListStyleType::String(_)) {
+        if matches!(style, ListStyleType::None | ListStyleType::String(_))
+            || matches!(&style, ListStyleType::Custom(name) if name.0 == atom!("none"))
+        {
             return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
         }
         Ok(style)
@@ -745,6 +747,26 @@ mod tests {
         parser
             .parse_entirely(|input| Content::parse(&context, input))
             .expect("content value should parse")
+    }
+
+    #[test]
+    fn content_counter_functions_reject_none_as_a_counter_style() {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        for css in ["counter(foo, none)", "counters(foo, '', none)"] {
+            let mut input = ParserInput::new(css);
+            let mut parser = Parser::new(&mut input);
+            assert!(parser.parse_entirely(|input| Content::parse(&context, input)).is_err(), "{css}");
+        }
     }
 
     #[test]

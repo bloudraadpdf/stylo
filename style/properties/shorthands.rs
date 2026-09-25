@@ -2446,13 +2446,17 @@ pub mod list_style {
             use list_style_type::SpecifiedValue as ListStyleType;
 
             let mut writer = SequenceWriter::new(dest, " ");
-            if *self.list_style_position != ListStylePosition::Outside {
+            let type_is_disc = *self.list_style_type == ListStyleType::disc()
+                || matches!(self.list_style_type, ListStyleType::Custom(name) if name.0 == atom!("disc"));
+            let type_is_outside =
+                matches!(self.list_style_type, ListStyleType::Custom(name) if name.0.as_ref() == "outside");
+            if *self.list_style_position != ListStylePosition::Outside || type_is_outside {
                 writer.item(self.list_style_position)?;
             }
             if *self.list_style_image != ListStyleImage::None {
                 writer.item(self.list_style_image)?;
             }
-            if *self.list_style_type != ListStyleType::disc() {
+            if !type_is_disc {
                 writer.item(self.list_style_type)?;
             }
             if !writer.has_written() {
@@ -6267,6 +6271,48 @@ pub mod _webkit_line_clamp {
     impl SpecifiedValueInfo for Longhands {
         fn collect_completion_keywords(f: KeywordsCollectFn) {
             f(&["none"]);
+        }
+    }
+}
+
+#[cfg(all(test, feature = "servo"))]
+mod list_style_tests {
+    use super::list_style;
+    use crate::context::QuirksMode;
+    use crate::parser::ParserContext;
+    use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
+    use cssparser::{Parser, ParserInput};
+    use style_traits::{ParsingMode, ToCss};
+
+    #[test]
+    fn shorthand_serialization_omits_disc_and_preserves_ambiguous_outside() {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        for (css, expected) in [
+            ("inside disc", "inside"),
+            ("disc outside none", "outside"),
+            ("outside outside", "outside outside"),
+        ] {
+            let mut input = ParserInput::new(css);
+            let mut parser = Parser::new(&mut input);
+            let longhands = parser
+                .parse_entirely(|input| list_style::parse_value(&context, input))
+                .expect("list-style shorthand should parse");
+            let shorthand = list_style::LonghandsToSerialize {
+                list_style_position: &longhands.list_style_position,
+                list_style_image: &longhands.list_style_image,
+                list_style_type: &longhands.list_style_type,
+            };
+            assert_eq!(shorthand.to_css_string(), expected, "{css}");
         }
     }
 }
