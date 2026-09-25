@@ -683,16 +683,7 @@ impl generic::CalcNodeLeaf for Leaf {
             (&Length(ref one), &Length(ref other)) => {
                 return Ok(Leaf::Length(one.try_op(other, op)?));
             },
-            _ => {
-                match *other {
-                    Number(..) | Percentage(..) | Angle(..) | Time(..) | Length(..)
-                    | Resolution(..) | ColorComponent(..) | Size => {},
-                    SiblingIndex | SiblingCount => {},
-                }
-                unsafe {
-                    debug_unreachable!();
-                }
-            },
+            _ => Err(()),
         }
     }
 
@@ -2058,6 +2049,7 @@ mod tree_counting_tests {
             ("calc(sibling-count())", "sibling-count()"),
             ("calc(0.5 * sibling-index())", "calc(0.5 * sibling-index())"),
             ("calc(2 * sibling-count())", "calc(2 * sibling-count())"),
+            ("hypot(3, sibling-index())", "hypot(3, sibling-index())"),
         ] {
             let mut number_input = ParserInput::new(css);
             let number = Parser::new(&mut number_input)
