@@ -21,6 +21,7 @@ use crate::values::generics::effects::SimpleShadow as GenericSimpleShadow;
 use crate::values::generics::{NonNegative, ZeroToOne};
 use crate::values::specified::color::Color;
 use crate::values::specified::length::{Length, NonNegativeLength};
+use crate::values::specified::percentage::ToPercentage;
 use crate::values::specified::url::SpecifiedUrl;
 use crate::values::specified::{Angle, NonNegativeNumberOrPercentage, Number, NumberOrPercentage};
 use crate::Zero;
@@ -56,14 +57,19 @@ impl ToComputedValue for FilterFactor {
     }
 }
 
-/// Clamp the value to 1 if the value is over 100%.
+/// Clamp the value to 1 if the value is over 100%. CSS Values 4 section 10.13
+/// clamps a math function to the range of its context only from the computed
+/// value onwards, so a `calc()` keeps its specified value here.
 #[inline]
 fn clamp_to_one(number: NumberOrPercentage) -> NumberOrPercentage {
     match number {
-        NumberOrPercentage::Percentage(percent) => {
+        NumberOrPercentage::Percentage(percent) if !percent.is_calc() => {
             NumberOrPercentage::Percentage(percent.clamp_to_hundred())
         },
-        NumberOrPercentage::Number(number) => NumberOrPercentage::Number(number.clamp_to_one()),
+        NumberOrPercentage::Number(number) if !number.was_calc() => {
+            NumberOrPercentage::Number(number.clamp_to_one())
+        },
+        number => number,
     }
 }
 
@@ -414,6 +420,47 @@ impl ToComputedValue for SimpleShadow {
             horizontal: ToComputedValue::from_computed_value(&computed.horizontal),
             vertical: ToComputedValue::from_computed_value(&computed.vertical),
             blur: Some(ToComputedValue::from_computed_value(&computed.blur)),
+        }
+    }
+}
+
+#[cfg(all(test, feature = "servo"))]
+mod tests {
+    use super::*;
+    use crate::context::QuirksMode;
+    use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
+    use crate::values::specified::Filter;
+    use cssparser::ParserInput;
+    use style_traits::{ParsingMode, ToCss};
+    use url::Url;
+
+    fn parse_filter(css: &str) -> Filter {
+        let url_data = UrlExtraData::from(Url::parse("https://example.invalid/").unwrap());
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input = ParserInput::new(css);
+        Parser::new(&mut input)
+            .parse_entirely(|input| Filter::parse(&context, input))
+            .expect("valid filter parses")
+    }
+
+    #[test]
+    fn a_zero_to_one_filter_factor_clamps_a_literal_but_keeps_a_calculation() {
+        for (source, expected) in [
+            ("grayscale(300%)", "grayscale(100%)"),
+            ("invert(2)", "invert(1)"),
+            ("opacity(calc(3))", "opacity(calc(3))"),
+            ("sepia(calc(300%))", "sepia(calc(300%))"),
+        ] {
+            assert_eq!(parse_filter(source).to_css_string(), expected);
         }
     }
 }
