@@ -148,6 +148,9 @@ bitflags! {
 
         /// Whether a computed value depends on the element's DOM sibling position.
         const DEPENDS_ON_TREE_COUNTING = 1 << 30;
+
+        /// Whether the winning `background-color` declaration is from the author origin.
+        const HAS_AUTHOR_SPECIFIED_BACKGROUND_COLOR = 1 << 31;
     }
 }
 
