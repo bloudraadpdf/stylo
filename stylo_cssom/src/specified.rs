@@ -229,12 +229,12 @@ mod inline_compatibility_projection_tests {
         use crate::compat::CompatMode;
 
         let url_data = crate::context::ABOUT_BLANK.clone().into();
-        for (authored, expected) in [
-            ("-ro-emoji", "-bd-emoji"),
-            ("sans-serif, -ro-emoji", "sans-serif, -bd-emoji"),
-            ("-ro-color-emoji, serif", "-bd-color-emoji, serif"),
-            ("\"-RO-EMOJI\"", "\"-bd-emoji\""),
-            ("\"custom-ro-emoji\"", "\"custom-ro-emoji\""),
+        for (authored, canonical, expected) in [
+            ("-ro-emoji", "-ro-emoji", "-bd-emoji"),
+            ("sans-serif, -ro-emoji", "sans-serif, -ro-emoji", "sans-serif, -bd-emoji"),
+            ("-ro-color-emoji, serif", "-ro-color-emoji, serif", "-bd-color-emoji, serif"),
+            ("\"-RO-EMOJI\"", "-RO-EMOJI", "-bd-emoji"),
+            ("\"custom-ro-emoji\"", "custom-ro-emoji", "custom-ro-emoji"),
         ] {
             let declarations = crate::declaration_parser::parse_inline_style_declarations(
                 &format!("font-family: {authored} !important"),
@@ -250,7 +250,7 @@ mod inline_compatibility_projection_tests {
                 let value = if compat == CompatMode::PdfReactor {
                     expected
                 } else {
-                    authored
+                    canonical
                 };
                 assert_eq!(
                     projected,
