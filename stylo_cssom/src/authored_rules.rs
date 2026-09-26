@@ -510,7 +510,20 @@ fn authored_rule_node(
     rule: &crate::rule_parser::ParsedCssRule,
     source: &str,
 ) -> stylo_cssom_model::RuleNode {
-    let node = rule.to_rule_node().with_projection_serialization(source);
+    let terminates_statement = matches!(
+        rule.grammar(),
+        stylo_cssom_model::RuleGrammar::Import
+            | stylo_cssom_model::RuleGrammar::Namespace
+            | stylo_cssom_model::RuleGrammar::LayerStatement
+    ) && !source.trim_end().ends_with(';');
+    let node = if terminates_statement {
+        let terminated = format!("{};", source.trim_end());
+        rule.to_rule_node()
+            .with_authored_serialization(terminated.clone())
+            .with_projection_serialization(terminated)
+    } else {
+        rule.to_rule_node().with_projection_serialization(source)
+    };
     if parsed_rule_contains_page(rule) {
         node.with_authored_serialization(source)
     } else {
@@ -1848,6 +1861,14 @@ mod tests {
 
         assert!(named.contains("@layer theme"));
         assert!(anonymous.contains("@layer {"));
+    }
+
+    #[test]
+    fn inserted_layer_statement_projects_with_required_terminator() {
+        let rule = parse_rule_node("@layer first, second")
+            .expect("EOF must terminate an inserted statement");
+        assert_eq!(rule.serialization(), "@layer first, second;");
+        assert_eq!(rule.projection_serialization(), "@layer first, second;");
     }
 
     #[test]
