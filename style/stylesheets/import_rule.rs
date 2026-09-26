@@ -272,11 +272,17 @@ impl ImportRule {
                     scope = Some(ImportScope::Implicit);
                     continue;
                 }
-                if let Ok(bounds) = input.try_parse(|input| {
+                if let Ok(parsed_scope) = input.try_parse(|input| {
                     input.expect_function_matching("scope")?;
-                    input.parse_nested_block(|input| ScopeBounds::parse_for_import(context, input))
+                    input.parse_nested_block(|input| {
+                        if input.is_exhausted() {
+                            Ok(ImportScope::Implicit)
+                        } else {
+                            ScopeBounds::parse_for_import(context, input).map(ImportScope::Explicit)
+                        }
+                    })
                 }) {
-                    scope = Some(ImportScope::Explicit(bounds));
+                    scope = Some(parsed_scope);
                     continue;
                 }
             }
