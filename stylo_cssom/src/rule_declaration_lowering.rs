@@ -424,12 +424,15 @@ pub fn lower_pending_declarations(
         .zip(source_stamps)
         .map(|(rule, source)| NativePositionTrySource { rule, source })
         .collect();
-    let stylesheet = DocumentStyleSheet(Arc::new(Stylesheet {
-        contents: lock.wrap(contents),
-        shared_lock: lock.clone(),
-        media: stylesheet.0.media.clone(),
-        disabled: std::sync::atomic::AtomicBool::new(stylesheet.0.disabled()),
-    }));
+    let stylesheet = DocumentStyleSheet(
+        Arc::new(Stylesheet {
+            contents: lock.wrap(contents),
+            shared_lock: lock.clone(),
+            media: stylesheet.0.media.clone(),
+            disabled: std::sync::atomic::AtomicBool::new(stylesheet.0.disabled()),
+        }),
+        stylesheet.1,
+    );
     Ok(LoweredStylesheet {
         stylesheet,
         position_try_sources,
