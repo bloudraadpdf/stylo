@@ -2253,6 +2253,32 @@ mod tests {
     use cssparser::ParserInput;
     use url::Url;
 
+    #[test]
+    fn default_font_size_adjust_metric_is_omitted_from_serialization() {
+        let url_data = UrlExtraData::from(Url::parse("https://example.invalid/").unwrap());
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            style_traits::ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        for (source, expected) in [
+            ("ex-height 0.5", "0.5"),
+            ("ex-height from-font", "from-font"),
+            ("ex-height calc(0.5)", "calc(0.5)"),
+            ("cap-height 0.5", "cap-height 0.5"),
+        ] {
+            let mut input = ParserInput::new(source);
+            let mut parser = Parser::new(&mut input);
+            let value = parser.parse_entirely(|parser| FontSizeAdjust::parse(&context, parser)).unwrap();
+            assert_eq!(value.to_css_string(), expected, "{source}");
+        }
+    }
+
     fn parse_absolute_font_weight(css: &str) -> Result<AbsoluteFontWeight, ()> {
         let url_data = UrlExtraData::from(Url::parse("https://example.invalid/").unwrap());
         let context = ParserContext::new(

@@ -3131,7 +3131,7 @@ mod tests {
     }
 
     #[test]
-    fn servo_preserves_font_size_adjust_syntax_distinction() {
+    fn servo_serializes_default_font_size_adjust_metric_canonically() {
         let stylesheet = parse_stylesheet(
             "p.num { font-size-adjust: 0.5; } p.explicit { font-size-adjust: ex-height 0.5; }",
         );
@@ -3158,8 +3158,8 @@ mod tests {
             .collect();
         assert_eq!(
             values,
-            vec!["0.5".to_string(), "ex-height 0.5".to_string()],
-            "typed style rules should preserve implicit and explicit ex-height syntax distinctly",
+            vec!["0.5".to_string(), "0.5".to_string()],
+            "the default ex-height metric has the same canonical serialization",
         );
     }
 
