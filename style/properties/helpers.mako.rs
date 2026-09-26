@@ -103,6 +103,7 @@ pub mod ${property.ident} {
                         % endif
                     }
                     CSSWideKeyword::RevertLayer |
+                    CSSWideKeyword::RevertRule |
                     CSSWideKeyword::Revert => {
                         declaration.debug_crash("Found revert/revert-layer not dealt with");
                     },

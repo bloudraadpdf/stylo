@@ -131,6 +131,7 @@ pub const fn css_wide_keyword_text(keyword: stylo_cssom_model::CssWideKeyword) -
         CssWideKeyword::Unset => "unset",
         CssWideKeyword::Revert => "revert",
         CssWideKeyword::RevertLayer => "revert-layer",
+        CssWideKeyword::RevertRule => "revert-rule",
     }
 }
 

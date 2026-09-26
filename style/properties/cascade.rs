@@ -15,9 +15,9 @@ use crate::dom::{AttributeProvider, AttributeTracker, DummyAttributeProvider, TE
 use crate::font_metrics::FontMetricsOrientation;
 use crate::logical_geometry::WritingMode;
 use crate::properties::{
-    property_counts, CSSWideKeyword, ComputedValues, DeclarationImportanceIterator, Importance,
+    CASCADE_PROPERTY, CSSWideKeyword, ComputedValues, DeclarationImportanceIterator, Importance,
     LonghandId, LonghandIdSet, PrioritaryPropertyId, PropertyDeclaration, PropertyDeclarationId,
-    PropertyFlags, ShorthandsWithPropertyReferencesCache, StyleBuilder, CASCADE_PROPERTY,
+    PropertyFlags, ShorthandsWithPropertyReferencesCache, StyleBuilder, property_counts,
 };
 use crate::rule_cache::{RuleCache, RuleCacheConditions};
 use crate::rule_tree::{CascadeLevel, StrongRuleNode};
@@ -25,7 +25,7 @@ use crate::selector_parser::PseudoElement;
 use crate::shared_lock::StylesheetGuards;
 use crate::style_adjuster::StyleAdjuster;
 use crate::stylesheets::container_rule::ContainerSizeQuery;
-use crate::stylesheets::{layer_rule::LayerOrder, Origin};
+use crate::stylesheets::{Origin, layer_rule::LayerOrder};
 use crate::stylist::Stylist;
 #[cfg(feature = "gecko")]
 use crate::values::specified::length::FontBaseSize;
@@ -109,6 +109,7 @@ struct DeclarationIterator<'a> {
     origin: Origin,
     importance: Importance,
     priority: CascadePriority,
+    rule_identity: usize,
 }
 
 impl<'a> DeclarationIterator<'a> {
@@ -126,6 +127,7 @@ impl<'a> DeclarationIterator<'a> {
             importance: Importance::Normal,
             priority: CascadePriority::new(CascadeLevel::UANormal, LayerOrder::root()),
             declarations: DeclarationImportanceIterator::default(),
+            rule_identity: 0,
             restriction,
         };
         iter.update_for_node(rule_node);
@@ -142,14 +144,17 @@ impl<'a> DeclarationIterator<'a> {
             Origin::User | Origin::UserAgent => self.guards.ua_or_user,
         };
         self.declarations = match node.style_source() {
-            Some(source) => source.read(guard).declaration_importance_iter(),
+            Some(source) => {
+                self.rule_identity = source.get().raw_ptr().as_ptr() as usize;
+                source.read(guard).declaration_importance_iter()
+            },
             None => DeclarationImportanceIterator::default(),
         };
     }
 }
 
 impl<'a> Iterator for DeclarationIterator<'a> {
-    type Item = (&'a PropertyDeclaration, CascadePriority);
+    type Item = (&'a PropertyDeclaration, CascadePriority, usize);
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
@@ -171,7 +176,7 @@ impl<'a> Iterator for DeclarationIterator<'a> {
                     }
                 }
 
-                return Some((decl, self.priority));
+                return Some((decl, self.priority, self.rule_identity));
             }
 
             let next_node = self.current_rule_node.take()?.parent()?;
@@ -233,19 +238,19 @@ pub enum CascadeMode<'a, 'b> {
 }
 
 fn iter_declarations<'builder, 'decls: 'builder>(
-    iter: impl Iterator<Item = (&'decls PropertyDeclaration, CascadePriority)>,
+    iter: impl Iterator<Item = (&'decls PropertyDeclaration, CascadePriority, usize)>,
     declarations: &mut Declarations<'decls>,
     mut custom_builder: Option<&mut CustomPropertiesBuilder<'builder, 'decls>>,
     attribute_tracker: &mut AttributeTracker,
 ) {
-    for (declaration, priority) in iter {
+    for (declaration, priority, rule_identity) in iter {
         if let PropertyDeclaration::Custom(ref declaration) = *declaration {
             if let Some(ref mut builder) = custom_builder {
-                builder.cascade(declaration, priority, attribute_tracker);
+                builder.cascade(declaration, priority, rule_identity, attribute_tracker);
             }
         } else {
             let id = declaration.id().as_longhand().unwrap();
-            declarations.note_declaration(declaration, priority, id);
+            declarations.note_declaration(declaration, priority, rule_identity, id);
             if CustomPropertiesBuilder::might_have_non_custom_dependency(id, declaration) {
                 if let Some(ref mut builder) = custom_builder {
                     builder.maybe_note_non_custom_dependency(id, declaration);
@@ -275,7 +280,7 @@ pub fn apply_declarations<'a, E, I>(
 ) -> Arc<ComputedValues>
 where
     E: TElement + 'a,
-    I: Iterator<Item = (&'a PropertyDeclaration, CascadePriority)>,
+    I: Iterator<Item = (&'a PropertyDeclaration, CascadePriority, usize)>,
 {
     debug_assert!(layout_parent_style.is_none() || parent_style.is_some());
     let device = stylist.device();
@@ -635,9 +640,9 @@ fn tweak_when_ignoring_colors(
 fn synthesise_bd_color_function_companion(
     color_declaration: &PropertyDeclaration,
 ) -> PropertyDeclaration {
+    use crate::color::ColorFunction;
     use crate::color::component::ColorComponent;
     use crate::color::parsing::NumberOrPercentageComponent;
-    use crate::color::ColorFunction;
     use crate::values::specified::BdColorFunction as SpecifiedBdColorFunction;
 
     // CSS-wide keywords propagate verbatim — the keyword resolution
@@ -794,6 +799,7 @@ impl Default for PrioritaryDeclarationPosition {
 struct Declaration<'a> {
     decl: &'a PropertyDeclaration,
     priority: CascadePriority,
+    rule_identity: usize,
     next_index: DeclarationIndex,
 }
 
@@ -835,6 +841,7 @@ impl<'a> Declarations<'a> {
         &mut self,
         decl: &'a PropertyDeclaration,
         priority: CascadePriority,
+        rule_identity: usize,
         id: LonghandId,
     ) {
         if let Some(id) = PrioritaryPropertyId::from_longhand(id) {
@@ -843,6 +850,7 @@ impl<'a> Declarations<'a> {
         self.longhand_declarations.push(Declaration {
             decl,
             priority,
+            rule_identity,
             next_index: 0,
         });
     }
@@ -856,6 +864,7 @@ struct Cascade<'b> {
     author_specified: LonghandIdSet,
     reverted_set: LonghandIdSet,
     reverted: FxHashMap<LonghandId, (CascadePriority, bool)>,
+    reverted_rules: FxHashMap<LonghandId, rustc_hash::FxHashSet<usize>>,
     declarations_to_apply_unless_overridden: DeclarationsToApplyUnlessOverriden,
 }
 
@@ -873,6 +882,7 @@ impl<'b> Cascade<'b> {
             author_specified: LonghandIdSet::default(),
             reverted_set: Default::default(),
             reverted: Default::default(),
+            reverted_rules: Default::default(),
             declarations_to_apply_unless_overridden: Default::default(),
         }
     }
@@ -954,6 +964,7 @@ impl<'b> Cascade<'b> {
                 longhand_id,
                 decl.decl,
                 decl.priority,
+                decl.rule_identity,
                 cache,
                 attr_provider,
             );
@@ -1106,6 +1117,7 @@ impl<'b> Cascade<'b> {
                 longhand_id,
                 declaration.decl,
                 declaration.priority,
+                declaration.rule_identity,
                 shorthand_cache,
                 attribute_tracker,
             );
@@ -1148,12 +1160,21 @@ impl<'b> Cascade<'b> {
         longhand_id: LonghandId,
         declaration: &PropertyDeclaration,
         priority: CascadePriority,
+        rule_identity: usize,
         cache: &mut ShorthandsWithPropertyReferencesCache,
         attribute_tracker: &mut AttributeTracker,
     ) {
         debug_assert!(!longhand_id.is_logical());
         let origin = priority.cascade_level().origin();
         if self.seen.contains(longhand_id) {
+            return;
+        }
+
+        if self
+            .reverted_rules
+            .get(&longhand_id)
+            .is_some_and(|rules| rules.contains(&rule_identity))
+        {
             return;
         }
 
@@ -1181,6 +1202,14 @@ impl<'b> Cascade<'b> {
         }
         let can_skip_apply = match declaration.get_css_wide_keyword() {
             Some(keyword) => {
+                if keyword == CSSWideKeyword::RevertRule {
+                    self.reverted_set.insert(longhand_id);
+                    self.reverted_rules
+                        .entry(longhand_id)
+                        .or_default()
+                        .insert(rule_identity);
+                    return;
+                }
                 if matches!(
                     keyword,
                     CSSWideKeyword::RevertLayer | CSSWideKeyword::Revert
@@ -1197,7 +1226,9 @@ impl<'b> Cascade<'b> {
                 let zoomed = !context.builder.effective_zoom_for_inheritance.is_one()
                     && longhand_id.zoom_dependent();
                 match keyword {
-                    CSSWideKeyword::Revert | CSSWideKeyword::RevertLayer => unreachable!(),
+                    CSSWideKeyword::Revert
+                    | CSSWideKeyword::RevertLayer
+                    | CSSWideKeyword::RevertRule => unreachable!(),
                     CSSWideKeyword::Unset => !zoomed || !inherited,
                     CSSWideKeyword::Inherit => inherited && !zoomed,
                     CSSWideKeyword::Initial => !inherited,
@@ -1281,7 +1312,9 @@ impl<'b> Cascade<'b> {
                 let zoomed = !context.builder.effective_zoom_for_inheritance.is_one()
                     && companion_id.zoom_dependent();
                 match keyword {
-                    CSSWideKeyword::Revert | CSSWideKeyword::RevertLayer => true,
+                    CSSWideKeyword::Revert
+                    | CSSWideKeyword::RevertLayer
+                    | CSSWideKeyword::RevertRule => true,
                     CSSWideKeyword::Unset => !zoomed || !inherited,
                     CSSWideKeyword::Inherit => inherited && !zoomed,
                     CSSWideKeyword::Initial => !inherited,
