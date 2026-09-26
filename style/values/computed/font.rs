@@ -719,7 +719,14 @@ impl Parse for SingleFontFamily {
             // the same computed name. Serialize it in that canonical form.
             // Parsing through the family grammar keeps generic and CSS-wide
             // names quoted, because their unquoted forms have other meanings.
-            let syntax = if value.contains('"') || value.contains('\'') {
+            // These are CSS generic keywords even though Servo currently
+            // represents their unquoted forms as identifier family names.
+            // Keep the string spelling distinct for named @font-face lookup.
+            let is_servo_generic = matches!(
+                value.to_ascii_lowercase().as_str(),
+                "math" | "ui-serif" | "ui-sans-serif" | "ui-monospace" | "ui-rounded"
+            );
+            let syntax = if value.contains('"') || value.contains('\'') || is_servo_generic {
                 FontFamilyNameSyntax::Quoted
             } else {
                 let mut source = ParserInput::new(&value);
@@ -1625,6 +1632,11 @@ mod tests {
             ("\"Veronica\"", "Veronica"),
             ("\"21st Century\"", "\"21st Century\""),
             ("\"serif\"", "\"serif\""),
+            ("\"math\"", "\"math\""),
+            ("\"ui-serif\"", "\"ui-serif\""),
+            ("\"ui-sans-serif\"", "\"ui-sans-serif\""),
+            ("\"ui-monospace\"", "\"ui-monospace\""),
+            ("\"ui-rounded\"", "\"ui-rounded\""),
             ("\"inherit\"", "\"inherit\""),
             ("\"A  B\"", "\"A  B\""),
         ] {
