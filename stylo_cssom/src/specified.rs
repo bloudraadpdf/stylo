@@ -879,6 +879,23 @@ impl<'a> ShorthandMembers<'a> {
         if let Some(value) = self.source_value() {
             return Some(projected_specified_style_value_text(value));
         }
+        // A system font is only expressible by the complete `font` shorthand.
+        // Once one of its longhands is replaced, the remaining system-derived
+        // values cannot be reconstructed as a regular font shorthand.
+        if self.schema.name == "font"
+            && self.declarations().any(|declaration| {
+                declaration
+                    .shorthand_source
+                    .is_some_and(|source| source.property().schema().name == "font")
+                    && declaration.shorthand_value.as_ref().is_some_and(|value| {
+                        crate::declaration_parser::is_system_font_keyword(
+                            &projected_specified_style_value_text(value),
+                        )
+                    })
+            })
+        {
+            return None;
+        }
         let wide = self
             .declarations()
             .find_map(|declaration| match declaration.value {
