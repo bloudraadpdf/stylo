@@ -2287,26 +2287,28 @@ impl StyleSheetLease {
                 );
                 continue;
             };
-            let Some(child) = rule
+            let child = rule
                 .import_bindings()
                 .into_iter()
                 .find(|binding| binding.context() == context)
-                .and_then(|binding| binding.loaded_child())
-            else {
+                .and_then(|binding| binding.loaded_child());
+            if child.is_none() && matches!(request.layer(), RuleImportLayer::Absent) {
                 continue;
-            };
-            let mut rules = child.projection_nodes_with_stack(ImportBindingContext::Source, stack);
-            if let Some(media) = request.media() {
-                rules = vec![RuleNode::media(media, rules)];
             }
-            if let Some(supports) = request.supports() {
-                rules = vec![RuleNode::supports(supports, rules)];
-            }
+            let mut rules = child.map_or_else(Vec::new, |child| {
+                child.projection_nodes_with_stack(ImportBindingContext::Source, stack)
+            });
             rules = match request.layer() {
                 RuleImportLayer::Absent => rules,
                 RuleImportLayer::Anonymous => vec![RuleNode::layer(None::<Arc<str>>, rules)],
                 RuleImportLayer::Named(name) => vec![RuleNode::layer(Some(name.clone()), rules)],
             };
+            if let Some(supports) = request.supports() {
+                rules = vec![RuleNode::supports(supports, rules)];
+            }
+            if let Some(media) = request.media() {
+                rules = vec![RuleNode::media(media, rules)];
+            }
             projected.extend(rules);
         }
         stack.pop();
@@ -2330,25 +2332,29 @@ impl StyleSheetLease {
                 let Some(RuleCssomData::Import { request }) = node.cssom_data() else {
                     return Some(rule.projection_serialization());
                 };
-                let binding = rule
+                let child = rule
                     .import_bindings()
                     .into_iter()
-                    .find(|binding| binding.context() == context)?;
-                let child = binding.loaded_child()?;
-                let mut css =
-                    child.serialise_projection_with_stack(ImportBindingContext::Source, stack);
-                if let Some(media) = request.media() {
-                    css = format!("@media {media} {{\n{css}\n}}");
+                    .find(|binding| binding.context() == context)
+                    .and_then(|binding| binding.loaded_child());
+                if child.is_none() && matches!(request.layer(), RuleImportLayer::Absent) {
+                    return None;
                 }
-                if let Some(supports) = request.supports() {
-                    css = format!("@supports {supports} {{\n{css}\n}}");
-                }
+                let mut css = child.map_or_else(String::new, |child| {
+                    child.serialise_projection_with_stack(ImportBindingContext::Source, stack)
+                });
                 if !matches!(request.layer(), RuleImportLayer::Absent) {
                     css = match request.layer() {
                         RuleImportLayer::Absent => unreachable!(),
                         RuleImportLayer::Anonymous => format!("@layer {{\n{css}\n}}"),
                         RuleImportLayer::Named(name) => format!("@layer {name} {{\n{css}\n}}"),
                     };
+                }
+                if let Some(supports) = request.supports() {
+                    css = format!("@supports {supports} {{\n{css}\n}}");
+                }
+                if let Some(media) = request.media() {
+                    css = format!("@media {media} {{\n{css}\n}}");
                 }
                 Some(css)
             })
