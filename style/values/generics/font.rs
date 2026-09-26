@@ -286,7 +286,7 @@ impl<Factor: ToCss> ToCss for GenericFontSizeAdjust<Factor> {
         let (prefix, value) = match self {
             Self::None => return dest.write_str("none"),
             Self::ExHeight(v) => ("", v),
-            Self::ExplicitExHeight(v) => ("ex-height ", v),
+            Self::ExplicitExHeight(v) => ("", v),
             Self::CapHeight(v) => ("cap-height ", v),
             Self::ChWidth(v) => ("ch-width ", v),
             Self::IcWidth(v) => ("ic-width ", v),
