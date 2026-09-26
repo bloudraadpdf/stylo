@@ -2436,6 +2436,41 @@ mod tests {
     }
 
     #[test]
+    fn replacing_one_system_font_longhand_clears_the_font_shorthand() {
+        for keyword in ["caption", "icon", "menu", "message-box", "small-caption", "status-bar"] {
+            let mut declarations = parse_inline_style_property_declarations(
+                "font",
+                keyword,
+                CssomDeclarationPriority::Normal,
+                &"about:blank".into(),
+            )
+            .expect("system font shorthand parses");
+            let style = parse_inline_style_property_declarations(
+                "font-style",
+                "normal",
+                CssomDeclarationPriority::Normal,
+                &"about:blank".into(),
+            )
+            .expect("font-style longhand parses")
+            .pop()
+            .expect("font-style produces a declaration");
+            declarations.retain(|declaration| declaration.property != style.property);
+            declarations.push(style);
+            assert_eq!(
+                crate::specified::projected_specified_property_value(&declarations, "font"),
+                None,
+                "{keyword}"
+            );
+            assert_eq!(
+                crate::specified::projected_specified_property_value(&declarations, "font-style")
+                    .as_deref(),
+                Some("normal"),
+                "{keyword}"
+            );
+        }
+    }
+
+    #[test]
     fn parsed_block_retains_pending_longhands_after_shorthand_override() {
         for css in [
             "transition:var(--timing)",
