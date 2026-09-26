@@ -10,11 +10,11 @@ use crate::media_queries::MediaList;
 use crate::parser::{Parse, ParserContext};
 use crate::shared_lock::{DeepCloneWithLock, SharedRwLock, SharedRwLockReadGuard, ToCssWithGuard};
 use crate::stylesheets::{
-    layer_rule::LayerName, supports_rule::SupportsCondition, CssRule, CssRuleType,
-    StylesheetInDocument,
+    CssRule, CssRuleType, StylesheetInDocument, layer_rule::LayerName, scope_rule::ScopeBounds,
+    supports_rule::SupportsCondition,
 };
 use crate::values::CssUrl;
-use cssparser::{Parser, SourceLocation};
+use cssparser::{Parser, SourceLocation, ToCss as CssParserToCss};
 use std::fmt::{self, Write};
 use style_traits::{CssStringWriter, CssWriter, ToCss};
 use to_shmem::{SharedMemoryBuilder, ToShmem};
@@ -118,6 +118,54 @@ pub enum ImportLayer {
     Named(LayerName),
 }
 
+/// Scoping applied to rules loaded by an import.
+#[derive(Debug, Clone)]
+pub enum ImportScope {
+    /// The owner of the importing stylesheet is the implicit root.
+    Implicit,
+    /// Explicit roots and optional limits.
+    Explicit(ScopeBounds),
+}
+
+impl ImportScope {
+    /// The argument of the `scope()` function, if this is an explicit scope.
+    pub fn boundaries_to_css(&self) -> Option<String> {
+        let Self::Explicit(bounds) = self else {
+            return None;
+        };
+        let mut css = String::new();
+        if let Some(start) = bounds.start.as_ref() {
+            css.push('(');
+            let _ = CssParserToCss::to_css(start, &mut css);
+            css.push(')');
+        }
+        if let Some(end) = bounds.end.as_ref() {
+            if bounds.start.is_some() {
+                css.push(' ');
+            }
+            css.push_str("to (");
+            let _ = CssParserToCss::to_css(end, &mut css);
+            css.push(')');
+        }
+        Some(css)
+    }
+}
+
+impl ToCss for ImportScope {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        dest.write_str("scope")?;
+        let Some(boundaries) = self.boundaries_to_css() else {
+            return Ok(());
+        };
+        dest.write_char('(')?;
+        dest.write_str(&boundaries)?;
+        dest.write_char(')')
+    }
+}
+
 /// The supports condition in an import rule.
 #[derive(Debug, Clone)]
 pub struct ImportSupportsCondition {
@@ -164,6 +212,9 @@ pub struct ImportRule {
     /// A `layer()` function name.
     pub layer: ImportLayer,
 
+    /// Scoping modifier for imported rules.
+    pub scope: Option<ImportScope>,
+
     /// The line and column of the rule's source code.
     pub source_location: SourceLocation,
 }
@@ -177,37 +228,61 @@ impl ImportRule {
     ///
     /// We do this here so that the import preloader can look at this without having to parse the
     /// whole import rule or parse the media query list or what not.
-    pub fn parse_layer_and_supports<'i, 't>(
+    pub fn parse_modifiers<'i, 't>(
         input: &mut Parser<'i, 't>,
         context: &mut ParserContext,
-    ) -> (ImportLayer, Option<ImportSupportsCondition>) {
-        let layer = if input
-            .try_parse(|input| input.expect_ident_matching("layer"))
-            .is_ok()
-        {
-            ImportLayer::Anonymous
-        } else {
-            input
-                .try_parse(|input| {
+    ) -> (
+        ImportLayer,
+        Option<ImportSupportsCondition>,
+        Option<ImportScope>,
+    ) {
+        let mut layer = ImportLayer::None;
+        let mut supports = None;
+        let mut scope = None;
+        loop {
+            if matches!(layer, ImportLayer::None) {
+                if input
+                    .try_parse(|input| input.expect_ident_matching("layer"))
+                    .is_ok()
+                {
+                    layer = ImportLayer::Anonymous;
+                    continue;
+                }
+                if let Ok(name) = input.try_parse(|input| {
                     input.expect_function_matching("layer")?;
-                    input
-                        .parse_nested_block(|input| LayerName::parse(context, input))
-                        .map(|name| ImportLayer::Named(name))
-                })
-                .ok()
-                .unwrap_or(ImportLayer::None)
-        };
-
-        let supports = input
-            .try_parse(SupportsCondition::parse_for_import)
-            .map(|condition| {
-                let enabled =
-                    context.nest_for_rule(CssRuleType::Style, |context| condition.eval(context));
-                ImportSupportsCondition { condition, enabled }
-            })
-            .ok();
-
-        (layer, supports)
+                    input.parse_nested_block(|input| LayerName::parse(context, input))
+                }) {
+                    layer = ImportLayer::Named(name);
+                    continue;
+                }
+            }
+            if supports.is_none() {
+                if let Ok(condition) = input.try_parse(SupportsCondition::parse_for_import) {
+                    let enabled = context
+                        .nest_for_rule(CssRuleType::Style, |context| condition.eval(context));
+                    supports = Some(ImportSupportsCondition { condition, enabled });
+                    continue;
+                }
+            }
+            if scope.is_none() {
+                if input
+                    .try_parse(|input| input.expect_ident_matching("scope"))
+                    .is_ok()
+                {
+                    scope = Some(ImportScope::Implicit);
+                    continue;
+                }
+                if let Ok(bounds) = input.try_parse(|input| {
+                    input.expect_function_matching("scope")?;
+                    input.parse_nested_block(|input| ScopeBounds::parse_for_import(context, input))
+                }) {
+                    scope = Some(ImportScope::Explicit(bounds));
+                    continue;
+                }
+            }
+            break;
+        }
+        (layer, supports, scope)
     }
 }
 
@@ -226,6 +301,7 @@ impl DeepCloneWithLock for ImportRule {
             stylesheet: self.stylesheet.deep_clone_with_lock(lock, guard),
             supports: self.supports.clone(),
             layer: self.layer.clone(),
+            scope: self.scope.clone(),
             source_location: self.source_location.clone(),
         }
     }
@@ -245,6 +321,11 @@ impl ToCssWithGuard for ImportRule {
             dest.write_str(" supports(")?;
             supports.condition.to_css(&mut CssWriter::new(dest))?;
             dest.write_char(')')?;
+        }
+
+        if let Some(ref scope) = self.scope {
+            dest.write_char(' ')?;
+            scope.to_css(&mut CssWriter::new(dest))?;
         }
 
         if let Some(media) = self.stylesheet.media(guard) {

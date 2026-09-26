@@ -85,13 +85,13 @@ pub use stylesheet_graph::{
     RuleBindingContext, RuleBlock, RuleConditionKind, RuleContainerCondition, RuleCssomData,
     RuleCustomMediaQuery, RuleDeclaration, RuleDeclarationBlock, RuleDeclarationDomain,
     RuleGrammar, RuleGraphError, RuleGroupHeader, RuleHandle, RuleImportCorsMode, RuleImportLayer,
-    RuleImportPrelude, RuleImportReferrerPolicy, RuleImportRequest, RuleKeyframeSelector,
-    RuleLease, RuleListHandle, RuleListLease, RuleMutationRevision, RuleNamespaceContext, RuleNode,
-    RuleSourceStamp, StyleOrigin, StyleShadowScopeHandle, StyleSheetAttachmentCandidate,
-    StyleSheetAttachmentHandle, StyleSheetAttachmentLease, StyleSheetAttachmentOwner,
-    StyleSheetCandidate, StyleSheetGraphCandidate, StyleSheetHandle, StyleSheetImportCandidate,
-    StyleSheetLease, StyleSheetSourceContext, StyleSheetSourceKind, StyleTreeScopeHandle,
-    TypedRulePayload,
+    RuleImportPrelude, RuleImportReferrerPolicy, RuleImportRequest, RuleImportScope,
+    RuleKeyframeSelector, RuleLease, RuleListHandle, RuleListLease, RuleMutationRevision,
+    RuleNamespaceContext, RuleNode, RuleSourceStamp, StyleOrigin, StyleShadowScopeHandle,
+    StyleSheetAttachmentCandidate, StyleSheetAttachmentHandle, StyleSheetAttachmentLease,
+    StyleSheetAttachmentOwner, StyleSheetCandidate, StyleSheetGraphCandidate, StyleSheetHandle,
+    StyleSheetImportCandidate, StyleSheetLease, StyleSheetSourceContext, StyleSheetSourceKind,
+    StyleTreeScopeHandle, TypedRulePayload,
 };
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -2738,6 +2738,64 @@ mod tests {
         assert_eq!(
             root.serialise_projection(ImportBindingContext::Source),
             "p { color: green; }"
+        );
+    }
+
+    #[test]
+    fn scoped_import_projection_retains_top_level_selector_context() {
+        let document = StyleDocumentHandle::allocate();
+        let mut state = StyleState::new(document);
+        let request = RuleImportRequest::new(
+            "child.css",
+            RuleImportLayer::Absent,
+            super::RuleImportPrelude::new("url(\"child.css\") scope((.card))"),
+        )
+        .with_scope(Some(super::RuleImportScope::Explicit(Arc::from("(.card)"))));
+        let import = RuleNode::authored(
+            RuleGrammar::Import,
+            "@import url(\"child.css\") scope((.card));",
+            [],
+        )
+        .with_cssom_data(RuleCssomData::Import { request })
+        .expect("import CSSOM data must match import grammar");
+        let child = StyleSheetGraphCandidate::new(
+            StyleSheetCandidate::new(
+                StyleSheetSourceContext {
+                    kind: StyleSheetSourceKind::Imported,
+                    origin: StyleOrigin::Author,
+                    document: Some(document),
+                    source_url: Some(Arc::from("https://example.test/child.css")),
+                    base_url: Some(Arc::from("https://example.test/child.css")),
+                    encoding: None,
+                },
+                [RuleNode::style(".card", "color: green")],
+            ),
+            [],
+        );
+        let root = state
+            .create_stylesheet_graph(StyleSheetGraphCandidate::new(
+                StyleSheetCandidate::new(
+                    StyleSheetSourceContext::inline(
+                        document,
+                        StyleOrigin::Author,
+                        Arc::from("https://example.test/"),
+                    ),
+                    [import],
+                ),
+                [StyleSheetImportCandidate::loaded(
+                    0,
+                    "https://example.test/child.css",
+                    child,
+                )],
+            ))
+            .expect("the scoped import must bind");
+        let projected = root.projection_nodes(ImportBindingContext::Source);
+        assert_eq!(projected.len(), 1);
+        assert_eq!(projected[0].grammar(), RuleGrammar::Scope);
+        assert!(projected[0].payload().imported_scope());
+        assert_eq!(
+            projected[0].payload().nested()[0].serialization(),
+            ".card { color: green; }"
         );
     }
 

@@ -12,16 +12,18 @@ use crate::font_face::parse_font_face_block;
 use crate::media_queries::MediaList;
 use crate::parser::{Parse, ParserContext};
 use crate::properties::declaration_block::{
-    parse_property_declaration_list, DeclarationParserState, PropertyDeclarationBlock,
+    DeclarationParserState, PropertyDeclarationBlock, parse_property_declaration_list,
 };
-use crate::properties_and_values::rule::{parse_property_block, PropertyRuleName};
+use crate::properties_and_values::rule::{PropertyRuleName, parse_property_block};
 use crate::selector_parser::{SelectorImpl, SelectorParser};
 use crate::shared_lock::{Locked, SharedRwLock};
 use crate::str::starts_with_ignore_ascii_case;
 use crate::stylesheets::container_rule::{ContainerConditions, ContainerRule};
 use crate::stylesheets::document_rule::DocumentCondition;
 use crate::stylesheets::font_feature_values_rule::parse_family_name_list;
-use crate::stylesheets::import_rule::{ImportLayer, ImportRule, ImportSupportsCondition};
+use crate::stylesheets::import_rule::{
+    ImportLayer, ImportRule, ImportScope, ImportSupportsCondition,
+};
 use crate::stylesheets::keyframes_rule::parse_keyframe_list;
 use crate::stylesheets::layer_rule::{LayerBlockRule, LayerName, LayerStatementRule};
 use crate::stylesheets::scope_rule::{ScopeBounds, ScopeRule};
@@ -38,9 +40,9 @@ use crate::values::computed::font::FamilyName;
 use crate::values::{CssUrl, CustomIdent, DashedIdent, KeyframesName};
 use crate::{Atom, Namespace, Prefix};
 use cssparser::{
-    match_ignore_ascii_case, AtRuleParser, BasicParseError, BasicParseErrorKind, CowRcStr,
-    DeclarationParser, Parser, ParserState, QualifiedRuleParser, RuleBodyItemParser,
-    RuleBodyParser, SourcePosition,
+    AtRuleParser, BasicParseError, BasicParseErrorKind, CowRcStr, DeclarationParser, Parser,
+    ParserState, QualifiedRuleParser, RuleBodyItemParser, RuleBodyParser, SourcePosition,
+    match_ignore_ascii_case,
 };
 use selectors::parser::{ParseRelative, SelectorList};
 use servo_arc::Arc;
@@ -276,6 +278,7 @@ pub enum AtRulePrelude {
         Arc<Locked<MediaList>>,
         Option<ImportSupportsCondition>,
         ImportLayer,
+        Option<ImportScope>,
     ),
     /// A @margin rule prelude.
     Margin(MarginRuleType),
@@ -384,12 +387,12 @@ impl<'a, 'i> AtRuleParser<'i> for TopLevelRuleParser<'a, 'i> {
                         ))
                     })?;
 
-                let (layer, supports) = ImportRule::parse_layer_and_supports(input, &mut self.context);
+                let (layer, supports, scope) = ImportRule::parse_modifiers(input, &mut self.context);
 
                 let media = MediaList::parse(&self.context, input);
                 let media = Arc::new(self.shared_lock.wrap(media));
 
-                return Ok(AtRulePrelude::Import(url, media, supports, layer));
+                return Ok(AtRulePrelude::Import(url, media, supports, layer, scope));
             },
             "namespace" => {
                 if !self.check_state(State::Namespaces) {
@@ -458,7 +461,7 @@ impl<'a, 'i> AtRuleParser<'i> for TopLevelRuleParser<'a, 'i> {
         start: &ParserState,
     ) -> Result<Self::AtRule, ()> {
         match prelude {
-            AtRulePrelude::Import(url, media, supports, layer) => {
+            AtRulePrelude::Import(url, media, supports, layer, scope) => {
                 let loader = self
                     .loader
                     .expect("Expected a stylesheet loader for @import");
@@ -470,6 +473,7 @@ impl<'a, 'i> AtRuleParser<'i> for TopLevelRuleParser<'a, 'i> {
                     media,
                     supports,
                     layer,
+                    scope,
                 );
 
                 self.state = State::Imports;
@@ -1120,6 +1124,7 @@ impl<'a, 'i> AtRuleParser<'i> for NestedRuleParser<'a, 'i> {
                 bounds,
                 rules: self.parse_nested_rules(input, CssRuleType::Scope),
                 source_location,
+                imported: false,
             })),
             AtRulePrelude::StartingStyle => CssRule::StartingStyle(Arc::new(StartingStyleRule {
                 rules: self.parse_nested_rules(input, CssRuleType::StartingStyle),
