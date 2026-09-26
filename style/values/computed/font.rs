@@ -22,7 +22,7 @@ use crate::values::specified::font::{
 use crate::values::specified::length::{FontBaseSize, LineHeightBase, NoCalcLength};
 use crate::values::CSSInteger;
 use crate::Atom;
-use cssparser::{match_ignore_ascii_case, serialize_identifier, CssStringWriter, Parser};
+use cssparser::{match_ignore_ascii_case, serialize_identifier, CssStringWriter, Parser, ParserInput};
 use malloc_size_of::{MallocSizeOf, MallocSizeOfOps};
 use num_traits::cast::AsPrimitive;
 use std::fmt::{self, Write};
@@ -715,9 +715,25 @@ impl Parse for SingleFontFamily {
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
         if let Ok(value) = input.try_parse(|i| i.expect_string_cloned()) {
+            // A family string that is also a valid identifier sequence has
+            // the same computed name. Serialize it in that canonical form.
+            // Parsing through the family grammar keeps generic and CSS-wide
+            // names quoted, because their unquoted forms have other meanings.
+            let syntax = if value.contains('"') || value.contains('\'') {
+                FontFamilyNameSyntax::Quoted
+            } else {
+                let mut source = ParserInput::new(&value);
+                let mut parser = Parser::new(&mut source);
+                match parser.parse_entirely(|parser| Self::parse(context, parser)) {
+                    Ok(Self::FamilyName(family)) if family.name.as_ref() == value.as_ref() => {
+                        family.syntax
+                    },
+                    _ => FontFamilyNameSyntax::Quoted,
+                }
+            };
             return Ok(SingleFontFamily::FamilyName(FamilyName {
                 name: Atom::from(&*value),
-                syntax: FontFamilyNameSyntax::Quoted,
+                syntax,
             }));
         }
 
@@ -1582,6 +1598,42 @@ mod tests {
     use crate::values::animated::{Animate, Procedure};
     use crate::values::generics::NonNegative;
     use style_traits::ToCss;
+
+    #[cfg(feature = "servo")]
+    #[test]
+    fn quoted_family_names_use_identifiers_when_the_name_is_valid_unquoted() {
+        use crate::context::QuirksMode;
+        use crate::parser::{Parse, ParserContext};
+        use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
+        use crate::values::specified::font::FontFamily;
+        use cssparser::{Parser, ParserInput};
+        use style_traits::ParsingMode;
+
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        for (input, expected) in [
+            ("\"New Century Schoolbook\", serif", "New Century Schoolbook, serif"),
+            ("\"Veronica\"", "Veronica"),
+            ("\"21st Century\"", "\"21st Century\""),
+            ("\"serif\"", "\"serif\""),
+            ("\"inherit\"", "\"inherit\""),
+            ("\"A  B\"", "\"A  B\""),
+        ] {
+            let mut parser_input = ParserInput::new(input);
+            let mut parser = Parser::new(&mut parser_input);
+            let family = parser.parse_entirely(|parser| FontFamily::parse(&context, parser)).unwrap();
+            assert_eq!(family.to_css_string(), expected, "{input}");
+        }
+    }
 
     #[cfg(feature = "servo")]
     #[test]
