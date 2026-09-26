@@ -2742,6 +2742,52 @@ mod tests {
     }
 
     #[test]
+    fn failed_layer_import_still_declares_layer_under_its_conditions() {
+        let document = StyleDocumentHandle::allocate();
+        let mut state = StyleState::new(document);
+        let request = RuleImportRequest::new(
+            "missing.css",
+            RuleImportLayer::Named(Arc::from("theme")),
+            super::RuleImportPrelude::new("url(\"missing.css\") layer(theme)"),
+        )
+        .with_conditions(Some("(display: block)"), Some("(min-width: 500px)"));
+        let import = RuleNode::authored(
+            RuleGrammar::Import,
+            "@import url(\"missing.css\") layer(theme);",
+            [],
+        )
+        .with_cssom_data(RuleCssomData::Import { request })
+        .expect("import CSSOM data must match import grammar");
+        let root = state
+            .create_stylesheet_graph(StyleSheetGraphCandidate::new(
+                StyleSheetCandidate::new(
+                    StyleSheetSourceContext::inline(
+                        document,
+                        StyleOrigin::Author,
+                        Arc::from("https://example.test/"),
+                    ),
+                    [import],
+                ),
+                [StyleSheetImportCandidate::failed(
+                    0,
+                    "https://example.test/missing.css",
+                )],
+            ))
+            .expect("failed import must still bind");
+        let projected = root.projection_nodes(ImportBindingContext::Source);
+        assert_eq!(projected.len(), 1);
+        assert_eq!(projected[0].grammar(), RuleGrammar::Media);
+        assert_eq!(
+            projected[0].payload().nested()[0].grammar(),
+            RuleGrammar::Supports
+        );
+        assert_eq!(
+            projected[0].payload().nested()[0].payload().nested()[0].grammar(),
+            RuleGrammar::LayerBlock
+        );
+    }
+
+    #[test]
     fn stylesheet_projection_keeps_authored_compatibility_text_out_of_cssom_text() {
         let document = StyleDocumentHandle::allocate();
         let mut state = StyleState::new(document);
