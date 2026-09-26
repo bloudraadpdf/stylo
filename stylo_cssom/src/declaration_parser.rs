@@ -772,7 +772,17 @@ pub fn parse_inline_style_property_declarations(
         stylo_cssom_model::property_schema(&backing_property.to_ascii_lowercase())
             .filter(|schema| inline_shorthand_serializes(schema))
     {
-        let value = specified_style_value_from_css(&backing_value, base_url)?;
+        // Servo expands system fonts to available platform defaults, so the
+        // native shorthand serialization no longer contains the specified
+        // keyword. Keep the parsed source for specified CSSOM serialization.
+        let shorthand_value = if shorthand.name == "font"
+            && is_system_font_keyword(value.trim())
+        {
+            value.trim().to_ascii_lowercase()
+        } else {
+            backing_value
+        };
+        let value = specified_style_value_from_css(&shorthand_value, base_url)?;
         for declaration in &mut declarations {
             declaration.shorthand_source = Some(
                 if declaration.shorthand_source.is_some_and(
@@ -789,6 +799,13 @@ pub fn parse_inline_style_property_declarations(
         }
     }
     Some(declarations)
+}
+
+pub(crate) fn is_system_font_keyword(value: &str) -> bool {
+    matches!(
+        value.to_ascii_lowercase().as_str(),
+        "caption" | "icon" | "menu" | "message-box" | "small-caption" | "status-bar"
+    )
 }
 
 fn inline_shorthand_serializes(schema: &stylo_cssom_model::PropertySchemaRow) -> bool {
@@ -2379,6 +2396,43 @@ mod tests {
                 .is_some_and(stylo_cssom_model::SpecifiedShorthandSource::has_pending_substitution)
                 && declaration.shorthand_value.is_some()
         }));
+    }
+
+    #[test]
+    fn system_font_shorthand_keeps_its_keyword_in_specified_cssom() {
+        for keyword in [
+            "caption",
+            "icon",
+            "menu",
+            "message-box",
+            "small-caption",
+            "status-bar",
+        ] {
+            let declarations = parse_inline_style_property_declarations(
+                "font",
+                keyword,
+                CssomDeclarationPriority::Normal,
+                &"about:blank".into(),
+            )
+            .expect("system font shorthand parses");
+            assert_eq!(
+                crate::specified::projected_specified_property_value(&declarations, "font")
+                    .as_deref(),
+                Some(keyword),
+                "{keyword}"
+            );
+            for declaration in &declarations {
+                let stylo_cssom_model::SpecifiedPropertyName::Standard(property) = declaration.property else {
+                    panic!("system font shorthand must expand to standard longhands");
+                };
+                let name = property.schema().name;
+                assert_eq!(
+                    crate::specified::projected_specified_property_value(&declarations, name),
+                    None,
+                    "{keyword}: {name}"
+                );
+            }
+        }
     }
 
     #[test]

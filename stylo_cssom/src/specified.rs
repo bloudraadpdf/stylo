@@ -1103,6 +1103,17 @@ pub fn projected_specified_property_value(
     })?;
     if declaration
         .shorthand_source
+        .is_some_and(|source| source.property().schema().name == "font")
+        && declaration.shorthand_value.as_ref().is_some_and(|value| {
+            crate::declaration_parser::is_system_font_keyword(
+                &projected_specified_style_value_text(value),
+            )
+        })
+    {
+        return None;
+    }
+    if declaration
+        .shorthand_source
         .is_some_and(stylo_cssom_model::SpecifiedShorthandSource::has_pending_substitution)
     {
         return None;
