@@ -38,6 +38,19 @@ fn assert_serialization(name: &str, input: &str, expected: Option<&str>) {
 }
 
 #[test]
+fn anchor_center_applies_to_self_alignment_only() {
+    let _lock = crate::test_support::pref_lock().lock().unwrap();
+    let _pref =
+        crate::test_support::BoolPrefGuard::set("layout.css.anchor-positioning.enabled", true);
+    for name in ["align-items", "justify-items"] {
+        assert_serialization(name, "anchor-center", None);
+    }
+    for name in ["align-self", "justify-self"] {
+        assert_serialization(name, "anchor-center", Some("anchor-center"));
+    }
+}
+
+#[test]
 fn masonry_slack_alias_preserves_flow_tolerance_keyword_semantics() {
     let _lock = crate::test_support::pref_lock().lock().unwrap();
     let _pref = crate::test_support::BoolPrefGuard::set(

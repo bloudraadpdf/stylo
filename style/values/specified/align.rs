@@ -370,7 +370,7 @@ impl SelfAlignment {
         let overflow_position = input
             .try_parse(parse_overflow_position)
             .unwrap_or(AlignFlags::empty());
-        let self_position = parse_self_position(input, axis)?;
+        let self_position = parse_self_position(input, axis, true)?;
         Ok(SelfAlignment(overflow_position | self_position))
     }
 
@@ -378,7 +378,7 @@ impl SelfAlignment {
         list_baseline_keywords(f);
         list_auto_normal_stretch(f);
         list_overflow_position_keywords(f);
-        list_self_position_keywords(f, axis);
+        list_self_position_keywords(f, axis, true);
     }
 
     /// Performs a flip of the position, that is, for self-start we return self-end, for left
@@ -504,7 +504,7 @@ impl ItemPlacement {
         let overflow = input
             .try_parse(parse_overflow_position)
             .unwrap_or(AlignFlags::empty());
-        let self_position = parse_self_position(input, axis)?;
+        let self_position = parse_self_position(input, axis, false)?;
         Ok(ItemPlacement(self_position | overflow))
     }
 }
@@ -514,7 +514,7 @@ impl SpecifiedValueInfo for ItemPlacement {
         list_baseline_keywords(f);
         list_normal_stretch(f);
         list_overflow_position_keywords(f);
-        list_self_position_keywords(f, AxisDirection::Block);
+        list_self_position_keywords(f, AxisDirection::Block, false);
     }
 }
 
@@ -648,6 +648,7 @@ fn list_overflow_position_keywords(f: KeywordsCollectFn) {
 fn parse_self_position<'i, 't>(
     input: &mut Parser<'i, 't>,
     axis: AxisDirection,
+    allow_anchor_center: bool,
 ) -> Result<AlignFlags, ParseError<'i>> {
     // NOTE Please also update the `list_self_position_keywords`
     //      function below when this function is updated.
@@ -663,11 +664,15 @@ fn parse_self_position<'i, 't>(
         "self-end" => AlignFlags::SELF_END,
         "left" if axis == AxisDirection::Inline => AlignFlags::LEFT,
         "right" if axis == AxisDirection::Inline => AlignFlags::RIGHT,
-        "anchor-center" if static_prefs::pref!("layout.css.anchor-positioning.enabled") => AlignFlags::ANCHOR_CENTER,
+        "anchor-center" if allow_anchor_center && static_prefs::pref!("layout.css.anchor-positioning.enabled") => AlignFlags::ANCHOR_CENTER,
     })
 }
 
-fn list_self_position_keywords(f: KeywordsCollectFn, axis: AxisDirection) {
+fn list_self_position_keywords(
+    f: KeywordsCollectFn,
+    axis: AxisDirection,
+    allow_anchor_center: bool,
+) {
     f(&[
         "start",
         "end",
@@ -680,7 +685,7 @@ fn list_self_position_keywords(f: KeywordsCollectFn, axis: AxisDirection) {
         "self-end",
     ]);
 
-    if static_prefs::pref!("layout.css.anchor-positioning.enabled") {
+    if allow_anchor_center && static_prefs::pref!("layout.css.anchor-positioning.enabled") {
         f(&["anchor-center"]);
     }
 
