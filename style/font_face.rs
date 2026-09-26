@@ -30,13 +30,54 @@ use style_traits::{StyleParseErrorKind, ToCss};
 
 /// A source for a font-face rule.
 #[cfg_attr(feature = "servo", derive(Deserialize, Serialize))]
-#[derive(Clone, Debug, Eq, PartialEq, ToCss, ToShmem)]
+#[derive(Clone, Debug, Eq, PartialEq, ToShmem)]
 pub enum Source {
     /// A `url()` source.
     Url(UrlSource),
     /// A `local()` source.
-    #[css(function)]
     Local(FamilyName),
+}
+
+impl ToCss for Source {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: fmt::Write,
+    {
+        match self {
+            Self::Url(url) => url.to_css(dest),
+            Self::Local(name) => {
+                dest.write_str("local(")?;
+                cssparser::serialize_string(&name.name.to_string(), dest)?;
+                dest.write_char(')')
+            },
+        }
+    }
+}
+
+#[cfg(all(test, feature = "servo"))]
+mod source_serialization_tests {
+    use super::*;
+    use crate::values::computed::font::FontFamilyNameSyntax;
+    use crate::Atom;
+
+    #[test]
+    fn local_source_serializes_its_name_as_a_string() {
+        for (name, syntax, expected) in [
+            ("B", FontFamilyNameSyntax::Identifiers, "local(\"B\")"),
+            (
+                "Font Face",
+                FontFamilyNameSyntax::Identifiers,
+                "local(\"Font Face\")",
+            ),
+            ("A\"B", FontFamilyNameSyntax::Quoted, "local(\"A\\\"B\")"),
+        ] {
+            let source = Source::Local(FamilyName {
+                name: Atom::from(name),
+                syntax,
+            });
+            assert_eq!(source.to_css_string(), expected);
+        }
+    }
 }
 
 /// A list of sources for the font-face src descriptor.
