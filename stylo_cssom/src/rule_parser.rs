@@ -2101,13 +2101,28 @@ pub fn replace_rule_selector(
     selector_text: &str,
     namespaces: &stylo_cssom_model::RuleNamespaceContext,
 ) -> Option<stylo_cssom_model::RuleNode> {
+    replace_rule_selector_in_context(
+        node,
+        selector_text,
+        namespaces,
+        crate::StyleRuleSelectorContext::TopLevel,
+    )
+}
+
+pub fn replace_rule_selector_in_context(
+    node: &stylo_cssom_model::RuleNode,
+    selector_text: &str,
+    namespaces: &stylo_cssom_model::RuleNamespaceContext,
+    context: crate::StyleRuleSelectorContext,
+) -> Option<stylo_cssom_model::RuleNode> {
     use stylo_cssom_model::RuleCssomData;
 
     let selector = match node.cssom_data()? {
         RuleCssomData::Style { selector: current } => {
-            let selector = crate::ValidatedSelectorText::parse(selector_text, namespaces)?
-                .as_str()
-                .to_owned();
+            let selector =
+                crate::ValidatedSelectorText::parse_in_context(selector_text, namespaces, context)?
+                    .as_str()
+                    .to_owned();
             if current.starts_with('&') && !selector.contains('&') {
                 format!("& {selector}")
             } else {
@@ -5714,6 +5729,26 @@ mod tests {
                 .expect("the nested style rule accepts a replacement selector");
         let nested_source = nested_source.serialization();
         assert!(nested_source.starts_with("& .a2 {"), "{nested_source}");
+    }
+
+    #[test]
+    fn selector_replacement_accepts_relative_selector_in_scope_context() {
+        let rule = ParsedCssRule::parse(".nomatch { color: green; }")
+            .expect("style rule parses")
+            .to_rule_node();
+        let namespaces = stylo_cssom_model::RuleNamespaceContext::default();
+        assert!(super::replace_rule_selector(&rule, "> .b", &namespaces).is_none());
+        let updated = super::replace_rule_selector_in_context(
+            &rule,
+            "> .b",
+            &namespaces,
+            crate::StyleRuleSelectorContext::ScopedStyle,
+        )
+        .expect("a scoped rule accepts a leading combinator");
+        assert!(matches!(
+            updated.cssom_data(),
+            Some(stylo_cssom_model::RuleCssomData::Style { selector }) if selector.as_ref() == "> .b"
+        ));
     }
 
     #[test]

@@ -821,10 +821,26 @@ pub struct ValidatedSelectorText {
     css: String,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum StyleRuleSelectorContext {
+    #[default]
+    TopLevel,
+    NestedStyle,
+    ScopedStyle,
+}
+
 impl ValidatedSelectorText {
     pub fn parse(
         selector: &str,
         namespaces: &stylo_cssom_model::RuleNamespaceContext,
+    ) -> Option<Self> {
+        Self::parse_in_context(selector, namespaces, StyleRuleSelectorContext::TopLevel)
+    }
+
+    pub fn parse_in_context(
+        selector: &str,
+        namespaces: &stylo_cssom_model::RuleNamespaceContext,
+        context: StyleRuleSelectorContext,
     ) -> Option<Self> {
         let namespaces = crate::declaration_parser::stylo_namespaces(namespaces);
         let url_data = UrlExtraData::from(ABOUT_BLANK.clone());
@@ -835,8 +851,13 @@ impl ValidatedSelectorText {
             for_supports_rule: false,
         };
         let mut input = ParserInput::new(selector);
+        let relative = match context {
+            StyleRuleSelectorContext::TopLevel => ParseRelative::No,
+            StyleRuleSelectorContext::NestedStyle => ParseRelative::ForNesting,
+            StyleRuleSelectorContext::ScopedStyle => ParseRelative::ForScope,
+        };
         let selectors = Parser::new(&mut input)
-            .parse_entirely(|input| SelectorList::parse(&parser, input, ParseRelative::No))
+            .parse_entirely(|input| SelectorList::parse(&parser, input, relative))
             .ok()?;
         let mut css = String::new();
         CssParserToCss::to_css(&selectors, &mut css).ok()?;

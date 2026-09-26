@@ -16,8 +16,8 @@ pub mod stylesheet_input;
 pub mod svg_presentation;
 pub mod values;
 pub mod view_transition;
-pub mod viewport_meta;
 pub mod view_transition_name_rewrite;
+pub mod viewport_meta;
 
 pub mod active_view_transition_selector;
 pub mod author_rule_projection;
@@ -38,7 +38,8 @@ pub mod rule_parser;
 pub mod view_transition_root_rewrite;
 pub use authored_rules::ValidatedCssRule;
 pub use authored_rules::{
-    ParsedStylesheet, ValidatedSelectorText, parse_nested_declarations_input,
+    ParsedStylesheet, StyleRuleSelectorContext, ValidatedSelectorText,
+    parse_nested_declarations_input,
 };
 pub use base_url::CssStylesheetBaseUrl;
 pub use rule_parser::RuleInput;
