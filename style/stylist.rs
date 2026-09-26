@@ -1853,10 +1853,8 @@ impl Stylist {
                         self.quirks_mode,
                         Some(&mut relevant_attributes),
                         |selector_and_hashes| {
-                            selectors_matched.push(matches_selector(
-                                &selector_and_hashes.selector,
-                                selector_and_hashes.selector_offset,
-                                Some(&selector_and_hashes.hashes),
+                            selectors_matched.push(data.matches_revalidation_selector(
+                                selector_and_hashes,
                                 &element,
                                 matching_context,
                             ));
@@ -1876,10 +1874,8 @@ impl Stylist {
                 self.quirks_mode,
                 Some(&mut relevant_attributes),
                 |selector_and_hashes| {
-                    selectors_matched.push(matches_selector(
-                        &selector_and_hashes.selector,
-                        selector_and_hashes.selector_offset,
-                        Some(&selector_and_hashes.hashes),
+                    selectors_matched.push(data.matches_revalidation_selector(
+                        selector_and_hashes,
                         &element,
                         &mut matching_context,
                     ));
@@ -2369,10 +2365,15 @@ struct RevalidationSelectorAndHashes {
     selector: Selector<SelectorImpl>,
     selector_offset: usize,
     hashes: AncestorHashes,
+    scope_condition_id: ScopeConditionId,
 }
 
 impl RevalidationSelectorAndHashes {
-    fn new(selector: Selector<SelectorImpl>, hashes: AncestorHashes) -> Self {
+    fn new(
+        selector: Selector<SelectorImpl>,
+        hashes: AncestorHashes,
+        scope_condition_id: ScopeConditionId,
+    ) -> Self {
         let selector_offset = {
             // We basically want to check whether the first combinator is a
             // pseudo-element combinator.  If it is, we want to use the offset
@@ -2398,6 +2399,7 @@ impl RevalidationSelectorAndHashes {
             selector,
             selector_offset,
             hashes,
+            scope_condition_id,
         }
     }
 }
@@ -3822,6 +3824,7 @@ impl CascadeData {
                         RevalidationSelectorAndHashes::new(
                             rule.selector.clone(),
                             rule.hashes.clone(),
+                            rule.scope_condition_id,
                         ),
                         quirks_mode,
                     )?;
@@ -4559,6 +4562,38 @@ impl CascadeData {
     /// Returns the custom properties map.
     pub fn custom_property_registrations(&self) -> &LayerOrderedMap<Arc<PropertyRegistration>> {
         &self.custom_property_registrations
+    }
+
+    fn matches_revalidation_selector<E: TElement>(
+        &self,
+        rule: &RevalidationSelectorAndHashes,
+        element: &E,
+        context: &mut MatchingContext<E::Impl>,
+    ) -> bool {
+        let matches = |context: &mut MatchingContext<E::Impl>| {
+            matches_selector(
+                &rule.selector,
+                rule.selector_offset,
+                Some(&rule.hashes),
+                element,
+                context,
+            )
+        };
+        if rule.scope_condition_id == ScopeConditionId::none() {
+            return matches(context);
+        }
+
+        let roots = scope_root_candidates(
+            &self.scope_conditions,
+            rule.scope_condition_id,
+            element,
+            rule.selector.is_part(),
+            &self.scope_subject_map,
+            context,
+        );
+        roots.candidates.into_iter().any(|candidate| {
+            context.nest_for_scope(Some(candidate.root), |context| matches(context))
+        })
     }
 
     fn revalidate_scopes<E: TElement>(
