@@ -13,8 +13,8 @@ use crate::shared_lock::{DeepCloneWithLock, Locked};
 use crate::shared_lock::{SharedRwLock, SharedRwLockReadGuard, ToCssWithGuard};
 use crate::stylesheets::{CssRuleType, CssRules};
 use cssparser::parse_important;
+use cssparser::{match_ignore_ascii_case, ParseError as CssParseError, ParserInput};
 use cssparser::{Delimiter, Parser, SourceLocation, Token};
-use cssparser::{ParseError as CssParseError, ParserInput, match_ignore_ascii_case};
 #[cfg(feature = "gecko")]
 use malloc_size_of::{MallocSizeOfOps, MallocUnconditionalShallowSizeOf};
 use selectors::parser::{Selector, SelectorParseErrorKind};
@@ -89,6 +89,8 @@ pub enum SupportsCondition {
     FontFormat(FontFaceSourceFormatKeyword),
     /// `font-tech(<font-tech>)`
     FontTech(FontFaceSourceTechFlags),
+    /// `at-rule(<at-keyword-token>)`
+    AtRule(String),
     /// `named-feature(<ident>)`
     NamedFeature(crate::Atom),
     /// `(any tokens)` or `func(any tokens)`
@@ -158,6 +160,14 @@ impl SupportsCondition {
                 let flag = FontFaceSourceTechFlags::parse_one(input)?;
                 Ok(SupportsCondition::FontTech(flag))
             },
+            "at-rule" => {
+                let keyword = match input.next()?.clone() {
+                    Token::AtKeyword(keyword) => keyword.as_ref().to_owned(),
+                    token => return Err(input.new_unexpected_token_error(token)),
+                };
+                input.expect_exhausted()?;
+                Ok(SupportsCondition::AtRule(keyword))
+            },
             "named-feature" => {
                 Ok(SupportsCondition::NamedFeature(crate::Atom::from(input.expect_ident()?.as_ref())))
             },
@@ -219,6 +229,7 @@ impl SupportsCondition {
             SupportsCondition::Selector(ref selector) => selector.eval(cx),
             SupportsCondition::FontFormat(ref format) => eval_font_format(format),
             SupportsCondition::FontTech(ref tech) => eval_font_tech(tech),
+            SupportsCondition::AtRule(ref keyword) => supports_at_rule(keyword),
             SupportsCondition::NamedFeature(ref name) => {
                 cfg!(feature = "servo")
                     && matches!(
@@ -228,6 +239,26 @@ impl SupportsCondition {
             },
             SupportsCondition::FutureSyntax(_) => false,
         }
+    }
+}
+
+fn supports_at_rule(keyword: &str) -> bool {
+    match_ignore_ascii_case! { keyword,
+        "import" | "namespace" | "media" | "supports" | "font-face" |
+        "font-feature-values" | "font-palette-values" | "counter-style" |
+        "keyframes" | "-webkit-keyframes" | "layer" | "when" | "else" |
+        "color-profile" | "region" | "footnote" | "-bd-sidenote" |
+        "swash" | "styleset" | "stylistic" | "character-variant" |
+        "ornaments" | "annotation" => true,
+        "page" | "container" => cfg!(feature = "gecko") || cfg!(feature = "servo"),
+        "property" => static_prefs::pref!("layout.css.properties-and-values.enabled"),
+        "scope" => static_prefs::pref!("layout.css.at-scope.enabled"),
+        "starting-style" => static_prefs::pref!("layout.css.starting-style-at-rules.enabled"),
+        "position-try" => static_prefs::pref!("layout.css.anchor-positioning.enabled"),
+        "custom-media" => static_prefs::pref!("layout.css.custom-media.enabled"),
+        "-moz-document" | "-moz-keyframes" => cfg!(feature = "gecko"),
+        _ => (cfg!(feature = "servo") || static_prefs::pref!("layout.css.margin-rules.enabled"))
+            && crate::stylesheets::MarginRuleType::match_name(keyword).is_some(),
     }
 }
 
@@ -385,6 +416,11 @@ impl ToCss for SupportsCondition {
             SupportsCondition::FontTech(ref flag) => {
                 dest.write_str("font-tech(")?;
                 flag.to_css(dest)?;
+                dest.write_char(')')
+            },
+            SupportsCondition::AtRule(ref keyword) => {
+                dest.write_str("at-rule(@")?;
+                cssparser::serialize_identifier(keyword, dest)?;
                 dest.write_char(')')
             },
             SupportsCondition::FutureSyntax(ref s) => dest.write_str(&s),

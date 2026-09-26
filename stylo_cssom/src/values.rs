@@ -184,10 +184,29 @@ pub fn keyword_is(source: &str, expected: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_font_shorthand;
+    use super::{parse_font_shorthand, supports, CssSupportsInput};
     use style::properties::PropertyDeclaration;
     use style::values::computed::font::{ScriptSpecificGenericFontFamily, SingleFontFamily};
     use style::values::specified::FontFamily;
+
+    #[test]
+    fn supports_at_rule_import_conditions_use_supported_at_rule_names() {
+        assert!(supports(CssSupportsInput::condition("at-rule(@import)")));
+        assert!(supports(CssSupportsInput::condition(
+            "at-rule(@media) or at-rule(@doesnotexist)"
+        )));
+        assert!(supports(CssSupportsInput::condition("at-rule(@swash)")));
+        assert!(supports(CssSupportsInput::condition(
+            "not at-rule(@unknown)"
+        )));
+        assert!(!supports(CssSupportsInput::condition(
+            "at-rule(@doesnotexist)"
+        )));
+        assert!(!supports(CssSupportsInput::condition("at-rule(@charset)")));
+        assert!(!supports(CssSupportsInput::condition(
+            "at-rule(@counter-style; system: fixed)"
+        )));
+    }
 
     #[test]
     fn font_shorthand_accepts_script_specific_generics() {
