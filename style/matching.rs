@@ -570,9 +570,38 @@ trait PrivateMatchMethods: TElement {
             return;
         }
 
+        let starting_style = if new_resolved_styles.may_have_starting_style()
+            && new_resolved_styles
+                .primary_style()
+                .get_ui()
+                .specifies_transitions()
+            && !new_resolved_styles
+                .primary_style()
+                .clone_display()
+                .is_none()
+            && (old_styles.primary.is_none()
+                || old_styles
+                    .primary
+                    .as_ref()
+                    .is_some_and(|old| old.clone_display().is_none()))
+        {
+            let mut resolver = StyleResolverForElement::new(
+                *self,
+                context,
+                RuleInclusion::All,
+                PseudoElementResolution::IfApplicable,
+            );
+            let style = resolver.resolve_starting_style().style;
+            (!style.style().clone_display().is_none()).then_some(style.0)
+        } else {
+            None
+        };
+        let before_change_style = starting_style.as_ref().or(old_styles.primary.as_ref());
+
         let style_changed = self.process_animations_for_style(
             context,
-            &mut old_styles.primary,
+            &old_styles.primary,
+            before_change_style,
             new_resolved_styles.primary_style_mut(),
             AnimationCascadeTarget::Element,
         );
@@ -659,6 +688,7 @@ trait PrivateMatchMethods: TElement {
         self.process_animations_for_style(
             context,
             &old_style,
+            old_style.as_ref(),
             &style,
             AnimationCascadeTarget::Pseudo {
                 pseudo: &pseudo_element,
@@ -722,6 +752,7 @@ trait PrivateMatchMethods: TElement {
         &self,
         context: &mut StyleContext<Self>,
         old_values: &Option<Arc<ComputedValues>>,
+        before_change_values: Option<&Arc<ComputedValues>>,
         new_values: &Arc<ComputedValues>,
         cascade_target: crate::animation::AnimationCascadeTarget<'_>,
     ) -> bool {
@@ -739,7 +770,7 @@ trait PrivateMatchMethods: TElement {
 
         let might_need_transitions_update = self.might_need_transitions_update(
             context,
-            old_values.as_deref(),
+            before_change_values.map(|style| &**style),
             new_values,
             pseudo_element.clone(),
         );
@@ -781,7 +812,7 @@ trait PrivateMatchMethods: TElement {
         animation_set.update_transitions_for_new_style(
             might_need_transitions_update,
             &shared_context,
-            old_values.as_ref(),
+            before_change_values,
             after_change_style.as_ref().unwrap_or(new_values),
             &self.host_animated_longhands(pseudo_element),
         );
