@@ -22,7 +22,7 @@ use malloc_size_of::{
     MallocSizeOfOps, MallocUnconditionalShallowSizeOf, MallocUnconditionalSizeOf,
 };
 use selectors::OpaqueElement;
-use selectors::context::{MatchingContext, QuirksMode};
+use selectors::context::{MatchingContext, QuirksMode, VisitedHandlingMode};
 use selectors::matching::matches_selector;
 use selectors::parser::{Component, ParseRelative, Selector, SelectorList};
 use servo_arc::Arc;
@@ -332,8 +332,11 @@ where
     let mut result = vec![];
     let mut parent = Some(element);
     let mut proximity = 0usize;
+    let mut visited_handling = context.visited_handling();
     while let Some(p) = parent {
-        if target.check(p, ceiling, scope_subject_map, context) {
+        if context.with_visited_handling_mode(visited_handling, |context| {
+            target.check(p, ceiling, scope_subject_map, context)
+        }) {
             result.push(ScopeRootCandidate {
                 root: p.opaque(),
                 proximity: ScopeProximity::new(proximity),
@@ -343,6 +346,10 @@ where
         }
         if ceiling == Some(p.opaque()) {
             break;
+        }
+        // Scope traversal, like selector matching, can visit only the nearest link as :visited.
+        if p.is_link() {
+            visited_handling = VisitedHandlingMode::AllLinksUnvisited;
         }
         parent = p.parent_element();
         proximity += 1;
@@ -369,13 +376,19 @@ where
 {
     let mut parent = Some(element);
     context.nest_for_scope_condition(Some(root), |context| {
+        let mut visited_handling = context.visited_handling();
         while let Some(p) = parent {
-            if matches_selector(selector, 0, None, &p, context) {
+            if context.with_visited_handling_mode(visited_handling, |context| {
+                matches_selector(selector, 0, None, &p, context)
+            }) {
                 return true;
             }
             if p.opaque() == root {
                 // Reached the top, not lying outside of scope.
                 break;
+            }
+            if p.is_link() {
+                visited_handling = VisitedHandlingMode::AllLinksUnvisited;
             }
             parent = p.parent_element();
             if parent.is_none() && root_may_be_shadow_host {
