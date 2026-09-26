@@ -3949,11 +3949,11 @@ impl CascadeData {
             .end
             .as_ref()
             .map(|selector| selector.replace_parent_selector(implicit_scope_selector));
-        if !imported {
-            containing_rule_state
-                .ancestor_selector_lists
-                .push(implicit_scope_selector.clone());
-        }
+        // Imported selectors retain their top-level parsing context, but a
+        // top-level `&` still represents the scoping root.
+        containing_rule_state
+            .ancestor_selector_lists
+            .push(implicit_scope_selector.clone());
         let replaced = ScopeBoundsWithHashes::new(quirks_mode, start, end);
         if let Some(selectors) = replaced.start.as_ref() {
             self.scope_subject_map
