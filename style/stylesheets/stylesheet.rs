@@ -292,17 +292,17 @@ impl StylesheetInDocument for Stylesheet {
     }
 }
 
-/// A simple wrapper over an `Arc<Stylesheet>`, with pointer comparison, and
-/// suitable for its use in a `StylesheetSet`.
+/// A stylesheet attachment and the root of an implicit scope in that attachment.
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "servo", derive(MallocSizeOf))]
 pub struct DocumentStyleSheet(
     #[cfg_attr(feature = "servo", ignore_malloc_size_of = "Arc")] pub Arc<Stylesheet>,
+    pub Option<ImplicitScopeRoot>,
 );
 
 impl PartialEq for DocumentStyleSheet {
     fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.0, &other.0)
+        Arc::ptr_eq(&self.0, &other.0) && self.1 == other.1
     }
 }
 
@@ -321,7 +321,7 @@ impl StylesheetInDocument for DocumentStyleSheet {
     }
 
     fn implicit_scope_root(&self) -> Option<ImplicitScopeRoot> {
-        None
+        self.1
     }
 }
 
@@ -616,6 +616,24 @@ mod tests {
             QuirksMode::NoQuirks,
             AllowImportRules::Yes,
         )
+    }
+
+    #[test]
+    fn stylesheet_attachments_retain_distinct_implicit_scope_roots() {
+        let parsed = Arc::new(parse_stylesheet("@scope { .item { color: green } }"));
+        let document = DocumentStyleSheet(parsed.clone(), Some(ImplicitScopeRoot::DocumentElement));
+        let constructed = DocumentStyleSheet(parsed, Some(ImplicitScopeRoot::Constructed));
+
+        assert_eq!(
+            document.implicit_scope_root(),
+            Some(ImplicitScopeRoot::DocumentElement)
+        );
+        assert_eq!(
+            constructed.implicit_scope_root(),
+            Some(ImplicitScopeRoot::Constructed)
+        );
+        assert_ne!(document, constructed);
+        assert_eq!(document, document.clone());
     }
 
     fn assert_standard_properties(properties: &[&str]) {
@@ -1313,10 +1331,22 @@ mod tests {
         for (media, query, expected) in [
             (MediaType::screen(), "(device-width: 793.7px)", true),
             (MediaType::screen(), "(color-index: 0)", true),
-            (MediaType::screen(), "(prefers-reduced-motion: no-preference)", true),
+            (
+                MediaType::screen(),
+                "(prefers-reduced-motion: no-preference)",
+                true,
+            ),
             (MediaType::screen(), "(prefers-reduced-motion)", false),
-            (MediaType::screen(), "(prefers-reduced-data: no-preference)", true),
-            (MediaType::screen(), "(prefers-contrast: no-preference)", true),
+            (
+                MediaType::screen(),
+                "(prefers-reduced-data: no-preference)",
+                true,
+            ),
+            (
+                MediaType::screen(),
+                "(prefers-contrast: no-preference)",
+                true,
+            ),
             (MediaType::screen(), "(forced-colors: none)", true),
             (MediaType::screen(), "(inverted-colors: none)", true),
             (MediaType::screen(), "(display-mode: browser)", true),
@@ -1353,8 +1383,16 @@ mod tests {
         use crate::stylesheets::CustomMediaEvaluator;
         use cssparser::{Parser, ParserInput};
         let url: UrlExtraData = url::Url::parse("https://example.test/").unwrap().into();
-        let context = ParserContext::new(Origin::Author, &url, None, ParsingMode::DEFAULT,
-            QuirksMode::NoQuirks, Default::default(), None, None);
+        let context = ParserContext::new(
+            Origin::Author,
+            &url,
+            None,
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
         let stylist = test_stylist_for_media(MediaType::screen(), 1.0);
         for (query, expected) in [
             ("(grid: calc(2 * sign(17px - 1rem)))", false),
@@ -1365,8 +1403,15 @@ mod tests {
         ] {
             let mut input = ParserInput::new(query);
             let list = MediaList::parse(&context, &mut Parser::new(&mut input));
-            assert_eq!(list.evaluate(stylist.device(), QuirksMode::NoQuirks,
-                &mut CustomMediaEvaluator::none()), expected, "{query}");
+            assert_eq!(
+                list.evaluate(
+                    stylist.device(),
+                    QuirksMode::NoQuirks,
+                    &mut CustomMediaEvaluator::none()
+                ),
+                expected,
+                "{query}"
+            );
         }
     }
 
@@ -3549,7 +3594,8 @@ mod tests {
                     })
                     .expect("expected @page rule");
                 assert_eq!(
-                    page_rule_css.contains(&format!("{property}:")), valid,
+                    page_rule_css.contains(&format!("{property}:")),
+                    valid,
                     "{property}: {value} produced {page_rule_css}",
                 );
             }
