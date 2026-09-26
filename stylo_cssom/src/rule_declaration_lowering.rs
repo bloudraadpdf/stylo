@@ -51,6 +51,7 @@ pub fn has_pending_rules(rules: &[RuleNode]) -> bool {
 pub fn requires_source_lowering(rules: &[RuleNode]) -> bool {
     rules.iter().any(|rule| {
         rule.grammar() == RuleGrammar::PositionTry
+            || rule.payload().imported_scope()
             || rule
                 .payload()
                 .declaration_block()
@@ -296,6 +297,17 @@ fn lower_rule_list(
             nesting,
             position_try_sources,
         )?;
+        if source.payload().imported_scope() {
+            let CssRule::Scope(scope) = &parser.rules[first] else {
+                return Err(DeclarationLoweringError::RuleGrammar);
+            };
+            parser.rules[first] = CssRule::Scope(Arc::new(style::stylesheets::ScopeRule {
+                bounds: scope.bounds.clone(),
+                rules: scope.rules.clone(),
+                source_location: scope.source_location.clone(),
+                imported: true,
+            }));
+        }
     }
     Ok(parser.rules)
 }
@@ -330,7 +342,7 @@ fn lower_rule(
         *destination.write_with(&mut lock.write()) = value;
     }
     let children = source.payload().nested();
-    if !requires_source_lowering(children) {
+    if !source.payload().imported_scope() && !requires_source_lowering(children) {
         return Ok(());
     }
     if let CssRule::Keyframes(rule) = native {
@@ -352,7 +364,11 @@ fn lower_rule(
         }
         rule.write_with(&mut lock.write()).keyframes = frames;
     } else {
-        nesting.save(native.rule_type());
+        if source.payload().imported_scope() {
+            nesting = style::parser::NestingContext::new_from_rule(None);
+        } else {
+            nesting.save(native.rule_type());
+        }
         let rules = lower_rule_list(children, contents, lock, nesting, position_try_sources)?;
         let destination = native_children(native, &lock.read());
         if let Some(destination) = destination {
@@ -442,6 +458,56 @@ pub fn lower_pending_declarations(
 #[cfg(test)]
 mod tests {
     use style::shared_lock::{DeepCloneWithLock, ToCssWithGuard};
+    use style::stylesheets::StylesheetInDocument;
+
+    #[test]
+    fn imported_scope_keeps_top_level_selector_parsing() {
+        crate::context::initialise_required_servo_style_prefs();
+        let source = stylo_cssom_model::RuleNode::imported_scope(
+            &stylo_cssom_model::RuleImportScope::Explicit("(.card)".into()),
+            [stylo_cssom_model::RuleNode::style(".card", "color: green")],
+        );
+        let lock = style::shared_lock::SharedRwLock::new();
+        let parsed = style::stylesheets::Stylesheet::from_str(
+            &source.projection_serialization(),
+            style::stylesheets::UrlExtraData::from(crate::context::ABOUT_BLANK.clone()),
+            style::stylesheets::Origin::Author,
+            servo_arc::Arc::new(lock.wrap(style::media_queries::MediaList::empty())),
+            lock.clone(),
+            None,
+            None,
+            selectors::matching::QuirksMode::NoQuirks,
+            style::stylesheets::AllowImportRules::Yes,
+        );
+        let lowered = super::lower_pending_declarations(
+            &[source],
+            style::stylesheets::DocumentStyleSheet(servo_arc::Arc::new(parsed), None),
+            &lock,
+        )
+        .expect("the import scope should lower without nesting its style selectors");
+        let guard = lock.read();
+        let [style::stylesheets::CssRule::Scope(scope)] =
+            lowered.stylesheet.contents(&guard).rules(&guard)
+        else {
+            panic!("the imported rules must be scoped");
+        };
+        assert!(scope.imported);
+        let [style::stylesheets::CssRule::Style(rule)] = scope.rules.read_with(&guard).0.as_slice()
+        else {
+            panic!("the imported style rule must be retained");
+        };
+        assert!(
+            rule.read_with(&guard)
+                .selectors
+                .slice()
+                .iter()
+                .all(|selector| {
+                    !selector.iter().any(|component| {
+                        matches!(component, selectors::parser::Component::ImplicitScope)
+                    })
+                })
+        );
+    }
 
     #[test]
     fn native_nested_declarations_clone_into_the_destination_lock() {

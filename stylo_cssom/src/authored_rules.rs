@@ -14,7 +14,7 @@ use style::{
     shared_lock::{Locked, SharedRwLock, SharedRwLockReadGuard, ToCssWithGuard},
     stylesheets::{
         AllowImportRules, CssRule, Origin, Stylesheet, StylesheetLoader, UrlExtraData,
-        import_rule::{ImportLayer, ImportRule, ImportSheet, ImportSupportsCondition},
+        import_rule::{ImportLayer, ImportRule, ImportScope, ImportSheet, ImportSupportsCondition},
     },
     values::CssUrl,
 };
@@ -600,8 +600,12 @@ fn parse_vendor_compatibility_rule(source: &str) -> Option<stylo_cssom_model::Ru
                 }
             };
             let data = match rule.grammar() {
-                RuleGrammar::Style => RuleCssomData::Style { selector: selector.into() },
-                RuleGrammar::Page => RuleCssomData::Page { selector: selector.into() },
+                RuleGrammar::Style => RuleCssomData::Style {
+                    selector: selector.into(),
+                },
+                RuleGrammar::Page => RuleCssomData::Page {
+                    selector: selector.into(),
+                },
                 _ => return None,
             };
             authored_rule_node(&rule, source)
@@ -850,6 +854,8 @@ pub struct ValidImportRule {
 
     pub layer: Option<Option<String>>,
 
+    pub scope: Option<stylo_cssom_model::RuleImportScope>,
+
     pub supports: Option<String>,
 
     pub media: Option<String>,
@@ -905,6 +911,7 @@ impl From<&stylo_cssom_model::RuleImportRequest> for ValidImportRule {
                 stylo_cssom_model::RuleImportLayer::Anonymous => Some(None),
                 stylo_cssom_model::RuleImportLayer::Named(name) => Some(Some(name.to_string())),
             },
+            scope: request.scope().cloned(),
             supports: request.supports().map(str::to_owned),
             media: request.media().map(str::to_owned),
         }
@@ -936,6 +943,9 @@ impl ParsedImportReplacement {
         let mut rules = ParsedStylesheet::parse(&serialised)
             .expect("serialised parsed import rules must remain valid")
             .rules;
+        if let Some(scope) = &import.scope {
+            rules = vec![stylo_cssom_model::RuleNode::imported_scope(scope, rules)];
+        }
         if let Some(media) = &import.media {
             rules = vec![stylo_cssom_model::RuleNode::media(media.as_str(), rules)];
         }
@@ -1195,6 +1205,7 @@ impl StylesheetLoader for NonLoadingImportLoader {
         media: ServoArc<Locked<MediaList>>,
         supports: Option<ImportSupportsCondition>,
         layer: ImportLayer,
+        scope: Option<ImportScope>,
     ) -> ServoArc<Locked<ImportRule>> {
         let placeholder = Stylesheet::from_str(
             "",
@@ -1213,6 +1224,7 @@ impl StylesheetLoader for NonLoadingImportLoader {
             stylesheet: sheet,
             supports,
             layer,
+            scope,
             source_location: location,
         }))
     }
@@ -1280,6 +1292,14 @@ fn project_import(import: &ImportRule, guard: &SharedRwLockReadGuard) -> ValidIm
         buffer
     });
 
+    let scope = import
+        .scope
+        .as_ref()
+        .map(|scope| match scope.boundaries_to_css() {
+            Some(boundaries) => stylo_cssom_model::RuleImportScope::Explicit(boundaries.into()),
+            None => stylo_cssom_model::RuleImportScope::Implicit,
+        });
+
     let media = import.stylesheet.media(guard).and_then(|media_list| {
         if media_list.is_empty() {
             None
@@ -1293,6 +1313,7 @@ fn project_import(import: &ImportRule, guard: &SharedRwLockReadGuard) -> ValidIm
     ValidImportRule {
         url,
         layer,
+        scope,
         supports,
         media,
     }
@@ -1704,6 +1725,7 @@ mod tests {
         ValidImportRule {
             url: stylo_cssom_model::CssResourceUrl::without_modifiers(url),
             layer: None,
+            scope: None,
             supports: None,
             media: None,
         }

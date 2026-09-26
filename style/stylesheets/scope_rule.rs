@@ -21,10 +21,10 @@ use cssparser::{Parser, SourceLocation, ToCss};
 use malloc_size_of::{
     MallocSizeOfOps, MallocUnconditionalShallowSizeOf, MallocUnconditionalSizeOf,
 };
+use selectors::OpaqueElement;
 use selectors::context::{MatchingContext, QuirksMode};
 use selectors::matching::matches_selector;
 use selectors::parser::{Component, ParseRelative, Selector, SelectorList};
-use selectors::OpaqueElement;
 use servo_arc::Arc;
 use std::fmt::{self, Write};
 use style_traits::{CssStringWriter, CssWriter, ParseError};
@@ -38,6 +38,9 @@ pub struct ScopeRule {
     pub rules: Arc<Locked<CssRules>>,
     /// The source position where this rule was found.
     pub source_location: SourceLocation,
+    /// The scope came from an import modifier, so its children retain their
+    /// top-level selector parsing context.
+    pub imported: bool,
 }
 
 impl DeepCloneWithLock for ScopeRule {
@@ -47,6 +50,7 @@ impl DeepCloneWithLock for ScopeRule {
             bounds: self.bounds.clone(),
             rules: Arc::new(lock.wrap(rules.deep_clone_with_lock(lock, guard))),
             source_location: self.source_location.clone(),
+            imported: self.imported,
         }
     }
 }
@@ -91,6 +95,32 @@ pub struct ScopeBounds {
 }
 
 impl ScopeBounds {
+    /// Parse the contents of an `@import scope()` modifier. Its argument may
+    /// be a bare scope-start selector or the boundaries used by `@scope`.
+    pub fn parse_for_import<'a>(
+        context: &ParserContext,
+        input: &mut Parser<'a, '_>,
+    ) -> Result<Self, ParseError<'a>> {
+        let bounds = Self::parse(context, input, ParseRelative::No)?;
+        if bounds.start.is_some() || bounds.end.is_some() {
+            input.expect_exhausted()?;
+            return Ok(bounds);
+        }
+        let selector_parser = SelectorParser {
+            stylesheet_origin: context.stylesheet_origin,
+            namespaces: &context.namespaces,
+            url_data: context.url_data,
+            for_supports_rule: false,
+        };
+        let start =
+            SelectorList::parse_disallow_pseudo(&selector_parser, input, ParseRelative::No)?;
+        input.expect_exhausted()?;
+        Ok(Self {
+            start: Some(start),
+            end: None,
+        })
+    }
+
     #[cfg(feature = "gecko")]
     fn size_of(&self, ops: &mut MallocSizeOfOps) -> usize {
         fn bound_size_of(

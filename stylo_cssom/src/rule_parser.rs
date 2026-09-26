@@ -1765,6 +1765,7 @@ fn canonical_import_rule(
     use style::servo::url::{UrlCorsMode, UrlReferrerPolicy};
     use stylo_cssom_model::{
         RuleImportCorsMode, RuleImportLayer, RuleImportReferrerPolicy, RuleImportRequest,
+        RuleImportScope,
     };
 
     let layer = match &rule.layer {
@@ -1816,6 +1817,14 @@ fn canonical_import_rule(
         let _ = supports.condition.to_css(&mut CssWriter::new(&mut prelude));
         prelude.push(')');
     }
+    let scope = rule.scope.as_ref().map(|scope| {
+        prelude.push(' ');
+        prelude.push_str(&scope.to_css_string());
+        match scope.boundaries_to_css() {
+            Some(boundaries) => RuleImportScope::Explicit(boundaries.into()),
+            None => RuleImportScope::Implicit,
+        }
+    });
     let request = RuleImportRequest::new(
         rule.url.original().unwrap_or_else(|| rule.url.as_str()),
         layer,
@@ -1826,7 +1835,8 @@ fn canonical_import_rule(
         modifiers.integrity().map(str::to_owned),
         referrer_policy,
     )
-    .with_conditions(supports, media);
+    .with_conditions(supports, media)
+    .with_scope(scope);
     ParsedCssRuleKind::Import(CanonicalCssImportRule { request })
 }
 
@@ -5481,6 +5491,45 @@ mod tests {
         assert_eq!(request.cors(), None);
         assert_eq!(request.integrity(), None);
         assert_eq!(request.referrer_policy(), None);
+    }
+
+    #[test]
+    fn import_scope_is_not_a_media_condition() {
+        for (css, expected_scope) in [
+            (
+                "@import url(a.css) scope;",
+                stylo_cssom_model::RuleImportScope::Implicit,
+            ),
+            (
+                "@import url(a.css) scope(.card);",
+                stylo_cssom_model::RuleImportScope::Explicit("(.card)".into()),
+            ),
+            (
+                "@import url(a.css) scope((.card));",
+                stylo_cssom_model::RuleImportScope::Explicit("(.card)".into()),
+            ),
+            (
+                "@import url(a.css) scope((.card) to (.limit));",
+                stylo_cssom_model::RuleImportScope::Explicit("(.card) to (.limit)".into()),
+            ),
+            (
+                "@import url(a.css) supports(display: grid) scope((.card));",
+                stylo_cssom_model::RuleImportScope::Explicit("(.card)".into()),
+            ),
+            (
+                "@import url(a.css) scope((.card)) layer(theme);",
+                stylo_cssom_model::RuleImportScope::Explicit("(.card)".into()),
+            ),
+        ] {
+            let rule = ParsedCssRule::parse(css).expect("the scoped import must parse");
+            let node = rule.to_rule_node();
+            let Some(stylo_cssom_model::RuleCssomData::Import { request }) = node.cssom_data()
+            else {
+                panic!("the import must retain its typed request: {css}");
+            };
+            assert_eq!(request.media(), None, "{css}");
+            assert_eq!(request.scope(), Some(&expected_scope), "{css}");
+        }
     }
 
     #[test]

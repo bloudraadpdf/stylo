@@ -268,6 +268,12 @@ pub enum RuleImportLayer {
     Named(Arc<str>),
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum RuleImportScope {
+    Implicit,
+    Explicit(Arc<str>),
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RuleImportCorsMode {
     Anonymous,
@@ -304,6 +310,7 @@ pub struct RuleImportRequest {
     integrity: Option<Arc<str>>,
     referrer_policy: Option<RuleImportReferrerPolicy>,
     layer: RuleImportLayer,
+    scope: Option<RuleImportScope>,
     supports: Option<Arc<str>>,
     media: Option<Arc<str>>,
 }
@@ -335,6 +342,7 @@ impl RuleImportRequest {
             integrity: None,
             referrer_policy: None,
             layer,
+            scope: None,
             supports: None,
             media: None,
         }
@@ -365,6 +373,12 @@ impl RuleImportRequest {
     }
 
     #[must_use]
+    pub fn with_scope(mut self, scope: Option<RuleImportScope>) -> Self {
+        self.scope = scope;
+        self
+    }
+
+    #[must_use]
     pub fn url(&self) -> &str {
         &self.url
     }
@@ -387,6 +401,11 @@ impl RuleImportRequest {
     #[must_use]
     pub const fn layer(&self) -> &RuleImportLayer {
         &self.layer
+    }
+
+    #[must_use]
+    pub const fn scope(&self) -> Option<&RuleImportScope> {
+        self.scope.as_ref()
     }
 
     #[must_use]
@@ -1044,6 +1063,7 @@ pub struct TypedRulePayload {
     declaration_block: Option<RuleDeclarationBlock>,
     cssom_data: Option<RuleCssomData>,
     source_stamp: Option<RuleSourceStamp>,
+    imported_scope: bool,
 }
 
 impl TypedRulePayload {
@@ -1064,6 +1084,7 @@ impl TypedRulePayload {
             declaration_block: None,
             cssom_data: None,
             source_stamp: None,
+            imported_scope: false,
         }
     }
 
@@ -1079,6 +1100,7 @@ impl TypedRulePayload {
             declaration_block: None,
             cssom_data: None,
             source_stamp: None,
+            imported_scope: false,
         }
     }
 
@@ -1099,6 +1121,7 @@ impl TypedRulePayload {
             declaration_block: None,
             cssom_data: None,
             source_stamp: None,
+            imported_scope: false,
         }
     }
 
@@ -1110,6 +1133,11 @@ impl TypedRulePayload {
     #[must_use]
     pub const fn source_stamp(&self) -> Option<RuleSourceStamp> {
         self.source_stamp
+    }
+
+    #[must_use]
+    pub const fn imported_scope(&self) -> bool {
+        self.imported_scope
     }
 
     #[must_use]
@@ -1504,6 +1532,27 @@ impl RuleNode {
             None::<Arc<str>>,
             rules,
         ))
+    }
+
+    /// A scope overlay for imported rules. Its children retain their original
+    /// top-level selector parsing context during native lowering.
+    #[must_use]
+    pub fn imported_scope(scope: &RuleImportScope, rules: impl Into<Arc<[Self]>>) -> Self {
+        let rules = rules.into();
+        let prelude = match scope {
+            RuleImportScope::Implicit => String::new(),
+            RuleImportScope::Explicit(boundaries) => format!(" {boundaries}"),
+        };
+        let header = format!("@scope{prelude}");
+        let serialization = format!("{header} {{ {} }}", serialise_rules(&rules));
+        let mut payload = TypedRulePayload::authored_with_group_header(
+            RuleGrammar::Scope,
+            serialization.into(),
+            rules,
+            RuleGroupHeader::new(header),
+        );
+        payload.imported_scope = true;
+        Self::Scope(payload)
     }
 
     #[must_use]
@@ -2298,6 +2347,9 @@ impl StyleSheetLease {
             let mut rules = child.map_or_else(Vec::new, |child| {
                 child.projection_nodes_with_stack(ImportBindingContext::Source, stack)
             });
+            if let Some(scope) = request.scope() {
+                rules = vec![RuleNode::imported_scope(scope, rules)];
+            }
             rules = match request.layer() {
                 RuleImportLayer::Absent => rules,
                 RuleImportLayer::Anonymous => vec![RuleNode::layer(None::<Arc<str>>, rules)],
@@ -2343,6 +2395,13 @@ impl StyleSheetLease {
                 let mut css = child.map_or_else(String::new, |child| {
                     child.serialise_projection_with_stack(ImportBindingContext::Source, stack)
                 });
+                if let Some(scope) = request.scope() {
+                    let prelude = match scope {
+                        RuleImportScope::Implicit => String::new(),
+                        RuleImportScope::Explicit(boundaries) => format!(" {boundaries}"),
+                    };
+                    css = format!("@scope{prelude} {{\n{css}\n}}");
+                }
                 if !matches!(request.layer(), RuleImportLayer::Absent) {
                     css = match request.layer() {
                         RuleImportLayer::Absent => unreachable!(),
