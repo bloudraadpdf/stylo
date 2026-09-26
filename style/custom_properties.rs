@@ -1172,7 +1172,7 @@ pub struct CustomPropertiesBuilder<'a, 'b: 'a> {
     has_color_scheme: bool,
     custom_properties: ComputedCustomProperties,
     reverted: PrecomputedHashMap<&'a Name, (CascadePriority, bool)>,
-    reverted_rules: PrecomputedHashMap<&'a Name, std::collections::HashSet<usize>>,
+    reverted_rules: PrecomputedHashMap<&'a Name, std::collections::HashMap<usize, CascadePriority>>,
     stylist: &'a Stylist,
     computed_context: &'a mut computed::Context<'b>,
     references_from_non_custom_properties: NonCustomReferenceMap<Vec<Name>>,
@@ -1265,7 +1265,7 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
         if self
             .reverted_rules
             .get(name)
-            .is_some_and(|rules| rules.contains(&rule_identity))
+            .is_some_and(|rules| rules.contains_key(&rule_identity))
         {
             return;
         }
@@ -1283,7 +1283,7 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
             self.reverted_rules
                 .entry(name)
                 .or_default()
-                .insert(rule_identity);
+                .insert(rule_identity, priority);
             return;
         }
 
@@ -1342,6 +1342,17 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
                 CSSWideKeyword::RevertRule => unreachable!(),
                 CSSWideKeyword::RevertLayer | CSSWideKeyword::Revert => {
                     let origin_revert = matches!(keyword, CSSWideKeyword::Revert);
+                    if !origin_revert
+                        && self.reverted_rules.get(name).is_some_and(|rules| {
+                            rules.values().any(|reverted_priority| {
+                                priority.allows_when_reverted(reverted_priority, false)
+                            })
+                        })
+                    {
+                        // Reverting this layer would revisit a rule that already
+                        // reverted to this declaration, so the cycle resolves to unset.
+                        return;
+                    }
                     self.seen.remove(name);
                     self.reverted.insert(name, (priority, origin_revert));
                 },

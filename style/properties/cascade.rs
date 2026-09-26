@@ -864,7 +864,7 @@ struct Cascade<'b> {
     author_specified: LonghandIdSet,
     reverted_set: LonghandIdSet,
     reverted: FxHashMap<LonghandId, (CascadePriority, bool)>,
-    reverted_rules: FxHashMap<LonghandId, rustc_hash::FxHashSet<usize>>,
+    reverted_rules: FxHashMap<LonghandId, FxHashMap<usize, CascadePriority>>,
     declarations_to_apply_unless_overridden: DeclarationsToApplyUnlessOverriden,
 }
 
@@ -1173,7 +1173,7 @@ impl<'b> Cascade<'b> {
         if self
             .reverted_rules
             .get(&longhand_id)
-            .is_some_and(|rules| rules.contains(&rule_identity))
+            .is_some_and(|rules| rules.contains_key(&rule_identity))
         {
             return;
         }
@@ -1207,7 +1207,7 @@ impl<'b> Cascade<'b> {
                     self.reverted_rules
                         .entry(longhand_id)
                         .or_default()
-                        .insert(rule_identity);
+                        .insert(rule_identity, priority);
                     return;
                 }
                 if matches!(
@@ -1215,6 +1215,18 @@ impl<'b> Cascade<'b> {
                     CSSWideKeyword::RevertLayer | CSSWideKeyword::Revert
                 ) {
                     let origin_revert = keyword == CSSWideKeyword::Revert;
+                    if !origin_revert
+                        && self.reverted_rules.get(&longhand_id).is_some_and(|rules| {
+                            rules.values().any(|reverted_priority| {
+                                priority.allows_when_reverted(reverted_priority, false)
+                            })
+                        })
+                    {
+                        // The layer rollback would reconsider a rule that already
+                        // reverted to this declaration. The resulting cycle is unset.
+                        self.seen.insert(longhand_id);
+                        return;
+                    }
                     // We intentionally don't want to insert it into `self.seen`, `reverted` takes
                     // care of rejecting other declarations as needed.
                     self.reverted_set.insert(longhand_id);
