@@ -1172,7 +1172,7 @@ pub struct CustomPropertiesBuilder<'a, 'b: 'a> {
     has_color_scheme: bool,
     custom_properties: ComputedCustomProperties,
     reverted: PrecomputedHashMap<&'a Name, (CascadePriority, bool)>,
-    reverted_rules: PrecomputedHashMap<&'a Name, PrecomputedHashSet<usize>>,
+    reverted_rules: PrecomputedHashMap<&'a Name, std::collections::HashSet<usize>>,
     stylist: &'a Stylist,
     computed_context: &'a mut computed::Context<'b>,
     references_from_non_custom_properties: NonCustomReferenceMap<Vec<Name>>,
