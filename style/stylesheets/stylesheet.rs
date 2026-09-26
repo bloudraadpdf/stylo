@@ -3872,6 +3872,7 @@ mod tests {
 
     #[test]
     fn servo_parses_column_fill_balance_all() {
+        let _guard = pref_lock().lock().unwrap();
         let _columns_pref = BoolPrefGuard::set("layout.columns.enabled", true);
         let stylesheet = parse_stylesheet("div { column-fill: balance-all; }");
         let guard = stylesheet.shared_lock.read();
