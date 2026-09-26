@@ -5516,6 +5516,14 @@ mod tests {
                 stylo_cssom_model::RuleImportScope::Implicit,
             ),
             (
+                "@import url(a.css) scope();",
+                stylo_cssom_model::RuleImportScope::Implicit,
+            ),
+            (
+                "@import url(a.css) scope( /* empty */ );",
+                stylo_cssom_model::RuleImportScope::Implicit,
+            ),
+            (
                 "@import url(a.css) scope(.card);",
                 stylo_cssom_model::RuleImportScope::Explicit("(.card)".into()),
             ),
