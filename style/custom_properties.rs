@@ -6,6 +6,7 @@
 //!
 //! [custom]: https://drafts.csswg.org/css-variables/
 
+use crate::Atom;
 use crate::applicable_declarations::CascadePriority;
 use crate::custom_properties_map::CustomPropertiesMap;
 use crate::derives::*;
@@ -17,7 +18,7 @@ use crate::properties::{
 };
 use crate::properties_and_values::{
     registry::PropertyRegistrationData,
-    syntax::{data_type::DependentDataTypes, Descriptor},
+    syntax::{Descriptor, data_type::DependentDataTypes},
     value::{
         AllowComputationallyDependent, ComputedValue as ComputedRegisteredValue,
         SpecifiedValue as SpecifiedRegisteredValue,
@@ -29,7 +30,6 @@ use crate::stylist::Stylist;
 use crate::values::computed::{self, ToComputedValue};
 use crate::values::generics::calc::SortKey as AttrUnit;
 use crate::values::specified::{AttrName, FontRelativeLength};
-use crate::Atom;
 use cssparser::{
     CowRcStr, Delimiter, Parser, ParserInput, SourcePosition, Token, TokenSerializationType,
 };
@@ -1172,6 +1172,7 @@ pub struct CustomPropertiesBuilder<'a, 'b: 'a> {
     has_color_scheme: bool,
     custom_properties: ComputedCustomProperties,
     reverted: PrecomputedHashMap<&'a Name, (CascadePriority, bool)>,
+    reverted_rules: PrecomputedHashMap<&'a Name, PrecomputedHashSet<usize>>,
     stylist: &'a Stylist,
     computed_context: &'a mut computed::Context<'b>,
     references_from_non_custom_properties: NonCustomReferenceMap<Vec<Name>>,
@@ -1214,6 +1215,7 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
         Self {
             seen: PrecomputedHashSet::default(),
             reverted: Default::default(),
+            reverted_rules: Default::default(),
             may_have_cycles: false,
             has_color_scheme: false,
             custom_properties,
@@ -1252,6 +1254,7 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
         &mut self,
         declaration: &'a CustomDeclaration,
         priority: CascadePriority,
+        rule_identity: usize,
         attribute_tracker: &mut AttributeTracker,
     ) {
         let CustomDeclaration {
@@ -1259,10 +1262,29 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
             ref value,
         } = *declaration;
 
+        if self
+            .reverted_rules
+            .get(name)
+            .is_some_and(|rules| rules.contains(&rule_identity))
+        {
+            return;
+        }
+
         if let Some(&(reverted_priority, is_origin_revert)) = self.reverted.get(&name) {
             if !reverted_priority.allows_when_reverted(&priority, is_origin_revert) {
                 return;
             }
+        }
+
+        if matches!(
+            value,
+            CustomDeclarationValue::CSSWideKeyword(CSSWideKeyword::RevertRule)
+        ) {
+            self.reverted_rules
+                .entry(name)
+                .or_default()
+                .insert(rule_identity);
+            return;
         }
 
         let was_already_present = !self.seen.insert(name);
@@ -1317,6 +1339,7 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
                 map.insert(registration, name, value);
             },
             CustomDeclarationValue::CSSWideKeyword(keyword) => match keyword {
+                CSSWideKeyword::RevertRule => unreachable!(),
                 CSSWideKeyword::RevertLayer | CSSWideKeyword::Revert => {
                     let origin_revert = matches!(keyword, CSSWideKeyword::Revert);
                     self.seen.remove(name);
@@ -1524,7 +1547,9 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
                     CSSWideKeyword::Unset => {
                         debug_assert!(false, "Should've been handled earlier");
                     },
-                    CSSWideKeyword::Revert | CSSWideKeyword::RevertLayer => {},
+                    CSSWideKeyword::Revert
+                    | CSSWideKeyword::RevertLayer
+                    | CSSWideKeyword::RevertRule => {},
                 }
                 None
             },
@@ -2134,15 +2159,18 @@ fn substitute_references_if_needed_and_apply(
                 (CSSWideKeyword::Initial, _, _)
                 | (CSSWideKeyword::Revert, false, _)
                 | (CSSWideKeyword::RevertLayer, false, _)
+                | (CSSWideKeyword::RevertRule, false, _)
                 | (CSSWideKeyword::Unset, false, _)
                 | (CSSWideKeyword::Revert, true, true)
                 | (CSSWideKeyword::RevertLayer, true, true)
+                | (CSSWideKeyword::RevertRule, true, true)
                 | (CSSWideKeyword::Unset, true, true)
                 | (CSSWideKeyword::Inherit, _, true) => {
                     remove_and_insert_initial_value(name, registration, custom_properties);
                 },
                 (CSSWideKeyword::Revert, true, false)
                 | (CSSWideKeyword::RevertLayer, true, false)
+                | (CSSWideKeyword::RevertRule, true, false)
                 | (CSSWideKeyword::Inherit, _, false)
                 | (CSSWideKeyword::Unset, true, false) => {
                     match inherited.get(registration, name) {
@@ -2538,10 +2566,10 @@ pub fn substitute_with_environment_resolution<'a>(
 mod tests {
     use super::*;
     use crate::stylesheets::UrlExtraData;
-    use crate::test_support::{pref_lock, BoolPrefGuard};
+    use crate::test_support::{BoolPrefGuard, pref_lock};
     use crate::{Namespace, Prefix};
-    use ::url::Url;
     use cssparser::{Parser, ParserInput};
+    use url::Url;
 
     fn parse_value(css: &str, namespaces: &Namespaces) -> VariableValue {
         let _guard = pref_lock().lock().unwrap();

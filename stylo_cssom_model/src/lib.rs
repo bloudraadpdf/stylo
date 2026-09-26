@@ -82,15 +82,16 @@ pub use stylesheet_graph::{
     DetachedRuleLease, DetachedRuleListLease, DetachedStyleSheetLease, ImportBindingContext,
     ImportBindingHandle, ImportBindingLease, ImportBindingLoadState, InternalStylesheetRoot,
     PendingSubstitutionValue, PositionTryDescriptorName, PreparedRuleGraphUpdate,
-    RuleBindingContext, RuleBlock, RuleConditionKind, RuleContainerCondition, RuleCssomData, RuleCustomMediaQuery,
-    RuleDeclaration, RuleDeclarationBlock, RuleDeclarationDomain, RuleGrammar, RuleGraphError,
-    RuleGroupHeader, RuleHandle, RuleImportCorsMode, RuleImportLayer, RuleImportPrelude,
-    RuleImportReferrerPolicy, RuleImportRequest, RuleKeyframeSelector, RuleLease, RuleListHandle,
-    RuleListLease, RuleMutationRevision, RuleNamespaceContext, RuleNode, RuleSourceStamp,
-    StyleOrigin, StyleShadowScopeHandle, StyleSheetAttachmentCandidate, StyleSheetAttachmentHandle,
-    StyleSheetAttachmentLease, StyleSheetAttachmentOwner, StyleSheetCandidate,
-    StyleSheetGraphCandidate, StyleSheetHandle, StyleSheetImportCandidate, StyleSheetLease,
-    StyleSheetSourceContext, StyleSheetSourceKind, StyleTreeScopeHandle, TypedRulePayload,
+    RuleBindingContext, RuleBlock, RuleConditionKind, RuleContainerCondition, RuleCssomData,
+    RuleCustomMediaQuery, RuleDeclaration, RuleDeclarationBlock, RuleDeclarationDomain,
+    RuleGrammar, RuleGraphError, RuleGroupHeader, RuleHandle, RuleImportCorsMode, RuleImportLayer,
+    RuleImportPrelude, RuleImportReferrerPolicy, RuleImportRequest, RuleKeyframeSelector,
+    RuleLease, RuleListHandle, RuleListLease, RuleMutationRevision, RuleNamespaceContext, RuleNode,
+    RuleSourceStamp, StyleOrigin, StyleShadowScopeHandle, StyleSheetAttachmentCandidate,
+    StyleSheetAttachmentHandle, StyleSheetAttachmentLease, StyleSheetAttachmentOwner,
+    StyleSheetCandidate, StyleSheetGraphCandidate, StyleSheetHandle, StyleSheetImportCandidate,
+    StyleSheetLease, StyleSheetSourceContext, StyleSheetSourceKind, StyleTreeScopeHandle,
+    TypedRulePayload,
 };
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -403,6 +404,7 @@ pub enum CssWideKeyword {
     Unset,
     Revert,
     RevertLayer,
+    RevertRule,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1501,7 +1503,9 @@ impl StyleState {
         destination.imperative_registration_revision = self.imperative_registration_revision;
         let mut copies = Vec::with_capacity(self.declaration_order.len());
         destination.declarations.reserve(self.declarations.len());
-        destination.declaration_order.reserve(self.declaration_order.len());
+        destination
+            .declaration_order
+            .reserve(self.declaration_order.len());
         destination.slots.reserve(self.slots.len());
         destination.unhydrated.reserve(self.unhydrated.len());
         for handle in &self.declaration_order {

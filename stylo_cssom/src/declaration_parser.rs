@@ -568,6 +568,7 @@ fn specified_style_value_from_components(
             "unset" => Some(CssWideKeyword::Unset),
             "revert" => Some(CssWideKeyword::Revert),
             "revert-layer" => Some(CssWideKeyword::RevertLayer),
+            "revert-rule" => Some(CssWideKeyword::RevertRule),
             _ => None,
         }
     } else {
@@ -927,6 +928,9 @@ pub fn specified_declarations_from_native_block(
                 "revert-layer" => stylo_cssom_model::SpecifiedStyleValue::CssWide(
                     stylo_cssom_model::CssWideKeyword::RevertLayer,
                 ),
+                "revert-rule" => stylo_cssom_model::SpecifiedStyleValue::CssWide(
+                    stylo_cssom_model::CssWideKeyword::RevertRule,
+                ),
                 _ if name == "opacity" => trimmed
                     .strip_suffix('%')
                     .and_then(|percentage| percentage.trim().parse::<f32>().ok())
@@ -1057,24 +1061,27 @@ pub fn inline_style_cssom_authored_value(property: &str, value: Option<String>) 
 }
 
 fn inline_color_needs_authored_cascade_value(block: &InlineStyleBlock) -> bool {
-    block.0.declaration_importance_iter().any(|(declaration, _)| {
-        match declaration {
+    block
+        .0
+        .declaration_importance_iter()
+        .any(|(declaration, _)| match declaration {
             PropertyDeclaration::Color(style::values::specified::ColorPropertyValue(color)) => {
                 match color {
                     style::values::specified::Color::Absolute(absolute) => absolute
                         .color
                         .flags
                         .contains(style::color::ColorFlags::SERIALIZE_AS_LEGACY_SRGB),
-                    style::values::specified::Color::ColorFunction(function) =>
-                        function.has_origin_color(),
-                    style::values::specified::Color::ColorMix(mix) =>
-                        color_mix_contains_authored_hsl_or_hwb(mix),
+                    style::values::specified::Color::ColorFunction(function) => {
+                        function.has_origin_color()
+                    },
+                    style::values::specified::Color::ColorMix(mix) => {
+                        color_mix_contains_authored_hsl_or_hwb(mix)
+                    },
                     _ => false,
                 }
             },
             _ => false,
-        }
-    })
+        })
 }
 
 fn color_mix_contains_authored_hsl_or_hwb(mix: &style::values::specified::color::ColorMix) -> bool {
@@ -1083,8 +1090,9 @@ fn color_mix_contains_authored_hsl_or_hwb(mix: &style::values::specified::color:
             absolute.color.color_space,
             style::color::ColorSpace::Hsl | style::color::ColorSpace::Hwb
         ),
-        style::values::specified::Color::ColorMix(nested) =>
-            color_mix_contains_authored_hsl_or_hwb(nested),
+        style::values::specified::Color::ColorMix(nested) => {
+            color_mix_contains_authored_hsl_or_hwb(nested)
+        },
         _ => false,
     })
 }
@@ -1245,7 +1253,12 @@ pub fn declaration_block_shorthand_values(
     block: &style::properties::declaration_block::PropertyDeclarationBlock,
 ) -> Vec<stylo_cssom_model::RuleDeclaration> {
     static SHORTHANDS: std::sync::LazyLock<
-        Box<[(&'static stylo_cssom_model::PropertySchemaRow, Option<style::properties::ShorthandId>)]>,
+        Box<
+            [(
+                &'static stylo_cssom_model::PropertySchemaRow,
+                Option<style::properties::ShorthandId>,
+            )],
+        >,
     > = std::sync::LazyLock::new(|| {
         stylo_cssom_model::STANDARD_PROPERTIES
             .iter()
@@ -1266,9 +1279,9 @@ pub fn declaration_block_shorthand_values(
         .iter()
         .filter(|(_, shorthand)| {
             shorthand.is_none_or(|shorthand| {
-                shorthand
-                    .longhands()
-                    .any(|longhand| present.contains(style::properties::PropertyDeclarationId::Longhand(longhand)))
+                shorthand.longhands().any(|longhand| {
+                    present.contains(style::properties::PropertyDeclarationId::Longhand(longhand))
+                })
             })
         })
         .filter_map(|(schema, _)| {
@@ -1396,17 +1409,16 @@ impl<'a> PendingShorthandExpansions<'a> {
     ) -> Option<(PropertyDeclaration, Importance)> {
         let pending = declaration.pending_substitution()?;
         let important = declaration.important();
-        let index = match self
-            .expansions
-            .iter()
-            .position(|expansion| expansion.important == important && expansion.source == *pending)
-        {
-            Some(index) => index,
-            None => {
-                self.expansions.push(self.expand(pending, important)?);
-                self.expansions.len() - 1
-            },
-        };
+        let index =
+            match self.expansions.iter().position(|expansion| {
+                expansion.important == important && expansion.source == *pending
+            }) {
+                Some(index) => index,
+                None => {
+                    self.expansions.push(self.expand(pending, important)?);
+                    self.expansions.len() - 1
+                },
+            };
         let expansion = &mut self.expansions[index];
         let matches = |(candidate, _): &(PropertyDeclaration, Importance)| {
             candidate.id().name() == declaration.name()
@@ -1709,6 +1721,25 @@ pub fn inline_style_declarations_with_importance(
 mod tests {
     use super::*;
 
+    #[test]
+    fn revert_rule_is_preserved_as_a_css_wide_declared_value() {
+        let block = parse_inline_style_block("color: revert-rule; --accent: revert-rule");
+        assert_eq!(
+            inline_style_get_property_value(&block, "color").as_deref(),
+            Some("revert-rule")
+        );
+        assert_eq!(
+            inline_style_get_property_value(&block, "--accent").as_deref(),
+            Some("revert-rule")
+        );
+        assert_eq!(
+            specified_style_value_from_css("revert-rule", &Arc::from("about:blank")),
+            Some(stylo_cssom_model::SpecifiedStyleValue::CssWide(
+                stylo_cssom_model::CssWideKeyword::RevertRule
+            ))
+        );
+    }
+
     /// CSSOM getPropertyValue returns the empty string for a shorthand whose
     /// longhands are not all present, including the longhands a shorthand only
     /// resets.
@@ -1751,7 +1782,8 @@ mod tests {
                 &Arc::from("about:blank"),
             )
             .expect("timing function must parse");
-            let cascade_value = crate::specified::projected_specified_property_value(&declarations, property);
+            let cascade_value =
+                crate::specified::projected_specified_property_value(&declarations, property);
             assert_eq!(cascade_value.as_deref(), Some(authored));
         }
     }
@@ -1821,8 +1853,7 @@ mod tests {
         )
         .expect("color mix must parse");
         assert_eq!(
-            crate::specified::projected_specified_property_value(&declarations, "color")
-                .as_deref(),
+            crate::specified::projected_specified_property_value(&declarations, "color").as_deref(),
             Some(authored),
         );
         assert_eq!(
@@ -1842,8 +1873,10 @@ mod tests {
             &Arc::from("about:blank"),
         )
         .expect("color mix must parse");
-        let canonical =
-            inline_style_get_property_value(&parse_inline_style_block(&format!("color: {authored}")), "color");
+        let canonical = inline_style_get_property_value(
+            &parse_inline_style_block(&format!("color: {authored}")),
+            "color",
+        );
         assert_eq!(canonical.as_deref(), Some(authored));
         assert_eq!(
             crate::specified::projected_specified_property_value(&declarations, "color"),
@@ -1854,13 +1887,29 @@ mod tests {
     #[test]
     fn cssom_color_layers_accepts_specified_blend_modes() {
         for mode in [
-            "normal", "multiply", "screen", "overlay", "darken", "lighten",
-            "color-dodge", "color-burn", "hard-light", "soft-light", "difference",
-            "exclusion", "hue", "saturation", "color", "luminosity",
+            "normal",
+            "multiply",
+            "screen",
+            "overlay",
+            "darken",
+            "lighten",
+            "color-dodge",
+            "color-burn",
+            "hard-light",
+            "soft-light",
+            "difference",
+            "exclusion",
+            "hue",
+            "saturation",
+            "color",
+            "luminosity",
         ] {
             let value = format!("color-layers({mode}, red, blue)");
             let block = parse_inline_style_block(&format!("color: {value}"));
-            assert!(inline_style_get_property_value(&block, "color").is_some(), "{mode}");
+            assert!(
+                inline_style_get_property_value(&block, "color").is_some(),
+                "{mode}"
+            );
         }
         let normal = parse_inline_style_block("color: color-layers(normal, red, blue)");
         assert_eq!(
@@ -2279,12 +2328,20 @@ mod tests {
                 .collect::<Vec<_>>();
             let filtered = super::declaration_block_shorthand_values(&block)
                 .iter()
-                .map(|declaration| (declaration.name().to_owned(), declaration.value().to_owned()))
+                .map(|declaration| {
+                    (
+                        declaration.name().to_owned(),
+                        declaration.value().to_owned(),
+                    )
+                })
                 .collect::<Vec<_>>();
             assert_eq!(filtered, every_schema_shorthand, "{css}");
             covered += filtered.len();
         }
-        assert!(covered > 5, "the fixtures must give shorthand values: {covered}");
+        assert!(
+            covered > 5,
+            "the fixtures must give shorthand values: {covered}"
+        );
     }
 
     #[test]

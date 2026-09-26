@@ -50,7 +50,7 @@ use crate::stylesheets::Origin;
 use crate::stylist::Stylist;
 use crate::values::{computed, serialize_atom_name};
 use arrayvec::{ArrayVec, Drain as ArrayVecDrain};
-use cssparser::{match_ignore_ascii_case, Parser, ParserInput};
+use cssparser::{Parser, ParserInput, match_ignore_ascii_case};
 use rustc_hash::FxHashMap;
 use servo_arc::Arc;
 use std::{
@@ -112,6 +112,8 @@ pub enum CSSWideKeyword {
     Revert,
     /// The `revert-layer` keyword.
     RevertLayer,
+    /// The `revert-rule` keyword.
+    RevertRule,
 }
 
 impl CSSWideKeyword {
@@ -123,6 +125,7 @@ impl CSSWideKeyword {
             CSSWideKeyword::Unset => "unset",
             CSSWideKeyword::Revert => "revert",
             CSSWideKeyword::RevertLayer => "revert-layer",
+            CSSWideKeyword::RevertRule => "revert-rule",
         }
     }
 }
@@ -136,6 +139,7 @@ impl CSSWideKeyword {
             "unset" => CSSWideKeyword::Unset,
             "revert" => CSSWideKeyword::Revert,
             "revert-layer" => CSSWideKeyword::RevertLayer,
+            "revert-rule" => CSSWideKeyword::RevertRule,
             _ => return Err(()),
         })
     }
@@ -539,7 +543,7 @@ impl PropertyId {
                 return !context
                     .nesting_context
                     .rule_types
-                    .contains(CssRuleType::PositionTry)
+                    .contains(CssRuleType::PositionTry);
             },
             Some(id) => id,
         };
@@ -1587,7 +1591,7 @@ impl UnparsedValue {
                 {
                     Ok(decl) => Cow::Owned(decl),
                     Err(..) => invalid_at_computed_value_time(),
-                }
+                };
             },
             Some(shorthand) => shorthand,
         };
@@ -1712,7 +1716,16 @@ mod native_common_property_tests;
 
 #[cfg(all(test, feature = "servo"))]
 mod tests {
-    use super::{LonghandId, LonghandIdSet, NonCustomPropertyId, PropertyId};
+    use super::{CSSWideKeyword, LonghandId, LonghandIdSet, NonCustomPropertyId, PropertyId};
+
+    #[test]
+    fn revert_rule_is_a_css_wide_keyword() {
+        assert_eq!(
+            CSSWideKeyword::from_ident("revert-rule"),
+            Ok(CSSWideKeyword::RevertRule)
+        );
+        assert_eq!(CSSWideKeyword::RevertRule.to_str(), "revert-rule");
+    }
 
     #[test]
     fn enabled_author_properties_preserve_native_names_and_aliases() {
