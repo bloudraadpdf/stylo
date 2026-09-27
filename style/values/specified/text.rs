@@ -319,6 +319,20 @@ mod tests {
     }
 
     #[test]
+    fn hanging_punctuation_serializes_in_grammar_order() {
+        for (css, expected) in [
+            ("last force-end first", "first force-end last"),
+            ("last allow-end first", "first allow-end last"),
+            ("last allow-end", "allow-end last"),
+            ("last force-end", "force-end last"),
+            ("last first", "first last"),
+        ] {
+            let value = parse_value::<HangingPunctuation>(css).expect(css);
+            assert_eq!(value.to_css_string(), expected);
+        }
+    }
+
+    #[test]
     fn hanging_punctuation_end_modes_are_mutually_exclusive() {
         for css in ["allow-end force-end", "first allow-end last force-end"] {
             assert!(parse_value::<HangingPunctuation>(css).is_err(), "{css}");
@@ -1350,7 +1364,7 @@ impl SpecifiedValueInfo for WordSpaceTransform {
 )]
 #[css(bitflags(
     single = "none",
-    mixed = "first,last,allow-end,force-end",
+    mixed = "first,force-end,allow-end,last",
     validate_mixed = "Self::validate_mixed_flags",
 ))]
 #[repr(C)]
