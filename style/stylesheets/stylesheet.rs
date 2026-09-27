@@ -2852,7 +2852,7 @@ mod tests {
             })
             .expect("expected hanging-punctuation declaration");
         assert_eq!(
-            hanging_punctuation, "first last allow-end",
+            hanging_punctuation, "first allow-end last",
             "typed style rules should preserve hanging-punctuation values",
         );
     }
