@@ -5,6 +5,7 @@ pub mod counter_style_cssom;
 pub mod float_diagnostics;
 pub mod media_list;
 pub mod numeric;
+pub mod intersection_observer;
 pub mod registration;
 pub mod scroll_markers;
 pub mod selector_query;
