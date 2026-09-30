@@ -37,7 +37,7 @@ pub fn parse_intersection_observer_margin(input: &str) -> Option<IntersectionObs
         }
         let value = match parser.next().ok()? {
             Token::Percentage { unit_value, .. } if unit_value.is_finite() => {
-                IntersectionObserverMarginValue::Percentage(f64::from(*unit_value))
+                IntersectionObserverMarginValue::Percentage(unit_value.to_string().parse().ok()?)
             },
             Token::Dimension { value, unit, .. } if value.is_finite() => {
                 let CssUnitKind::Canonical(conversion) = TypedOmUnit::parse(unit)?.kind() else {
@@ -97,6 +97,10 @@ mod tests {
             ]
         );
         assert_eq!(margin.serialize(), "1px 25% -3px 25%");
+        assert_eq!(
+            parse_intersection_observer_margin("20%").unwrap().sides()[0],
+            IntersectionObserverMarginValue::Percentage(0.2)
+        );
         assert_eq!(
             parse_intersection_observer_margin("").unwrap().serialize(),
             "0px 0px 0px 0px"
