@@ -1,6 +1,7 @@
 //! Typed CSSOM entry points backed by Stylo's CSS grammars.
 
 pub use stylo_cssom_model as model;
+pub mod parser_api;
 pub mod counter_style_cssom;
 pub mod float_diagnostics;
 pub mod media_list;

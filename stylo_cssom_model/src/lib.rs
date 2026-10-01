@@ -5,6 +5,8 @@ pub mod color_matrix;
 pub use calibrated_color::{CalGrayParams, CalRgbParams, CalibratedColour, LabParams};
 
 mod error;
+mod parser_api;
+pub use parser_api::{SyntaxBlockKind, SyntaxBodyKind, SyntaxOptions, SyntaxParseError, SyntaxRule, SyntaxValue};
 mod resource_url;
 pub use error::CssomStylesheetError;
 pub use resource_url::{
