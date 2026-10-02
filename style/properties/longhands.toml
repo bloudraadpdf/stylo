@@ -6804,6 +6804,7 @@ initial = "computed::WritingModeProperty::HorizontalTb"
 struct = "inherited_box"
 spec = "https://drafts.csswg.org/css-writing-modes/#propdef-writing-mode"
 servo_pref = "layout.writing-mode.enabled"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 animation_type = "none"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
