@@ -1715,6 +1715,9 @@ where
 mod native_common_property_tests;
 
 #[cfg(all(test, feature = "servo"))]
+mod page_rule_tests;
+
+#[cfg(all(test, feature = "servo"))]
 mod tests {
     use super::{CSSWideKeyword, LonghandId, LonghandIdSet, NonCustomPropertyId, PropertyId};
 
