@@ -810,8 +810,6 @@ const LARGER_FONT_SIZE_RATIO: f32 = 1.2;
 
 /// The default font size.
 pub const FONT_MEDIUM_PX: f32 = 16.0;
-/// The default line height.
-pub const FONT_MEDIUM_LINE_HEIGHT_PX: f32 = FONT_MEDIUM_PX * 1.2;
 /// The default ex height -- https://drafts.csswg.org/css-values/#ex
 /// > In the cases where it is impossible or impractical to determine the x-height, a value of 0.5em must be assumed
 pub const FONT_MEDIUM_EX_PX: f32 = FONT_MEDIUM_PX * 0.5;

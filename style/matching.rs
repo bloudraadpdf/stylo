@@ -1037,19 +1037,14 @@ pub trait MatchMethods: TElement {
             let old_font_size = old_style.map(|s| s.get_font().clone_font_size());
 
             // For line-height, we want the fully resolved value, as `normal` also depends on other
-            // font properties.
-            let new_line_height = device
-                .calc_line_height(
-                    &new_primary_style.get_font(),
-                    new_primary_style.writing_mode,
-                    None,
-                )
-                .0;
-            let old_line_height = old_style.map(|s| {
+            // font properties. `normal` queries font metrics, so it is resolved only when compared.
+            let line_height = |style: &ComputedValues| {
                 device
-                    .calc_line_height(&s.get_font(), s.writing_mode, None)
+                    .calc_line_height(&style.get_font(), style.writing_mode, None)
                     .0
-            });
+            };
+            let line_height_changed =
+                || old_style.map(|old| line_height(old) != line_height(new_primary_style));
 
             // Update root font-relative units. If any of these unit values changed
             // since last time, ensure that we recascade the entire tree.
@@ -1066,16 +1061,9 @@ pub trait MatchMethods: TElement {
                     }
                 }
 
-                // Update root line height for rlh units
-                if old_line_height != Some(new_line_height) {
-                    device.set_root_line_height(
-                        new_primary_style
-                            .effective_zoom
-                            .unzoom(new_line_height.px()),
-                    );
-                    if device.used_root_line_height() {
-                        restyle_requirement = ChildRestyleRequirement::MustCascadeDescendants;
-                    }
+                // The root line height for rlh units derives from the root style on use.
+                if device.used_root_line_height() && line_height_changed() != Some(false) {
+                    restyle_requirement = ChildRestyleRequirement::MustCascadeDescendants;
                 }
 
                 // Update root font metrics for rcap, rch, rex, ric units. Since querying
@@ -1088,7 +1076,7 @@ pub trait MatchMethods: TElement {
 
             if is_container
                 && (old_font_size.is_some_and(|old| old != new_font_size)
-                    || old_line_height.is_some_and(|old| old != new_line_height))
+                    || line_height_changed() == Some(true))
             {
                 // TODO(emilio): Maybe only do this if we were matched
                 // against relative font sizes?

@@ -20,7 +20,7 @@ use crate::values::computed::{ColorScheme, Length, NonNegativeLength};
 use crate::values::specified::color::{ColorSchemeFlags, ForcedColors, SystemColor};
 use crate::values::specified::font::{
     QueryFontMetricsFlags, FONT_MEDIUM_CAP_PX, FONT_MEDIUM_CH_PX, FONT_MEDIUM_EX_PX,
-    FONT_MEDIUM_IC_PX, FONT_MEDIUM_LINE_HEIGHT_PX, FONT_MEDIUM_PX,
+    FONT_MEDIUM_IC_PX, FONT_MEDIUM_PX,
 };
 use crate::values::specified::ViewportVariant;
 use crate::values::{CustomIdent, KeyframesName};
@@ -50,8 +50,6 @@ pub struct Device {
     root_style: RwLock<Arc<ComputedValues>>,
     /// Font size of the root element, used for rem units in other elements.
     root_font_size: AtomicU32,
-    /// Line height of the root element, used for rlh units in other elements.
-    root_line_height: AtomicU32,
     /// X-height of the root element, used for rex units in other elements.
     root_font_metrics_ex: AtomicU32,
     /// Cap-height of the root element, used for rcap units in other elements.
@@ -119,7 +117,6 @@ impl Device {
             default_values: default_values,
             root_style: root_style,
             root_font_size: AtomicU32::new(FONT_MEDIUM_PX.to_bits()),
-            root_line_height: AtomicU32::new(FONT_MEDIUM_LINE_HEIGHT_PX.to_bits()),
             root_font_metrics_ex: AtomicU32::new(FONT_MEDIUM_EX_PX.to_bits()),
             root_font_metrics_cap: AtomicU32::new(FONT_MEDIUM_CAP_PX.to_bits()),
             root_font_metrics_ch: AtomicU32::new(FONT_MEDIUM_CH_PX.to_bits()),
@@ -208,18 +205,16 @@ impl Device {
         self.root_font_size.store(size.to_bits(), Ordering::Relaxed)
     }
 
-    /// Get the line height of the root element (for rlh)
+    /// Get the line height of the root element (for rlh), in zoom-independent CSS pixels.
+    ///
+    /// It derives from the root style on use, so that a document without rlh units
+    /// queries no font metrics for it.
     pub fn root_line_height(&self) -> Length {
         self.used_root_line_height.store(true, Ordering::Relaxed);
-        Length::new(f32::from_bits(
-            self.root_line_height.load(Ordering::Relaxed),
-        ))
-    }
-
-    /// Set the line height of the root element (for rlh), in zoom-independent CSS pixels.
-    pub fn set_root_line_height(&self, size: f32) {
-        self.root_line_height
-            .store(size.to_bits(), Ordering::Relaxed);
+        let root_style = self.root_style.read();
+        let line_height =
+            self.calc_line_height(&root_style.get_font(), root_style.writing_mode, None);
+        Length::new(root_style.effective_zoom.unzoom(line_height.0.px()))
     }
 
     /// Get the x-height of the root element (for rex)
