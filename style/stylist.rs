@@ -1530,6 +1530,10 @@ impl Stylist {
         E: TElement,
     {
         debug_assert!(pseudo.is_lazy());
+        #[cfg(feature = "servo")]
+        let exact_match = |selector: &PseudoElement| selector == pseudo;
+        #[cfg(feature = "servo")]
+        let matching_fn = matching_fn.or(Some(&exact_match));
 
         let mut selector_caches = SelectorCaches::default();
         // No need to bother setting the selector flags when we're computing

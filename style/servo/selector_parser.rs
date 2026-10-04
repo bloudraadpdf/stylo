@@ -25,16 +25,13 @@ use selectors::attr::{AttrSelectorOperation, CaseSensitivity, NamespaceConstrain
 use selectors::parser::SelectorParseErrorKind;
 use selectors::visitor::SelectorVisitor;
 use std::fmt;
-use std::mem;
 use std::ops::{Deref, DerefMut};
 use style_traits::{CssWriter, ParseError, StyleParseErrorKind};
 
 /// A pseudo-element, both public and private.
 ///
 /// NB: If you add to this list, be sure to update `each_simple_pseudo_element` too.
-#[derive(
-    Clone, Copy, Debug, Deserialize, Eq, Hash, MallocSizeOf, PartialEq, Serialize, ToShmem,
-)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, MallocSizeOf, PartialEq, Serialize, ToShmem)]
 #[allow(missing_docs)]
 #[repr(usize)]
 pub enum PseudoElement {
@@ -52,6 +49,15 @@ pub enum PseudoElement {
 
     // Non-eager pseudos.
     Backdrop,
+    PickerIcon,
+    GrammarError,
+    SpellingError,
+    Highlight(Atom),
+    ViewTransition,
+    ViewTransitionGroup(Atom),
+    ViewTransitionImagePair(Atom),
+    ViewTransitionOld(Atom),
+    ViewTransitionNew(Atom),
     ViewTransitionOldRoot,
     ViewTransitionNewRoot,
     DetailsSummary,
@@ -97,7 +103,7 @@ pub enum PseudoElement {
 }
 
 /// The count of all pseudo-elements.
-pub const PSEUDO_COUNT: usize = PseudoElement::ServoTableWrapper as usize + 1;
+pub const PSEUDO_COUNT: usize = PseudoElement::ServoTableWrapper.index() + 1;
 
 impl ToCss for PseudoElement {
     fn to_css<W>(&self, dest: &mut W) -> fmt::Result
@@ -112,6 +118,26 @@ impl ToCss for PseudoElement {
             FirstLetter => "::first-letter",
             FirstLine => "::first-line",
             Backdrop => "::backdrop",
+            PickerIcon => "::picker-icon",
+            GrammarError => "::grammar-error",
+            SpellingError => "::spelling-error",
+            ViewTransition => "::view-transition",
+            Highlight(ref name)
+            | ViewTransitionGroup(ref name)
+            | ViewTransitionImagePair(ref name)
+            | ViewTransitionOld(ref name)
+            | ViewTransitionNew(ref name) => {
+                dest.write_str(match self {
+                    Highlight(_) => "::highlight(",
+                    ViewTransitionGroup(_) => "::view-transition-group(",
+                    ViewTransitionImagePair(_) => "::view-transition-image-pair(",
+                    ViewTransitionOld(_) => "::view-transition-old(",
+                    ViewTransitionNew(_) => "::view-transition-new(",
+                    _ => unreachable!(),
+                })?;
+                cssparser::serialize_identifier(&name.to_string(), dest)?;
+                return dest.write_str(")");
+            },
             ViewTransitionOldRoot => "::view-transition-old(root)",
             ViewTransitionNewRoot => "::view-transition-new(root)",
             DetailsSummary => "::-servo-details-summary",
@@ -177,27 +203,70 @@ impl PseudoElement {
     #[inline]
     pub fn eager_index(&self) -> usize {
         debug_assert!(self.is_eager());
-        self.clone() as usize
+        self.index()
     }
 
     /// An index for this pseudo-element to be indexed in an enumerated array.
     #[inline]
-    pub fn index(&self) -> usize {
-        self.clone() as usize
+    pub const fn index(&self) -> usize {
+        match self {
+            Self::After => 0,
+            Self::Before => 1,
+            Self::Selection => 2,
+            Self::FirstLetter => 3,
+            Self::FirstLine => 4,
+            Self::Backdrop => 5,
+            Self::PickerIcon => 6,
+            Self::GrammarError => 7,
+            Self::SpellingError => 8,
+            Self::Highlight(_) => 9,
+            Self::ViewTransition => 10,
+            Self::ViewTransitionGroup(_) => 11,
+            Self::ViewTransitionImagePair(_) => 12,
+            Self::ViewTransitionOld(_) | Self::ViewTransitionOldRoot => 13,
+            Self::ViewTransitionNew(_) | Self::ViewTransitionNewRoot => 14,
+            Self::DetailsSummary => 15,
+            Self::DetailsContent => 16,
+            Self::Marker => 17,
+            Self::ScrollMarkerGroup => 18,
+            Self::ScrollMarker => 19,
+            Self::FootnoteCall => 20,
+            Self::FootnoteMarker => 21,
+            Self::BdBeforeBreak => 22,
+            Self::BdAfterBreak => 23,
+            Self::BdFootnoteArea => 24,
+            Self::BdSidenoteCall => 25,
+            Self::BdSidenoteMarker => 26,
+            Self::ColorSwatch => 27,
+            Self::Placeholder => 28,
+            Self::FileSelectorButton => 29,
+            Self::ServoTextControlInnerContainer => 30,
+            Self::ServoTextControlInnerEditor => 31,
+            Self::ServoAnonymousBox => 32,
+            Self::ServoAnonymousTable => 33,
+            Self::ServoAnonymousTableCell => 34,
+            Self::ServoAnonymousTableRow => 35,
+            Self::ServoTableGrid => 36,
+            Self::ServoTableWrapper => 37,
+        }
     }
 
     /// An array of `None`, one per pseudo-element.
     pub fn pseudo_none_array<T>() -> [Option<T>; PSEUDO_COUNT] {
-        Default::default()
+        [const { None }; PSEUDO_COUNT]
     }
 
     /// Creates a pseudo-element from an eager index.
     #[inline]
     pub fn from_eager_index(i: usize) -> Self {
-        assert!(i < EAGER_PSEUDO_COUNT);
-        let result: PseudoElement = unsafe { mem::transmute(i) };
-        debug_assert!(result.is_eager());
-        result
+        match i {
+            0 => Self::After,
+            1 => Self::Before,
+            2 => Self::Selection,
+            3 => Self::FirstLetter,
+            4 => Self::FirstLine,
+            _ => panic!("invalid eager pseudo-element index"),
+        }
     }
 
     /// Whether the current pseudo element is ::before or ::after.
@@ -301,6 +370,15 @@ impl PseudoElement {
             | PseudoElement::FirstLetter
             | PseudoElement::FirstLine => PseudoElementCascadeType::Eager,
             PseudoElement::Backdrop
+            | PseudoElement::PickerIcon
+            | PseudoElement::GrammarError
+            | PseudoElement::SpellingError
+            | PseudoElement::Highlight(_)
+            | PseudoElement::ViewTransition
+            | PseudoElement::ViewTransitionGroup(_)
+            | PseudoElement::ViewTransitionImagePair(_)
+            | PseudoElement::ViewTransitionOld(_)
+            | PseudoElement::ViewTransitionNew(_)
             | PseudoElement::ViewTransitionOldRoot
             | PseudoElement::ViewTransitionNewRoot
             | PseudoElement::ColorSwatch
@@ -854,6 +932,10 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             "color-swatch" => ColorSwatch,
             "placeholder" => Placeholder,
             "file-selector-button" => FileSelectorButton,
+            "picker-icon" => PickerIcon,
+            "grammar-error" => GrammarError,
+            "spelling-error" => SpellingError,
+            "view-transition" => ViewTransition,
             "-servo-text-control-inner-container" => {
                 if !self.in_user_agent_stylesheet() {
                     return Err(location.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(name.clone())))
@@ -914,15 +996,18 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
         name: CowRcStr<'i>,
         parser: &mut CssParser<'i, 't>,
     ) -> Result<PseudoElement, ParseError<'i>> {
-        let root = parser.expect_ident()?;
-        if !root.eq_ignore_ascii_case("root") || !parser.is_exhausted() {
-            return Err(parser.new_custom_error(
-                SelectorParseErrorKind::UnsupportedPseudoClassOrElement(name),
-            ));
-        }
+        let excluded = if name.eq_ignore_ascii_case("highlight") {
+            &[][..]
+        } else {
+            &["none", "match-element"][..]
+        };
+        let argument = crate::values::CustomIdent::parse(parser, excluded)?.0;
         match_ignore_ascii_case! { &name,
-            "view-transition-old" => Ok(PseudoElement::ViewTransitionOldRoot),
-            "view-transition-new" => Ok(PseudoElement::ViewTransitionNewRoot),
+            "highlight" => Ok(PseudoElement::Highlight(argument)),
+            "view-transition-group" => Ok(PseudoElement::ViewTransitionGroup(argument)),
+            "view-transition-image-pair" => Ok(PseudoElement::ViewTransitionImagePair(argument)),
+            "view-transition-old" => Ok(if argument == Atom::from("root") { PseudoElement::ViewTransitionOldRoot } else { PseudoElement::ViewTransitionOld(argument) }),
+            "view-transition-new" => Ok(if argument == Atom::from("root") { PseudoElement::ViewTransitionNewRoot } else { PseudoElement::ViewTransitionNew(argument) }),
             _ => Err(parser.new_custom_error(SelectorParseErrorKind::UnsupportedPseudoClassOrElement(name)))
         }
     }
