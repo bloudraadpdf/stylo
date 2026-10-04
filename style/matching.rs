@@ -780,7 +780,7 @@ trait PrivateMatchMethods: TElement {
             after_change_style = self.after_change_style(context, new_values);
         }
 
-        let key = AnimationSetKey::new(self.as_node().opaque(), pseudo_element);
+        let key = AnimationSetKey::new(self.as_node().opaque(), pseudo_element.clone());
         let shared_context = context.shared;
         let mut animation_set = shared_context
             .animations

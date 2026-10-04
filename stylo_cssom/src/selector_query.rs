@@ -104,7 +104,7 @@ pub fn parse_cssom_pseudo_element(selector: &str) -> Result<PseudoElement, Strin
     }
     selector
         .pseudo_element()
-        .copied()
+        .cloned()
         .ok_or_else(|| "expected a pseudo-element selector".to_owned())
 }
 
@@ -134,6 +134,44 @@ pub fn selector_targets_pseudo_element(source: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{parse_dom_selector, selector_targets_pseudo_element};
+
+    #[test]
+    fn cssom_pseudos_retain_names_and_require_double_colons() {
+        use cssparser::ToCss;
+        for source in [
+            "::picker-icon",
+            "::grammar-error",
+            "::spelling-error",
+            "::highlight(name)",
+            "::view-transition",
+            "::view-transition-group(name)",
+            "::view-transition-image-pair(name)",
+            "::view-transition-old(name)",
+            "::view-transition-new(name)",
+        ] {
+            let pseudo = super::parse_cssom_pseudo_element(source).unwrap();
+            assert_eq!(pseudo.to_css_string(), source);
+            assert!(
+                super::parse_cssom_pseudo_element(&source[1..]).is_err(),
+                "{source}"
+            );
+            let other = source.replace("(name)", "(other)");
+            if other != source {
+                assert_ne!(pseudo, super::parse_cssom_pseudo_element(&other).unwrap());
+            }
+        }
+        for source in [
+            "::highlight()",
+            "::highlight(inherit)",
+            "::view-transition-old(none)",
+            "::picker-icon ",
+        ] {
+            assert!(
+                super::parse_cssom_pseudo_element(source).is_err(),
+                "{source}"
+            );
+        }
+    }
 
     #[test]
     fn only_a_lang_selector_reads_the_content_language() {
