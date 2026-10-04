@@ -88,6 +88,8 @@ pub enum PseudoElement {
     ColorSwatch,
     Placeholder,
     FileSelectorButton,
+    Checkmark,
+    PickerSelect,
 
     // Private, Servo-specific implemented pseudos. Only matchable in UA sheet.
     ServoTextControlInnerContainer,
@@ -155,6 +157,8 @@ impl ToCss for PseudoElement {
             ColorSwatch => "::color-swatch",
             Placeholder => "::placeholder",
             FileSelectorButton => "::file-selector-button",
+            Checkmark => "::checkmark",
+            PickerSelect => "::picker(select)",
             ServoTextControlInnerContainer => "::-servo-text-control-inner-container",
             ServoTextControlInnerEditor => "::-servo-text-control-inner-editor",
             ServoAnonymousBox => "::-servo-anonymous-box",
@@ -240,14 +244,16 @@ impl PseudoElement {
             Self::ColorSwatch => 27,
             Self::Placeholder => 28,
             Self::FileSelectorButton => 29,
-            Self::ServoTextControlInnerContainer => 30,
-            Self::ServoTextControlInnerEditor => 31,
-            Self::ServoAnonymousBox => 32,
-            Self::ServoAnonymousTable => 33,
-            Self::ServoAnonymousTableCell => 34,
-            Self::ServoAnonymousTableRow => 35,
-            Self::ServoTableGrid => 36,
-            Self::ServoTableWrapper => 37,
+            Self::Checkmark => 30,
+            Self::PickerSelect => 31,
+            Self::ServoTextControlInnerContainer => 32,
+            Self::ServoTextControlInnerEditor => 33,
+            Self::ServoAnonymousBox => 34,
+            Self::ServoAnonymousTable => 35,
+            Self::ServoAnonymousTableCell => 36,
+            Self::ServoAnonymousTableRow => 37,
+            Self::ServoTableGrid => 38,
+            Self::ServoTableWrapper => 39,
         }
     }
 
@@ -395,6 +401,8 @@ impl PseudoElement {
             | PseudoElement::BdSidenoteMarker
             | PseudoElement::Placeholder
             | PseudoElement::FileSelectorButton
+            | PseudoElement::Checkmark
+            | PseudoElement::PickerSelect
             | PseudoElement::DetailsContent
             | PseudoElement::ServoTextControlInnerContainer
             | PseudoElement::ServoTextControlInnerEditor => PseudoElementCascadeType::Lazy,
@@ -933,6 +941,7 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             "placeholder" => Placeholder,
             "file-selector-button" => FileSelectorButton,
             "picker-icon" => PickerIcon,
+            "checkmark" => Checkmark,
             "grammar-error" => GrammarError,
             "spelling-error" => SpellingError,
             "view-transition" => ViewTransition,
@@ -996,6 +1005,13 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
         name: CowRcStr<'i>,
         parser: &mut CssParser<'i, 't>,
     ) -> Result<PseudoElement, ParseError<'i>> {
+        if name.eq_ignore_ascii_case("picker") {
+            parser.expect_ident_matching("select")?;
+            while !parser.is_exhausted() {
+                parser.expect_ident_matching("select")?;
+            }
+            return Ok(PseudoElement::PickerSelect);
+        }
         let excluded = if name.eq_ignore_ascii_case("highlight") {
             &[][..]
         } else {
