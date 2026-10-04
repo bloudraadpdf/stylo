@@ -67,11 +67,10 @@ impl CssomMediaList {
 }
 
 fn parse_single(source: &str) -> Option<MediaQuery> {
-    with_parser(source, |context, input| {
-        input
-            .parse_entirely(|input| MediaQuery::parse(context, input))
-            .ok()
-    })
+    match CssomMediaList::parse(source).0.media_queries.as_slice() {
+        [query] => Some(query.clone()),
+        _ => None,
+    }
 }
 
 fn with_parser<T>(
@@ -114,6 +113,20 @@ mod tests {
             CssomMediaList::parse("unknown(foo[").serialization(),
             "unknown(foo[])"
         );
+    }
+
+    #[test]
+    fn single_medium_mutations_use_query_list_error_recovery() {
+        let mut list = CssomMediaList::parse("screen");
+        assert!(list.append("bad$"));
+        assert_eq!(list.serialization(), "screen, not all");
+        assert_eq!(list.delete("bad$"), Some(true));
+        assert_eq!(list.delete("bad$"), Some(false));
+        for source in ["", "screen, print", "screen,"] {
+            assert!(!list.append(source), "{source:?}");
+            assert_eq!(list.delete(source), None, "{source:?}");
+        }
+        assert_eq!(list.serialization(), "screen");
     }
 
     #[test]
