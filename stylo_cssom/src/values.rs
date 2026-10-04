@@ -4,7 +4,7 @@ use style::{
     parser::Parse,
     properties::PropertyDeclaration,
     stylesheets::supports_rule::{
-        parse_condition_or_declaration, Declaration as SupportsDeclaration,
+        Declaration as SupportsDeclaration, parse_condition_or_declaration,
     },
 };
 
@@ -80,6 +80,15 @@ pub fn css_supports(query: CssSupportsQuery<'_>) -> bool {
         CssSupportsQuery::Declaration { property, value } => {
             if property.eq_ignore_ascii_case("position-try") {
                 return crate::declaration_parser::position_try_shorthand_is_valid(value);
+            }
+            if property.starts_with("--") {
+                if !crate::is_valid_custom_property_name(property) {
+                    return false;
+                }
+            } else if style::properties::PropertyId::parse_enabled_for_all_content(property)
+                .is_err()
+            {
+                return false;
             }
             if crate::declaration_parser::parse_inline_compatibility_declaration(
                 property,
@@ -184,10 +193,36 @@ pub fn keyword_is(source: &str, expected: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_font_shorthand, supports, CssSupportsInput};
+    use super::{CssSupportsInput, parse_font_shorthand, supports};
     use style::properties::PropertyDeclaration;
     use style::values::computed::font::{ScriptSpecificGenericFontFamily, SingleFontFamily};
     use style::values::specified::FontFamily;
+
+    #[test]
+    fn supports_declaration_requires_a_property_name_not_declaration_syntax() {
+        for property in [
+            " color",
+            "color ",
+            "\tcolor",
+            "color\n",
+            "co/**/lor",
+            "c\\6flor",
+            "--name ",
+            "--",
+        ] {
+            assert!(
+                !supports(CssSupportsInput::declaration(property, "red")),
+                "{property:?}"
+            );
+        }
+        for property in ["color", "COLOR", "--name"] {
+            assert!(
+                supports(CssSupportsInput::declaration(property, "  red  ")),
+                "{property}"
+            );
+        }
+        assert!(supports(CssSupportsInput::condition("  color : red  ")));
+    }
 
     #[test]
     fn supports_at_rule_import_conditions_use_supported_at_rule_names() {

@@ -1795,10 +1795,15 @@ fn canonical_import_rule(
         UrlReferrerPolicy::UnsafeUrl => RuleImportReferrerPolicy::UnsafeUrl,
     });
     let supports = rule.supports.as_ref().map(|support| {
-        let mut css = String::from("(");
-        let _ = support.condition.to_css(&mut CssWriter::new(&mut css));
-        css.push(')');
-        css
+        let condition = support.condition.to_css_string();
+        if matches!(
+            support.condition,
+            style::stylesheets::supports_rule::SupportsCondition::Declaration(_)
+        ) {
+            format!("({condition})")
+        } else {
+            condition
+        }
     });
     let media = rule
         .stylesheet
@@ -5474,6 +5479,28 @@ mod tests {
             Some(["alpha".to_owned(), "beta.gamma".to_owned()].as_slice())
         );
         assert_eq!(anonymous.layer_block_name(), Some(""));
+    }
+
+    #[test]
+    fn import_supports_text_serializes_the_typed_condition() {
+        for (condition, expected) in [
+            ("display: grid", "(display: grid)"),
+            (
+                "(display: flex) or (display: block)",
+                "(display: flex) or (display: block)",
+            ),
+            ("not (color: red)", "not (color: red)"),
+            ("selector(div > span)", "selector(div > span)"),
+        ] {
+            let rule = ParsedCssRule::parse(&format!("@import url(a.css) supports({condition});"))
+                .unwrap();
+            let node = rule.to_rule_node();
+            let Some(stylo_cssom_model::RuleCssomData::Import { request }) = node.cssom_data()
+            else {
+                panic!("the import node must retain its typed request");
+            };
+            assert_eq!(request.supports(), Some(expected), "{condition}");
+        }
     }
 
     #[test]
