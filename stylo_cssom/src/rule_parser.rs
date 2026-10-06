@@ -2808,6 +2808,7 @@ mod tests {
             PropertyDeclaration::MinIntrinsicSizing(value) => {
                 PropertyDeclaration::MinIntrinsicSizing(*value)
             },
+            PropertyDeclaration::FrameSizing(value) => PropertyDeclaration::FrameSizing(*value),
             PropertyDeclaration::MixBlendMode(value) => PropertyDeclaration::MixBlendMode(*value),
             PropertyDeclaration::ObjectFit(value) => PropertyDeclaration::ObjectFit(*value),
             PropertyDeclaration::OffsetRotate(value) => {

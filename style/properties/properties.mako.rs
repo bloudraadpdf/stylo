@@ -1154,6 +1154,9 @@ impl PropertyId {
         ::cssparser::ascii_case_insensitive_phf_map! {
             static_ids -> StaticId = {
                 % for i, property in enumerate(data.longhands + data.shorthands + data.all_aliases()):
+                % if engine == "servo" and i < len(data.longhands) and property.name == "size":
+                <% continue %>
+                % endif
                 "${property.name}" => StaticId::NonCustom(NonCustomPropertyId(${i})),
                 % endfor
                 % for property in data.counted_unknown_properties:

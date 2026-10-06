@@ -62,7 +62,10 @@ impl InlineStyleBlock {
 }
 
 #[allow(missing_debug_implementations)]
-pub struct CssomDeclarationBlock(style::properties::declaration_block::PropertyDeclarationBlock);
+pub struct CssomDeclarationBlock(
+    style::properties::declaration_block::PropertyDeclarationBlock,
+    CssomDeclarationContext,
+);
 
 impl CssomDeclarationBlock {
     pub const fn as_typed(
@@ -808,12 +811,12 @@ pub(crate) fn is_system_font_keyword(value: &str) -> bool {
     )
 }
 
-fn inline_shorthand_serializes(schema: &stylo_cssom_model::PropertySchemaRow) -> bool {
+pub(crate) fn inline_shorthand_serializes(schema: &stylo_cssom_model::PropertySchemaRow) -> bool {
     schema.kind == stylo_cssom_model::PropertyKind::Shorthand
-        && !matches!(
-            schema.name,
-            "page-break-before" | "page-break-after" | "page-break-inside"
-        )
+        && PropertyId::parse_unchecked(schema.name, None)
+            .ok()
+            .and_then(|property| property.as_shorthand().ok())
+            .is_none_or(style::properties::ShorthandId::is_preferred_serialization_shorthand)
 }
 
 pub fn inline_compatibility_properties()
@@ -1120,13 +1123,16 @@ pub fn parse_cssom_declaration_block(
 ) -> CssomDeclarationBlock {
     crate::context::initialise_required_servo_style_prefs();
     let url_data: UrlExtraData = ABOUT_BLANK.clone().into();
-    CssomDeclarationBlock(parse_style_attribute(
-        css,
-        &url_data,
-        None,
-        selectors::matching::QuirksMode::NoQuirks,
-        context.rule_type(),
-    ))
+    CssomDeclarationBlock(
+        parse_style_attribute(
+            css,
+            &url_data,
+            None,
+            selectors::matching::QuirksMode::NoQuirks,
+            context.rule_type(),
+        ),
+        context,
+    )
 }
 
 pub fn inline_style_get_property_value(block: &InlineStyleBlock, property: &str) -> Option<String> {
@@ -1328,7 +1334,8 @@ pub fn mutate_rule_declaration_block(
     if property.is_empty() {
         return None;
     }
-    let mut parsed = CssomDeclarationBlock(stylo_rule_declaration_block(block, context)?);
+    let mut parsed =
+        CssomDeclarationBlock(stylo_rule_declaration_block(block, context)?, context);
     let namespaces = stylo_namespaces(block.namespaces());
     let url_data = ABOUT_BLANK.clone().into();
     if value.is_empty() {
@@ -1630,7 +1637,8 @@ fn declaration_block_set_property_with_context(
             | None => {},
         }
     }
-    let Ok(id) = PropertyId::parse_enabled_for_all_content(property) else {
+    let context = declaration_parser_context(rule_type, url_data, namespaces);
+    let Ok(id) = PropertyId::parse(property, &context) else {
         return false;
     };
     if matches!(rule_type, CssRuleType::Style)
@@ -1641,7 +1649,6 @@ fn declaration_block_set_property_with_context(
         return false;
     }
     let mut decls = SourcePropertyDeclaration::default();
-    let context = declaration_parser_context(rule_type, url_data, namespaces);
     let mut input = ParserInput::new(value);
     if Parser::new(&mut input)
         .parse_entirely(|parser| PropertyDeclaration::parse_into(&mut decls, id, &context, parser))
@@ -1693,6 +1700,13 @@ pub fn cssom_declaration_remove_property(
     block: &mut CssomDeclarationBlock,
     property: &str,
 ) -> Option<String> {
+    if block.1 == CssomDeclarationContext::Page {
+        let namespaces = Namespaces::default();
+        let url_data = ABOUT_BLANK.clone().into();
+        let context = declaration_parser_context(block.1.rule_type(), &url_data, &namespaces);
+        let id = PropertyId::parse(property, &context).ok()?;
+        return declaration_block_remove_typed_property(&mut block.0, &id);
+    }
     declaration_block_remove_property(&mut block.0, property)
 }
 
@@ -1710,11 +1724,18 @@ fn declaration_block_remove_property(
         return old;
     }
     let id = stylo_serialized_property_id(property)?;
-    let first = block.first_declaration_to_remove(&id)?;
+    declaration_block_remove_typed_property(block, &id)
+}
+
+fn declaration_block_remove_typed_property(
+    block: &mut style::properties::declaration_block::PropertyDeclarationBlock,
+    id: &PropertyId,
+) -> Option<String> {
+    let first = block.first_declaration_to_remove(id)?;
     let mut out = String::new();
 
-    let had_value = block.property_value_to_css(&id, &mut out).is_ok() && !out.is_empty();
-    block.remove_property(&id, first);
+    let had_value = block.property_value_to_css(id, &mut out).is_ok() && !out.is_empty();
+    block.remove_property(id, first);
     if had_value { Some(out) } else { None }
 }
 

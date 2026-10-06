@@ -265,6 +265,21 @@ mod inline_compatibility_projection_tests {
     }
 
     #[test]
+    fn size_is_excluded_from_preferred_specified_serialization() {
+        for height in ["100px", "200px"] {
+            for priority in ["", " !important"] {
+                let expected = format!("width: 100px{priority}; height: {height}{priority};");
+                for source in [expected.clone(), format!("size:100px {height}{priority}")] {
+                    let declarations = crate::declaration_parser::parse_inline_style_declarations(
+                        &source, "about:blank".into(),
+                    );
+                    assert_eq!(serialize_specified_declarations(&declarations), expected, "{source}");
+                }
+            }
+        }
+    }
+
+    #[test]
     fn all_shorthand_serialisation_does_not_repeat_completeness_scans() {
         let declarations = crate::declaration_parser::parse_inline_style_property_declarations(
             "all",
@@ -761,12 +776,7 @@ pub fn serialize_specified_declarations(
         let shorthand = declaration
             .shorthand_source
             .map(stylo_cssom_model::SpecifiedShorthandSource::property)
-            .filter(|shorthand| {
-                !style::properties::PropertyId::parse_unchecked(shorthand.schema().name, None)
-                    .ok()
-                    .and_then(|property| property.as_shorthand().ok())
-                    .is_some_and(style::properties::ShorthandId::is_legacy_shorthand)
-            })
+            .filter(|shorthand| crate::declaration_parser::inline_shorthand_serializes(shorthand.schema()))
             .filter(|shorthand| !emitted_shorthands.contains(shorthand))
             .filter(|_| shorthand_completeness[index]);
         if declaration.shorthand_source.is_some() && shorthand.is_none() {
@@ -963,7 +973,7 @@ fn synthesised_independent_shorthands(
     let mut shorthands = Vec::new();
 
     for schema in stylo_cssom_model::STANDARD_PROPERTIES {
-        if schema.kind != stylo_cssom_model::PropertyKind::Shorthand
+        if !crate::declaration_parser::inline_shorthand_serializes(schema)
             || schema.shorthand_expansion.len() < 2
         {
             continue;
