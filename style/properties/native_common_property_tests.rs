@@ -38,6 +38,77 @@ fn assert_serialization(name: &str, input: &str, expected: Option<&str>) {
 }
 
 #[test]
+fn sizing_shorthands_expand_both_axes_and_css_wide_values() {
+    for prefix in ["", "min-", "max-"] {
+        let name = format!("{prefix}size");
+        for (input, width, height) in [
+            ("100px", "100px", "100px"),
+            ("100px 200px", "100px", "200px"),
+            ("20% min-content", "20%", "min-content"),
+            (
+                "fit-content(40px)",
+                "fit-content(40px)",
+                "fit-content(40px)",
+            ),
+            ("initial", "initial", "initial"),
+            ("inherit", "inherit", "inherit"),
+            ("unset", "unset", "unset"),
+            ("revert", "revert", "revert"),
+            ("revert-layer", "revert-layer", "revert-layer"),
+        ] {
+            let declarations = block(&format!("{name}:{input}"));
+            for (axis, expected) in [("width", width), ("height", height)] {
+                assert_eq!(
+                    serialized_value(&declarations, &format!("{prefix}{axis}")),
+                    expected,
+                    "{name}:{input}"
+                );
+            }
+        }
+        for invalid in ["10px 20px 30px", "-1px", "initial auto", "portrait", "A4"] {
+            assert!(
+                block(&format!("{name}:{invalid}")).is_empty(),
+                "{name}:{invalid}"
+            );
+        }
+    }
+}
+
+#[test]
+fn size_property_does_not_expand_in_page_rules() {
+    let url: UrlExtraData = url::Url::parse("https://example.test/style.css")
+        .unwrap()
+        .into();
+    let declarations = parse_style_attribute(
+        "size:100px 200px",
+        &url,
+        None,
+        selectors::matching::QuirksMode::NoQuirks,
+        CssRuleType::Page,
+    );
+    assert_eq!(declarations.len(), 1);
+    let mut size = String::new();
+    declarations
+        .property_value_to_css(
+            &PropertyId::NonCustom(super::LonghandId::Size.into()),
+            &mut size,
+        )
+        .unwrap();
+    assert_eq!(size, "100px 200px");
+    assert_eq!(serialized_value(&declarations, "width"), "");
+    assert_eq!(serialized_value(&declarations, "height"), "");
+}
+
+#[test]
+fn size_is_not_a_preferred_serialization_shorthand() {
+    let declarations = block("width:100px;height:100px");
+    let mut css = String::new();
+    declarations.to_css(&mut css).unwrap();
+    assert_eq!(css, "width: 100px; height: 100px;");
+    assert_eq!(serialized_value(&declarations, "size"), "100px");
+}
+
+#[test]
 fn anchor_center_applies_to_self_alignment_only() {
     let _lock = crate::test_support::pref_lock().lock().unwrap();
     let _pref =

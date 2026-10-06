@@ -247,7 +247,10 @@ impl NonCustomPropertyId {
                         .expect("property identifiers fit their u16 representation"),
                 )
             })
-            .filter(|id| id.enabled_for_all_content())
+            .filter(|id| {
+                id.enabled_for_all_content()
+                    && PropertyId::parse_unchecked(id.name(), None) == Ok(id.to_property_id())
+            })
     }
 
     /// Returns the underlying index, used for use counter.
@@ -437,6 +440,12 @@ impl PropertyId {
     #[inline]
     pub fn parse(name: &str, context: &ParserContext) -> Result<Self, ()> {
         let id = Self::parse_unchecked(name, context.use_counters)?;
+        #[cfg(feature = "servo")]
+        let id = if context.in_page_rule() && name.eq_ignore_ascii_case("size") {
+            Self::NonCustom(LonghandId::Size.into())
+        } else {
+            id
+        };
         if !id.allowed_in(context) {
             return Err(());
         }
@@ -744,6 +753,18 @@ impl ShorthandId {
         }
 
         None
+    }
+
+    /// Whether declaration-block serialization may prefer this shorthand.
+    pub fn is_preferred_serialization_shorthand(self) -> bool {
+        if self.is_legacy_shorthand() {
+            return false;
+        }
+        #[cfg(feature = "servo")]
+        if self == Self::Size {
+            return false;
+        }
+        true
     }
 
     /// Returns whether this property is a legacy shorthand.

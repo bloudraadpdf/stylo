@@ -1902,6 +1902,14 @@ rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
+[frame-sizing]
+struct = "box"
+spec = "https://drafts.csswg.org/css-sizing-4/#propdef-frame-sizing"
+animation_type = "discrete"
+affects = "layout"
+servo_restyle_damage = "rebuild_box"
+keyword = { values = ["auto", "content-width", "content-height", "content-block-size", "content-inline-size"] }
+
 # CSS Sizing 4 §5.4 — modulates the box's intrinsic-size
 # contribution to its containing block when the box has scrollable
 # overflow or its size is extrinsic.

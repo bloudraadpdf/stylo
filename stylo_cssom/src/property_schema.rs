@@ -4,7 +4,7 @@ use stylo_cssom_model::PropertySchemaRow;
 pub fn property_schema_for_id(property: &PropertyId) -> Option<&'static PropertySchemaRow> {
     match property {
         PropertyId::NonCustom(property) => {
-            stylo_cssom_model::property_schema(property.unaliased().name())
+            stylo_cssom_model::STANDARD_PROPERTIES.get(property.unaliased().bit())
         },
         PropertyId::Custom(_) => None,
     }
@@ -46,9 +46,15 @@ fn native_properties_resolve_their_matching_schema() {
         STANDARD_PROPERTIES.len(),
         property_counts::LONGHANDS_AND_SHORTHANDS + 2
     );
-    for row in &STANDARD_PROPERTIES[..property_counts::LONGHANDS_AND_SHORTHANDS] {
-        let property =
-            PropertyId::parse_unchecked_for_testing(row.name).expect("native property ID");
+    let native = style::properties::LonghandId::ALL
+        .iter()
+        .map(|id| PropertyId::NonCustom((*id).into()))
+        .chain(
+            style::properties::ShorthandId::ALL
+                .iter()
+                .map(|id| PropertyId::NonCustom((*id).into())),
+        );
+    for (row, property) in STANDARD_PROPERTIES.iter().zip(native) {
         let resolved = property_schema_for_id(&property).expect("native property has a schema");
         assert_eq!(resolved.name, row.name);
         assert_eq!(resolved.id, row.id);

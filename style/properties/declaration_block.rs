@@ -1184,7 +1184,7 @@ impl PropertyDeclarationBlock {
                 }
                 already_serialized.insert(shorthand.into());
 
-                if shorthand.is_legacy_shorthand() {
+                if !shorthand.is_preferred_serialization_shorthand() {
                     continue;
                 }
 

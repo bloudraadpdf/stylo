@@ -883,3 +883,22 @@ engine = "gecko"
 sub_properties = ["-webkit-text-stroke-width", "-webkit-text-stroke-color"]
 spec = "https://compat.spec.whatwg.org/#the-webkit-text-stroke"
 derive_serialize = true
+
+[size]
+engine = "servo"
+sub_properties = ["width", "height"]
+kind = "two_properties"
+rule_types_allowed = ["style", "keyframe", "scope", "position-try"]
+spec = "https://drafts.csswg.org/css-sizing-4/#propdef-size"
+
+[min-size]
+engine = "servo"
+sub_properties = ["min-width", "min-height"]
+kind = "two_properties"
+spec = "https://drafts.csswg.org/css-sizing-4/#propdef-min-size"
+
+[max-size]
+engine = "servo"
+sub_properties = ["max-width", "max-height"]
+kind = "two_properties"
+spec = "https://drafts.csswg.org/css-sizing-4/#propdef-max-size"

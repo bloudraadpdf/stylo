@@ -109,6 +109,7 @@ pub struct StandardPropertyId(u16);
 pub enum PropertyKind {
     Longhand,
     Shorthand,
+    PageDescriptor,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -365,6 +366,7 @@ pub fn property_schema(name: &str) -> Option<&'static PropertySchemaRow> {
         LazyLock::new(|| {
             STANDARD_PROPERTIES
                 .iter()
+                .filter(|row| row.kind != PropertyKind::PageDescriptor)
                 .map(|row| (row.name, row))
                 .collect()
         });
@@ -3176,14 +3178,20 @@ mod tests {
     }
 
     #[test]
-    fn schema_names_are_unique_and_opacity_is_typed() {
+    fn schema_names_are_unique_per_domain_and_opacity_is_typed() {
         for (index, row) in STANDARD_PROPERTIES.iter().enumerate() {
             assert_eq!(row.id.index(), index);
-            assert_eq!(property_schema(row.name), Some(row));
+            if row.kind != super::PropertyKind::PageDescriptor {
+                assert_eq!(property_schema(row.name), Some(row));
+            }
             assert_eq!(
                 STANDARD_PROPERTIES
                     .iter()
-                    .filter(|candidate| candidate.name == row.name)
+                    .filter(|candidate| {
+                        candidate.name == row.name
+                            && (candidate.kind == super::PropertyKind::PageDescriptor)
+                                == (row.kind == super::PropertyKind::PageDescriptor)
+                    })
                     .count(),
                 1
             );
