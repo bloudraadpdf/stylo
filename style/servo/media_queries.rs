@@ -104,6 +104,12 @@ pub struct Device {
     /// for free — correct for continuous media, where the two
     /// coincide.
     page_box_size: Size2D<f32, CSSPixel>,
+    /// The page box that the page-relative length units
+    /// (`-bd-p{w,h,i,b,min,max}`) resolve against, in CSS pixels: the
+    /// first page with its margins. Media queries keep `page_box_size`,
+    /// the paper size that no `@page` rule chooses (css-page-3 §7.1).
+    /// Initialised to the same dimensions as `viewport_size`.
+    page_unit_box_size: Size2D<f32, CSSPixel>,
     /// The current device pixel ratio, from CSS pixels to device pixels.
     device_pixel_ratio: Scale<f32, CSSPixel, DevicePixel>,
     /// The current quirks mode.
@@ -181,6 +187,7 @@ impl Device {
             device_size: viewport_size,
             bleed_box_size: viewport_size,
             page_box_size: viewport_size,
+            page_unit_box_size: viewport_size,
             device_pixel_ratio,
             quirks_mode,
             root_style,
@@ -437,6 +444,18 @@ impl Device {
         self.page_box_size = page_box_size;
     }
 
+    /// Get the page box of the page-relative length units on this [`Device`].
+    pub fn page_unit_box_size(&self) -> Size2D<f32, CSSPixel> {
+        self.page_unit_box_size
+    }
+
+    /// Set the page box of the page-relative length units on this
+    /// [`Device`]. Like `set_viewport_size`, this does not update any
+    /// associated `Stylist`.
+    pub fn set_page_unit_box_size(&mut self, page_unit_box_size: Size2D<f32, CSSPixel>) {
+        self.page_unit_box_size = page_unit_box_size;
+    }
+
     /// Returns the viewport size of the current device in app units, needed,
     /// among other things, to resolve viewport units.
     #[inline]
@@ -458,13 +477,14 @@ impl Device {
         self.au_viewport_size()
     }
 
-    /// Returns the configured full page-box size in app units, recording that
-    /// a page-relative unit participated in computed-value resolution.
+    /// Returns the page box of the page-relative length units in app units,
+    /// recording that a page-relative unit participated in computed-value
+    /// resolution.
     pub fn au_page_box_size_for_resolution(&self) -> UntypedSize2D<Au> {
         self.used_viewport_units.store(true, Ordering::Relaxed);
         Size2D::new(
-            Au::from_f32_px(self.page_box_size.width),
-            Au::from_f32_px(self.page_box_size.height),
+            Au::from_f32_px(self.page_unit_box_size.width),
+            Au::from_f32_px(self.page_unit_box_size.height),
         )
     }
 
