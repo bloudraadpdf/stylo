@@ -3609,7 +3609,10 @@ mod tests {
         let mut stylist = test_stylist();
         stylist
             .device_mut()
-            .set_page_box_size(Size2D::<f32, CSSPixel>::new(200.0, 300.0));
+            .set_page_box_size(Size2D::<f32, CSSPixel>::new(100.0, 100.0));
+        stylist
+            .device_mut()
+            .set_page_unit_box_size(Size2D::<f32, CSSPixel>::new(200.0, 300.0));
         stylist
             .device_mut()
             .set_bleed_box_size(Size2D::<f32, CSSPixel>::new(240.0, 360.0));
