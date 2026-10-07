@@ -2351,12 +2351,15 @@ fn canonical_page_declaration_block(authored_body: &str) -> CanonicalCssDeclarat
             continue;
         }
         let page = crate::declaration_parser::parse_cssom_declaration_block(declaration, context);
-        crate::declaration_parser::cssom_declaration_merge(&mut block, &page);
-        let style = crate::declaration_parser::parse_cssom_declaration_block(
-            declaration,
-            crate::declaration_parser::CssomDeclarationContext::Margin,
-        );
-        crate::declaration_parser::cssom_declaration_merge(&mut block, &style);
+        let accepted = if page.as_typed().is_empty() {
+            crate::declaration_parser::parse_cssom_declaration_block(
+                declaration,
+                crate::declaration_parser::CssomDeclarationContext::Margin,
+            )
+        } else {
+            page
+        };
+        crate::declaration_parser::cssom_declaration_merge(&mut block, &accepted);
     }
     let _ = crate::declaration_parser::cssom_declaration_remove_property(
         &mut block,
