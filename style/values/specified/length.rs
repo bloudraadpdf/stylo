@@ -874,18 +874,19 @@ impl AbsoluteLength {
         }
     }
 
-    /// Convert this into a pixel value.
+    /// Convert this into a pixel value, from the number of units in an inch, rounded once.
     #[inline]
     pub fn to_px(&self) -> CSSFloat {
-        match *self {
-            Self::Px(value) => value,
-            Self::In(value) => value * PX_PER_IN,
-            Self::Cm(value) => value * PX_PER_CM,
-            Self::Mm(value) => value * PX_PER_MM,
-            Self::Q(value) => value * PX_PER_Q,
-            Self::Pt(value) => value * PX_PER_PT,
-            Self::Pc(value) => value * PX_PER_PC,
-        }
+        let (value, units_per_in) = match *self {
+            Self::Px(value) => return value,
+            Self::In(value) => (value, 1.),
+            Self::Cm(value) => (value, 2.54),
+            Self::Mm(value) => (value, 25.4),
+            Self::Q(value) => (value, 101.6),
+            Self::Pt(value) => (value, 72.),
+            Self::Pc(value) => (value, 6.),
+        };
+        (f64::from(value) * f64::from(PX_PER_IN) / units_per_in) as CSSFloat
     }
 
     fn try_op<O>(&self, other: &Self, op: O) -> Result<Self, ()>
@@ -2887,5 +2888,19 @@ mod calc_size_tests {
         assert!(parser
             .parse_entirely(|input| NonNegativeLengthPercentage::parse(&context(), input))
             .is_err());
+    }
+}
+
+#[cfg(test)]
+mod absolute_length_tests {
+    use super::AbsoluteLength;
+
+    /// CSS Values 4 §6.2: 1in = 2.54cm = 72pt = 96px. Each length converts to the f32 nearest its exact pixel
+    /// length: 400/3, 200/3 and 14400/127.
+    #[test]
+    fn an_absolute_length_converts_to_the_nearest_pixel_length() {
+        assert_eq!(AbsoluteLength::Pt(100.).to_px(), 133.333_33);
+        assert_eq!(AbsoluteLength::Pt(50.).to_px(), 66.666_664);
+        assert_eq!(AbsoluteLength::Cm(3.).to_px(), 113.385_826);
     }
 }
