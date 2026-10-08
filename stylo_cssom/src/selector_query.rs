@@ -1,4 +1,4 @@
-use selectors::{SelectorList, parser::ParseRelative};
+use selectors::{parser::ParseRelative, SelectorList};
 use style::{
     selector_parser::{PseudoElement, SelectorImpl, SelectorParser},
     stylesheets::{Namespaces, Origin, UrlExtraData},
@@ -137,6 +137,58 @@ pub fn selector_targets_pseudo_element(source: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{parse_dom_selector, selector_targets_pseudo_element};
+
+    #[test]
+    fn scroll_button_arguments_and_states_follow_the_selector_grammar() {
+        for direction in [
+            "up",
+            "down",
+            "left",
+            "right",
+            "block-start",
+            "block-end",
+            "inline-start",
+            "inline-end",
+            "prev",
+            "next",
+            "*",
+        ] {
+            for state in ["", ":focus", ":enabled", ":disabled"] {
+                let source = format!(
+                    "::scroll-button( {} ){state}",
+                    direction.to_ascii_uppercase()
+                );
+                assert_eq!(
+                    super::selector_serializations(&source),
+                    [format!("::scroll-button({direction}){state}")],
+                    "{source}"
+                );
+            }
+            let source = format!("::scroll-button({direction})");
+            assert!(
+                super::parse_cssom_pseudo_element(&source).is_ok(),
+                "{source}"
+            );
+        }
+        for source in [
+            "::scroll-button",
+            "::scroll-button()",
+            "::scroll-button(north)",
+            "::scroll-button(up down)",
+            "::scroll-button(up,down)",
+            "::scroll-button(1)",
+            "::scroll-button(\"up\")",
+            "::scroll-button(up):checked",
+            "::before::scroll-button(up)",
+            "::before:enabled",
+            "::scroll-marker:disabled",
+        ] {
+            assert!(
+                super::selector_serializations(source).is_empty(),
+                "{source}"
+            );
+        }
+    }
 
     #[test]
     fn cssom_pseudos_retain_names_and_require_double_colons() {

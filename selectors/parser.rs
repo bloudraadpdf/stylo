@@ -42,6 +42,11 @@ pub trait PseudoElement: Sized + ToCss {
         false
     }
 
+    /// Whether `:enabled` and `:disabled` can follow this pseudo-element.
+    fn accepts_enabled_disabled_pseudo_classes(&self) -> bool {
+        false
+    }
+
     /// Whether this pseudo-element is valid after a ::slotted(..) pseudo.
     fn valid_after_slotted(&self) -> bool {
         false
@@ -90,6 +95,11 @@ pub trait NonTSPseudoClass: Sized + ToCss {
     ///
     /// https://drafts.csswg.org/selectors-4/#useraction-pseudos
     fn is_user_action_state(&self) -> bool;
+
+    /// Whether this pseudo-class is `:enabled` or `:disabled`.
+    fn is_enabled_or_disabled(&self) -> bool {
+        false
+    }
 
     fn visit<V>(&self, _visitor: &mut V) -> bool
     where
@@ -161,6 +171,9 @@ bitflags! {
         /// Whether we've parsed a pseudo-element which is in a pseudo-element tree (i.e. it is a
         /// descendant pseudo of a pseudo-element root).
         const IN_PSEUDO_ELEMENT_TREE = 1 << 9;
+
+        /// The pseudo-element permits `:enabled` and `:disabled` after it.
+        const AFTER_ENABLEABLE_PSEUDO = 1 << 10;
     }
 }
 
@@ -3410,6 +3423,10 @@ where
                         state.insert(SelectorParsingState::AFTER_BEFORE_OR_AFTER_PSEUDO);
                     }
                 }
+                state.set(
+                    SelectorParsingState::AFTER_ENABLEABLE_PSEUDO,
+                    p.accepts_enabled_disabled_pseudo_classes(),
+                );
                 if !p.accepts_state_pseudo_classes() {
                     state.insert(SelectorParsingState::AFTER_NON_STATEFUL_PSEUDO_ELEMENT);
                 }
@@ -3790,6 +3807,8 @@ where
     let pseudo_class = P::parse_non_ts_pseudo_class(parser, location, name)?;
     if state.intersects(SelectorParsingState::AFTER_NON_ELEMENT_BACKED_PSEUDO)
         && !pseudo_class.is_user_action_state()
+        && !(state.intersects(SelectorParsingState::AFTER_ENABLEABLE_PSEUDO)
+            && pseudo_class.is_enabled_or_disabled())
     {
         return Err(location.new_custom_error(SelectorParseErrorKind::InvalidState));
     }

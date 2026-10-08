@@ -28,6 +28,35 @@ use std::fmt;
 use std::ops::{Deref, DerefMut};
 use style_traits::{CssWriter, ParseError, StyleParseErrorKind};
 
+/// A direction argument of `::scroll-button()` (CSS Overflow 5).
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    Hash,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    Serialize,
+    ToCss,
+    ToShmem,
+)]
+#[allow(missing_docs)]
+pub enum ScrollButtonDirection {
+    Up,
+    Down,
+    Left,
+    Right,
+    BlockStart,
+    BlockEnd,
+    InlineStart,
+    InlineEnd,
+    Prev,
+    Next,
+}
+
 /// A pseudo-element, both public and private.
 ///
 /// NB: If you add to this list, be sure to update `each_simple_pseudo_element` too.
@@ -65,6 +94,7 @@ pub enum PseudoElement {
     Marker,
     ScrollMarkerGroup,
     ScrollMarker,
+    ScrollButton(Option<ScrollButtonDirection>),
     FootnoteCall,
     FootnoteMarker,
     // moegoe Family 13: PDFreactor break + footnote-area pseudos.
@@ -147,6 +177,16 @@ impl ToCss for PseudoElement {
             Marker => "::marker",
             ScrollMarkerGroup => "::scroll-marker-group",
             ScrollMarker => "::scroll-marker",
+            ScrollButton(direction) => {
+                dest.write_str("::scroll-button(")?;
+                match direction {
+                    Some(direction) => {
+                        style_traits::ToCss::to_css(&direction, &mut CssWriter::new(dest))?
+                    },
+                    None => dest.write_str("*")?,
+                }
+                return dest.write_str(")");
+            },
             FootnoteCall => "::footnote-call",
             FootnoteMarker => "::footnote-marker",
             BdBeforeBreak => "::-bd-before-break",
@@ -175,7 +215,11 @@ impl ::selectors::parser::PseudoElement for PseudoElement {
     type Impl = SelectorImpl;
 
     fn accepts_state_pseudo_classes(&self) -> bool {
-        matches!(self, Self::ScrollMarker)
+        matches!(self, Self::ScrollMarker | Self::ScrollButton(_))
+    }
+
+    fn accepts_enabled_disabled_pseudo_classes(&self) -> bool {
+        matches!(self, Self::ScrollButton(_))
     }
 
     fn valid_after_slotted(&self) -> bool {
@@ -234,26 +278,27 @@ impl PseudoElement {
             Self::Marker => 17,
             Self::ScrollMarkerGroup => 18,
             Self::ScrollMarker => 19,
-            Self::FootnoteCall => 20,
-            Self::FootnoteMarker => 21,
-            Self::BdBeforeBreak => 22,
-            Self::BdAfterBreak => 23,
-            Self::BdFootnoteArea => 24,
-            Self::BdSidenoteCall => 25,
-            Self::BdSidenoteMarker => 26,
-            Self::ColorSwatch => 27,
-            Self::Placeholder => 28,
-            Self::FileSelectorButton => 29,
-            Self::Checkmark => 30,
-            Self::PickerSelect => 31,
-            Self::ServoTextControlInnerContainer => 32,
-            Self::ServoTextControlInnerEditor => 33,
-            Self::ServoAnonymousBox => 34,
-            Self::ServoAnonymousTable => 35,
-            Self::ServoAnonymousTableCell => 36,
-            Self::ServoAnonymousTableRow => 37,
-            Self::ServoTableGrid => 38,
-            Self::ServoTableWrapper => 39,
+            Self::ScrollButton(_) => 20,
+            Self::FootnoteCall => 21,
+            Self::FootnoteMarker => 22,
+            Self::BdBeforeBreak => 23,
+            Self::BdAfterBreak => 24,
+            Self::BdFootnoteArea => 25,
+            Self::BdSidenoteCall => 26,
+            Self::BdSidenoteMarker => 27,
+            Self::ColorSwatch => 28,
+            Self::Placeholder => 29,
+            Self::FileSelectorButton => 30,
+            Self::Checkmark => 31,
+            Self::PickerSelect => 32,
+            Self::ServoTextControlInnerContainer => 33,
+            Self::ServoTextControlInnerEditor => 34,
+            Self::ServoAnonymousBox => 35,
+            Self::ServoAnonymousTable => 36,
+            Self::ServoAnonymousTableCell => 37,
+            Self::ServoAnonymousTableRow => 38,
+            Self::ServoTableGrid => 39,
+            Self::ServoTableWrapper => 40,
         }
     }
 
@@ -392,6 +437,7 @@ impl PseudoElement {
             | PseudoElement::Marker
             | PseudoElement::ScrollMarkerGroup
             | PseudoElement::ScrollMarker
+            | PseudoElement::ScrollButton(_)
             | PseudoElement::FootnoteCall
             | PseudoElement::FootnoteMarker
             | PseudoElement::BdBeforeBreak
@@ -568,6 +614,10 @@ impl ::selectors::parser::NonTSPseudoClass for NonTSPseudoClass {
                 | NonTSPseudoClass::TargetBefore
                 | NonTSPseudoClass::TargetCurrent
         )
+    }
+
+    fn is_enabled_or_disabled(&self) -> bool {
+        matches!(self, Self::Enabled | Self::Disabled)
     }
 
     fn visit<V>(&self, _: &mut V) -> bool
@@ -1005,6 +1055,14 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
         name: CowRcStr<'i>,
         parser: &mut CssParser<'i, 't>,
     ) -> Result<PseudoElement, ParseError<'i>> {
+        if name.eq_ignore_ascii_case("scroll-button") {
+            let direction = if parser.try_parse(|input| input.expect_delim('*')).is_ok() {
+                None
+            } else {
+                Some(ScrollButtonDirection::parse(parser)?)
+            };
+            return Ok(PseudoElement::ScrollButton(direction));
+        }
         if name.eq_ignore_ascii_case("picker") {
             parser.expect_ident_matching("select")?;
             while !parser.is_exhausted() {
