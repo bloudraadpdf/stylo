@@ -4609,6 +4609,14 @@ spec = "Nonstandard (moegoe -bd-* fork extension; F31 linebreak-magic)"
 animation_type = "none"
 affects = "layout"
 
+[-bd-justify-shrink]
+type = "NonNegativePercentage"
+initial = "computed::NonNegativePercentage::zero()"
+struct = "inherited_text"
+spec = "Nonstandard (moegoe -bd-* fork extension; justification shrink of word separators)"
+animation_type = "none"
+affects = "layout"
+
 # moegoe Family 26 — AcroForm widget field flags / maxlength /
 # signature longhands. Per-element; not inherited; consumed by the
 # form-widget conversion arm in `moegoe-css`. See

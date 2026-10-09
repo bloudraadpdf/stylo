@@ -3275,6 +3275,9 @@ mod tests {
             PropertyDeclaration::BdInitialZoom(value) => {
                 PropertyDeclaration::BdInitialZoom(value.clone())
             },
+            PropertyDeclaration::BdJustifyShrink(value) => {
+                PropertyDeclaration::BdJustifyShrink(value.clone())
+            },
             PropertyDeclaration::BdKeepWithPrevious(value) => {
                 PropertyDeclaration::BdKeepWithPrevious(value.clone())
             },
