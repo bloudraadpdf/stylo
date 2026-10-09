@@ -4530,6 +4530,56 @@ mod tests {
             "all",
         );
     }
+
+    #[test]
+    fn bd_justify_shrink_accepts_nonnegative_percentages_and_inherits() {
+        for value in ["0%", "16.6667%"] {
+            assert_bd_roundtrip(
+                &format!("p {{ -bd-justify-shrink: {value}; }}"),
+                "-bd-justify-shrink",
+                value,
+            );
+        }
+        assert_parsed_declaration_count("p { -bd-justify-shrink: -1%; }", 0);
+
+        let stylist = test_stylist();
+        let shrink =
+            inspect_style_declaration_block("p { -bd-justify-shrink: 16.6667%; }", |block| {
+                let (PropertyDeclaration::BdJustifyShrink(value), _) = block
+                    .declaration_importance_iter()
+                    .next()
+                    .expect("the declaration parses")
+                else {
+                    panic!("expected a typed justification shrink")
+                };
+                crate::values::computed::Context::for_media_query_evaluation(
+                    stylist.device(),
+                    QuirksMode::NoQuirks,
+                    |context| value.to_computed_value(context),
+                )
+            });
+        let mut parent =
+            StyleBuilder::for_inheritance(stylist.device(), Some(&stylist), None, None);
+        assert_eq!(
+            parent
+                .get_inherited_text()
+                .clone__bd_justify_shrink()
+                .to_css_string(),
+            "0%"
+        );
+        parent.set__bd_justify_shrink(shrink);
+        let parent = parent.build();
+        let child =
+            StyleBuilder::for_inheritance(stylist.device(), Some(&stylist), Some(&parent), None)
+                .build();
+        assert_eq!(
+            child
+                .get_inherited_text()
+                .clone__bd_justify_shrink()
+                .to_css_string(),
+            "16.6667%"
+        );
+    }
     /// moegoe F24 — all 12 PDFreactor-compatible proprietary length
     /// units (page-relative and bleed-relative) must parse and
     /// survive into the property block.
