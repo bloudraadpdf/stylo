@@ -1,6 +1,7 @@
 pub const CUSTOM_HIGHLIGHT_ATTRIBUTE: &str = "data-moegoe-custom-highlight";
 pub const CUSTOM_HIGHLIGHT_ELEMENT: &str = "moegoe-highlight";
 pub const SELECTION_ATTRIBUTE: &str = "data-moegoe-selection";
+pub const TARGET_TEXT_ATTRIBUTE: &str = "data-moegoe-target-text";
 
 use stylo_cssom_model::InternalStylesheetRoot;
 
@@ -17,7 +18,10 @@ pub fn project_custom_highlight_root(root: &InternalStylesheetRoot) -> InternalS
 
 pub fn project_highlight_selectors(css: &str) -> String {
     const PSEUDO: &[u8] = b"::highlight(";
-    const SELECTION: &[u8] = b"::selection";
+    const SIMPLE_HIGHLIGHTS: &[(&[u8], &str)] = &[
+        (b"::selection", SELECTION_ATTRIBUTE),
+        (b"::target-text", TARGET_TEXT_ATTRIBUTE),
+    ];
 
     let bytes = css.as_bytes();
     let mut output = String::with_capacity(css.len());
@@ -78,19 +82,22 @@ pub fn project_highlight_selectors(css: &str) -> String {
                 continue;
             }
         }
-        if bytes
-            .get(index..index.saturating_add(SELECTION.len()))
-            .is_some_and(|candidate| candidate.eq_ignore_ascii_case(SELECTION))
-            && bytes
-                .get(index.saturating_add(SELECTION.len()))
-                .is_none_or(|byte| !byte.is_ascii_alphanumeric() && !matches!(byte, b'-' | b'_'))
-        {
+        if let Some((pseudo, attribute)) = SIMPLE_HIGHLIGHTS.iter().find(|(pseudo, _)| {
+            bytes
+                .get(index..index.saturating_add(pseudo.len()))
+                .is_some_and(|candidate| candidate.eq_ignore_ascii_case(pseudo))
+                && bytes
+                    .get(index.saturating_add(pseudo.len()))
+                    .is_none_or(|byte| {
+                        !byte.is_ascii_alphanumeric() && !matches!(byte, b'-' | b'_')
+                    })
+        }) {
             push_projected_selector_origin(&mut output);
             output.push_str(CUSTOM_HIGHLIGHT_ELEMENT);
             output.push_str(":where([");
-            output.push_str(SELECTION_ATTRIBUTE);
+            output.push_str(attribute);
             output.push_str("])");
-            index += SELECTION.len();
+            index += pseudo.len();
             continue;
         }
         copy_next_char(css, &mut output, &mut index);
@@ -176,6 +183,22 @@ fn push_css_string(output: &mut String, value: &str) {
 #[cfg(test)]
 mod tests {
     use super::{project_custom_highlight_root, project_highlight_selectors};
+
+    #[test]
+    fn target_text_projection_retains_origin_and_selector_lists() {
+        assert_eq!(
+            project_highlight_selectors("p::TARGET-TEXT, .marked { color: lime }"),
+            "p moegoe-highlight:where([data-moegoe-target-text]), .marked { color: lime }"
+        );
+        assert_eq!(
+            project_highlight_selectors("::target-textual { color: red }"),
+            "::target-textual { color: red }"
+        );
+        assert_eq!(
+            project_highlight_selectors("p::target-text { content: '::target-text' }"),
+            "p moegoe-highlight:where([data-moegoe-target-text]) { content: '::target-text' }"
+        );
+    }
 
     #[test]
     fn highlight_selectors_target_render_projection_segments() {
