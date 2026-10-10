@@ -126,7 +126,7 @@ fn native_declarations(
         RuleDeclarationDomain::Keyframe => CssomDeclarationContext::Keyframe,
         RuleDeclarationDomain::Page => CssomDeclarationContext::Page,
         RuleDeclarationDomain::Margin => CssomDeclarationContext::Margin,
-        RuleDeclarationDomain::FontFaceDescriptor => {
+        RuleDeclarationDomain::FontFaceDescriptor | RuleDeclarationDomain::FunctionDescriptors => {
             return Err(DeclarationLoweringError::DeclarationContext);
         },
     };
@@ -247,6 +247,7 @@ fn lower_rule_list(
         wants_first_declaration_block: false,
         first_declaration_block: Default::default(),
         declaration_parser_state: Default::default(),
+        function_declarations: None,
         error_reporting_state: Default::default(),
         rules: Vec::new(),
     };

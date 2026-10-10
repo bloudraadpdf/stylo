@@ -30,6 +30,7 @@ use crate::stylist::Stylist;
 use crate::values::computed::{self, ToComputedValue};
 use crate::values::generics::calc::SortKey as AttrUnit;
 use crate::values::specified::{AttrName, FontRelativeLength};
+use crate::values::DashedIdent;
 use cssparser::{
     CowRcStr, Delimiter, Parser, ParserInput, SourcePosition, Token, TokenSerializationType,
 };
@@ -625,13 +626,27 @@ enum SubstitutionFunction {
         name: AttrName,
         syntax: AttributeType,
     },
+    /// <https://drafts.csswg.org/css-mixins-1/#typedef-dashed-function>
+    Function {
+        name: DashedIdent,
+        arguments: Box<[FunctionArgument]>,
+    },
+}
+
+/// One `<dashed-function>` argument, without its `{}` wrapper.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
+struct FunctionArgument {
+    start: usize,
+    end: usize,
+    first_token_type: TokenSerializationType,
+    last_token_type: TokenSerializationType,
 }
 
 impl SubstitutionFunction {
     fn variable_name(&self) -> Option<&Name> {
         match self {
             Self::Var(name) => Some(name),
-            Self::Env(_) | Self::Attr { .. } => None,
+            Self::Env(_) | Self::Attr { .. } | Self::Function { .. } => None,
         }
     }
 
@@ -669,6 +684,7 @@ struct References {
     any_env: bool,
     any_var: bool,
     any_attr: bool,
+    any_function: bool,
 }
 
 impl References {
@@ -880,6 +896,11 @@ impl VariableValue {
     pub fn has_references(&self) -> bool {
         self.references.has_references()
     }
+
+    /// Returns whether this value calls a custom function.
+    pub fn has_dashed_functions(&self) -> bool {
+        self.references.any_function
+    }
 }
 
 /// <https://drafts.csswg.org/css-syntax-3/#typedef-declaration-value>
@@ -980,6 +1001,47 @@ fn parse_declaration_value_block<'i, 't>(
             Token::CloseCurlyBracket => {
                 let e = StyleParseErrorKind::UnbalancedCloseCurlyBracketInDeclarationValueBlock;
                 return Err(input.new_custom_error(e));
+            },
+            Token::Function(ref name) if name.starts_with("--") => {
+                let our_ref_index = references.refs.len();
+                let start = token_start.byte_index() - input_start.byte_index();
+                references.refs.push(SubstitutionFunctionReference {
+                    function: SubstitutionFunction::Function {
+                        name: DashedIdent(Atom::from(name.as_ref())),
+                        arguments: Box::default(),
+                    },
+                    start,
+                    end: start,
+                    prev_token_type,
+                    next_token_type: TokenSerializationType::Nothing,
+                    fallback: None,
+                });
+                let mut input_end_position = None;
+                let parsed_arguments = input.parse_nested_block(|input| {
+                    let arguments = parse_function_arguments(
+                        input,
+                        input_start,
+                        namespaces,
+                        references,
+                        missing_closing_characters,
+                    )?;
+                    input_end_position = Some(input.position());
+                    Ok(arguments)
+                })?;
+                if input_end_position.unwrap() == input.position() {
+                    missing_closing_characters.push_str(")");
+                }
+                prev_reference_index = Some(our_ref_index);
+                let reference = &mut references.refs[our_ref_index];
+                reference.end = input.position().byte_index() - input_start.byte_index()
+                    + missing_closing_characters.len();
+                if let SubstitutionFunction::Function {
+                    ref mut arguments, ..
+                } = reference.function
+                {
+                    *arguments = parsed_arguments;
+                }
+                references.any_function = true;
             },
             Token::Function(ref name) => {
                 let substitution_kind = match SubstitutionFunctionKind::from_ident(name).ok() {
@@ -1137,6 +1199,135 @@ fn parse_declaration_value_block<'i, 't>(
         };
     }
     Ok((first_token_type, last_token_type))
+}
+
+/// Parse `<declaration-value>#?`, the arguments of a `<dashed-function>`.
+/// <https://drafts.csswg.org/css-values-5/#component-function-commas>
+fn parse_function_arguments<'i, 't>(
+    input: &mut Parser<'i, 't>,
+    input_start: SourcePosition,
+    namespaces: &Namespaces,
+    references: &mut References,
+    missing_closing_characters: &mut String,
+) -> Result<Box<[FunctionArgument]>, ParseError<'i>> {
+    input.skip_whitespace();
+    if input.is_exhausted() {
+        return Ok(Box::default());
+    }
+    let mut arguments = vec![];
+    loop {
+        arguments.push(input.parse_until_before(Delimiter::Comma, |input| {
+            parse_function_argument(
+                input,
+                input_start,
+                namespaces,
+                references,
+                missing_closing_characters,
+            )
+        })?);
+        if input.next().is_err() {
+            return Ok(arguments.into_boxed_slice());
+        }
+    }
+}
+
+fn parse_function_argument<'i, 't>(
+    input: &mut Parser<'i, 't>,
+    input_start: SourcePosition,
+    namespaces: &Namespaces,
+    references: &mut References,
+    missing_closing_characters: &mut String,
+) -> Result<FunctionArgument, ParseError<'i>> {
+    input.skip_whitespace();
+    let wrapped = input.try_parse(|input| {
+        input.expect_curly_bracket_block()?;
+        let mut inner_end_position = None;
+        let argument = input.parse_nested_block(|input| {
+            let argument = parse_function_argument_value(
+                input,
+                input_start,
+                namespaces,
+                references,
+                missing_closing_characters,
+            )?;
+            inner_end_position = Some(input.position());
+            Ok(argument)
+        })?;
+        if inner_end_position == Some(input.position()) {
+            missing_closing_characters.push_str("}");
+        }
+        input.expect_exhausted()?;
+        Ok::<_, ParseError<'i>>(argument)
+    });
+    if let Ok(argument) = wrapped {
+        return Ok(argument);
+    }
+    let state = input.state();
+    while let Ok(token) = input.next() {
+        if matches!(token, Token::CurlyBracketBlock) {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+    }
+    input.reset(&state);
+    let named = input.try_parse(|input| -> Result<bool, ParseError<'i>> {
+        let dashed = input.expect_ident()?.starts_with("--");
+        input.expect_colon()?;
+        Ok(dashed)
+    });
+    if matches!(named, Ok(true)) {
+        return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+    }
+    input.reset(&state);
+    parse_function_argument_value(
+        input,
+        input_start,
+        namespaces,
+        references,
+        missing_closing_characters,
+    )
+}
+
+fn parse_function_argument_value<'i, 't>(
+    input: &mut Parser<'i, 't>,
+    input_start: SourcePosition,
+    namespaces: &Namespaces,
+    references: &mut References,
+    missing_closing_characters: &mut String,
+) -> Result<FunctionArgument, ParseError<'i>> {
+    input.skip_whitespace();
+    let start = input.position();
+    parse_declaration_value(
+        input,
+        input_start,
+        namespaces,
+        references,
+        missing_closing_characters,
+    )?;
+    input.expect_exhausted()?;
+    let css = input.slice_from(start).trim_ascii_end();
+    if css.is_empty() {
+        return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+    }
+    let (first_token_type, last_token_type) = token_types(css);
+    let start = start.byte_index() - input_start.byte_index();
+    Ok(FunctionArgument {
+        start,
+        end: start + css.len(),
+        first_token_type,
+        last_token_type,
+    })
+}
+
+fn token_types(css: &str) -> (TokenSerializationType, TokenSerializationType) {
+    let mut input = ParserInput::new(css);
+    let mut input = Parser::new(&mut input);
+    let mut first = TokenSerializationType::Nothing;
+    let mut last = TokenSerializationType::Nothing;
+    while let Ok(token) = input.next_including_whitespace_and_comments() {
+        last = token.serialization_type();
+        first.set_if_nothing(last);
+    }
+    (first, last)
 }
 
 /// Parse <attr-type> = type( <syntax> ) | raw-string | number | <attr-unit>.
@@ -2425,6 +2616,7 @@ fn substitute_one_reference<'a>(
                 },
             }
         },
+        SubstitutionFunction::Function { .. } => None,
         // https://drafts.csswg.org/css-values-5/#attr-substitution
         SubstitutionFunction::Attr { name, syntax } => {
             let attribute = name

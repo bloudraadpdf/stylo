@@ -627,6 +627,9 @@ impl StylesheetInvalidationSet {
                     }
                 }
             },
+            FunctionDeclarations(..) => {
+                // Do nothing, the containing @function invalidates.
+            },
             NestedDeclarations(..) => {
                 if ancestors.iter().any(|r| matches!(r, CssRuleRef::Scope(_))) {
                     self.invalidate_fully();
@@ -672,7 +675,11 @@ impl StylesheetInvalidationSet {
                     // Do nothing, this animation can't affect the style of existing elements.
                 }
             },
-            CounterStyle(..) | Property(..) | FontFeatureValues(..) | FontPaletteValues(..) => {
+            CounterStyle(..)
+            | Property(..)
+            | Function(..)
+            | FontFeatureValues(..)
+            | FontPaletteValues(..) => {
                 debug!(" > Found unsupported rule, marking the whole subtree invalid.");
                 self.invalidate_fully();
             },

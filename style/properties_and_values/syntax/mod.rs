@@ -72,18 +72,7 @@ impl Descriptor {
         }
 
         loop {
-            let name = Self::try_parse_component_name(input).map_err(|err| {
-                input.new_custom_error(StyleParseErrorKind::PropertySyntaxField(err))
-            })?;
-
-            let multiplier = if name.is_pre_multiplied() {
-                None
-            } else {
-                Self::try_parse_multiplier(input)
-            };
-
-            let component = Component { multiplier, name };
-            components.push(component);
+            components.push(Self::parse_component(input)?);
             let Ok(delim) = input.next() else { break };
 
             if delim != &Token::Delim('|') {
@@ -99,6 +88,45 @@ impl Descriptor {
             components,
             specified: None,
         })
+    }
+
+    /// Parse a `<css-type>`: one `<syntax-component>`, or `type( <syntax> )`.
+    /// https://drafts.csswg.org/css-mixins-1/#typedef-css-type
+    pub fn parse_css_type<'i>(input: &mut CSSParser<'i, '_>) -> Result<Self, StyleParseError<'i>> {
+        if input
+            .try_parse(|input| input.expect_function_matching("type"))
+            .is_ok()
+        {
+            return input.parse_nested_block(Self::from_css_parser);
+        }
+        Ok(Self {
+            components: vec![Self::parse_component(input)?],
+            specified: None,
+        })
+    }
+
+    /// Serialize as a `<css-type>`.
+    /// https://drafts.csswg.org/css-mixins-1/#serialize-a-css-type
+    pub fn to_css_type<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        if let [component] = self.components.as_slice() {
+            return component.to_css(dest);
+        }
+        dest.write_str("type(")?;
+        self.to_css(dest)?;
+        dest.write_char(')')
+    }
+
+    fn parse_component<'i>(
+        input: &mut CSSParser<'i, '_>,
+    ) -> Result<Component, StyleParseError<'i>> {
+        let name = Self::try_parse_component_name(input)
+            .map_err(|err| input.new_custom_error(StyleParseErrorKind::PropertySyntaxField(err)))?;
+        let multiplier = if name.is_pre_multiplied() {
+            None
+        } else {
+            Self::try_parse_multiplier(input)
+        };
+        Ok(Component { multiplier, name })
     }
 
     fn try_parse_multiplier<'i>(input: &mut CSSParser<'i, '_>) -> Option<Multiplier> {

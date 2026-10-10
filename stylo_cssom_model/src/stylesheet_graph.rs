@@ -243,6 +243,8 @@ pub enum RuleGrammar {
     StartingStyle,
     PositionTry,
     NestedDeclarations,
+    Function,
+    FunctionDeclarations,
     ColorProfile,
     When,
     Else,
@@ -445,6 +447,44 @@ impl RuleContainerCondition {
     }
 }
 
+/// <https://drafts.csswg.org/css-mixins-1/#dictdef-functionparameter>
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RuleFunctionParameter {
+    name: Arc<str>,
+    syntax: Arc<str>,
+    default_value: Option<Arc<str>>,
+}
+
+impl RuleFunctionParameter {
+    #[must_use]
+    pub fn new(
+        name: impl Into<Arc<str>>,
+        syntax: impl Into<Arc<str>>,
+        default_value: Option<impl Into<Arc<str>>>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            syntax: syntax.into(),
+            default_value: default_value.map(Into::into),
+        }
+    }
+
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    #[must_use]
+    pub fn syntax(&self) -> &str {
+        &self.syntax
+    }
+
+    #[must_use]
+    pub fn default_value(&self) -> Option<&str> {
+        self.default_value.as_deref()
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RuleCustomMediaQuery {
     Boolean(bool),
@@ -511,6 +551,11 @@ pub enum RuleCssomData {
     PositionTry {
         name: Arc<str>,
     },
+    Function {
+        name: Arc<str>,
+        parameters: Arc<[RuleFunctionParameter]>,
+        return_type: Arc<str>,
+    },
     Margin {
         name: Arc<str>,
     },
@@ -552,6 +597,7 @@ impl RuleCssomData {
             Self::CounterStyle { .. } => RuleGrammar::CounterStyle,
             Self::Property { .. } => RuleGrammar::Property,
             Self::PositionTry { .. } => RuleGrammar::PositionTry,
+            Self::Function { .. } => RuleGrammar::Function,
             Self::Margin { .. } => RuleGrammar::Margin,
             Self::Page { .. } => RuleGrammar::Page,
             Self::LayerBlock { .. } => RuleGrammar::LayerBlock,
@@ -650,6 +696,7 @@ pub enum RuleDeclarationDomain {
     Keyframe,
     PositionTry,
     Nested,
+    FunctionDescriptors,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1190,6 +1237,7 @@ rule_nodes! {
     Margin => Margin, Page => Page, Property => Property, LayerBlock => LayerBlock,
     LayerStatement => LayerStatement, Scope => Scope, StartingStyle => StartingStyle,
     PositionTry => PositionTry, NestedDeclarations => NestedDeclarations,
+    Function => Function, FunctionDeclarations => FunctionDeclarations,
     ColorProfile => ColorProfile, When => When, Else => Else, Document => Document,
     CustomMedia => CustomMedia, Region => Region, Footnote => Footnote,
     Sidenote => Sidenote, BdColour => BdColour, Unknown => Unknown,
@@ -1211,6 +1259,7 @@ impl RuleNode {
                 | RuleGrammar::When
                 | RuleGrammar::Else
                 | RuleGrammar::Keyframes
+                | RuleGrammar::Function
         )
     }
 
@@ -1250,6 +1299,8 @@ impl RuleNode {
             RuleGrammar::StartingStyle => Self::StartingStyle(payload),
             RuleGrammar::PositionTry => Self::PositionTry(payload),
             RuleGrammar::NestedDeclarations => Self::NestedDeclarations(payload),
+            RuleGrammar::Function => Self::Function(payload),
+            RuleGrammar::FunctionDeclarations => Self::FunctionDeclarations(payload),
             RuleGrammar::ColorProfile => Self::ColorProfile(payload),
             RuleGrammar::When => Self::When(payload),
             RuleGrammar::Else => Self::Else(payload),
@@ -1364,7 +1415,9 @@ impl RuleNode {
                 | Some(RuleCssomData::PositionTry { name }) => Some(name.clone()),
                 _ if matches!(
                     self.grammar(),
-                    RuleGrammar::FontFace | RuleGrammar::NestedDeclarations
+                    RuleGrammar::FontFace
+                        | RuleGrammar::NestedDeclarations
+                        | RuleGrammar::FunctionDeclarations
                 ) =>
                 {
                     Some(Arc::from(""))
@@ -1721,7 +1774,7 @@ impl RuleNode {
                 let prelude = at_rule_prelude(payload.prelude());
                 serialise_qualified_rule(&format!("@page{prelude}"), &serialise_rule_body(payload))
             },
-            Self::NestedDeclarations(_) => {
+            Self::NestedDeclarations(_) | Self::FunctionDeclarations(_) => {
                 canonical_declaration_block(payload.block().unwrap_or_default())
             },
             _ if let Some(block) = payload.block() => {
@@ -1847,7 +1900,8 @@ const fn grammar_name(grammar: RuleGrammar) -> &'static str {
         RuleGrammar::Style
         | RuleGrammar::Keyframe
         | RuleGrammar::Margin
-        | RuleGrammar::NestedDeclarations => "",
+        | RuleGrammar::NestedDeclarations
+        | RuleGrammar::FunctionDeclarations => "",
         RuleGrammar::Namespace => "namespace",
         RuleGrammar::Import => "import",
         RuleGrammar::Media => "media",
@@ -1864,6 +1918,7 @@ const fn grammar_name(grammar: RuleGrammar) -> &'static str {
         RuleGrammar::Scope => "scope",
         RuleGrammar::StartingStyle => "starting-style",
         RuleGrammar::PositionTry => "position-try",
+        RuleGrammar::Function => "function",
         RuleGrammar::ColorProfile => "color-profile",
         RuleGrammar::When => "when",
         RuleGrammar::Else => "else",

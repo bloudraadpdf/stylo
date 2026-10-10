@@ -93,7 +93,11 @@ where
             | CssRule::FontFeatureValues(_)
             | CssRule::FontPaletteValues(_)
             | CssRule::NestedDeclarations(_)
+            | CssRule::FunctionDeclarations(_)
             | CssRule::PositionTry(_) => None,
+            CssRule::Function(ref function_rule) => {
+                Some(function_rule.rules.read_with(guard).0.iter())
+            },
             CssRule::Page(ref page_rule) => {
                 let page_rule = page_rule.read_with(guard);
                 let rules = page_rule.rules.read_with(guard);

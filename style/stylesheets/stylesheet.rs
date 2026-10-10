@@ -387,6 +387,8 @@ impl SanitizationKind {
             CssRule::ColorProfile(..) |
             CssRule::Region(..) |
             CssRule::Property(..) |
+            CssRule::Function(..) |
+            CssRule::FunctionDeclarations(..) |
             CssRule::FontFeatureValues(..) |
             CssRule::FontPaletteValues(..) |
             CssRule::CounterStyle(..) => !is_standard,
@@ -457,6 +459,7 @@ impl Stylesheet {
             insert_rule_context: None,
             allow_import_rules,
             declaration_parser_state: Default::default(),
+            function_declarations: None,
             first_declaration_block: Default::default(),
             wants_first_declaration_block: false,
             error_reporting_state: Default::default(),
@@ -591,7 +594,7 @@ mod tests {
     use crate::servo::media_queries::{Device, FontMetricsProvider};
     use crate::shared_lock::ToCssWithGuard;
     use crate::stylesheets::CssRule;
-    use crate::test_support::{pref_lock, BoolPrefGuard};
+    use crate::test_support::{parse_stylesheet, pref_lock, BoolPrefGuard};
     use crate::values::computed::font::GenericFontFamily;
     use crate::values::computed::{CSSPixelLength, Length, ToComputedValue};
     use crate::Atom;
@@ -600,23 +603,6 @@ mod tests {
     use euclid::{Scale, Size2D};
     use servo_arc::Arc;
     use style_traits::{CSSPixel, DevicePixel, ToCss};
-
-    fn parse_stylesheet(css: &str) -> Stylesheet {
-        let shared_lock = SharedRwLock::new();
-        let media = Arc::new(shared_lock.wrap(MediaList::empty()));
-        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
-        Stylesheet::from_str(
-            css,
-            url_data,
-            Origin::Author,
-            media,
-            shared_lock,
-            None,
-            None,
-            QuirksMode::NoQuirks,
-            AllowImportRules::Yes,
-        )
-    }
 
     #[test]
     fn stylesheet_attachments_retain_distinct_implicit_scope_roots() {

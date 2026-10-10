@@ -21,6 +21,7 @@ use crate::str::starts_with_ignore_ascii_case;
 use crate::stylesheets::container_rule::{ContainerConditions, ContainerRule};
 use crate::stylesheets::document_rule::DocumentCondition;
 use crate::stylesheets::font_feature_values_rule::parse_family_name_list;
+use crate::stylesheets::function_rule::{FunctionDescriptor, FunctionDescriptors, FunctionPrelude};
 use crate::stylesheets::import_rule::{
     ImportLayer, ImportRule, ImportScope, ImportSupportsCondition,
 };
@@ -32,9 +33,9 @@ use crate::stylesheets::when_rule::{ChainConditions, ElseRule, WhenCondition, Wh
 use crate::stylesheets::{
     AllowImportRules, CorsMode, CssRule, CssRuleType, CssRuleTypes, CssRules, CustomMediaCondition,
     CustomMediaRule, DocumentRule, FontFeatureValuesRule, FontPaletteValuesRule, FootnoteRule,
-    KeyframesRule, MarginRule, MarginRuleType, MediaRule, NamespaceRule, NestedDeclarationsRule,
-    PageRule, PageSelectors, PositionTryRule, RegionRule, RulesMutateError, SidenoteRule,
-    StartingStyleRule, StyleRule, StylesheetLoader, SupportsRule,
+    FunctionDeclarationsRule, FunctionRule, KeyframesRule, MarginRule, MarginRuleType, MediaRule,
+    NamespaceRule, NestedDeclarationsRule, PageRule, PageSelectors, PositionTryRule, RegionRule,
+    RulesMutateError, SidenoteRule, StartingStyleRule, StyleRule, StylesheetLoader, SupportsRule,
 };
 use crate::values::computed::font::FamilyName;
 use crate::values::{CssUrl, CustomIdent, DashedIdent, KeyframesName};
@@ -115,6 +116,8 @@ pub struct TopLevelRuleParser<'a, 'i> {
     pub first_declaration_block: PropertyDeclarationBlock,
     /// Parser state for declaration blocks in either nested rules or style rules.
     pub declaration_parser_state: DeclarationParserState<'i>,
+    /// The pending run of declarations in a function body.
+    pub function_declarations: Option<FunctionDeclarationsRule>,
     /// State we keep around only for error reporting purposes. Right now that contains just the
     /// selectors stack for nesting, if any.
     ///
@@ -155,8 +158,19 @@ impl<'a, 'i> TopLevelRuleParser<'a, 'i> {
         // Scope rules can have direct declarations, behaving as if `:where(:scope)`.
         // See https://drafts.csswg.org/css-cascade-6/#scoped-declarations
         self.in_specified_rule(
-            CssRuleType::Style.bit() | CssRuleType::Page.bit() | CssRuleType::Scope.bit(),
+            CssRuleType::Style.bit()
+                | CssRuleType::Page.bit()
+                | CssRuleType::Scope.bit()
+                | CssRuleType::Function.bit(),
         )
+    }
+
+    #[inline]
+    fn in_function_rule(&self) -> bool {
+        self.context
+            .nesting_context
+            .rule_types
+            .contains(CssRuleType::Function)
     }
 
     #[inline]
@@ -176,7 +190,7 @@ impl<'a, 'i> TopLevelRuleParser<'a, 'i> {
     }
 
     #[inline]
-    fn in_specified_rule(&self, bits: u32) -> bool {
+    fn in_specified_rule(&self, bits: u64) -> bool {
         let types = CssRuleTypes::from_bits(bits);
         self.context.nesting_context.rule_types.intersects(types)
     }
@@ -270,6 +284,8 @@ pub enum AtRulePrelude {
     Page(PageSelectors),
     /// A @property rule prelude.
     Property(PropertyRuleName),
+    /// A @function rule prelude.
+    Function(FunctionPrelude),
     /// A @document rule, with its conditional.
     Document(DocumentCondition),
     /// A @import rule prelude.
@@ -330,6 +346,7 @@ impl AtRulePrelude {
             Self::Keyframes(..) => "keyframes",
             Self::Page(..) => "page",
             Self::Property(..) => "property",
+            Self::Function(..) => "function",
             Self::Document(..) => "-moz-document",
             Self::Import(..) => "import",
             Self::Margin(..) => "margin",
@@ -561,6 +578,14 @@ impl<'a, 'i> NestedRuleParser<'a, 'i> {
     //     of style rules: any at-rule whose body contains style rules can be nested inside of a
     //     style rule as well.
     fn at_rule_allowed(&self, prelude: &AtRulePrelude) -> bool {
+        if self.in_function_rule() {
+            return matches!(
+                prelude,
+                AtRulePrelude::Media(..)
+                    | AtRulePrelude::Supports(..)
+                    | AtRulePrelude::Container(..)
+            );
+        }
         match prelude {
             AtRulePrelude::Media(..)
             | AtRulePrelude::Supports(..)
@@ -581,6 +606,7 @@ impl<'a, 'i> NestedRuleParser<'a, 'i> {
             | AtRulePrelude::Keyframes(..)
             | AtRulePrelude::Page(..)
             | AtRulePrelude::Property(..)
+            | AtRulePrelude::Function(..)
             | AtRulePrelude::Import(..)
             | AtRulePrelude::PositionTry(..)
             | AtRulePrelude::BdColour(..)
@@ -714,6 +740,12 @@ impl<'a, 'i> NestedRuleParser<'a, 'i> {
         parser
             .declaration_parser_state
             .report_errors_if_needed(&parser.context, &parser.error_reporting_state);
+        if let Some(rule) = parser.function_declarations.take() {
+            parser
+                .rules
+                .push(CssRule::FunctionDeclarations(Arc::new(rule)));
+            return;
+        }
         if !parser.declaration_parser_state.has_parsed_declarations() {
             return;
         }
@@ -864,6 +896,9 @@ impl<'a, 'i> AtRuleParser<'i> for NestedRuleParser<'a, 'i> {
                     input.new_custom_error(StyleParseErrorKind::UnexpectedIdent(name.clone()))
                 })?;
                 AtRulePrelude::Property(PropertyRuleName(Atom::from(name)))
+            },
+            "function" => {
+                AtRulePrelude::Function(FunctionPrelude::parse(&self.context, input)?)
             },
             "-moz-document" if cfg!(feature = "gecko") => {
                 let cond = DocumentCondition::parse(&self.context, input)?;
@@ -1018,6 +1053,11 @@ impl<'a, 'i> AtRuleParser<'i> for NestedRuleParser<'a, 'i> {
                 let rule_data = parse_property_block(&p.context, input, name, source_location)?;
                 Ok::<CssRule, ParseError<'i>>(CssRule::Property(Arc::new(rule_data)))
             })?,
+            AtRulePrelude::Function(prelude) => CssRule::Function(Arc::new(FunctionRule::new(
+                prelude,
+                self.parse_nested_rules(input, CssRuleType::Function),
+                source_location,
+            ))),
             AtRulePrelude::Document(condition) => {
                 if !cfg!(feature = "gecko") {
                     unreachable!()
@@ -1251,7 +1291,7 @@ impl<'a, 'i> AtRuleParser<'i> for NestedRuleParser<'a, 'i> {
         prelude: AtRulePrelude,
         start: &ParserState,
     ) -> Result<(), ()> {
-        if self.in_style_rule() {
+        if self.in_style_rule() || self.in_function_rule() {
             return Err(());
         }
         let source_location = start.source_location();
@@ -1289,6 +1329,9 @@ impl<'a, 'i> QualifiedRuleParser<'i> for NestedRuleParser<'a, 'i> {
         &mut self,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self::Prelude, ParseError<'i>> {
+        if self.in_function_rule() {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
         let selector_parser = SelectorParser {
             stylesheet_origin: self.context.stylesheet_origin,
             namespaces: &self.context.namespaces,
@@ -1341,6 +1384,17 @@ impl<'a, 'i> DeclarationParser<'i> for NestedRuleParser<'a, 'i> {
         declaration_start: &ParserState,
     ) -> Result<(), ParseError<'i>> {
         let top = &mut **self;
+        if top.in_function_rule() {
+            let descriptor = FunctionDescriptor::parse(&top.context, name, input)?;
+            top.function_declarations
+                .get_or_insert_with(|| FunctionDeclarationsRule {
+                    descriptors: FunctionDescriptors::default(),
+                    source_location: declaration_start.source_location(),
+                })
+                .descriptors
+                .push(descriptor);
+            return Ok(());
+        }
         top.declaration_parser_state
             .parse_value(&top.context, name, input, declaration_start)
     }
