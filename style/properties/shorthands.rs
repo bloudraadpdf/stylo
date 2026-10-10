@@ -6151,7 +6151,7 @@ pub mod mask_border {
 pub mod line_clamp {
     use super::*;
     pub use crate::properties::shorthands_generated::line_clamp::*;
-    use crate::values::specified::{BlockEllipsis, Continue, MaxLines};
+    use crate::values::specified::{BlockEllipsis, Continue, MaxLines, PositiveLineCount};
 
     pub fn parse_value<'i, 't>(
         context: &ParserContext,
@@ -6168,24 +6168,46 @@ pub mod line_clamp {
             });
         }
 
-        let max_lines = input
-            .try_parse(|input| MaxLines::parse(context, input))
-            .ok();
-        let block_ellipsis = input.try_parse(|input| BlockEllipsis::parse(context, input));
-        if max_lines.is_none() && block_ellipsis.is_err() {
-            return Err(block_ellipsis.unwrap_err());
+        let mut count = None;
+        let mut automatic = false;
+        let mut block_ellipsis = None;
+        loop {
+            if count.is_none() {
+                if let Ok(value) = input.try_parse(|input| PositiveLineCount::parse(context, input))
+                {
+                    count = Some(value);
+                    continue;
+                }
+            }
+            if !automatic
+                && input
+                    .try_parse(|input| input.expect_ident_matching("auto"))
+                    .is_ok()
+            {
+                automatic = true;
+                continue;
+            }
+            if block_ellipsis.is_none() {
+                if let Ok(value) = input.try_parse(|input| BlockEllipsis::parse(context, input)) {
+                    block_ellipsis = Some(value);
+                    continue;
+                }
+            }
+            break;
         }
-        let max_lines = max_lines.or_else(|| {
-            input
-                .try_parse(|input| MaxLines::parse(context, input))
-                .ok()
-        });
+        if count.is_none() && !automatic && block_ellipsis.is_none() {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
         let legacy = input
             .try_parse(|input| input.expect_ident_matching("-webkit-legacy"))
             .is_ok();
 
         Ok(expanded! {
-            max_lines: max_lines.unwrap_or(MaxLines::Auto),
+            max_lines: match count {
+                Some(count) if automatic => MaxLines::LinesAuto(count),
+                Some(count) => MaxLines::Lines(count),
+                None => MaxLines::Auto,
+            },
             continue_: if legacy { Continue::WebkitLegacy } else { Continue::Collapse },
             block_ellipsis: block_ellipsis.unwrap_or(BlockEllipsis::Ellipsis),
         })
@@ -6424,10 +6446,23 @@ mod line_clamp_tests {
                 "ellipsis",
             ),
             (r#""CUSTOM" 12"#, "12", "collapse", r#""CUSTOM""#),
+            ("3 ellipsis auto", "3 auto", "collapse", "ellipsis"),
+            (
+                "3 ellipsis auto -webkit-legacy",
+                "3 auto",
+                "-webkit-legacy",
+                "ellipsis",
+            ),
+            ("auto no-ellipsis 4", "4 auto", "collapse", "no-ellipsis"),
         ] {
             assert_expansion(css, max_lines, continuation, ellipsis);
         }
-        for css in ["3 none", "3 ellipsis auto", "-webkit-legacy"] {
+        for css in [
+            "3 none",
+            "3 auto auto",
+            "ellipsis 3 no-ellipsis",
+            "-webkit-legacy",
+        ] {
             assert!(try_parse(css).is_err(), "{css:?} must be invalid");
         }
     }
