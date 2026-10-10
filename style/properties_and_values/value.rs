@@ -701,6 +701,7 @@ impl CustomAnimatedValue {
                 CascadeLevel::Animations,
                 attribute_tracker,
             )?
+            .css
         } else {
             Cow::Borrowed(value.css.as_str())
         };

@@ -44,6 +44,7 @@ use std::fmt::{self, Write};
 use std::ops::{Index, IndexMut};
 use std::{cmp, num};
 use style_traits::{CssWriter, ParseError, StyleParseErrorKind, ToCss};
+use thin_vec::ThinVec;
 
 mod functions;
 
@@ -391,6 +392,20 @@ pub struct VariableValue {
 
     /// var(), env(), attr() or non-custom property (e.g. through `em`) references.
     references: References,
+
+    /// The ranges of `css` that `attr()` substitution produced.
+    attr_tainted: ThinVec<AttrTaintedRange>,
+}
+
+/// A byte range of a value that `attr()` substitution produced.
+///
+/// <https://drafts.csswg.org/css-values-5/#attr-security>
+#[derive(Clone, Copy, Debug, Eq, MallocSizeOf, PartialEq, ToShmem)]
+pub struct AttrTaintedRange {
+    /// The first byte.
+    pub start: usize,
+    /// The byte after the last.
+    pub end: usize,
 }
 
 trivial_to_computed_value!(VariableValue);
@@ -718,6 +733,7 @@ impl VariableValue {
             first_token_type: Default::default(),
             url_data: url_data.clone(),
             references: Default::default(),
+            attr_tainted: ThinVec::new(),
         }
     }
 
@@ -735,6 +751,7 @@ impl VariableValue {
             first_token_type,
             last_token_type,
             references: Default::default(),
+            attr_tainted: ThinVec::new(),
         }
     }
 
@@ -743,6 +760,7 @@ impl VariableValue {
         css: &str,
         css_first_token_type: TokenSerializationType,
         css_last_token_type: TokenSerializationType,
+        attr_tainted: &[AttrTaintedRange],
     ) -> Result<(), ()> {
         /// Prevent values from getting terribly big since you can use custom
         /// properties exponentially.
@@ -774,6 +792,12 @@ impl VariableValue {
         {
             self.css.push_str("/**/")
         }
+        let offset = self.css.len();
+        self.attr_tainted
+            .extend(attr_tainted.iter().map(|range| AttrTaintedRange {
+                start: offset + range.start,
+                end: offset + range.end,
+            }));
         self.css.push_str(css);
         self.last_token_type = css_last_token_type;
         Ok(())
@@ -819,6 +843,7 @@ impl VariableValue {
             first_token_type,
             last_token_type,
             references,
+            attr_tainted: ThinVec::new(),
         })
     }
 
@@ -892,6 +917,7 @@ impl VariableValue {
             first_token_type: token_type,
             last_token_type: token_type,
             references: Default::default(),
+            attr_tainted: ThinVec::new(),
         }
     }
 
@@ -2551,6 +2577,7 @@ struct Substitution<'a> {
     css: Cow<'a, str>,
     first_token_type: TokenSerializationType,
     last_token_type: TokenSerializationType,
+    attr_tainted: ThinVec<AttrTaintedRange>,
 }
 
 impl<'a> Substitution<'a> {
@@ -2559,7 +2586,17 @@ impl<'a> Substitution<'a> {
             css: v.css.into(),
             first_token_type: v.first_token_type,
             last_token_type: v.last_token_type,
+            attr_tainted: v.attr_tainted,
         }
+    }
+
+    /// Mark the whole substitution as produced by `attr()`.
+    fn attr_tainted(mut self) -> Self {
+        self.attr_tainted = ThinVec::from([AttrTaintedRange {
+            start: 0,
+            end: self.css.len(),
+        }]);
+        self
     }
 
     fn into_value(
@@ -2576,6 +2613,7 @@ impl<'a> Substitution<'a> {
                     last_token_type: self.last_token_type,
                     url_data: url_data.clone(),
                     references: Default::default(),
+                    attr_tainted: self.attr_tainted,
                 },
             )));
         }
@@ -2591,6 +2629,7 @@ impl<'a> Substitution<'a> {
             css,
             first_token_type,
             last_token_type,
+            attr_tainted: ThinVec::new(),
         }
     }
 
@@ -2599,6 +2638,7 @@ impl<'a> Substitution<'a> {
             css: Cow::Owned(self.css.into_owned()),
             first_token_type: self.first_token_type,
             last_token_type: self.last_token_type,
+            attr_tainted: self.attr_tainted,
         }
     }
 }
@@ -2734,6 +2774,7 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
                     &css[cur_pos..reference.start],
                     next_token_type,
                     reference.prev_token_type,
+                    &[],
                 )?;
             }
 
@@ -2748,13 +2789,14 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
                 &substitution.css,
                 substitution.first_token_type,
                 substitution.last_token_type,
+                &substitution.attr_tainted,
             )?;
             next_token_type = reference.next_token_type;
             cur_pos = reference.end;
         }
         // Push the rest of the value if needed.
         if cur_pos != end {
-            substituted.push(&css[cur_pos..end], next_token_type, last_token_type)?;
+            substituted.push(&css[cur_pos..end], next_token_type, last_token_type, &[])?;
         }
         Ok(Substitution::from_value(substituted))
     }
@@ -2873,6 +2915,7 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
                             },
                             AttributeType::RawString | AttributeType::None => simple_subst(&attr),
                         }
+                        .map(Substitution::attr_tainted)
                     },
                 )
             },
@@ -2910,6 +2953,14 @@ fn quoted_css_string(src: &str) -> String {
     dest
 }
 
+/// The CSS text of a substituted value.
+pub struct SubstitutedValue<'a> {
+    /// The text.
+    pub css: Cow<'a, str>,
+    /// The ranges of `css` that `attr()` substitution produced.
+    pub attr_tainted: ThinVec<AttrTaintedRange>,
+}
+
 /// Replace var(), env(), attr() and custom function calls, returning the resulting CSS string.
 ///
 /// `level` is the cascade level of the declaration, which scopes its custom function names.
@@ -2920,7 +2971,7 @@ pub fn substitute<'a>(
     computed_context: &'a computed::Context,
     level: CascadeLevel,
     attribute_tracker: &'a mut AttributeTracker,
-) -> Result<Cow<'a, str>, ()> {
+) -> Result<SubstitutedValue<'a>, ()> {
     substitute_with_environment_resolution(
         variable_value,
         custom_properties,
@@ -2941,7 +2992,7 @@ pub fn substitute_with_environment_resolution<'a>(
     level: CascadeLevel,
     environment_resolution: EnvironmentResolutionMode,
     attribute_tracker: &'a mut AttributeTracker,
-) -> Result<Cow<'a, str>, ()> {
+) -> Result<SubstitutedValue<'a>, ()> {
     debug_assert!(variable_value.has_references());
     Substitutor::new(
         custom_properties,
@@ -2952,7 +3003,10 @@ pub fn substitute_with_environment_resolution<'a>(
         Some(level),
     )
     .substitute_value(variable_value, None)
-    .map(|substitution| substitution.css)
+    .map(|substitution| SubstitutedValue {
+        css: substitution.css,
+        attr_tainted: substitution.attr_tainted,
+    })
 }
 
 #[cfg(all(test, feature = "servo"))]

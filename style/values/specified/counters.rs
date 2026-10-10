@@ -332,7 +332,10 @@ fn parse_target_reference<'i, 't>(
     context: &ParserContext,
     input: &mut Parser<'i, 't>,
 ) -> Result<generics::TargetReference, ParseError<'i>> {
+    input.skip_whitespace();
+    let start = input.position();
     if let Ok(url) = input.try_parse(|input| input.expect_url()) {
+        context.reject_attr_tainted_url(input, start)?;
         return Ok(generics::TargetReference::Url(
             url.as_ref().to_owned().into(),
         ));

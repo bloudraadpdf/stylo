@@ -396,12 +396,14 @@ fn keyword(css: &str) -> Option<CSSWideKeyword> {
 }
 
 fn owned(substitution: Substitution, url_data: &UrlExtraData) -> VariableValue {
-    VariableValue::new(
+    let mut value = VariableValue::new(
         substitution.css.into_owned(),
         url_data,
         substitution.first_token_type,
         substitution.last_token_type,
-    )
+    );
+    value.attr_tainted = substitution.attr_tainted;
+    value
 }
 
 impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
@@ -437,9 +439,19 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
         if registration.syntax.is_universal() {
             return Some(owned(value, url_data));
         }
-        compute_value(&value.css, url_data, registration, self.computed_context)
-            .ok()
-            .map(|value| value.to_variable_value())
+        let tainted = !value.attr_tainted.is_empty();
+        let computed = compute_value(&value.css, url_data, registration, self.computed_context)
+            .ok()?
+            .to_variable_value();
+        let computed = Substitution::from_value(computed);
+        Some(owned(
+            if tainted {
+                computed.attr_tainted()
+            } else {
+                computed
+            },
+            url_data,
+        ))
     }
 
     /// The value of `name` on the caller, typed by this frame's registration.
@@ -636,10 +648,11 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
 
 #[cfg(all(test, feature = "servo"))]
 mod tests {
+    use super::super::{AttrTaintedRange, VariableValue};
     use super::super::{CustomPropertiesBuilder, DeferFontRelativeCustomPropertyResolution};
     use crate::applicable_declarations::CascadePriority;
     use crate::context::QuirksMode;
-    use crate::dom::AttributeTracker;
+    use crate::dom::{AttributeProvider, AttributeTracker, ExpandedAttributeName};
     use crate::properties::{PropertyDeclaration, StyleBuilder};
     use crate::rule_cache::RuleCacheConditions;
     use crate::rule_tree::CascadeLevel;
@@ -649,13 +662,40 @@ mod tests {
     use crate::stylesheets::{CssRule, DocumentStyleSheet, StylesheetInDocument};
     use crate::stylist::Stylist;
     use crate::test_support::{parse_stylesheet, test_device};
+    use crate::test_support::{pref_lock, BoolPrefGuard};
     use crate::values::computed::Context;
     use crate::Atom;
     use servo_arc::Arc;
 
+    struct Attributes(&'static [(&'static str, &'static str)]);
+
+    impl AttributeProvider for Attributes {
+        fn get_attr(&self, attr: &ExpandedAttributeName) -> Option<String> {
+            self.0
+                .iter()
+                .find(|(name, _)| *name == &*attr.local_name)
+                .map(|(_, value)| (*value).to_owned())
+        }
+    }
+
     /// The `--actual` and `--expected` values of the last style rule, as in
     /// WPT's `css/css-mixins/resources/utils.js`.
     fn actual_and_expected(css: &str) -> (Option<String>, Option<String>) {
+        let [actual, expected] = cascade(css, &Attributes(&[]), ["actual", "expected"]);
+        (
+            actual.map(|value| value.css),
+            expected.map(|value| value.css),
+        )
+    }
+
+    /// The computed values of `names` from the custom properties of the last style rule.
+    fn cascade<const N: usize>(
+        css: &str,
+        attributes: &Attributes,
+        names: [&str; N],
+    ) -> [Option<VariableValue>; N] {
+        let _guard = pref_lock().lock().unwrap();
+        let _attr_pref = BoolPrefGuard::set("layout.css.attr.enabled", true);
         let sheet = Arc::new(parse_stylesheet(css));
         let mut stylist = Stylist::new(test_device(), QuirksMode::NoQuirks);
         let guard = sheet.shared_lock.read();
@@ -679,7 +719,7 @@ mod tests {
             &mut conditions,
             ContainerSizeQuery::none(),
         );
-        let mut tracker = AttributeTracker::new_dummy();
+        let mut tracker = AttributeTracker::new(attributes);
         let mut builder = CustomPropertiesBuilder::new(&stylist, &mut context);
         for (declaration, _) in block.declaration_importance_iter() {
             if let PropertyDeclaration::Custom(ref declaration) = *declaration {
@@ -691,15 +731,14 @@ mod tests {
             }
         }
         builder.build(DeferFontRelativeCustomPropertyResolution::No, &mut tracker);
-        let value = |name: &str| {
+        names.map(|name| {
             context
                 .builder
                 .custom_properties
                 .inherited
                 .get(&Atom::from(name))
-                .map(|value| value.to_variable_value().css)
-        };
-        (value("actual"), value("expected"))
+                .map(|value| value.to_variable_value())
+        })
     }
 
     fn assert_templates(templates: &[(&str, &str)]) {
@@ -978,5 +1017,64 @@ mod tests {
                  #t { --cyclic: --bump(var(--cyclic)); --actual: var(--cyclic); }",
             ),
         ]);
+    }
+
+    #[test]
+    fn attr_results_stay_tainted_through_calls() {
+        let attributes = Attributes(&[("data-cat", "url(cat.png)")]);
+        for (name, css) in [
+            (
+                "result",
+                "@function --f() { result: attr(data-cat type(*)); }",
+            ),
+            (
+                "typed result",
+                "@function --f() returns <url> { result: attr(data-cat type(*)); }",
+            ),
+            (
+                "local",
+                "@function --f() { --l: attr(data-cat type(*)); result: var(--l); }",
+            ),
+            ("argument", "@function --f(--a) { result: var(--a); }"),
+            (
+                "default",
+                "@function --f(--a: attr(data-cat type(*))) { result: var(--a); }",
+            ),
+            (
+                "caller frame",
+                "@function --f() { --x: attr(data-cat type(*)); result: --g(); } \
+                 @function --g() { result: var(--x); }",
+            ),
+            (
+                "inherit",
+                "@function --f() { --x: attr(data-cat type(*)); result: --g(); } \
+                 @function --g() { --x: inherit; result: var(--x); }",
+            ),
+        ] {
+            let call = if name == "argument" {
+                "--f(attr(data-cat type(*)))"
+            } else {
+                "--f()"
+            };
+            let css = format!("{css} #t {{ --actual: a {call} b; }}");
+            let [actual] = cascade(&css, &attributes, ["actual"]);
+            let actual = actual.unwrap_or_else(|| panic!("{name}: invalid"));
+            let start = actual.css.find("url").expect("the url is substituted");
+            assert_eq!(
+                actual.attr_tainted.as_slice(),
+                [AttrTaintedRange {
+                    start,
+                    end: actual.css.len() - 2
+                }],
+                "{name}: {}",
+                actual.css
+            );
+        }
+        let [actual] = cascade(
+            "@function --f() { result: url(cat.png); } #t { --actual: --f(); }",
+            &attributes,
+            ["actual"],
+        );
+        assert!(actual.unwrap().attr_tainted.is_empty());
     }
 }

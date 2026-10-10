@@ -1577,7 +1577,7 @@ impl UnparsedValue {
             }
         }
 
-        let css = match custom_properties::substitute_with_environment_resolution(
+        let substituted = match custom_properties::substitute_with_environment_resolution(
             &self.variable_value,
             custom_properties,
             stylist,
@@ -1586,7 +1586,7 @@ impl UnparsedValue {
             environment_resolution,
             attribute_tracker,
         ) {
-            Ok(css) => css,
+            Ok(substituted) => substituted,
             Err(..) => return invalid_at_computed_value_time(),
         };
 
@@ -1609,9 +1609,10 @@ impl UnparsedValue {
             /* namespaces = */ Default::default(),
             None,
             None,
-        );
+        )
+        .with_attr_tainted(&substituted.attr_tainted);
 
-        let mut input = ParserInput::new(&css);
+        let mut input = ParserInput::new(&substituted.css);
         let mut input = Parser::new(&mut input);
         input.skip_whitespace();
 
