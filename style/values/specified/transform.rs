@@ -132,194 +132,213 @@ impl Transform {
 
         Ok(generic::Transform(
             Space::parse(input, |input| {
-                let function = input.expect_function()?.clone();
-                input.parse_nested_block(|input| {
-                    let location = input.current_source_location();
-                    let result = match_ignore_ascii_case! { &function,
-                        "matrix" => {
-                            let a = Number::parse(context, input)?;
-                            input.expect_comma()?;
-                            let b = Number::parse(context, input)?;
-                            input.expect_comma()?;
-                            let c = Number::parse(context, input)?;
-                            input.expect_comma()?;
-                            let d = Number::parse(context, input)?;
-                            input.expect_comma()?;
-                            // Standard matrix parsing.
-                            let e = Number::parse(context, input)?;
-                            input.expect_comma()?;
-                            let f = Number::parse(context, input)?;
-                            Ok(generic::TransformOperation::Matrix(Matrix { a, b, c, d, e, f }))
-                        },
-                        "matrix3d" => {
-                            let m11 = Number::parse(context, input)?;
-                            input.expect_comma()?;
-                            let m12 = Number::parse(context, input)?;
-                            input.expect_comma()?;
-                            let m13 = Number::parse(context, input)?;
-                            input.expect_comma()?;
-                            let m14 = Number::parse(context, input)?;
-                            input.expect_comma()?;
-                            let m21 = Number::parse(context, input)?;
-                            input.expect_comma()?;
-                            let m22 = Number::parse(context, input)?;
-                            input.expect_comma()?;
-                            let m23 = Number::parse(context, input)?;
-                            input.expect_comma()?;
-                            let m24 = Number::parse(context, input)?;
-                            input.expect_comma()?;
-                            let m31 = Number::parse(context, input)?;
-                            input.expect_comma()?;
-                            let m32 = Number::parse(context, input)?;
-                            input.expect_comma()?;
-                            let m33 = Number::parse(context, input)?;
-                            input.expect_comma()?;
-                            let m34 = Number::parse(context, input)?;
-                            input.expect_comma()?;
-                            // Standard matrix3d parsing.
-                            let m41 = Number::parse(context, input)?;
-                            input.expect_comma()?;
-                            let m42 = Number::parse(context, input)?;
-                            input.expect_comma()?;
-                            let m43 = Number::parse(context, input)?;
-                            input.expect_comma()?;
-                            let m44 = Number::parse(context, input)?;
-                            Ok(generic::TransformOperation::Matrix3D(Matrix3D {
-                                m11, m12, m13, m14,
-                                m21, m22, m23, m24,
-                                m31, m32, m33, m34,
-                                m41, m42, m43, m44,
-                            }))
-                        },
-                        "translate" => {
-                            let sx = specified::LengthPercentage::parse(context, input)?;
-                            if input.try_parse(|input| input.expect_comma()).is_ok() {
-                                let sy = specified::LengthPercentage::parse(context, input)?;
-                                Ok(generic::TransformOperation::Translate(sx, sy))
-                            } else {
-                                Ok(generic::TransformOperation::Translate(sx, Zero::zero()))
-                            }
-                        },
-                        "translatex" => {
-                            let tx = specified::LengthPercentage::parse(context, input)?;
-                            Ok(generic::TransformOperation::TranslateX(tx))
-                        },
-                        "translatey" => {
-                            let ty = specified::LengthPercentage::parse(context, input)?;
-                            Ok(generic::TransformOperation::TranslateY(ty))
-                        },
-                        "translatez" => {
-                            let tz = specified::Length::parse(context, input)?;
-                            Ok(generic::TransformOperation::TranslateZ(tz))
-                        },
-                        "translate3d" => {
-                            let tx = specified::LengthPercentage::parse(context, input)?;
-                            input.expect_comma()?;
-                            let ty = specified::LengthPercentage::parse(context, input)?;
-                            input.expect_comma()?;
-                            let tz = specified::Length::parse(context, input)?;
-                            Ok(generic::TransformOperation::Translate3D(tx, ty, tz))
-                        },
-                        "scale" => {
-                            let sx = NumberOrPercentage::parse(context, input)?.to_number();
-                            if input.try_parse(|input| input.expect_comma()).is_ok() {
-                                let sy = NumberOrPercentage::parse(context, input)?.to_number();
-                                Ok(generic::TransformOperation::Scale(sx, sy))
-                            } else {
-                                Ok(generic::TransformOperation::Scale(sx.clone(), sx))
-                            }
-                        },
-                        "scalex" => {
-                            let sx = NumberOrPercentage::parse(context, input)?.to_number();
-                            Ok(generic::TransformOperation::ScaleX(sx))
-                        },
-                        "scaley" => {
-                            let sy = NumberOrPercentage::parse(context, input)?.to_number();
-                            Ok(generic::TransformOperation::ScaleY(sy))
-                        },
-                        "scalez" => {
-                            let sz = NumberOrPercentage::parse(context, input)?.to_number();
-                            Ok(generic::TransformOperation::ScaleZ(sz))
-                        },
-                        "scale3d" => {
-                            let sx = NumberOrPercentage::parse(context, input)?.to_number();
-                            input.expect_comma()?;
-                            let sy = NumberOrPercentage::parse(context, input)?.to_number();
-                            input.expect_comma()?;
-                            let sz = NumberOrPercentage::parse(context, input)?.to_number();
-                            Ok(generic::TransformOperation::Scale3D(sx, sy, sz))
-                        },
-                        "rotate" => {
-                            let theta = specified::Angle::parse_with_unitless(context, input)?;
-                            Ok(generic::TransformOperation::Rotate(theta))
-                        },
-                        "rotatex" => {
-                            let theta = specified::Angle::parse_with_unitless(context, input)?;
-                            Ok(generic::TransformOperation::RotateX(theta))
-                        },
-                        "rotatey" => {
-                            let theta = specified::Angle::parse_with_unitless(context, input)?;
-                            Ok(generic::TransformOperation::RotateY(theta))
-                        },
-                        "rotatez" => {
-                            let theta = specified::Angle::parse_with_unitless(context, input)?;
-                            Ok(generic::TransformOperation::RotateZ(theta))
-                        },
-                        "rotate3d" => {
-                            let ax = Number::parse(context, input)?;
-                            input.expect_comma()?;
-                            let ay = Number::parse(context, input)?;
-                            input.expect_comma()?;
-                            let az = Number::parse(context, input)?;
-                            input.expect_comma()?;
-                            let theta = specified::Angle::parse_with_unitless(context, input)?;
-                            // TODO(gw): Check that the axis can be normalized.
-                            Ok(generic::TransformOperation::Rotate3D(ax, ay, az, theta))
-                        },
-                        "skew" => {
-                            let ax = specified::Angle::parse_with_unitless(context, input)?;
-                            if input.try_parse(|input| input.expect_comma()).is_ok() {
-                                let ay = specified::Angle::parse_with_unitless(context, input)?;
-                                Ok(generic::TransformOperation::Skew(ax, ay))
-                            } else {
-                                Ok(generic::TransformOperation::Skew(ax, Zero::zero()))
-                            }
-                        },
-                        "skewx" => {
-                            let theta = specified::Angle::parse_with_unitless(context, input)?;
-                            Ok(generic::TransformOperation::SkewX(theta))
-                        },
-                        "skewy" => {
-                            let theta = specified::Angle::parse_with_unitless(context, input)?;
-                            Ok(generic::TransformOperation::SkewY(theta))
-                        },
-                        "perspective" => {
-                            let p = match input.try_parse(|input| {
-                                if matches!(allow_unitless_perspective, AllowUnitlessPerspective::Yes) {
-                                    specified::Length::parse_non_negative_quirky(context, input, AllowQuirks::Always)
-                                } else {
-                                    specified::Length::parse_non_negative(context, input)
-                                }
-                            }) {
-                                Ok(p) => generic::PerspectiveFunction::Length(p),
-                                Err(..) => {
-                                    input.expect_ident_matching("none")?;
-                                    generic::PerspectiveFunction::None
-                                }
-                            };
-                            Ok(generic::TransformOperation::Perspective(p))
-                        },
-                        _ => Err(()),
-                    };
-                    result.map_err(|()| {
-                        location.new_custom_error(StyleParseErrorKind::UnexpectedFunction(
-                            function.clone(),
-                        ))
-                    })
-                })
+                TransformOperation::parse_internal(context, input, &allow_unitless_perspective)
             })?
             .into(),
         ))
+    }
+}
+
+impl TransformOperation {
+    fn parse_internal<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+        allow_unitless_perspective: &AllowUnitlessPerspective,
+    ) -> Result<Self, ParseError<'i>> {
+        let function = input.expect_function()?.clone();
+        input.parse_nested_block(|input| {
+            let location = input.current_source_location();
+            let result = match_ignore_ascii_case! { &function,
+                "matrix" => {
+                    let a = Number::parse(context, input)?;
+                    input.expect_comma()?;
+                    let b = Number::parse(context, input)?;
+                    input.expect_comma()?;
+                    let c = Number::parse(context, input)?;
+                    input.expect_comma()?;
+                    let d = Number::parse(context, input)?;
+                    input.expect_comma()?;
+                    // Standard matrix parsing.
+                    let e = Number::parse(context, input)?;
+                    input.expect_comma()?;
+                    let f = Number::parse(context, input)?;
+                    Ok(generic::TransformOperation::Matrix(Matrix { a, b, c, d, e, f }))
+                },
+                "matrix3d" => {
+                    let m11 = Number::parse(context, input)?;
+                    input.expect_comma()?;
+                    let m12 = Number::parse(context, input)?;
+                    input.expect_comma()?;
+                    let m13 = Number::parse(context, input)?;
+                    input.expect_comma()?;
+                    let m14 = Number::parse(context, input)?;
+                    input.expect_comma()?;
+                    let m21 = Number::parse(context, input)?;
+                    input.expect_comma()?;
+                    let m22 = Number::parse(context, input)?;
+                    input.expect_comma()?;
+                    let m23 = Number::parse(context, input)?;
+                    input.expect_comma()?;
+                    let m24 = Number::parse(context, input)?;
+                    input.expect_comma()?;
+                    let m31 = Number::parse(context, input)?;
+                    input.expect_comma()?;
+                    let m32 = Number::parse(context, input)?;
+                    input.expect_comma()?;
+                    let m33 = Number::parse(context, input)?;
+                    input.expect_comma()?;
+                    let m34 = Number::parse(context, input)?;
+                    input.expect_comma()?;
+                    // Standard matrix3d parsing.
+                    let m41 = Number::parse(context, input)?;
+                    input.expect_comma()?;
+                    let m42 = Number::parse(context, input)?;
+                    input.expect_comma()?;
+                    let m43 = Number::parse(context, input)?;
+                    input.expect_comma()?;
+                    let m44 = Number::parse(context, input)?;
+                    Ok(generic::TransformOperation::Matrix3D(Matrix3D {
+                        m11, m12, m13, m14,
+                        m21, m22, m23, m24,
+                        m31, m32, m33, m34,
+                        m41, m42, m43, m44,
+                    }))
+                },
+                "translate" => {
+                    let sx = specified::LengthPercentage::parse(context, input)?;
+                    if input.try_parse(|input| input.expect_comma()).is_ok() {
+                        let sy = specified::LengthPercentage::parse(context, input)?;
+                        Ok(generic::TransformOperation::Translate(sx, sy))
+                    } else {
+                        Ok(generic::TransformOperation::Translate(sx, Zero::zero()))
+                    }
+                },
+                "translatex" => {
+                    let tx = specified::LengthPercentage::parse(context, input)?;
+                    Ok(generic::TransformOperation::TranslateX(tx))
+                },
+                "translatey" => {
+                    let ty = specified::LengthPercentage::parse(context, input)?;
+                    Ok(generic::TransformOperation::TranslateY(ty))
+                },
+                "translatez" => {
+                    let tz = specified::Length::parse(context, input)?;
+                    Ok(generic::TransformOperation::TranslateZ(tz))
+                },
+                "translate3d" => {
+                    let tx = specified::LengthPercentage::parse(context, input)?;
+                    input.expect_comma()?;
+                    let ty = specified::LengthPercentage::parse(context, input)?;
+                    input.expect_comma()?;
+                    let tz = specified::Length::parse(context, input)?;
+                    Ok(generic::TransformOperation::Translate3D(tx, ty, tz))
+                },
+                "scale" => {
+                    let sx = NumberOrPercentage::parse(context, input)?.to_number();
+                    if input.try_parse(|input| input.expect_comma()).is_ok() {
+                        let sy = NumberOrPercentage::parse(context, input)?.to_number();
+                        Ok(generic::TransformOperation::Scale(sx, sy))
+                    } else {
+                        Ok(generic::TransformOperation::Scale(sx.clone(), sx))
+                    }
+                },
+                "scalex" => {
+                    let sx = NumberOrPercentage::parse(context, input)?.to_number();
+                    Ok(generic::TransformOperation::ScaleX(sx))
+                },
+                "scaley" => {
+                    let sy = NumberOrPercentage::parse(context, input)?.to_number();
+                    Ok(generic::TransformOperation::ScaleY(sy))
+                },
+                "scalez" => {
+                    let sz = NumberOrPercentage::parse(context, input)?.to_number();
+                    Ok(generic::TransformOperation::ScaleZ(sz))
+                },
+                "scale3d" => {
+                    let sx = NumberOrPercentage::parse(context, input)?.to_number();
+                    input.expect_comma()?;
+                    let sy = NumberOrPercentage::parse(context, input)?.to_number();
+                    input.expect_comma()?;
+                    let sz = NumberOrPercentage::parse(context, input)?.to_number();
+                    Ok(generic::TransformOperation::Scale3D(sx, sy, sz))
+                },
+                "rotate" => {
+                    let theta = specified::Angle::parse_with_unitless(context, input)?;
+                    Ok(generic::TransformOperation::Rotate(theta))
+                },
+                "rotatex" => {
+                    let theta = specified::Angle::parse_with_unitless(context, input)?;
+                    Ok(generic::TransformOperation::RotateX(theta))
+                },
+                "rotatey" => {
+                    let theta = specified::Angle::parse_with_unitless(context, input)?;
+                    Ok(generic::TransformOperation::RotateY(theta))
+                },
+                "rotatez" => {
+                    let theta = specified::Angle::parse_with_unitless(context, input)?;
+                    Ok(generic::TransformOperation::RotateZ(theta))
+                },
+                "rotate3d" => {
+                    let ax = Number::parse(context, input)?;
+                    input.expect_comma()?;
+                    let ay = Number::parse(context, input)?;
+                    input.expect_comma()?;
+                    let az = Number::parse(context, input)?;
+                    input.expect_comma()?;
+                    let theta = specified::Angle::parse_with_unitless(context, input)?;
+                    // TODO(gw): Check that the axis can be normalized.
+                    Ok(generic::TransformOperation::Rotate3D(ax, ay, az, theta))
+                },
+                "skew" => {
+                    let ax = specified::Angle::parse_with_unitless(context, input)?;
+                    if input.try_parse(|input| input.expect_comma()).is_ok() {
+                        let ay = specified::Angle::parse_with_unitless(context, input)?;
+                        Ok(generic::TransformOperation::Skew(ax, ay))
+                    } else {
+                        Ok(generic::TransformOperation::Skew(ax, Zero::zero()))
+                    }
+                },
+                "skewx" => {
+                    let theta = specified::Angle::parse_with_unitless(context, input)?;
+                    Ok(generic::TransformOperation::SkewX(theta))
+                },
+                "skewy" => {
+                    let theta = specified::Angle::parse_with_unitless(context, input)?;
+                    Ok(generic::TransformOperation::SkewY(theta))
+                },
+                "perspective" => {
+                    let p = match input.try_parse(|input| {
+                        if matches!(allow_unitless_perspective, AllowUnitlessPerspective::Yes) {
+                            specified::Length::parse_non_negative_quirky(context, input, AllowQuirks::Always)
+                        } else {
+                            specified::Length::parse_non_negative(context, input)
+                        }
+                    }) {
+                        Ok(p) => generic::PerspectiveFunction::Length(p),
+                        Err(..) => {
+                            input.expect_ident_matching("none")?;
+                            generic::PerspectiveFunction::None
+                        }
+                    };
+                    Ok(generic::TransformOperation::Perspective(p))
+                },
+                _ => Err(()),
+            };
+            result.map_err(|()| {
+                location.new_custom_error(StyleParseErrorKind::UnexpectedFunction(
+                    function.clone(),
+                ))
+            })
+        })
+    }
+}
+
+impl Parse for TransformOperation {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        Self::parse_internal(context, input, &AllowUnitlessPerspective::No)
     }
 }
 

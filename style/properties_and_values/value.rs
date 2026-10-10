@@ -19,6 +19,7 @@ use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
 use crate::values::{
     animated::{self, Animate, Procedure},
     computed::{self, ToComputedValue},
+    generics::transform::Transform,
     specified, CustomIdent,
 };
 use crate::{custom_properties::ComputedValue as ComputedPropertyValue, dom::AttributeTracker};
@@ -27,8 +28,8 @@ use selectors::matching::QuirksMode;
 use servo_arc::Arc;
 use smallvec::SmallVec;
 use style_traits::{
-    owned_str::OwnedStr, CssWriter, ParseError as StyleParseError, ParsingMode,
-    PropertySyntaxParseError, StyleParseErrorKind, ToCss,
+    owned_str::OwnedStr, CssWriter, ParseError as StyleParseError, ParsingMode, Separator, Space,
+    StyleParseErrorKind, ToCss,
 };
 
 /// A single component of the computed value.
@@ -44,6 +45,7 @@ pub type ComputedValueComponent = GenericValueComponent<
     computed::Angle,
     computed::Time,
     computed::Resolution,
+    SingleTransformFunction<computed::TransformOperation>,
     computed::Transform,
 >;
 
@@ -60,11 +62,12 @@ pub type SpecifiedValueComponent = GenericValueComponent<
     specified::Angle,
     specified::Time,
     specified::Resolution,
+    SingleTransformFunction<specified::TransformOperation>,
     specified::Transform,
 >;
 
-impl<L, N, P, LP, C, Image, U, Integer, A, T, R, Transform>
-    GenericValueComponent<L, N, P, LP, C, Image, U, Integer, A, T, R, Transform>
+impl<L, N, P, LP, C, Image, U, Integer, A, T, R, TF, TL>
+    GenericValueComponent<L, N, P, LP, C, Image, U, Integer, A, T, R, TF, TL>
 {
     fn serialization_types(&self) -> (TokenSerializationType, TokenSerializationType) {
         let first_token_type = match self {
@@ -108,6 +111,7 @@ pub enum GenericValueComponent<
     Time,
     Resolution,
     TransformFunction,
+    TransformList,
 > {
     /// A <length> value
     Length(Length),
@@ -134,17 +138,32 @@ pub enum GenericValueComponent<
     /// A <resolution> value
     Resolution(Resolution),
     /// A <transform-function> value
-    /// TODO(bug 1884606): <transform-function> `none` should not interpolate.
     TransformFunction(TransformFunction),
     /// A <custom-ident> value
     #[animation(error)]
     CustomIdent(CustomIdent),
     /// A <transform-list> value, equivalent to <transform-function>+
-    /// TODO(bug 1884606): <transform-list> `none` should not interpolate.
-    TransformList(ComponentList<Self>),
+    TransformList(TransformList),
     /// A <string> value
     #[animation(error)]
     String(OwnedStr),
+}
+
+/// A single <transform-function> value.
+#[derive(
+    Clone, ToComputedValue, ToResolvedValue, ToCss, Debug, MallocSizeOf, PartialEq, ToShmem,
+)]
+pub struct SingleTransformFunction<Operation>(Operation);
+
+/// <https://drafts.css-houdini.org/css-properties-values-api-1/#animation-behavior-of-custom-properties>
+impl Animate for SingleTransformFunction<computed::TransformOperation> {
+    fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
+        let list = |function: &Self| Transform(vec![function.0.clone()].into());
+        match &*list(self).animate(&list(other), procedure)?.0 {
+            [operation] => Ok(Self(operation.clone())),
+            _ => Err(()),
+        }
+    }
 }
 
 /// A list of component values, including the list's multiplier.
@@ -237,8 +256,8 @@ impl<Component> Value<Component> {
     }
 }
 
-impl<L, N, P, LP, C, Image, U, Integer, A, T, R, Transform>
-    Value<GenericValueComponent<L, N, P, LP, C, Image, U, Integer, A, T, R, Transform>>
+impl<L, N, P, LP, C, Image, U, Integer, A, T, R, TF, TL>
+    Value<GenericValueComponent<L, N, P, LP, C, Image, U, Integer, A, T, R, TF, TL>>
 where
     Self: ToCss,
 {
@@ -448,10 +467,9 @@ impl<'a> Parser<'a> {
             None,
         );
         for component in self.syntax.components.iter() {
+            let component = component.premultiplied();
             let result = input.try_parse(|input| {
-                input.parse_entirely(|input| {
-                    Self::parse_value(context, input, &component.unpremultiplied())
-                })
+                input.parse_entirely(|input| Self::parse_value(context, input, &component))
             });
             let Ok(values) = result else { continue };
             self.output.extend(values);
@@ -540,39 +558,18 @@ impl<'a> Parser<'a> {
                 SpecifiedValueComponent::Resolution(specified::Resolution::parse(context, input)?)
             },
             DataType::TransformFunction => SpecifiedValueComponent::TransformFunction(
-                specified::Transform::parse(context, input)?,
+                SingleTransformFunction(specified::TransformOperation::parse(context, input)?),
             ),
             DataType::CustomIdent => {
                 let name = CustomIdent::parse(input, &[])?;
                 SpecifiedValueComponent::CustomIdent(name)
             },
-            DataType::TransformList => {
-                let mut values = vec![];
-                let Some(multiplier) = component.unpremultiplied().multiplier() else {
-                    debug_assert!(false, "Unpremultiplied <transform-list> had no multiplier?");
-                    return Err(
-                        input.new_custom_error(StyleParseErrorKind::PropertySyntaxField(
-                            PropertySyntaxParseError::UnexpectedEOF,
-                        )),
-                    );
-                };
-                debug_assert_eq!(multiplier, Multiplier::Space);
-                loop {
-                    values.push(SpecifiedValueComponent::TransformFunction(
-                        specified::Transform::parse(context, input)?,
-                    ));
-                    let result = Self::expect_multiplier(input, &multiplier);
-                    if Self::expect_multiplier_yielded_eof_error(&result) {
-                        break;
-                    }
-                    result?;
-                }
-                let list = ComponentList {
-                    multiplier,
-                    components: values.into(),
-                };
-                SpecifiedValueComponent::TransformList(list)
-            },
+            DataType::TransformList => SpecifiedValueComponent::TransformList(Transform(
+                Space::parse(input, |input| {
+                    specified::TransformOperation::parse(context, input)
+                })?
+                .into(),
+            )),
             DataType::String => {
                 let string = input.expect_string()?;
                 SpecifiedValueComponent::String(string.as_ref().to_owned().into())
@@ -697,5 +694,87 @@ impl CustomAnimatedValue {
             name: self.name.clone(),
             value: self.value.to_declared_value(),
         })
+    }
+}
+
+#[cfg(all(test, feature = "servo"))]
+mod tests {
+    use super::*;
+    use crate::test_support::with_computed_context;
+
+    fn computed(syntax: &str, css: &str) -> Result<ComputedValue, ()> {
+        let syntax = Descriptor::from_str(syntax, false).expect("the syntax must parse");
+        let url_data = UrlExtraData::from(url::Url::parse("about:blank").unwrap());
+        let mut input = cssparser::ParserInput::new(css);
+        let value = CSSParser::new(&mut input)
+            .parse_entirely(|input| {
+                SpecifiedValue::parse(
+                    input,
+                    &syntax,
+                    &url_data,
+                    AllowComputationallyDependent::Yes,
+                )
+            })
+            .map_err(|_| ())?;
+        Ok(with_computed_context(|context| {
+            value.to_computed_value(context)
+        }))
+    }
+
+    fn animate(syntax: &str, from: &str, to: &str, procedure: Procedure) -> Result<String, ()> {
+        let from = computed(syntax, from)?;
+        Ok(from
+            .animate(&computed(syntax, to)?, procedure)?
+            .to_css_string())
+    }
+
+    #[test]
+    fn transform_function_is_one_function() {
+        assert!(computed("<transform-function>", "translateX(1px) scale(2)").is_err());
+        assert!(computed("<transform-function>", "none").is_err());
+    }
+
+    #[test]
+    fn transform_list_excludes_none() {
+        assert!(computed("<transform-list>", "none").is_err());
+    }
+
+    #[test]
+    fn transform_function_does_not_add_to_transform_list() {
+        assert_eq!(
+            animate(
+                "<transform-function> | <transform-list>",
+                "translateX(100px) scale(2)",
+                "translateX(200px)",
+                Procedure::Add,
+            ),
+            Err(()),
+        );
+    }
+
+    #[test]
+    fn transform_list_adds_by_concatenation() {
+        assert_eq!(
+            animate(
+                "<transform-list>",
+                "translateX(100px)",
+                "scale(2)",
+                Procedure::Add
+            ),
+            Ok("translateX(100px) scale(2)".to_owned()),
+        );
+    }
+
+    #[test]
+    fn transform_function_list_interpolates_as_transform_list() {
+        assert_eq!(
+            animate(
+                "<transform-function>+",
+                "translateX(100px) scale(2)",
+                "translateX(200px)",
+                Procedure::Interpolate { progress: 0.5 },
+            ),
+            Ok("translateX(150px) scale(1.5)".to_owned()),
+        );
     }
 }
