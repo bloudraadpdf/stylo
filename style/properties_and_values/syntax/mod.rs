@@ -280,19 +280,20 @@ impl Component {
         self.multiplier
     }
 
-    /// If the component is premultiplied, return the un-premultiplied component.
+    /// The pre-multiplied data type name equivalent to the component, e.g. `<transform-list>` for
+    /// `<transform-function>+`.
+    ///
+    /// <https://drafts.css-houdini.org/css-properties-values-api-1/#pre-multiplied-data-type-name>
     #[inline]
-    pub fn unpremultiplied(&self) -> Cow<'_, Self> {
-        match self.name.unpremultiply() {
-            Some(component) => {
-                debug_assert!(
-                    self.multiplier.is_none(),
-                    "Shouldn't have parsed a multiplier for a pre-multiplied data type name",
-                );
-                Cow::Owned(component)
-            },
-            None => Cow::Borrowed(self),
+    pub fn premultiplied(&self) -> Cow<'_, Self> {
+        let transform_list = ComponentName::DataType(DataType::TransformList);
+        if transform_list.unpremultiply().as_ref() != Some(self) {
+            return Cow::Borrowed(self);
         }
+        Cow::Owned(Self {
+            name: transform_list,
+            multiplier: None,
+        })
     }
 }
 

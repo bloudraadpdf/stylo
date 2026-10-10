@@ -280,7 +280,7 @@ pub use self::text_decor_4::{
     TextDecorationSkipKind, TextDecorationSkipSpaces, TextDecorationTrim, TextEmphasisSkip,
 };
 pub use self::time::Time;
-pub use self::transform::{Rotate, Scale, Transform};
+pub use self::transform::{Rotate, Scale, Transform, TransformOperation};
 pub use self::transform::{TransformBox, TransformOrigin, TransformStyle, Translate};
 #[cfg(feature = "gecko")]
 pub use self::ui::CursorImage;
