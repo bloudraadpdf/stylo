@@ -1,7 +1,8 @@
 use style::{
+    custom_properties::VariableValue,
     properties_and_values::syntax::{ComponentName, Descriptor, Multiplier, data_type::DataType},
     properties_and_values::value::{AllowComputationallyDependent, SpecifiedValue},
-    stylesheets::UrlExtraData,
+    stylesheets::{Namespaces, UrlExtraData},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -195,20 +196,39 @@ pub fn length_percentage_sum(source: &str) -> Option<LengthPercentageSum> {
     (sum.percentage.is_finite() && sum.px.is_finite()).then_some(sum)
 }
 pub fn parse_registered_value(descriptor: &Descriptor, value: &str) -> Option<SpecifiedValue> {
+    parse_static_value(value, |input, url_data| {
+        SpecifiedValue::parse(
+            input,
+            descriptor,
+            url_data,
+            AllowComputationallyDependent::Yes,
+        )
+    })
+}
+
+/// Whether a registered custom property value is valid at parse time: it matches the syntax, or
+/// it has an arbitrary substitution function, which only computed-value time validates.
+pub fn registered_value_is_valid_at_parse_time(descriptor: &Descriptor, value: &str) -> bool {
+    parse_registered_value(descriptor, value).is_some()
+        || parse_static_value(value, |input, url_data| {
+            VariableValue::parse(input, url_data, &Namespaces::default())
+        })
+        .is_some_and(|value| value.has_references())
+}
+
+fn parse_static_value<'i, T>(
+    value: &'i str,
+    parse: impl FnOnce(
+        &mut cssparser::Parser<'i, '_>,
+        &UrlExtraData,
+    ) -> Result<T, style_traits::ParseError<'i>>,
+) -> Option<T> {
     let mut input = cssparser::ParserInput::new(value);
-    let mut parser = cssparser::Parser::new(&mut input);
     let url_data = UrlExtraData::from(
         url::Url::parse("about:blank").expect("the static CSS value base URL must be valid"),
     );
-    parser
-        .parse_entirely(|input| {
-            SpecifiedValue::parse(
-                input,
-                descriptor,
-                &url_data,
-                AllowComputationallyDependent::Yes,
-            )
-        })
+    cssparser::Parser::new(&mut input)
+        .parse_entirely(|input| parse(input, &url_data))
         .ok()
 }
 
@@ -330,5 +350,21 @@ pub fn direct_registered_serialization(computed: &str) -> String {
         computed.replace("rgb(255, 0, 0)", "red")
     } else {
         computed.to_owned()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn substitution_functions_are_valid_at_parse_time() {
+        let length = Descriptor::from_str("<length>", false).expect("the syntax must parse");
+        assert!(registered_value_is_valid_at_parse_time(&length, "1px"));
+        assert!(registered_value_is_valid_at_parse_time(
+            &length,
+            "var(--missing, invalid)"
+        ));
+        assert!(!registered_value_is_valid_at_parse_time(&length, "invalid"));
     }
 }
