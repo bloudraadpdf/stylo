@@ -272,7 +272,7 @@ pub use self::text::{
     HangingPunctuation, InitialLetter, LetterSpacing, LineBreak, TextCombineUpright, TextFit,
     TextIndent, TextSizeAdjust,
 };
-pub use self::text::{HyphenateCharacter, HyphenateLimitChars, HyphenateLimitLines};
+pub use self::text::{HyphenateCharCount, HyphenateCharacter, HyphenateLimitChars, HyphenateLimitLines};
 pub use self::text::{
     OverflowWrap, RubyPosition, TextOverflow, WordBreak, WordSpaceTransform, WordSpacing,
 };

@@ -3882,6 +3882,12 @@ mod tests {
             PropertyDeclaration::HyphenateCharacter(value) => {
                 PropertyDeclaration::HyphenateCharacter(value.clone())
             },
+            PropertyDeclaration::HyphenateAfter(value) => {
+                PropertyDeclaration::HyphenateAfter(value.clone())
+            },
+            PropertyDeclaration::HyphenateBefore(value) => {
+                PropertyDeclaration::HyphenateBefore(value.clone())
+            },
             PropertyDeclaration::HyphenateLimitChars(value) => {
                 PropertyDeclaration::HyphenateLimitChars(value.clone())
             },

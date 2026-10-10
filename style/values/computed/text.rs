@@ -183,6 +183,9 @@ pub type TextIndent = GenericTextIndent<LengthPercentage>;
 /// A computed value for the `hyphenate-character` property.
 pub type HyphenateLimitChars = GenericHyphenateLimitChars<CSSInteger>;
 
+/// A computed value of `hyphenate-before` and `hyphenate-after`.
+pub type HyphenateCharCount = NumberOrAuto<CSSInteger>;
+
 /// The computed limit on successive hyphenated lines.
 pub type HyphenateLimitLines =
     GenericHyphenateLimitLines<crate::values::generics::NonNegative<CSSInteger>>;

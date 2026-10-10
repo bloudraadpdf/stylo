@@ -6287,6 +6287,24 @@ spec = "https://drafts.csswg.org/css-text-4/#hyphenate-char-limits"
 affects = "layout"
 boxed = true
 
+[hyphenate-before]
+type = "HyphenateCharCount"
+initial = "computed::HyphenateCharCount::Auto"
+struct = "inherited_text"
+initial_specified_value = "specified::HyphenateCharCount::Auto"
+spec = "Nonstandard (CSS3 Text 2007 draft; PDFreactor and Antenna House; the before part of hyphenate-limit-chars)"
+animation_type = "discrete"
+affects = "layout"
+
+[hyphenate-after]
+type = "HyphenateCharCount"
+initial = "computed::HyphenateCharCount::Auto"
+struct = "inherited_text"
+initial_specified_value = "specified::HyphenateCharCount::Auto"
+spec = "Nonstandard (CSS3 Text 2007 draft; PDFreactor and Antenna House; the after part of hyphenate-limit-chars)"
+animation_type = "discrete"
+affects = "layout"
+
 [hanging-punctuation]
 type = "HangingPunctuation"
 initial = "computed::HangingPunctuation::NONE"

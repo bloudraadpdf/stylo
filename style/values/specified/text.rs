@@ -172,6 +172,9 @@ pub enum HyphenateCharacter {
 /// A value for the `hyphenate-limit-chars` property.
 pub type HyphenateLimitChars = GenericHyphenateLimitChars<Integer>;
 
+/// A specified value of `hyphenate-before` and `hyphenate-after`.
+pub type HyphenateCharCount = NumberOrAuto<Integer>;
+
 /// The specified limit on successive hyphenated lines.
 pub type HyphenateLimitLines =
     GenericHyphenateLimitLines<crate::values::specified::NonNegativeInteger>;
@@ -316,6 +319,19 @@ mod tests {
         );
         let computed = computed::text::TextAlignLast::new(TextAlignLastKeyword::Start, true);
         assert_eq!(TextAlignLast::from_computed_value(&computed), TextAlignLast::MatchParent);
+    }
+
+    #[test]
+    fn hyphenate_char_counts_accept_auto_and_an_integer() {
+        for css in ["auto", "5"] {
+            assert_eq!(
+                parse_value::<HyphenateCharCount>(css)
+                    .expect(css)
+                    .to_css_string(),
+                css
+            );
+        }
+        assert!(parse_value::<HyphenateCharCount>("5px").is_err());
     }
 
     #[test]

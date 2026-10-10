@@ -55,6 +55,7 @@ pub enum GenericHyphenateLimitLines<Integer> {
     ToCss,
     ToResolvedValue,
     ToShmem,
+    ToTyped,
 )]
 #[repr(C, u8)]
 pub enum NumberOrAuto<N> {
