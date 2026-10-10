@@ -271,6 +271,13 @@ impl ShadowCascadeOrder {
         Self(1)
     }
 
+    /// The tree steps from the element's tree: outwards through shadow hosts when positive,
+    /// inwards through assigned slots when negative.
+    #[inline]
+    pub fn steps(self) -> i8 {
+        self.0
+    }
+
     /// Decrement the level, moving inwards. We should only move inwards if
     /// we're traversing slots.
     #[inline]

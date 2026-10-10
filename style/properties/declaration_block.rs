@@ -25,6 +25,7 @@ use crate::properties::{
     StyleBuilder,
 };
 use crate::rule_cache::RuleCacheConditions;
+use crate::rule_tree::CascadeLevel;
 use crate::selector_map::PrecomputedHashSet;
 use crate::selector_parser::SelectorImpl;
 use crate::shared_lock::Locked;
@@ -1088,6 +1089,7 @@ impl PropertyDeclarationBlock {
                             &context.builder.custom_properties,
                             stylist,
                             &context,
+                            CascadeLevel::same_tree_author_normal(),
                             environment_resolution,
                             &mut shorthand_cache,
                             &mut AttributeTracker::new(&DummyAttributeProvider {}),

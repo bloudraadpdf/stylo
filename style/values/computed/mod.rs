@@ -16,7 +16,9 @@ use super::specified;
 use super::{CSSFloat, CSSInteger};
 use crate::computed_value_flags::ComputedValueFlags;
 use crate::context::QuirksMode;
-use crate::custom_properties::ComputedCustomProperties;
+use crate::custom_properties::{
+    document_function_scope, CallingElement, ComputedCustomProperties, FunctionScope,
+};
 use crate::derives::*;
 use crate::font_metrics::{FontMetrics, FontMetricsOrientation};
 use crate::media_queries::Device;
@@ -26,7 +28,7 @@ use crate::properties::{ComputedValues, StyleBuilder};
 use crate::rule_cache::RuleCacheConditions;
 use crate::rule_tree::CascadeLevel;
 use crate::stylesheets::container_rule::{
-    ContainerInfo, ContainerSizeQuery, ContainerSizeQueryResult,
+    ContainerConditions, ContainerInfo, ContainerSizeQuery, ContainerSizeQueryResult,
 };
 use crate::stylist::Stylist;
 use crate::values::generics::ClampToNonNegative;
@@ -448,6 +450,9 @@ pub struct Context<'a> {
 
     tree_counting: TreeCounting<'a>,
 
+    /// The element whose properties call custom functions.
+    calling_element: Option<Box<dyn CallingElement<'a> + 'a>>,
+
     /// Container size query for this context.
     container_size_query: RefCell<ContainerSizeQuery<'a>>,
 }
@@ -479,6 +484,7 @@ impl<'a> Context<'a> {
             rule_cache_conditions: RefCell::new(&mut conditions),
             scope: CascadeLevel::same_tree_author_normal(),
             tree_counting: TreeCounting::default(),
+            calling_element: None,
             container_size_query: RefCell::new(ContainerSizeQuery::none()),
         };
         f(&context)
@@ -517,6 +523,7 @@ impl<'a> Context<'a> {
             rule_cache_conditions: RefCell::new(&mut conditions),
             scope: CascadeLevel::same_tree_author_normal(),
             tree_counting: TreeCounting::default(),
+            calling_element: None,
             container_size_query: RefCell::new(container_size_query),
         };
 
@@ -542,6 +549,7 @@ impl<'a> Context<'a> {
             rule_cache_conditions: RefCell::new(rule_cache_conditions),
             scope: CascadeLevel::same_tree_author_normal(),
             tree_counting: TreeCounting::default(),
+            calling_element: None,
             container_size_query: RefCell::new(container_size_query),
         }
     }
@@ -566,6 +574,7 @@ impl<'a> Context<'a> {
             rule_cache_conditions: RefCell::new(rule_cache_conditions),
             scope: CascadeLevel::same_tree_author_normal(),
             tree_counting: TreeCounting::default(),
+            calling_element: None,
             container_size_query: RefCell::new(container_size_query),
         }
     }
@@ -590,12 +599,41 @@ impl<'a> Context<'a> {
             rule_cache_conditions: RefCell::new(rule_cache_conditions),
             scope: CascadeLevel::same_tree_author_normal(),
             tree_counting: TreeCounting::default(),
+            calling_element: None,
             container_size_query: RefCell::new(ContainerSizeQuery::none()),
         }
     }
 
     pub(crate) fn set_tree_counting(&mut self, resolve: impl Fn() -> (usize, usize) + 'a) {
         self.tree_counting = TreeCounting::new(resolve);
+    }
+
+    pub(crate) fn set_calling_element(&mut self, element: impl CallingElement<'a> + 'a) {
+        self.calling_element = Some(Box::new(element));
+    }
+
+    /// The trees, innermost first, whose custom functions a declaration at `level` sees.
+    pub fn function_scope(&self, level: CascadeLevel) -> FunctionScope<'a> {
+        match self.calling_element {
+            Some(ref element) => element.function_scope(level),
+            None => self
+                .builder
+                .stylist
+                .map_or_else(FunctionScope::new, |stylist| {
+                    document_function_scope(stylist, level)
+                }),
+        }
+    }
+
+    /// Whether a `@container` rule in a custom function body applies to the calling element.
+    pub fn function_container_matches(&self, conditions: &ContainerConditions) -> bool {
+        let Some(ref element) = self.calling_element else {
+            return false;
+        };
+        let mut flags = ComputedValueFlags::empty();
+        let matches = element.container_matches(conditions, &mut flags);
+        self.builder.add_flags(flags);
+        matches
     }
 
     pub(crate) fn sibling_index(&self) -> CSSFloat {

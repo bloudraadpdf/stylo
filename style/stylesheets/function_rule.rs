@@ -124,6 +124,7 @@ fn parse_parameter<'i>(
         .try_parse(Descriptor::parse_css_type)
         .unwrap_or_else(|_| Descriptor::universal());
     let default = if input.try_parse(|input| input.expect_colon()).is_ok() {
+        input.skip_whitespace();
         let value = VariableValue::parse(input, &context.url_data, &context.namespaces)?;
         if value.css.is_empty() || !default_matches(&value, &syntax) {
             return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
@@ -290,6 +291,7 @@ impl FunctionDescriptor {
         let Some(name) = FunctionDescriptorName::parse(&name) else {
             return Err(input.new_custom_error(StyleParseErrorKind::UnknownProperty(name)));
         };
+        input.skip_whitespace();
         let value = VariableValue::parse(input, &context.url_data, &context.namespaces)?;
         input.expect_exhausted()?;
         Ok(Self {

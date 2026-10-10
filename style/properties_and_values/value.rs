@@ -16,6 +16,7 @@ use super::{
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
 use crate::properties;
+use crate::rule_tree::CascadeLevel;
 use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
 use crate::stylist::Stylist;
 use crate::values::{
@@ -697,6 +698,7 @@ impl CustomAnimatedValue {
                 context.style().custom_properties(),
                 stylist,
                 context,
+                CascadeLevel::Animations,
                 attribute_tracker,
             )?
         } else {

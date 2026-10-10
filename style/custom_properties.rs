@@ -24,6 +24,7 @@ use crate::properties_and_values::{
         SpecifiedValue as SpecifiedRegisteredValue,
     },
 };
+use crate::rule_tree::CascadeLevel;
 use crate::selector_map::{PrecomputedHashMap, PrecomputedHashSet};
 use crate::stylesheets::{Namespaces, UrlExtraData};
 use crate::stylist::Stylist;
@@ -43,6 +44,13 @@ use std::fmt::{self, Write};
 use std::ops::{Index, IndexMut};
 use std::{cmp, num};
 use style_traits::{CssWriter, ParseError, StyleParseErrorKind, ToCss};
+
+mod functions;
+
+pub use self::functions::{
+    document_function_scope, CallingElement, CustomFunction, ElementCallSite, FunctionBodyItem,
+    FunctionScope,
+};
 
 /// CSS env-1 §3 paged-media environment variables, in CSS pixels.
 ///
@@ -518,6 +526,15 @@ bitflags! {
 }
 
 impl NonCustomReferences {
+    /// The references that apply to an element: root-relative units only on the root.
+    fn for_element(self, is_root_element: bool) -> Self {
+        let mut mask = Self::NON_ROOT_DEPENDENCIES;
+        if is_root_element {
+            mask |= Self::ROOT_DEPENDENCIES
+        }
+        self & mask
+    }
+
     fn for_each<F>(&self, mut f: F)
     where
         F: FnMut(SingleNonCustomReference),
@@ -690,14 +707,6 @@ struct References {
 impl References {
     fn has_references(&self) -> bool {
         !self.refs.is_empty()
-    }
-
-    fn non_custom_references(&self, is_root_element: bool) -> NonCustomReferences {
-        let mut mask = NonCustomReferences::NON_ROOT_DEPENDENCIES;
-        if is_root_element {
-            mask |= NonCustomReferences::ROOT_DEPENDENCIES
-        }
-        self.non_custom_references & mask
     }
 }
 
@@ -1367,6 +1376,16 @@ pub struct CustomPropertiesBuilder<'a, 'b: 'a> {
     stylist: &'a Stylist,
     computed_context: &'a mut computed::Context<'b>,
     references_from_non_custom_properties: NonCustomReferenceMap<Vec<Name>>,
+    function_levels: FunctionLevels,
+}
+
+/// The cascade levels of custom property values that call custom functions.
+type FunctionLevels = PrecomputedHashMap<Name, CascadeLevel>;
+
+/// Custom properties whose resolution waits for font-relative properties.
+pub struct DeferredCustomProperties {
+    values: CustomPropertiesMap,
+    function_levels: FunctionLevels,
 }
 
 fn find_non_custom_references(
@@ -1377,10 +1396,43 @@ fn find_non_custom_references(
     include_universal: bool,
 ) -> Option<NonCustomReferences> {
     let dependent_types = registration.syntax.dependent_types();
-    let may_reference_length = dependent_types.intersects(DependentDataTypes::LENGTH)
-        || (include_universal && registration.syntax.is_universal());
+    non_custom_dependencies(
+        dependent_types,
+        dependent_types.intersects(DependentDataTypes::LENGTH)
+            || (include_universal && registration.syntax.is_universal()),
+        value.references.non_custom_references,
+        may_have_color_scheme,
+        is_root_element,
+    )
+}
+
+/// The non-custom references of a computation of `dependent_types`.
+fn function_non_custom_references(
+    dependencies: &functions::FunctionDependencies,
+    value: &VariableValue,
+    may_have_color_scheme: bool,
+    is_root_element: bool,
+) -> Option<NonCustomReferences> {
+    non_custom_dependencies(
+        dependencies.dependent_types,
+        dependencies
+            .dependent_types
+            .intersects(DependentDataTypes::LENGTH),
+        value.references.non_custom_references | dependencies.non_custom_references,
+        may_have_color_scheme,
+        is_root_element,
+    )
+}
+
+fn non_custom_dependencies(
+    dependent_types: DependentDataTypes,
+    may_reference_length: bool,
+    references: NonCustomReferences,
+    may_have_color_scheme: bool,
+    is_root_element: bool,
+) -> Option<NonCustomReferences> {
     if may_reference_length {
-        let value_dependencies = value.references.non_custom_references(is_root_element);
+        let value_dependencies = references.for_element(is_root_element);
         if !value_dependencies.is_empty() {
             return Some(value_dependencies);
         }
@@ -1413,6 +1465,7 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
             stylist,
             computed_context,
             references_from_non_custom_properties: NonCustomReferenceMap::default(),
+            function_levels: FunctionLevels::default(),
         }
     }
 
@@ -1500,6 +1553,7 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
                 // that require computed value of such dependencies.
                 let has_dependency = unparsed_value.references.any_var
                     || unparsed_value.references.any_attr
+                    || unparsed_value.references.any_function
                     || find_non_custom_references(
                         registration,
                         unparsed_value,
@@ -1515,11 +1569,16 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
                     return substitute_references_if_needed_and_apply(
                         name,
                         unparsed_value,
+                        None,
                         map,
                         self.stylist,
                         self.computed_context,
                         attribute_tracker,
                     );
+                }
+                if unparsed_value.references.any_function {
+                    self.function_levels
+                        .insert(name.clone(), priority.cascade_level());
                 }
                 self.may_have_cycles = true;
                 let value = ComputedRegisteredValue::universal(Arc::clone(unparsed_value));
@@ -1584,7 +1643,13 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
 
     /// Note a non-custom property with variable reference that may in turn depend on that property.
     /// e.g. `font-size` depending on a custom property that may be a registered property using `em`.
-    pub fn maybe_note_non_custom_dependency(&mut self, id: LonghandId, decl: &PropertyDeclaration) {
+    /// `level` is the cascade level of the declaration.
+    pub fn maybe_note_non_custom_dependency(
+        &mut self,
+        id: LonghandId,
+        decl: &PropertyDeclaration,
+        level: CascadeLevel,
+    ) {
         debug_assert!(Self::might_have_non_custom_dependency(id, decl));
         if id == LonghandId::ColorScheme {
             // If we might change the color-scheme, we need to defer computation of colors.
@@ -1592,12 +1657,13 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
             return;
         }
 
-        let refs = match decl {
-            PropertyDeclaration::WithVariables(ref v) => &v.value.variable_value.references,
+        let value = match decl {
+            PropertyDeclaration::WithVariables(ref v) => &v.value.variable_value,
             _ => return,
         };
+        let refs = &value.references;
 
-        if !refs.any_var && !refs.any_attr {
+        if !refs.any_var && !refs.any_attr && !refs.any_function {
             return;
         }
 
@@ -1622,21 +1688,26 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
             _ => return,
         };
 
+        let called = refs.any_function.then(|| {
+            functions::FunctionDependencies::new(
+                value,
+                &self.computed_context.function_scope(level),
+            )
+            .names
+        });
         let variables: Vec<Atom> = refs
             .refs
             .iter()
-            .filter_map(|reference| {
-                let name = reference.function.variable_name()?;
-                let registration = self.stylist.get_custom_property_registration(name);
-                if !registration
+            .filter_map(|reference| reference.function.variable_name())
+            .chain(called.iter().flatten())
+            .filter(|name| {
+                self.stylist
+                    .get_custom_property_registration(name)
                     .syntax
                     .dependent_types()
                     .intersects(DependentDataTypes::LENGTH)
-                {
-                    return None;
-                }
-                Some(name.clone())
             })
+            .cloned()
             .collect();
         references.for_each(|idx| {
             let entry = &mut self.references_from_non_custom_properties[idx];
@@ -1783,7 +1854,7 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
         mut self,
         defer: DeferFontRelativeCustomPropertyResolution,
         attribute_tracker: &mut AttributeTracker,
-    ) -> Option<CustomPropertiesMap> {
+    ) -> Option<DeferredCustomProperties> {
         let mut deferred_custom_properties = None;
         if self.may_have_cycles {
             if defer == DeferFontRelativeCustomPropertyResolution::Yes {
@@ -1797,6 +1868,7 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
                 self.has_color_scheme,
                 &self.seen,
                 &self.references_from_non_custom_properties,
+                &self.function_levels,
                 self.stylist,
                 self.computed_context,
                 attribute_tracker,
@@ -1833,17 +1905,24 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
             },
         };
 
-        deferred_custom_properties
+        deferred_custom_properties.map(|values| DeferredCustomProperties {
+            values,
+            function_levels: self.function_levels,
+        })
     }
 
     /// Fully resolve all deferred custom properties, assuming that the incoming context
     /// has necessary properties resolved.
     pub fn build_deferred(
-        deferred: CustomPropertiesMap,
+        deferred: DeferredCustomProperties,
         stylist: &Stylist,
         computed_context: &mut computed::Context,
         attribute_tracker: &mut AttributeTracker,
     ) {
+        let DeferredCustomProperties {
+            values: deferred,
+            function_levels,
+        } = deferred;
         if deferred.is_empty() {
             return;
         }
@@ -1858,6 +1937,7 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
             substitute_references_if_needed_and_apply(
                 k,
                 v,
+                function_levels.get(k).copied(),
                 &mut custom_properties,
                 stylist,
                 computed_context,
@@ -1879,6 +1959,7 @@ fn substitute_all(
     has_color_scheme: bool,
     seen: &PrecomputedHashSet<&Name>,
     references_from_non_custom_properties: &NonCustomReferenceMap<Vec<Name>>,
+    function_levels: &FunctionLevels,
     stylist: &Stylist,
     computed_context: &computed::Context,
     attr_provider: &mut AttributeTracker,
@@ -1944,6 +2025,8 @@ fn substitute_all(
         /// non-inherited properties in the same map, since we need to make sure we iterate through
         /// them in the right order.
         deferred_properties: Option<&'a mut CustomPropertiesMap>,
+        /// The cascade levels of values that call custom functions.
+        function_levels: &'a FunctionLevels,
     }
 
     /// This function combines the traversal for cycle removal and value
@@ -1988,6 +2071,7 @@ fn substitute_all(
                 context.non_custom_references |= non_custom_refs.unwrap_or_default();
                 let has_dependency = value.references.any_var
                     || value.references.any_attr
+                    || value.references.any_function
                     || non_custom_refs.is_some();
                 // Nothing to resolve.
                 if !has_dependency {
@@ -2008,6 +2092,7 @@ fn substitute_all(
                         substitute_references_if_needed_and_apply(
                             name,
                             &value,
+                            None,
                             &mut context.map,
                             context.stylist,
                             context.computed_context,
@@ -2028,9 +2113,25 @@ fn substitute_all(
                 }
                 context.contains_computed_custom_property |= !registration.syntax.is_universal();
 
+                let dependencies = value.references.any_function.then(|| {
+                    let scope = context
+                        .computed_context
+                        .function_scope(context.function_levels[name]);
+                    functions::FunctionDependencies::new(value, &scope)
+                });
+                if let Some(ref dependencies) = dependencies {
+                    context.non_custom_references |= function_non_custom_references(
+                        dependencies,
+                        value,
+                        context.has_color_scheme,
+                        is_root,
+                    )
+                    .unwrap_or_default();
+                }
+
                 // Hold a strong reference to the value so that we don't
                 // need to keep reference to context.map.
-                Some(value.clone())
+                Some((value.clone(), dependencies))
             },
             VarType::NonCustom(ref non_custom) => {
                 let entry = &mut context.non_custom_index_map[*non_custom];
@@ -2079,7 +2180,7 @@ fn substitute_all(
                     *lowlink = cmp::min(*lowlink, next_index);
                 }
             };
-        if let Some(ref v) = value.as_ref() {
+        if let Some((ref v, ref dependencies)) = value {
             debug_assert!(
                 matches!(var, VarType::Custom(_)),
                 "Non-custom property has references?"
@@ -2099,8 +2200,31 @@ fn substitute_all(
                 );
             }
 
+            // ... and the custom properties that called functions read...
+            for name in dependencies
+                .iter()
+                .flat_map(|dependencies| &dependencies.names)
+            {
+                visit_link(
+                    VarType::Custom(name.clone()),
+                    context,
+                    &mut lowlink,
+                    &mut self_ref,
+                );
+            }
+
             // ... Then non-custom properties.
-            v.references.non_custom_references.for_each(|r| {
+            let function_references = dependencies
+                .as_ref()
+                .filter(|dependencies| {
+                    dependencies
+                        .dependent_types
+                        .intersects(DependentDataTypes::LENGTH)
+                })
+                .map_or_else(NonCustomReferences::empty, |dependencies| {
+                    dependencies.non_custom_references
+                });
+            (v.references.non_custom_references | function_references).for_each(|r| {
                 visit_link(VarType::NonCustom(r), context, &mut lowlink, &mut self_ref);
             });
         } else if let VarType::NonCustom(non_custom) = var {
@@ -2198,7 +2322,7 @@ fn substitute_all(
             return None;
         }
 
-        if let Some(ref v) = value {
+        if let Some((ref v, ref dependencies)) = value {
             let registration = context.stylist.get_custom_property_registration(&name);
 
             let mut defer = false;
@@ -2219,6 +2343,20 @@ fn substitute_all(
                             .variable_name()
                             .is_some_and(|name| deferred.get(name).is_some())
                             || reference.function.is_attr()
+                    })
+                    || dependencies.as_ref().is_some_and(|dependencies| {
+                        dependencies.any_attr
+                            || dependencies
+                                .names
+                                .iter()
+                                .any(|name| deferred.get(name).is_some())
+                            || function_non_custom_references(
+                                dependencies,
+                                v,
+                                context.has_color_scheme,
+                                context.computed_context.is_root_element(),
+                            )
+                            .is_some()
                     });
 
                 if defer {
@@ -2229,10 +2367,13 @@ fn substitute_all(
             }
 
             // If there are no var references we should already be computed and substituted by now.
-            if !defer && (v.references.any_var || v.references.any_attr) {
+            if !defer
+                && (v.references.any_var || v.references.any_attr || v.references.any_function)
+            {
                 substitute_references_if_needed_and_apply(
                     &name,
                     v,
+                    context.function_levels.get(&name).copied(),
                     &mut context.map,
                     context.stylist,
                     context.computed_context,
@@ -2264,6 +2405,7 @@ fn substitute_all(
             invalid_non_custom_properties,
             deferred_properties: deferred_properties_map.as_deref_mut(),
             contains_computed_custom_property: false,
+            function_levels,
         };
         traverse(
             VarType::Custom((*name).clone()),
@@ -2306,10 +2448,12 @@ fn handle_invalid_at_computed_value_time(
     custom_properties.remove(registration, name);
 }
 
-/// Replace `var()`, `env()`, and `attr()` functions in a pre-existing variable value.
+/// Replace `var()`, `env()`, `attr()` and custom function calls in a pre-existing variable
+/// value declared at `level`.
 fn substitute_references_if_needed_and_apply(
     name: &Name,
     value: &Arc<VariableValue>,
+    level: Option<CascadeLevel>,
     custom_properties: &mut ComputedCustomProperties,
     stylist: &Stylist,
     computed_context: &computed::Context,
@@ -2325,14 +2469,16 @@ fn substitute_references_if_needed_and_apply(
 
     let inherited = computed_context.inherited_custom_properties();
     let url_data = &value.url_data;
-    let substitution = match substitute_internal(
-        value,
+    let substitution = Substitutor::new(
         custom_properties,
         stylist,
         computed_context,
         EnvironmentResolutionMode::ResolveLiveEnvironment,
         attribute_tracker,
-    ) {
+        level,
+    )
+    .substitute_value(value, None);
+    let substitution = match substitution {
         Ok(v) => v,
         Err(..) => {
             handle_invalid_at_computed_value_time(name, custom_properties, computed_context);
@@ -2447,6 +2593,14 @@ impl<'a> Substitution<'a> {
             last_token_type,
         }
     }
+
+    fn into_owned(self) -> Substitution<'static> {
+        Substitution {
+            css: Cow::Owned(self.css.into_owned()),
+            first_token_type: self.first_token_type,
+            last_token_type: self.last_token_type,
+        }
+    }
 }
 
 fn compute_value(
@@ -2482,79 +2636,272 @@ fn remove_and_insert_initial_value(
     }
 }
 
-fn do_substitute_chunk<'a>(
-    css: &'a str,
-    start: usize,
-    end: usize,
-    first_token_type: TokenSerializationType,
-    last_token_type: TokenSerializationType,
-    url_data: &UrlExtraData,
+/// Replaces arbitrary substitution functions in values of one declaration.
+struct Substitutor<'a, 'b, 't> {
     custom_properties: &'a ComputedCustomProperties,
-    stylist: &Stylist,
-    computed_context: &computed::Context,
+    stylist: &'a Stylist,
+    computed_context: &'a computed::Context<'b>,
     environment_resolution: EnvironmentResolutionMode,
-    references: &mut std::iter::Peekable<std::slice::Iter<SubstitutionFunctionReference>>,
-    attribute_tracker: &mut AttributeTracker,
-) -> Result<Substitution<'a>, ()> {
-    if start == end {
-        // Empty string. Easy.
-        return Ok(Substitution::default());
-    }
-    // Easy case: no references involved.
-    if references
-        .peek()
-        .map_or(true, |reference| reference.end > end)
-    {
-        let result = &css[start..end];
-        return Ok(Substitution::new(
-            Cow::Borrowed(result),
-            first_token_type,
-            last_token_type,
-        ));
-    }
+    attribute_tracker: &'a mut AttributeTracker<'t>,
+    calls: functions::FunctionCalls<'a>,
+}
 
-    let mut substituted = ComputedValue::empty(url_data);
-    let mut next_token_type = first_token_type;
-    let mut cur_pos = start;
-    while let Some(reference) = references.next_if(|reference| reference.end <= end) {
-        if reference.start != cur_pos {
-            substituted.push(
-                &css[cur_pos..reference.start],
-                next_token_type,
-                reference.prev_token_type,
-            )?;
-        }
+type ReferenceIter<'a> = std::iter::Peekable<std::slice::Iter<'a, SubstitutionFunctionReference>>;
 
-        let substitution = substitute_one_reference(
-            css,
-            url_data,
+impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
+    fn new(
+        custom_properties: &'a ComputedCustomProperties,
+        stylist: &'a Stylist,
+        computed_context: &'a computed::Context<'b>,
+        environment_resolution: EnvironmentResolutionMode,
+        attribute_tracker: &'a mut AttributeTracker<'t>,
+        level: Option<CascadeLevel>,
+    ) -> Self {
+        Self {
             custom_properties,
-            reference,
             stylist,
             computed_context,
             environment_resolution,
-            references,
             attribute_tracker,
-        )?;
+            calls: functions::FunctionCalls::new(level),
+        }
+    }
 
-        // Optimize the property: var(--...) case to avoid allocating at all.
-        if reference.start == start && reference.end == end {
-            return Ok(substitution);
+    /// Replace the substitution functions of `value`, with `var()` seen from `frame`.
+    fn substitute_value(
+        &mut self,
+        value: &'a VariableValue,
+        frame: Option<usize>,
+    ) -> Result<Substitution<'a>, ()> {
+        let mut references = value.references.refs.iter().peekable();
+        self.chunk(
+            &value.css,
+            0,
+            value.css.len(),
+            value.first_token_type,
+            value.last_token_type,
+            &value.url_data,
+            frame,
+            &mut references,
+        )
+    }
+
+    /// The value of `var(name)` seen from `frame`.
+    fn variable(&mut self, frame: Option<usize>, name: &Name) -> Option<Substitution<'a>> {
+        if let Some(value) = self.frame_variable(frame, name) {
+            return value.map(Substitution::from_value);
+        }
+        let registration = self.stylist.get_custom_property_registration(name);
+        self.custom_properties
+            .get(registration, name)
+            .map(|value| Substitution::from_value(value.to_variable_value()))
+    }
+
+    fn chunk(
+        &mut self,
+        css: &'a str,
+        start: usize,
+        end: usize,
+        first_token_type: TokenSerializationType,
+        last_token_type: TokenSerializationType,
+        url_data: &UrlExtraData,
+        frame: Option<usize>,
+        references: &mut ReferenceIter<'a>,
+    ) -> Result<Substitution<'a>, ()> {
+        if start == end {
+            // Empty string. Easy.
+            return Ok(Substitution::default());
+        }
+        // Easy case: no references involved.
+        if references
+            .peek()
+            .map_or(true, |reference| reference.end > end)
+        {
+            let result = &css[start..end];
+            return Ok(Substitution::new(
+                Cow::Borrowed(result),
+                first_token_type,
+                last_token_type,
+            ));
         }
 
-        substituted.push(
-            &substitution.css,
-            substitution.first_token_type,
-            substitution.last_token_type,
-        )?;
-        next_token_type = reference.next_token_type;
-        cur_pos = reference.end;
+        let mut substituted = ComputedValue::empty(url_data);
+        let mut next_token_type = first_token_type;
+        let mut cur_pos = start;
+        while let Some(reference) = references.next_if(|reference| reference.end <= end) {
+            if reference.start != cur_pos {
+                substituted.push(
+                    &css[cur_pos..reference.start],
+                    next_token_type,
+                    reference.prev_token_type,
+                )?;
+            }
+
+            let substitution = self.reference(css, url_data, reference, frame, references)?;
+
+            // Optimize the property: var(--...) case to avoid allocating at all.
+            if reference.start == start && reference.end == end {
+                return Ok(substitution);
+            }
+
+            substituted.push(
+                &substitution.css,
+                substitution.first_token_type,
+                substitution.last_token_type,
+            )?;
+            next_token_type = reference.next_token_type;
+            cur_pos = reference.end;
+        }
+        // Push the rest of the value if needed.
+        if cur_pos != end {
+            substituted.push(&css[cur_pos..end], next_token_type, last_token_type)?;
+        }
+        Ok(Substitution::from_value(substituted))
     }
-    // Push the rest of the value if needed.
-    if cur_pos != end {
-        substituted.push(&css[cur_pos..end], next_token_type, last_token_type)?;
+
+    fn reference(
+        &mut self,
+        css: &'a str,
+        url_data: &UrlExtraData,
+        reference: &'a SubstitutionFunctionReference,
+        frame: Option<usize>,
+        references: &mut ReferenceIter<'a>,
+    ) -> Result<Substitution<'a>, ()> {
+        let simple_subst = |s: &str| {
+            Some(Substitution::new(
+                Cow::Owned(quoted_css_string(s)),
+                TokenSerializationType::Nothing,
+                TokenSerializationType::Nothing,
+            ))
+        };
+        let substitution: Option<_> = match &reference.function {
+            SubstitutionFunction::Var(name) => self.variable(frame, name),
+            SubstitutionFunction::Env(name) => {
+                match self.environment_resolution {
+                    EnvironmentResolutionMode::ResolveLiveEnvironment => {
+                        let device = self.stylist.device();
+                        device
+                            .environment()
+                            .get(name, device, url_data)
+                            .map(Substitution::from_value)
+                    },
+                    EnvironmentResolutionMode::TreatAsMissing => None,
+                    EnvironmentResolutionMode::ResolvePagedMediaEnvOnly => {
+                        // CSS env-1 §3 paged-media path: only the six
+                        // paged-media variable names resolve; every other
+                        // env() (notably safe-area-inset-*) falls through
+                        // to its authored fallback, matching the previous
+                        // `TreatAsMissing` behaviour for those names.
+                        if is_paged_media_env_name(name) {
+                            let device = self.stylist.device();
+                            device
+                                .environment()
+                                .get(name, device, url_data)
+                                .map(Substitution::from_value)
+                        } else {
+                            None
+                        }
+                    },
+                }
+            },
+            SubstitutionFunction::Function { name, arguments } => {
+                let arguments = arguments
+                    .iter()
+                    .map(|argument| {
+                        self.chunk(
+                            css,
+                            argument.start,
+                            argument.end,
+                            argument.first_token_type,
+                            argument.last_token_type,
+                            url_data,
+                            frame,
+                            references,
+                        )
+                        .ok()
+                        .map(Substitution::into_owned)
+                    })
+                    .collect();
+                self.call(frame, name, arguments, url_data)
+            },
+            // https://drafts.csswg.org/css-values-5/#attr-substitution
+            SubstitutionFunction::Attr { name, syntax } => {
+                let attribute = name
+                    .expanded_name()
+                    .as_ref()
+                    .and_then(|name| self.attribute_tracker.query(name));
+                attribute.map_or_else(
+                    || {
+                        // Special case when fallback and <attr-type> are omitted.
+                        // See FAILURE: https://drafts.csswg.org/css-values-5/#attr-substitution
+                        if reference.fallback.is_none() && *syntax == AttributeType::None {
+                            simple_subst("")
+                        } else {
+                            None
+                        }
+                    },
+                    |attr| {
+                        let mut input = ParserInput::new(&attr);
+                        let mut parser = Parser::new(&mut input);
+                        match syntax {
+                            AttributeType::Unit(unit) => {
+                                let css = {
+                                    // Verify that attribute data is a <number-token>.
+                                    parser.expect_number().ok()?;
+                                    let mut s = attr.clone();
+                                    s.push_str(unit.as_ref());
+                                    s
+                                };
+                                let serialization = match unit {
+                                    AttrUnit::Number => TokenSerializationType::Number,
+                                    AttrUnit::Percentage => TokenSerializationType::Percentage,
+                                    _ => TokenSerializationType::Dimension,
+                                };
+                                let value =
+                                    ComputedValue::new(css, url_data, serialization, serialization);
+                                Some(Substitution::from_value(value))
+                            },
+                            AttributeType::Type(syntax) => {
+                                let value = SpecifiedRegisteredValue::parse(
+                                    &mut parser,
+                                    syntax,
+                                    url_data,
+                                    AllowComputationallyDependent::Yes,
+                                )
+                                .ok()?;
+                                Some(Substitution::from_value(value.to_variable_value()))
+                            },
+                            AttributeType::RawString | AttributeType::None => simple_subst(&attr),
+                        }
+                    },
+                )
+            },
+        };
+
+        if let Some(s) = substitution {
+            // Skip references that are inside the outer variable (in fallback for example).
+            while references
+                .next_if(|next_ref| next_ref.end <= reference.end)
+                .is_some()
+            {}
+            return Ok(s);
+        }
+
+        let Some(ref fallback) = reference.fallback else {
+            return Err(());
+        };
+
+        self.chunk(
+            css,
+            fallback.start.get(),
+            reference.end - 1, // Skip the closing parenthesis of the reference value.
+            fallback.first_token_type,
+            fallback.last_token_type,
+            url_data,
+            frame,
+            references,
+        )
     }
-    Ok(Substitution::from_value(substituted))
 }
 
 fn quoted_css_string(src: &str) -> String {
@@ -2563,206 +2910,49 @@ fn quoted_css_string(src: &str) -> String {
     dest
 }
 
-fn substitute_one_reference<'a>(
-    css: &'a str,
-    url_data: &UrlExtraData,
-    custom_properties: &'a ComputedCustomProperties,
-    reference: &SubstitutionFunctionReference,
-    stylist: &Stylist,
-    computed_context: &computed::Context,
-    environment_resolution: EnvironmentResolutionMode,
-    references: &mut std::iter::Peekable<std::slice::Iter<SubstitutionFunctionReference>>,
-    attribute_tracker: &mut AttributeTracker,
-) -> Result<Substitution<'a>, ()> {
-    let simple_subst = |s: &str| {
-        Some(Substitution::new(
-            Cow::Owned(quoted_css_string(s)),
-            TokenSerializationType::Nothing,
-            TokenSerializationType::Nothing,
-        ))
-    };
-    let substitution: Option<_> = match &reference.function {
-        SubstitutionFunction::Var(name) => {
-            let registration = stylist.get_custom_property_registration(name);
-            custom_properties
-                .get(registration, name)
-                .map(|v| Substitution::from_value(v.to_variable_value()))
-        },
-        SubstitutionFunction::Env(name) => {
-            match environment_resolution {
-                EnvironmentResolutionMode::ResolveLiveEnvironment => {
-                    let device = stylist.device();
-                    device
-                        .environment()
-                        .get(name, device, url_data)
-                        .map(Substitution::from_value)
-                },
-                EnvironmentResolutionMode::TreatAsMissing => None,
-                EnvironmentResolutionMode::ResolvePagedMediaEnvOnly => {
-                    // CSS env-1 §3 paged-media path: only the six
-                    // paged-media variable names resolve; every other
-                    // env() (notably safe-area-inset-*) falls through
-                    // to its authored fallback, matching the previous
-                    // `TreatAsMissing` behaviour for those names.
-                    if is_paged_media_env_name(name) {
-                        let device = stylist.device();
-                        device
-                            .environment()
-                            .get(name, device, url_data)
-                            .map(Substitution::from_value)
-                    } else {
-                        None
-                    }
-                },
-            }
-        },
-        SubstitutionFunction::Function { .. } => None,
-        // https://drafts.csswg.org/css-values-5/#attr-substitution
-        SubstitutionFunction::Attr { name, syntax } => {
-            let attribute = name
-                .expanded_name()
-                .as_ref()
-                .and_then(|name| attribute_tracker.query(name));
-            attribute.map_or_else(
-                || {
-                    // Special case when fallback and <attr-type> are omitted.
-                    // See FAILURE: https://drafts.csswg.org/css-values-5/#attr-substitution
-                    if reference.fallback.is_none() && *syntax == AttributeType::None {
-                        simple_subst("")
-                    } else {
-                        None
-                    }
-                },
-                |attr| {
-                    let mut input = ParserInput::new(&attr);
-                    let mut parser = Parser::new(&mut input);
-                    match syntax {
-                        AttributeType::Unit(unit) => {
-                            let css = {
-                                // Verify that attribute data is a <number-token>.
-                                parser.expect_number().ok()?;
-                                let mut s = attr.clone();
-                                s.push_str(unit.as_ref());
-                                s
-                            };
-                            let serialization = match unit {
-                                AttrUnit::Number => TokenSerializationType::Number,
-                                AttrUnit::Percentage => TokenSerializationType::Percentage,
-                                _ => TokenSerializationType::Dimension,
-                            };
-                            let value =
-                                ComputedValue::new(css, url_data, serialization, serialization);
-                            Some(Substitution::from_value(value))
-                        },
-                        AttributeType::Type(syntax) => {
-                            let value = SpecifiedRegisteredValue::parse(
-                                &mut parser,
-                                syntax,
-                                url_data,
-                                AllowComputationallyDependent::Yes,
-                            )
-                            .ok()?;
-                            Some(Substitution::from_value(value.to_variable_value()))
-                        },
-                        AttributeType::RawString | AttributeType::None => simple_subst(&attr),
-                    }
-                },
-            )
-        },
-    };
-
-    if let Some(s) = substitution {
-        // Skip references that are inside the outer variable (in fallback for example).
-        while references
-            .next_if(|next_ref| next_ref.end <= reference.end)
-            .is_some()
-        {}
-        return Ok(s);
-    }
-
-    let Some(ref fallback) = reference.fallback else {
-        return Err(());
-    };
-
-    do_substitute_chunk(
-        css,
-        fallback.start.get(),
-        reference.end - 1, // Skip the closing parenthesis of the reference value.
-        fallback.first_token_type,
-        fallback.last_token_type,
-        url_data,
-        custom_properties,
-        stylist,
-        computed_context,
-        environment_resolution,
-        references,
-        attribute_tracker,
-    )
-}
-
-/// Replace `var()`, `env()`, and `attr()` functions. Return `Err(..)` for invalid at computed time.
-fn substitute_internal<'a>(
-    variable_value: &'a VariableValue,
-    custom_properties: &'a ComputedCustomProperties,
-    stylist: &Stylist,
-    computed_context: &computed::Context,
-    environment_resolution: EnvironmentResolutionMode,
-    attribute_tracker: &mut AttributeTracker,
-) -> Result<Substitution<'a>, ()> {
-    let mut refs = variable_value.references.refs.iter().peekable();
-    do_substitute_chunk(
-        &variable_value.css,
-        /* start = */ 0,
-        /* end = */ variable_value.css.len(),
-        variable_value.first_token_type,
-        variable_value.last_token_type,
-        &variable_value.url_data,
-        custom_properties,
-        stylist,
-        computed_context,
-        environment_resolution,
-        &mut refs,
-        attribute_tracker,
-    )
-}
-
-/// Replace var(), env(), and attr() functions, returning the resulting CSS string.
+/// Replace var(), env(), attr() and custom function calls, returning the resulting CSS string.
+///
+/// `level` is the cascade level of the declaration, which scopes its custom function names.
 pub fn substitute<'a>(
     variable_value: &'a VariableValue,
     custom_properties: &'a ComputedCustomProperties,
-    stylist: &Stylist,
-    computed_context: &computed::Context,
-    attribute_tracker: &mut AttributeTracker,
+    stylist: &'a Stylist,
+    computed_context: &'a computed::Context,
+    level: CascadeLevel,
+    attribute_tracker: &'a mut AttributeTracker,
 ) -> Result<Cow<'a, str>, ()> {
     substitute_with_environment_resolution(
         variable_value,
         custom_properties,
         stylist,
         computed_context,
+        level,
         EnvironmentResolutionMode::ResolveLiveEnvironment,
         attribute_tracker,
     )
 }
 
-/// Replace var(), env(), and attr() functions, returning the resulting CSS string.
+/// Replace var(), env(), attr() and custom function calls, returning the resulting CSS string.
 pub fn substitute_with_environment_resolution<'a>(
     variable_value: &'a VariableValue,
     custom_properties: &'a ComputedCustomProperties,
-    stylist: &Stylist,
-    computed_context: &computed::Context,
+    stylist: &'a Stylist,
+    computed_context: &'a computed::Context,
+    level: CascadeLevel,
     environment_resolution: EnvironmentResolutionMode,
-    attribute_tracker: &mut AttributeTracker,
+    attribute_tracker: &'a mut AttributeTracker,
 ) -> Result<Cow<'a, str>, ()> {
     debug_assert!(variable_value.has_references());
-    let v = substitute_internal(
-        variable_value,
+    Substitutor::new(
         custom_properties,
         stylist,
         computed_context,
         environment_resolution,
         attribute_tracker,
-    )?;
-    Ok(v.css)
+        Some(level),
+    )
+    .substitute_value(variable_value, None)
+    .map(|substitution| substitution.css)
 }
 
 #[cfg(all(test, feature = "servo"))]
