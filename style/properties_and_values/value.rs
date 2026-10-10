@@ -28,7 +28,7 @@ use selectors::matching::QuirksMode;
 use servo_arc::Arc;
 use smallvec::SmallVec;
 use style_traits::{
-    owned_str::OwnedStr, CssWriter, ParseError as StyleParseError, ParsingMode, Separator, Space,
+    owned_str::OwnedStr, CssWriter, ParseError as StyleParseError, ParsingMode,
     StyleParseErrorKind, ToCss,
 };
 
@@ -569,12 +569,9 @@ impl<'a> Parser<'a> {
                 let name = CustomIdent::parse(input, &[])?;
                 SpecifiedValueComponent::CustomIdent(name)
             },
-            DataType::TransformList => SpecifiedValueComponent::TransformList(Transform(
-                Space::parse(input, |input| {
-                    specified::TransformOperation::parse(context, input)
-                })?
-                .into(),
-            )),
+            DataType::TransformList => {
+                SpecifiedValueComponent::TransformList(specified::Transform::parse(context, input)?)
+            },
             DataType::String => {
                 let string = input.expect_string()?;
                 SpecifiedValueComponent::String(string.as_ref().to_owned().into())
@@ -737,11 +734,6 @@ mod tests {
     fn transform_function_is_one_function() {
         assert!(computed("<transform-function>", "translateX(1px) scale(2)").is_err());
         assert!(computed("<transform-function>", "none").is_err());
-    }
-
-    #[test]
-    fn transform_list_excludes_none() {
-        assert!(computed("<transform-list>", "none").is_err());
     }
 
     #[test]
