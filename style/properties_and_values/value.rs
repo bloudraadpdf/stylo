@@ -4,6 +4,7 @@
 
 //! Parsing for registered custom properties.
 
+use std::borrow::Cow;
 use std::fmt::{self, Write};
 
 use super::{
@@ -16,6 +17,7 @@ use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
 use crate::properties;
 use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
+use crate::stylist::Stylist;
 use crate::values::{
     animated::{self, Animate, Procedure},
     computed::{self, ToComputedValue},
@@ -645,7 +647,7 @@ impl CustomAnimatedValue {
         declaration: &properties::CustomDeclaration,
         context: &mut computed::Context,
         _initial: &properties::ComputedValues,
-        _attribute_tracker: &mut AttributeTracker,
+        attribute_tracker: &mut AttributeTracker,
     ) -> Option<Self> {
         let computed_value = match declaration.value {
             properties::CustomDeclarationValue::Unparsed(ref value) => {
@@ -653,31 +655,22 @@ impl CustomAnimatedValue {
                     context.builder.stylist.is_some(),
                     "Need a Stylist to get property registration!"
                 );
-                let registration = context
-                    .builder
-                    .stylist
-                    .unwrap()
-                    .get_custom_property_registration(&declaration.name);
+                let stylist = context.builder.stylist.unwrap();
+                let registration = stylist.get_custom_property_registration(&declaration.name);
                 if registration.syntax.is_universal() {
                     // FIXME: Do we need to perform substitution here somehow?
-                    ComputedValue {
-                        v: ValueInner::Universal(Arc::clone(value)),
-                        url_data: value.url_data.clone(),
-                    }
+                    ComputedValue::universal(Arc::clone(value))
                 } else {
-                    let mut input = cssparser::ParserInput::new(&value.css);
-                    let mut input = CSSParser::new(&mut input);
-                    SpecifiedValue::compute(
-                        &mut input,
+                    // A value that is invalid at computed-value time stays unparsed: it animates
+                    // discretely and does not compose.
+                    Self::compute_registered(
+                        value,
                         registration,
-                        &value.url_data,
+                        stylist,
                         context,
-                        AllowComputationallyDependent::Yes,
+                        attribute_tracker,
                     )
-                    .unwrap_or_else(|_| ComputedValue {
-                        v: ValueInner::Universal(Arc::clone(value)),
-                        url_data: value.url_data.clone(),
-                    })
+                    .unwrap_or_else(|()| ComputedValue::universal(Arc::clone(value)))
                 }
             },
             properties::CustomDeclarationValue::Parsed(ref v) => v.to_computed_value(context),
@@ -691,6 +684,34 @@ impl CustomAnimatedValue {
         })
     }
 
+    fn compute_registered(
+        value: &ComputedPropertyValue,
+        registration: &PropertyRegistrationData,
+        stylist: &Stylist,
+        context: &computed::Context,
+        attribute_tracker: &mut AttributeTracker,
+    ) -> Result<ComputedValue, ()> {
+        let css = if value.has_references() {
+            crate::custom_properties::substitute(
+                value,
+                context.style().custom_properties(),
+                stylist,
+                context,
+                attribute_tracker,
+            )?
+        } else {
+            Cow::Borrowed(value.css.as_str())
+        };
+        let mut input = cssparser::ParserInput::new(&css);
+        SpecifiedValue::compute(
+            &mut CSSParser::new(&mut input),
+            registration,
+            &value.url_data,
+            context,
+            AllowComputationallyDependent::Yes,
+        )
+    }
+
     pub(crate) fn to_declaration(&self) -> properties::PropertyDeclaration {
         properties::PropertyDeclaration::Custom(properties::CustomDeclaration {
             name: self.name.clone(),
@@ -702,7 +723,14 @@ impl CustomAnimatedValue {
 #[cfg(all(test, feature = "servo"))]
 mod tests {
     use super::*;
-    use crate::test_support::with_computed_context;
+    use crate::dom::DummyAttributeProvider;
+    use crate::properties::{CustomDeclaration, CustomDeclarationValue, StyleBuilder};
+    use crate::properties_and_values::registry::PropertyRegistration;
+    use crate::properties_and_values::rule::{Inherits, PropertyRuleName};
+    use crate::rule_cache::RuleCacheConditions;
+    use crate::stylesheets::container_rule::ContainerSizeQuery;
+    use crate::test_support::{test_device, with_computed_context};
+    use crate::Atom;
 
     fn computed(syntax: &str, css: &str) -> Result<ComputedValue, ()> {
         let syntax = Descriptor::from_str(syntax, false).expect("the syntax must parse");
@@ -786,5 +814,62 @@ mod tests {
             ),
             Ok("translateX(150px) scale(1.5)".to_owned()),
         );
+    }
+
+    fn keyframe_value(syntax: &str, css: &str) -> ComputedValue {
+        let name = Atom::from("x");
+        let url_data = UrlExtraData::from(url::Url::parse("about:blank").unwrap());
+        let mut stylist = Stylist::new(test_device(), QuirksMode::NoQuirks);
+        stylist
+            .custom_property_script_registry_mut()
+            .register(PropertyRegistration {
+                name: PropertyRuleName(name.clone()),
+                data: PropertyRegistrationData {
+                    syntax: Descriptor::from_str(syntax, false).expect("the syntax must parse"),
+                    inherits: Inherits::False,
+                    initial_value: None,
+                },
+                url_data: url_data.clone(),
+                source_location: cssparser::SourceLocation { line: 0, column: 0 },
+            });
+        let mut input = cssparser::ParserInput::new(css);
+        let value = CSSParser::new(&mut input)
+            .parse_entirely(|input| {
+                ComputedPropertyValue::parse(input, &url_data, &Default::default())
+            })
+            .expect("the declaration value must parse");
+        let declaration = CustomDeclaration {
+            name,
+            value: CustomDeclarationValue::Unparsed(Arc::new(value)),
+        };
+        let initial_values = stylist.device().default_computed_values();
+        let mut conditions = RuleCacheConditions::default();
+        let mut context = computed::Context::new(
+            StyleBuilder::for_derived_style(stylist.device(), Some(&stylist), initial_values, None),
+            QuirksMode::NoQuirks,
+            &mut conditions,
+            ContainerSizeQuery::none(),
+        );
+        CustomAnimatedValue::from_declaration(
+            &declaration,
+            &mut context,
+            initial_values,
+            &mut AttributeTracker::new(&DummyAttributeProvider),
+        )
+        .expect("an unparsed declaration has an animated value")
+        .value
+    }
+
+    #[test]
+    fn keyframe_value_substitutes_references() {
+        let value = keyframe_value("<length>", "var(--missing, 1px)");
+        assert!(value.as_universal().is_none());
+        assert_eq!(value.to_css_string(), "1px");
+    }
+
+    #[test]
+    fn keyframe_value_invalid_at_computed_value_time_stays_unparsed() {
+        let value = keyframe_value("<length>", "var(--missing, invalid)");
+        assert!(value.as_universal().is_some());
     }
 }
