@@ -158,6 +158,11 @@ pub struct SingleTransformFunction<Operation>(Operation);
 /// <https://drafts.css-houdini.org/css-properties-values-api-1/#animation-behavior-of-custom-properties>
 impl Animate for SingleTransformFunction<computed::TransformOperation> {
     fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
+        // Concatenation cannot give a single function, so addition accumulates.
+        let procedure = match procedure {
+            Procedure::Add => Procedure::Accumulate { count: 1 },
+            procedure => procedure,
+        };
         let list = |function: &Self| Transform(vec![function.0.clone()].into());
         match &*list(self).animate(&list(other), procedure)?.0 {
             [operation] => Ok(Self(operation.clone())),
@@ -737,6 +742,19 @@ mod tests {
     #[test]
     fn transform_list_excludes_none() {
         assert!(computed("<transform-list>", "none").is_err());
+    }
+
+    #[test]
+    fn transform_function_adds_by_accumulation() {
+        assert_eq!(
+            animate(
+                "<transform-function>#",
+                "translateX(10px), scale(2)",
+                "translateX(20px), scale(3)",
+                Procedure::Add,
+            ),
+            Ok("translateX(30px), scale(4)".to_owned()),
+        );
     }
 
     #[test]
