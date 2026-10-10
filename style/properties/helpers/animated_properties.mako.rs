@@ -29,6 +29,7 @@ use super::ComputedValues;
 use crate::derives::*;
 use crate::properties::OwnedPropertyDeclarationId;
 use crate::dom::AttributeTracker;
+use crate::rule_tree::CascadeLevel;
 use crate::values::animated::{Animate, Procedure, ToAnimatedValue, ToAnimatedZero};
 use crate::values::animated::effects::AnimatedFilter;
 #[cfg(feature = "gecko")] use crate::values::computed::TransitionProperty;
@@ -381,6 +382,7 @@ impl AnimationValue {
                         custom_properties,
                         context.builder.stylist.unwrap(),
                         context,
+                        CascadeLevel::Animations,
                         &mut cache,
                         attribute_tracker,
                     )

@@ -45,6 +45,7 @@ use crate::dom::AttributeTracker;
 use crate::gecko_bindings::structs::{CSSPropertyId, NonCustomCSSPropertyId, RefPtr};
 use crate::logical_geometry::WritingMode;
 use crate::parser::ParserContext;
+use crate::rule_tree::CascadeLevel;
 use crate::stylesheets::CssRuleType;
 use crate::stylesheets::Origin;
 use crate::stylist::Stylist;
@@ -1521,6 +1522,7 @@ impl UnparsedValue {
         custom_properties: &ComputedCustomProperties,
         stylist: &Stylist,
         computed_context: &computed::Context,
+        level: CascadeLevel,
         shorthand_cache: &'cache mut ShorthandsWithPropertyReferencesCache,
         attribute_tracker: &mut AttributeTracker,
     ) -> Cow<'cache, PropertyDeclaration> {
@@ -1529,6 +1531,7 @@ impl UnparsedValue {
             custom_properties,
             stylist,
             computed_context,
+            level,
             EnvironmentResolutionMode::ResolveLiveEnvironment,
             shorthand_cache,
             attribute_tracker,
@@ -1541,6 +1544,7 @@ impl UnparsedValue {
         custom_properties: &ComputedCustomProperties,
         stylist: &Stylist,
         computed_context: &computed::Context,
+        level: CascadeLevel,
         environment_resolution: EnvironmentResolutionMode,
         shorthand_cache: &'cache mut ShorthandsWithPropertyReferencesCache,
         attribute_tracker: &mut AttributeTracker,
@@ -1578,6 +1582,7 @@ impl UnparsedValue {
             custom_properties,
             stylist,
             computed_context,
+            level,
             environment_resolution,
             attribute_tracker,
         ) {

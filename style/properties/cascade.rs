@@ -8,7 +8,7 @@ use crate::applicable_declarations::CascadePriority;
 use crate::color::AbsoluteColor;
 use crate::computed_value_flags::ComputedValueFlags;
 use crate::custom_properties::{
-    CustomPropertiesBuilder, DeferFontRelativeCustomPropertyResolution,
+    CustomPropertiesBuilder, DeferFontRelativeCustomPropertyResolution, ElementCallSite,
 };
 use crate::dom::{AttributeProvider, AttributeTracker, DummyAttributeProvider, TElement, TNode};
 #[cfg(feature = "gecko")]
@@ -253,7 +253,11 @@ fn iter_declarations<'builder, 'decls: 'builder>(
             declarations.note_declaration(declaration, priority, rule_identity, id);
             if CustomPropertiesBuilder::might_have_non_custom_dependency(id, declaration) {
                 if let Some(ref mut builder) = custom_builder {
-                    builder.maybe_note_non_custom_dependency(id, declaration);
+                    builder.maybe_note_non_custom_dependency(
+                        id,
+                        declaration,
+                        priority.cascade_level(),
+                    );
                 }
             }
         }
@@ -329,6 +333,14 @@ where
             None => (1, 1),
         }
     });
+
+    if let Some(element) = element {
+        context.set_calling_element(ElementCallSite {
+            stylist,
+            element,
+            originating_element_style: pseudo.and(parent_style),
+        });
+    }
 
     context.style().add_flags(cascade_input_flags);
 
@@ -892,6 +904,7 @@ impl<'b> Cascade<'b> {
         context: &mut computed::Context,
         shorthand_cache: &'cache mut ShorthandsWithPropertyReferencesCache,
         declaration: &'decl PropertyDeclaration,
+        level: CascadeLevel,
         attribute_tracker: &mut AttributeTracker,
     ) -> Cow<'decl, PropertyDeclaration>
     where
@@ -934,6 +947,7 @@ impl<'b> Cascade<'b> {
             context.builder.custom_properties(),
             context.builder.stylist.unwrap(),
             context,
+            level,
             shorthand_cache,
             attribute_tracker,
         )
@@ -1186,8 +1200,13 @@ impl<'b> Cascade<'b> {
             }
         }
 
-        let mut declaration =
-            self.substitute_variables_if_needed(context, cache, declaration, attribute_tracker);
+        let mut declaration = self.substitute_variables_if_needed(
+            context,
+            cache,
+            declaration,
+            priority.cascade_level(),
+            attribute_tracker,
+        );
 
         // When document colors are disabled, do special handling of
         // properties that are marked as ignored in that mode.

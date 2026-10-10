@@ -98,7 +98,7 @@ them.
 - [x] Parse `@function`, `FunctionDeclarations`, `<dashed-function>`; CSSOM model.
 - [ ] Moegoe CSSOM bindings: `CSSFunctionRule`, `CSSFunctionDeclarations`,
       `CSSFunctionDescriptors`.
-- [ ] Compile functions into `CascadeData`; layer order; media folding.
-- [ ] Evaluate calls: arguments, defaults, locals, result, types, keywords.
-- [ ] Cycles: substitution context stack; Tarjan edges for free variables.
+- [x] Compile functions into `CascadeData`; layer order; media folding.
+- [x] Evaluate calls: arguments, defaults, locals, result, types, keywords.
+- [x] Cycles: substitution context stack; Tarjan edges for free variables.
 - [ ] Tree scopes; `@container` in bodies.

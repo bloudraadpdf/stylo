@@ -10,7 +10,7 @@ use crate::applicable_declarations::{
 };
 use crate::computed_value_flags::ComputedValueFlags;
 use crate::context::{CascadeInputs, QuirksMode};
-use crate::custom_properties::ComputedCustomProperties;
+use crate::custom_properties::{ComputedCustomProperties, CustomFunction, FunctionBodyItem};
 use crate::derives::*;
 use crate::dom::TElement;
 #[cfg(feature = "gecko")]
@@ -3222,6 +3222,10 @@ pub struct CascadeData {
     #[ignore_malloc_size_of = "Arc"]
     custom_property_registrations: LayerOrderedMap<Arc<PropertyRegistration>>,
 
+    /// The layer-ordered custom functions at this `CascadeData`'s origin, indexed by name.
+    #[ignore_malloc_size_of = "Arc"]
+    custom_functions: LayerOrderedMap<Arc<CustomFunction>>,
+
     /// Custom media query registrations.
     custom_media: CustomMediaMap,
 
@@ -3307,6 +3311,7 @@ impl CascadeData {
             selectors_for_cache_revalidation: SelectorMap::new(),
             animations: Default::default(),
             custom_property_registrations: Default::default(),
+            custom_functions: Default::default(),
             custom_media: Default::default(),
             layer_id: Default::default(),
             layers: smallvec::smallvec![CascadeLayer::root()],
@@ -3604,6 +3609,7 @@ impl CascadeData {
         }
         self.animations.shrink_if_needed();
         self.custom_property_registrations.shrink_if_needed();
+        self.custom_functions.shrink_if_needed();
         self.invalidation_map.shrink_if_needed();
         self.relative_selector_invalidation_map.shrink_if_needed();
         self.additional_relative_selector_invalidation_map
@@ -3659,7 +3665,8 @@ impl CascadeData {
         self.extra_data.sort_by_layer(&self.layers);
         self.animations
             .sort_with(&self.layers, compare_keyframes_in_same_layer);
-        self.custom_property_registrations.sort(&self.layers)
+        self.custom_property_registrations.sort(&self.layers);
+        self.custom_functions.sort(&self.layers)
     }
 
     /// Collects all the applicable media query results into `results`.
@@ -3984,6 +3991,68 @@ impl CascadeData {
             .reserve(child_count);
     }
 
+    /// Fold the effective `@media` and `@supports` rules of a function body; keep `@container`
+    /// rules, which depend on the calling element.
+    fn function_body(
+        &mut self,
+        rules: std::slice::Iter<CssRule>,
+        device: &Device,
+        quirks_mode: QuirksMode,
+        guard: &SharedRwLockReadGuard,
+        rebuild_kind: SheetRebuildKind,
+    ) -> Vec<FunctionBodyItem> {
+        let mut body = Vec::new();
+        for rule in rules {
+            match *rule {
+                CssRule::FunctionDeclarations(ref rule) => body.extend(
+                    rule.descriptors
+                        .iter()
+                        .cloned()
+                        .map(FunctionBodyItem::Descriptor),
+                ),
+                CssRule::Container(ref rule) => body.push(FunctionBodyItem::Container(
+                    rule.conditions.clone(),
+                    self.function_body(
+                        rule.rules.read_with(guard).0.iter(),
+                        device,
+                        quirks_mode,
+                        guard,
+                        rebuild_kind,
+                    )
+                    .into_boxed_slice(),
+                )),
+                _ => {
+                    let mut effective = false;
+                    let Some(children) = EffectiveRulesIterator::<&CustomMediaMap>::children(
+                        rule,
+                        device,
+                        quirks_mode,
+                        &self.custom_media,
+                        guard,
+                        &mut effective,
+                    ) else {
+                        continue;
+                    };
+                    if let CssRule::Media(ref media_rule) = *rule {
+                        if rebuild_kind.should_rebuild_invalidation() {
+                            self.effective_media_query_results
+                                .saw_effective(&**media_rule);
+                        }
+                    }
+                    let nested =
+                        self.function_body(children, device, quirks_mode, guard, rebuild_kind);
+                    body.extend(nested);
+                },
+            }
+        }
+        body
+    }
+
+    /// Returns the winning custom function with this name, by layer order.
+    pub fn custom_function(&self, name: &Atom) -> Option<&Arc<CustomFunction>> {
+        self.custom_functions.get(name)
+    }
+
     fn add_rule_list<S>(
         &mut self,
         rules: std::slice::Iter<CssRule>,
@@ -4097,7 +4166,21 @@ impl CascadeData {
                         compare_keyframes_in_same_layer,
                     )?;
                 },
-                CssRule::Function(..) => continue,
+                CssRule::Function(ref rule) => {
+                    let body = self.function_body(
+                        rule.rules.read_with(guard).0.iter(),
+                        device,
+                        quirks_mode,
+                        guard,
+                        rebuild_kind,
+                    );
+                    self.custom_functions.try_insert(
+                        rule.name.0.clone(),
+                        Arc::new(CustomFunction::new(rule, body)),
+                        containing_rule_state.layer_id,
+                    )?;
+                    continue;
+                },
                 CssRule::Property(ref registration) => {
                     self.custom_property_registrations.try_insert(
                         registration.name.0.clone(),
@@ -4651,6 +4734,7 @@ impl CascadeData {
         }
         self.animations.clear();
         self.custom_property_registrations.clear();
+        self.custom_functions.clear();
         self.layer_id.clear();
         self.layers.clear();
         self.layers.push(CascadeLayer::root());
