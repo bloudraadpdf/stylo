@@ -96,9 +96,17 @@ them.
 ## Tasks
 
 - [x] Parse `@function`, `FunctionDeclarations`, `<dashed-function>`; CSSOM model.
-- [ ] Moegoe CSSOM bindings: `CSSFunctionRule`, `CSSFunctionDeclarations`,
+- [x] Moegoe CSSOM bindings: `CSSFunctionRule`, `CSSFunctionDeclarations`,
       `CSSFunctionDescriptors`.
 - [x] Compile functions into `CascadeData`; layer order; media folding.
 - [x] Evaluate calls: arguments, defaults, locals, result, types, keywords.
 - [x] Cycles: substitution context stack; Tarjan edges for free variables.
-- [ ] Tree scopes; `@container` in bodies.
+- [x] Tree scopes; `@container` in bodies.
+- [x] `attr()` taint: tainted ranges follow substitution; a tainted `<url>`
+      is invalid at computed-value time.
+
+## Open
+
+- `revert-layer` and `revert-rule` returned by `result` act as `unset`.
+- Typed registered custom properties drop `attr()` taint ranges.
+- `insertRule()` on a `CSSFunctionRule` uses the top-level rule grammar.
