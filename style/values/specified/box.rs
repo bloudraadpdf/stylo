@@ -1027,6 +1027,7 @@ pub enum ScrollSnapAxis {
     Block,
     Inline,
     Both,
+    Pair,
 }
 
 /// https://drafts.csswg.org/css-scroll-snap-1/#snap-strictness
@@ -1289,7 +1290,7 @@ impl ScrollSnapType {
 }
 
 impl Parse for ScrollSnapType {
-    /// none | [ x | y | block | inline | both ] [ mandatory | proximity ]?
+    /// none | [ x | y | block | inline | both | pair ] [ mandatory | proximity ]?
     fn parse<'i, 't>(
         _context: &ParserContext,
         input: &mut Parser<'i, 't>,
@@ -1323,6 +1324,30 @@ impl ToCss for ScrollSnapType {
             self.strictness.to_css(dest)?;
         }
         Ok(())
+    }
+}
+
+#[cfg(all(test, feature = "servo"))]
+mod scroll_snap_type_tests {
+    use super::*;
+    use style_traits::ToCss;
+
+    #[test]
+    fn pair_parses_with_each_strictness() {
+        for (css, strictness, serialized) in [
+            ("pair", ScrollSnapStrictness::Proximity, "pair"),
+            (
+                "pair mandatory",
+                ScrollSnapStrictness::Mandatory,
+                "pair mandatory",
+            ),
+            ("pair proximity", ScrollSnapStrictness::Proximity, "pair"),
+        ] {
+            let value: ScrollSnapType = parse_box_test_value(css).expect("pair must parse");
+            assert_eq!(value.axis(), ScrollSnapAxis::Pair);
+            assert_eq!(value.strictness(), strictness);
+            assert_eq!(value.to_css_string(), serialized);
+        }
     }
 }
 
