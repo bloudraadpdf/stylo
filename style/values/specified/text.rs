@@ -321,8 +321,16 @@ mod tests {
     #[test]
     fn text_alignment_longhands_accept_inside_and_outside() {
         for css in ["inside", "outside"] {
-            assert_eq!(parse_value::<TextAlign>(css).expect(css).to_css_string(), css);
-            assert_eq!(parse_value::<TextAlignLast>(css).expect(css).to_css_string(), css);
+            assert_eq!(
+                parse_value::<TextAlign>(css).expect(css).to_css_string(),
+                css
+            );
+            assert_eq!(
+                parse_value::<TextAlignLast>(css)
+                    .expect(css)
+                    .to_css_string(),
+                css
+            );
         }
     }
 
