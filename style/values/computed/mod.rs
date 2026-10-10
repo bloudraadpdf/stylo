@@ -608,7 +608,8 @@ impl<'a> Context<'a> {
         self.tree_counting = TreeCounting::new(resolve);
     }
 
-    pub(crate) fn set_calling_element(&mut self, element: impl CallingElement<'a> + 'a) {
+    /// Evaluate custom function calls for `element`.
+    pub fn set_calling_element(&mut self, element: impl CallingElement<'a> + 'a) {
         self.calling_element = Some(Box::new(element));
     }
 

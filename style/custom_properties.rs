@@ -2960,6 +2960,22 @@ pub struct SubstitutedValue<'a> {
     pub css: Cow<'a, str>,
     /// The ranges of `css` that `attr()` substitution produced.
     pub attr_tainted: ThinVec<AttrTaintedRange>,
+    first_token_type: TokenSerializationType,
+    last_token_type: TokenSerializationType,
+}
+
+impl SubstitutedValue<'_> {
+    /// The substituted value, without references.
+    pub fn into_value(self, url_data: &UrlExtraData) -> VariableValue {
+        let mut value = VariableValue::new(
+            self.css.into_owned(),
+            url_data,
+            self.first_token_type,
+            self.last_token_type,
+        );
+        value.attr_tainted = self.attr_tainted;
+        value
+    }
 }
 
 /// Replace var(), env(), attr() and custom function calls, returning the resulting CSS string.
@@ -3007,6 +3023,8 @@ pub fn substitute_with_environment_resolution<'a>(
     .map(|substitution| SubstitutedValue {
         css: substitution.css,
         attr_tainted: substitution.attr_tainted,
+        first_token_type: substitution.first_token_type,
+        last_token_type: substitution.last_token_type,
     })
 }
 

@@ -659,8 +659,22 @@ impl CustomAnimatedValue {
                 let stylist = context.builder.stylist.unwrap();
                 let registration = stylist.get_custom_property_registration(&declaration.name);
                 if registration.syntax.is_universal() {
-                    // FIXME: Do we need to perform substitution here somehow?
-                    ComputedValue::universal(Arc::clone(value))
+                    // A value that is invalid at computed-value time stays unparsed, as below.
+                    let substituted = if value.has_references() {
+                        crate::custom_properties::substitute(
+                            value,
+                            context.style().custom_properties(),
+                            stylist,
+                            context,
+                            CascadeLevel::Animations,
+                            attribute_tracker,
+                        )
+                        .map(|substituted| Arc::new(substituted.into_value(&value.url_data)))
+                        .ok()
+                    } else {
+                        None
+                    };
+                    ComputedValue::universal(substituted.unwrap_or_else(|| Arc::clone(value)))
                 } else {
                     // A value that is invalid at computed-value time stays unparsed: it animates
                     // discretely and does not compose.
@@ -874,5 +888,11 @@ mod tests {
     fn keyframe_value_invalid_at_computed_value_time_stays_unparsed() {
         let value = keyframe_value("<length>", "var(--missing, invalid)");
         assert!(value.as_universal().is_some());
+    }
+
+    #[test]
+    fn untyped_keyframe_value_substitutes_references() {
+        let value = keyframe_value("*", "a var(--missing, 1px)");
+        assert_eq!(value.to_css_string(), "a 1px");
     }
 }
