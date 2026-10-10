@@ -648,7 +648,7 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
 
 #[cfg(all(test, feature = "servo"))]
 mod tests {
-    use super::super::{AttrTaintedRange, VariableValue};
+    use super::super::{AttrTaintedRange, DeferredCustomProperties, VariableValue};
     use super::super::{CustomPropertiesBuilder, DeferFontRelativeCustomPropertyResolution};
     use crate::applicable_declarations::CascadePriority;
     use crate::context::QuirksMode;
@@ -694,6 +694,21 @@ mod tests {
         attributes: &Attributes,
         names: [&str; N],
     ) -> [Option<VariableValue>; N] {
+        cascade_with(
+            css,
+            attributes,
+            names,
+            DeferFontRelativeCustomPropertyResolution::No,
+        )
+        .0
+    }
+
+    fn cascade_with<const N: usize>(
+        css: &str,
+        attributes: &Attributes,
+        names: [&str; N],
+        defer: DeferFontRelativeCustomPropertyResolution,
+    ) -> ([Option<VariableValue>; N], Option<DeferredCustomProperties>) {
         let _guard = pref_lock().lock().unwrap();
         let _attr_pref = BoolPrefGuard::set("layout.css.attr.enabled", true);
         let sheet = Arc::new(parse_stylesheet(css));
@@ -730,15 +745,16 @@ mod tests {
                 builder.cascade(declaration, priority, 0, &mut tracker);
             }
         }
-        builder.build(DeferFontRelativeCustomPropertyResolution::No, &mut tracker);
-        names.map(|name| {
+        let deferred = builder.build(defer, &mut tracker);
+        let values = names.map(|name| {
             context
                 .builder
                 .custom_properties
                 .inherited
                 .get(&Atom::from(name))
                 .map(|value| value.to_variable_value())
-        })
+        });
+        (values, deferred)
     }
 
     fn assert_templates(templates: &[(&str, &str)]) {
@@ -1076,5 +1092,36 @@ mod tests {
             ["actual"],
         );
         assert!(actual.unwrap().attr_tainted.is_empty());
+    }
+
+    #[test]
+    fn font_relative_results_defer_registered_properties() {
+        for (name, function, deferred) in [
+            ("untyped result", "@function --f() { result: 1em; }", true),
+            (
+                "typed result",
+                "@function --f() returns <length> { result: 1em; }",
+                true,
+            ),
+            (
+                "no font-relative units",
+                "@function --f() { result: 1px; }",
+                false,
+            ),
+        ] {
+            let css = format!(
+                "@property --actual {{ syntax: '<length>'; inherits: true; initial-value: 0px; }} \
+                 {function} #t {{ --actual: --f(); }}"
+            );
+            let (_, values) = cascade_with(
+                &css,
+                &Attributes(&[]),
+                [],
+                DeferFontRelativeCustomPropertyResolution::Yes,
+            );
+            let actual =
+                values.is_some_and(|values| values.values.get(&Atom::from("actual")).is_some());
+            assert_eq!(actual, deferred, "{name}");
+        }
     }
 }
