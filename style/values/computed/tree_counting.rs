@@ -2,7 +2,33 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+use crate::dom::{TElement, TNode};
 use std::cell::OnceCell;
+
+/// The position of `element` among the element children of its parent, and their number.
+pub(super) fn tree_counts<E: TElement>(element: Option<E>) -> (usize, usize) {
+    let Some(element) = element else {
+        return (0, 0);
+    };
+    let node = element.as_node();
+    match node.parent_node() {
+        Some(parent) => {
+            let mut index = 0;
+            let mut count = 0;
+            for child in parent
+                .dom_children()
+                .filter(|child| child.as_element().is_some())
+            {
+                count += 1;
+                if child == node {
+                    index = count;
+                }
+            }
+            (index, count)
+        },
+        None => (1, 1),
+    }
+}
 
 #[derive(Default)]
 pub(super) struct TreeCounting<'a> {

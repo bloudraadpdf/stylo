@@ -10,7 +10,7 @@ use crate::computed_value_flags::ComputedValueFlags;
 use crate::custom_properties::{
     CustomPropertiesBuilder, DeferFontRelativeCustomPropertyResolution, ElementCallSite,
 };
-use crate::dom::{AttributeProvider, AttributeTracker, DummyAttributeProvider, TElement, TNode};
+use crate::dom::{AttributeProvider, AttributeTracker, DummyAttributeProvider, TElement};
 #[cfg(feature = "gecko")]
 use crate::font_metrics::FontMetricsOrientation;
 use crate::logical_geometry::WritingMode;
@@ -310,29 +310,7 @@ where
         rule_cache_conditions,
         container_size_query,
     );
-    context.set_tree_counting(move || {
-        let Some(element) = element else {
-            return (0, 0);
-        };
-        let node = element.as_node();
-        match node.parent_node() {
-            Some(parent) => {
-                let mut index = 0;
-                let mut count = 0;
-                for child in parent
-                    .dom_children()
-                    .filter(|child| child.as_element().is_some())
-                {
-                    count += 1;
-                    if child == node {
-                        index = count;
-                    }
-                }
-                (index, count)
-            },
-            None => (1, 1),
-        }
-    });
+    context.set_tree_counting_element(element);
 
     if let Some(element) = element {
         context.set_calling_element(ElementCallSite {

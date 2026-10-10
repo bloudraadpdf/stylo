@@ -604,8 +604,9 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub(crate) fn set_tree_counting(&mut self, resolve: impl Fn() -> (usize, usize) + 'a) {
-        self.tree_counting = TreeCounting::new(resolve);
+    /// Resolve `sibling-index()` and `sibling-count()` against the element children of `element`'s parent.
+    pub fn set_tree_counting_element<E: crate::dom::TElement + 'a>(&mut self, element: Option<E>) {
+        self.tree_counting = TreeCounting::new(move || tree_counting::tree_counts(element));
     }
 
     /// Evaluate custom function calls for `element`.
