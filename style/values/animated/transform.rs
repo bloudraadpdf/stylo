@@ -103,6 +103,13 @@ impl Animate for MatrixDecomposed2D {
         }
 
         // Don't rotate the long way around.
+        if angle == 0.0 {
+            angle = 360.
+        }
+        if other_angle == 0.0 {
+            other_angle = 360.
+        }
+
         if (angle - other_angle).abs() > 180. {
             if angle > other_angle {
                 angle -= 360.
@@ -223,7 +230,7 @@ impl From<MatrixDecomposed2D> for Matrix3D {
         computed_matrix.m42 = decomposed.translate.1;
 
         // Rotate matrix.
-        let angle = decomposed.angle.to_radians();
+        let angle = decomposed.angle.rem_euclid(360.).to_radians();
         let cos_angle = angle.cos();
         let sin_angle = angle.sin();
 
@@ -1900,5 +1907,38 @@ mod tests {
             .expect("mismatched 2D transform lists interpolate");
 
         assert!(matches!(*result.0, [TransformOperation::Matrix(..)]));
+    }
+
+    #[test]
+    fn half_turn_from_zero_angle_interpolates_through_negative_angles() {
+        let from = Matrix {
+            a: 2.0,
+            b: 0.0,
+            c: 0.0,
+            d: 2.0,
+            e: 100.0,
+            f: 0.0,
+        };
+        let to = Matrix {
+            a: -1.0,
+            b: 0.0,
+            c: 0.0,
+            d: -1.0,
+            e: 0.0,
+            f: 0.0,
+        };
+        let result = from
+            .animate(&to, Procedure::Interpolate { progress: 0.5 })
+            .expect("invertible 2D matrices interpolate");
+
+        let actual = [result.a, result.b, result.c, result.d, result.e, result.f];
+        let expected = [0.0, -1.5, 1.5, 0.0, 50.0, 0.0];
+        assert!(
+            actual
+                .iter()
+                .zip(expected)
+                .all(|(a, e)| (a - e).abs() < 1e-4),
+            "{actual:?} is not {expected:?}",
+        );
     }
 }
