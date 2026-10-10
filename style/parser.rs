@@ -5,10 +5,11 @@
 //! The context within which CSS code is parsed.
 
 use crate::context::QuirksMode;
+use crate::custom_properties::AttrTaintedRange;
 use crate::error_reporting::{ContextualParseError, ParseErrorReporter};
 use crate::stylesheets::{CssRuleType, CssRuleTypes, Namespaces, Origin, UrlExtraData};
 use crate::use_counters::UseCounters;
-use cssparser::{Parser, SourceLocation, UnicodeRange};
+use cssparser::{Parser, SourceLocation, SourcePosition, UnicodeRange};
 use selectors::parser::ParseRelative;
 use std::borrow::Cow;
 use style_traits::{OneOrMoreSeparated, ParseError, ParsingMode, Separator};
@@ -86,6 +87,8 @@ pub struct ParserContext<'a> {
     pub use_counters: Option<&'a UseCounters>,
     /// Current nesting context.
     pub nesting_context: NestingContext,
+    /// The ranges of the parsed text that `attr()` substitution produced.
+    attr_tainted: &'a [AttrTaintedRange],
 }
 
 impl<'a> ParserContext<'a> {
@@ -110,7 +113,35 @@ impl<'a> ParserContext<'a> {
             namespaces,
             use_counters,
             nesting_context: NestingContext::new_from_rule(rule_type),
+            attr_tainted: &[],
         }
+    }
+
+    /// Parse text whose `ranges` came from `attr()` substitution.
+    pub fn with_attr_tainted(self, ranges: &'a [AttrTaintedRange]) -> Self {
+        Self {
+            attr_tainted: ranges,
+            ..self
+        }
+    }
+
+    /// Reject a `<url>` that starts at `start` in `attr()`-tainted text.
+    ///
+    /// <https://drafts.csswg.org/css-values-5/#attr-security>
+    pub fn reject_attr_tainted_url<'i>(
+        &self,
+        input: &Parser<'i, '_>,
+        start: SourcePosition,
+    ) -> Result<(), ParseError<'i>> {
+        let index = start.byte_index();
+        if self
+            .attr_tainted
+            .iter()
+            .any(|range| (range.start..range.end).contains(&index))
+        {
+            return Err(input.new_custom_error(style_traits::StyleParseErrorKind::UnspecifiedError));
+        }
+        Ok(())
     }
 
     /// Temporarily sets the rule_type and executes the callback function, returning its result.

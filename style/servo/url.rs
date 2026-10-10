@@ -305,6 +305,8 @@ impl CssUrl {
         input: &mut Parser<'i, 't>,
         cors_mode: CorsMode,
     ) -> Result<Self, ParseError<'i>> {
+        input.skip_whitespace();
+        context.reject_attr_tainted_url(input, input.position())?;
         let before = input.state();
         if let Ok(url) = input.try_parse(|input| input.expect_url()) {
             return Ok(Self::parse_from_string(
@@ -490,5 +492,60 @@ impl ToCss for ComputedUrl {
         string.to_css(dest)?;
         self.request_modifiers().to_css(dest)?;
         dest.write_char(')')
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::CssUrl;
+    use crate::context::QuirksMode;
+    use crate::custom_properties::AttrTaintedRange;
+    use crate::parser::{Parse, ParserContext};
+    use crate::stylesheets::{Origin, UrlExtraData};
+    use crate::values::specified::Image;
+    use cssparser::{Parser, ParserInput};
+    use style_traits::ParsingMode;
+
+    fn parses<T: Parse>(css: &str, tainted: &[AttrTaintedRange]) -> bool {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            None,
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        )
+        .with_attr_tainted(tainted);
+        let mut input = ParserInput::new(css);
+        Parser::new(&mut input)
+            .parse_entirely(|input| T::parse(&context, input))
+            .is_ok()
+    }
+
+    #[test]
+    fn attr_tainted_urls_are_invalid() {
+        let all = |css: &str| {
+            [AttrTaintedRange {
+                start: 0,
+                end: css.len(),
+            }]
+        };
+        for css in ["url(cat.png)", "url(\"cat.png\")"] {
+            assert!(parses::<CssUrl>(css, &[]), "{css}");
+            assert!(!parses::<CssUrl>(css, &all(css)), "{css}");
+        }
+        let css = "image-set(\"cat.png\" 1x)";
+        assert!(parses::<Image>(css, &[]));
+        assert!(!parses::<Image>(
+            css,
+            &[AttrTaintedRange { start: 10, end: 19 }]
+        ));
+        assert!(parses::<Image>(
+            css,
+            &[AttrTaintedRange { start: 20, end: 22 }]
+        ));
     }
 }

@@ -283,10 +283,20 @@ impl FilterImage {
         cors_mode: CorsMode,
         flags: ParseImageFlags,
     ) -> Result<Self, ParseError<'i>> {
-        let image = if let Ok(url) = input.try_parse(|input| input.expect_string().map(|url| url.as_ref().to_owned())) {
+        input.skip_whitespace();
+        let start = input.position();
+        let image = if let Ok(url) =
+            input.try_parse(|input| input.expect_string().map(|url| url.as_ref().to_owned()))
+        {
+            context.reject_attr_tainted_url(input, start)?;
             generic::Image::Url(SpecifiedUrl::parse_from_string(url, context, cors_mode))
         } else {
-            Image::parse_with_cors_mode(context, input, cors_mode, flags | ParseImageFlags::FORBID_NONE)?
+            Image::parse_with_cors_mode(
+                context,
+                input,
+                cors_mode,
+                flags | ParseImageFlags::FORBID_NONE,
+            )?
         };
         input.expect_comma()?;
         let mut filters = vec![SpecifiedFilter::parse(context, input)?];
@@ -332,7 +342,10 @@ impl ImageImage {
                 }) {
                     return Ok(GenericImageSrc::Url(url));
                 }
+                input.skip_whitespace();
+                let start = input.position();
                 let s = input.expect_string()?.as_ref().to_owned();
+                context.reject_attr_tainted_url(input, start)?;
                 let url = SpecifiedUrl::parse_from_string(s, context, cors_mode);
                 Ok(GenericImageSrc::String(url))
             })
@@ -532,12 +545,17 @@ impl ImageSetItem {
         cors_mode: CorsMode,
         flags: ParseImageFlags,
     ) -> Result<Self, ParseError<'i>> {
+        input.skip_whitespace();
+        let start = input.position();
         let image = match input.try_parse(|i| i.expect_url_or_string()) {
-            Ok(url) => Image::Url(SpecifiedUrl::parse_from_string(
-                url.as_ref().into(),
-                context,
-                cors_mode,
-            )),
+            Ok(url) => {
+                context.reject_attr_tainted_url(input, start)?;
+                Image::Url(SpecifiedUrl::parse_from_string(
+                    url.as_ref().into(),
+                    context,
+                    cors_mode,
+                ))
+            },
             Err(..) => Image::parse_with_cors_mode(
                 context,
                 input,
