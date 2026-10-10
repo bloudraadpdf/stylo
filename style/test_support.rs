@@ -63,17 +63,20 @@ impl FontMetricsProvider for TestFontMetricsProvider {
     }
 }
 
-/// Evaluates with a computed-value context of an 800x600 print device.
-pub(crate) fn with_computed_context<R>(evaluate: impl FnOnce(&Context) -> R) -> R {
-    let initial_values = ComputedValues::initial_values_with_font_override(Font::initial_values());
-    let device = Device::new(
+/// An 800x600 print device.
+pub(crate) fn test_device() -> Device {
+    Device::new(
         MediaType::print(),
         QuirksMode::NoQuirks,
         Size2D::<f32, CSSPixel>::new(800.0, 600.0),
         Scale::<f32, CSSPixel, DevicePixel>::new(1.0),
         Box::new(TestFontMetricsProvider),
-        initial_values,
+        ComputedValues::initial_values_with_font_override(Font::initial_values()),
         PrefersColorScheme::Light,
-    );
-    Context::for_media_query_evaluation(&device, QuirksMode::NoQuirks, evaluate)
+    )
+}
+
+/// Evaluates with a computed-value context of the test device.
+pub(crate) fn with_computed_context<R>(evaluate: impl FnOnce(&Context) -> R) -> R {
+    Context::for_media_query_evaluation(&test_device(), QuirksMode::NoQuirks, evaluate)
 }
