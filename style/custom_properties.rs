@@ -1432,18 +1432,21 @@ fn find_non_custom_references(
     )
 }
 
-/// The non-custom references of a computation of `dependent_types`.
+/// The non-custom references of a value that calls custom functions: those of the value and of
+/// the reachable function bodies, which the functions' types or the registration may compute.
 fn function_non_custom_references(
     dependencies: &functions::FunctionDependencies,
+    registration: &PropertyRegistrationData,
     value: &VariableValue,
     may_have_color_scheme: bool,
     is_root_element: bool,
+    include_universal: bool,
 ) -> Option<NonCustomReferences> {
+    let dependent_types = dependencies.dependent_types | registration.syntax.dependent_types();
     non_custom_dependencies(
-        dependencies.dependent_types,
-        dependencies
-            .dependent_types
-            .intersects(DependentDataTypes::LENGTH),
+        dependent_types,
+        dependent_types.intersects(DependentDataTypes::LENGTH)
+            || (include_universal && registration.syntax.is_universal()),
         value.references.non_custom_references | dependencies.non_custom_references,
         may_have_color_scheme,
         is_root_element,
@@ -2145,19 +2148,25 @@ fn substitute_all(
                         .function_scope(context.function_levels[name]);
                     functions::FunctionDependencies::new(value, &scope)
                 });
-                if let Some(ref dependencies) = dependencies {
-                    context.non_custom_references |= function_non_custom_references(
+                let function_references = dependencies.as_ref().and_then(|dependencies| {
+                    function_non_custom_references(
                         dependencies,
+                        registration,
                         value,
                         context.has_color_scheme,
                         is_root,
+                        /* include_universal = */ true,
                     )
-                    .unwrap_or_default();
-                }
+                });
+                context.non_custom_references |= function_references.unwrap_or_default();
 
                 // Hold a strong reference to the value so that we don't
                 // need to keep reference to context.map.
-                Some((value.clone(), dependencies))
+                Some((
+                    value.clone(),
+                    dependencies,
+                    function_references.unwrap_or_default(),
+                ))
             },
             VarType::NonCustom(ref non_custom) => {
                 let entry = &mut context.non_custom_index_map[*non_custom];
@@ -2206,7 +2215,7 @@ fn substitute_all(
                     *lowlink = cmp::min(*lowlink, next_index);
                 }
             };
-        if let Some((ref v, ref dependencies)) = value {
+        if let Some((ref v, ref dependencies, function_references)) = value {
             debug_assert!(
                 matches!(var, VarType::Custom(_)),
                 "Non-custom property has references?"
@@ -2240,16 +2249,6 @@ fn substitute_all(
             }
 
             // ... Then non-custom properties.
-            let function_references = dependencies
-                .as_ref()
-                .filter(|dependencies| {
-                    dependencies
-                        .dependent_types
-                        .intersects(DependentDataTypes::LENGTH)
-                })
-                .map_or_else(NonCustomReferences::empty, |dependencies| {
-                    dependencies.non_custom_references
-                });
             (v.references.non_custom_references | function_references).for_each(|r| {
                 visit_link(VarType::NonCustom(r), context, &mut lowlink, &mut self_ref);
             });
@@ -2348,7 +2347,7 @@ fn substitute_all(
             return None;
         }
 
-        if let Some((ref v, ref dependencies)) = value {
+        if let Some((ref v, ref dependencies, _)) = value {
             let registration = context.stylist.get_custom_property_registration(&name);
 
             let mut defer = false;
@@ -2378,9 +2377,11 @@ fn substitute_all(
                                 .any(|name| deferred.get(name).is_some())
                             || function_non_custom_references(
                                 dependencies,
+                                registration,
                                 v,
                                 context.has_color_scheme,
                                 context.computed_context.is_root_element(),
+                                /* include_universal = */ false,
                             )
                             .is_some()
                     });
