@@ -319,6 +319,14 @@ mod tests {
     }
 
     #[test]
+    fn text_alignment_longhands_accept_inside_and_outside() {
+        for css in ["inside", "outside"] {
+            assert_eq!(parse_value::<TextAlign>(css).expect(css).to_css_string(), css);
+            assert_eq!(parse_value::<TextAlignLast>(css).expect(css).to_css_string(), css);
+        }
+    }
+
+    #[test]
     fn hanging_punctuation_serializes_in_grammar_order() {
         for (css, expected) in [
             ("last force-end first", "first force-end last"),
@@ -769,6 +777,10 @@ pub enum TextAlignLastKeyword {
     Right,
     Center,
     Justify,
+    /// The inside edge of the page (a Prince extension).
+    Inside,
+    /// The outside edge of the page (a Prince extension).
+    Outside,
 }
 
 /// Specified value of text-align-last.
@@ -810,6 +822,8 @@ impl ToComputedValue for TextAlignLast {
                         TextAlignKeyword::Left | TextAlignKeyword::MozLeft => K::Left,
                         TextAlignKeyword::Right | TextAlignKeyword::MozRight => K::Right,
                         TextAlignKeyword::Center | TextAlignKeyword::MozCenter => K::Center,
+                        TextAlignKeyword::Inside => K::Inside,
+                        TextAlignKeyword::Outside => K::Outside,
                     },
                     keyword => keyword,
                 };
@@ -872,6 +886,10 @@ pub enum TextAlignKeyword {
     MozLeft,
     #[parse(aliases = "-webkit-right")]
     MozRight,
+    /// The inside edge of the page (a Prince extension).
+    Inside,
+    /// The outside edge of the page (a Prince extension).
+    Outside,
 }
 
 /// Specified value of text-align property.
