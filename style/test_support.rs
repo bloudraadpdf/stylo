@@ -10,6 +10,7 @@ use crate::context::QuirksMode;
 use crate::font_metrics::FontMetrics;
 use crate::media_queries::MediaList;
 use crate::media_queries::MediaType;
+use crate::parser::ParserContext;
 use crate::properties::{style_structs::Font, ComputedValues};
 use crate::queries::values::PrefersColorScheme;
 use crate::servo::media_queries::{Device, FontMetricsProvider};
@@ -18,7 +19,7 @@ use crate::stylesheets::{AllowImportRules, Origin, Stylesheet, UrlExtraData};
 use crate::values::computed::font::GenericFontFamily;
 use crate::values::computed::{CSSPixelLength, Context, Length};
 use euclid::{Scale, Size2D};
-use style_traits::{CSSPixel, DevicePixel};
+use style_traits::{CSSPixel, DevicePixel, ParsingMode};
 
 /// Serialises tests that mutate global style prefs.
 pub(crate) fn pref_lock() -> &'static Mutex<()> {
@@ -88,10 +89,9 @@ pub(crate) fn with_computed_context<R>(evaluate: impl FnOnce(&Context) -> R) -> 
 pub(crate) fn parse_stylesheet(css: &str) -> Stylesheet {
     let shared_lock = SharedRwLock::new();
     let media = servo_arc::Arc::new(shared_lock.wrap(MediaList::empty()));
-    let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
     Stylesheet::from_str(
         css,
-        url_data,
+        test_url_data(),
         Origin::Author,
         media,
         shared_lock,
@@ -99,5 +99,24 @@ pub(crate) fn parse_stylesheet(css: &str) -> Stylesheet {
         None,
         QuirksMode::NoQuirks,
         AllowImportRules::Yes,
+    )
+}
+
+/// The URL data of test stylesheets.
+pub(crate) fn test_url_data() -> UrlExtraData {
+    UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap())
+}
+
+/// An author parser context without rule type or namespaces.
+pub(crate) fn author_parser_context(url_data: &UrlExtraData) -> ParserContext<'_> {
+    ParserContext::new(
+        Origin::Author,
+        url_data,
+        None,
+        ParsingMode::DEFAULT,
+        QuirksMode::NoQuirks,
+        Default::default(),
+        None,
+        None,
     )
 }

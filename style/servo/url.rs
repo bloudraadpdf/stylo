@@ -495,30 +495,18 @@ impl ToCss for ComputedUrl {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "servo"))]
 mod tests {
     use super::CssUrl;
-    use crate::context::QuirksMode;
     use crate::custom_properties::AttrTaintedRange;
-    use crate::parser::{Parse, ParserContext};
-    use crate::stylesheets::{Origin, UrlExtraData};
+    use crate::parser::Parse;
+    use crate::test_support::{author_parser_context, test_url_data};
     use crate::values::specified::Image;
     use cssparser::{Parser, ParserInput};
-    use style_traits::ParsingMode;
 
     fn parses<T: Parse>(css: &str, tainted: &[AttrTaintedRange]) -> bool {
-        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
-        let context = ParserContext::new(
-            Origin::Author,
-            &url_data,
-            None,
-            ParsingMode::DEFAULT,
-            QuirksMode::NoQuirks,
-            Default::default(),
-            None,
-            None,
-        )
-        .with_attr_tainted(tainted);
+        let url_data = test_url_data();
+        let context = author_parser_context(&url_data).with_attr_tainted(tainted);
         let mut input = ParserInput::new(css);
         Parser::new(&mut input)
             .parse_entirely(|input| T::parse(&context, input))
