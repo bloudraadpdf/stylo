@@ -594,7 +594,9 @@ mod tests {
     use crate::servo::media_queries::{Device, FontMetricsProvider};
     use crate::shared_lock::ToCssWithGuard;
     use crate::stylesheets::CssRule;
-    use crate::test_support::{parse_stylesheet, pref_lock, BoolPrefGuard};
+    use crate::test_support::{
+        author_parser_context, parse_stylesheet, pref_lock, test_url_data, BoolPrefGuard,
+    };
     use crate::values::computed::font::GenericFontFamily;
     use crate::values::computed::{CSSPixelLength, Length, ToComputedValue};
     use crate::Atom;
@@ -1471,17 +1473,8 @@ mod tests {
     }
 
     fn parse_and_compute_color(value: &str) -> crate::values::computed::Color {
-        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
-        let context = ParserContext::new(
-            Origin::Author,
-            &url_data,
-            None,
-            ParsingMode::DEFAULT,
-            QuirksMode::NoQuirks,
-            Default::default(),
-            None,
-            None,
-        );
+        let url_data = test_url_data();
+        let context = author_parser_context(&url_data);
         let mut input = ParserInput::new(value);
         let mut parser = Parser::new(&mut input);
         let stylist = test_stylist();
@@ -2587,17 +2580,8 @@ mod tests {
     #[test]
     fn servo_line_limits_compute_to_private_positive_counts() {
         fn parse_max_lines(css: &str) -> Result<crate::values::specified::MaxLines, ()> {
-            let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
-            let context = ParserContext::new(
-                Origin::Author,
-                &url_data,
-                None,
-                ParsingMode::DEFAULT,
-                QuirksMode::NoQuirks,
-                Default::default(),
-                None,
-                None,
-            );
+            let url_data = test_url_data();
+            let context = author_parser_context(&url_data);
             let mut input = ParserInput::new(css);
             let mut parser = Parser::new(&mut input);
             parser
@@ -2606,17 +2590,8 @@ mod tests {
         }
 
         fn parse_legacy_line_clamp(css: &str) -> Result<crate::values::specified::MaxLines, ()> {
-            let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
-            let context = ParserContext::new(
-                Origin::Author,
-                &url_data,
-                None,
-                ParsingMode::DEFAULT,
-                QuirksMode::NoQuirks,
-                Default::default(),
-                None,
-                None,
-            );
+            let url_data = test_url_data();
+            let context = author_parser_context(&url_data);
             let mut input = ParserInput::new(css);
             let mut parser = Parser::new(&mut input);
             parser
