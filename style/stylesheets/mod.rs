@@ -13,6 +13,7 @@ mod font_face_rule;
 pub mod font_feature_values_rule;
 pub mod font_palette_values_rule;
 mod footnote_rule;
+pub mod function_rule;
 pub mod import_rule;
 pub mod keyframes_rule;
 pub mod layer_rule;
@@ -71,6 +72,7 @@ pub use self::font_face_rule::FontFaceRule;
 pub use self::font_feature_values_rule::FontFeatureValuesRule;
 pub use self::font_palette_values_rule::FontPaletteValuesRule;
 pub use self::footnote_rule::FootnoteRule;
+pub use self::function_rule::{FunctionDeclarationsRule, FunctionRule};
 pub use self::import_rule::ImportRule;
 pub use self::keyframes_rule::KeyframesRule;
 pub use self::layer_rule::{LayerBlockRule, LayerStatementRule};
@@ -396,6 +398,8 @@ pub enum CssRule {
     StartingStyle(Arc<StartingStyleRule>),
     PositionTry(Arc<Locked<PositionTryRule>>),
     NestedDeclarations(Arc<Locked<NestedDeclarationsRule>>),
+    Function(Arc<FunctionRule>),
+    FunctionDeclarations(Arc<FunctionDeclarationsRule>),
 }
 
 impl CssRule {
@@ -479,6 +483,12 @@ impl CssRule {
             CssRule::NestedDeclarations(ref lock) => {
                 lock.unconditional_shallow_size_of(ops) + lock.read_with(guard).size_of(guard, ops)
             },
+            CssRule::Function(ref arc) => {
+                arc.unconditional_shallow_size_of(ops)
+                    + arc.rules.unconditional_shallow_size_of(ops)
+                    + arc.rules.read_with(guard).size_of(guard, ops)
+            },
+            CssRule::FunctionDeclarations(ref arc) => arc.unconditional_shallow_size_of(ops),
         }
     }
 
@@ -549,6 +559,8 @@ pub enum CssRuleRef<'a> {
     StartingStyle(&'a StartingStyleRule),
     PositionTry(&'a LockedPositionTryRule),
     NestedDeclarations(&'a LockedNestedDeclarationsRule),
+    Function(&'a FunctionRule),
+    FunctionDeclarations(&'a FunctionDeclarationsRule),
 }
 
 impl<'a> From<&'a CssRule> for CssRuleRef<'a> {
@@ -583,6 +595,8 @@ impl<'a> From<&'a CssRule> for CssRuleRef<'a> {
             CssRule::StartingStyle(r) => CssRuleRef::StartingStyle(r.as_ref()),
             CssRule::PositionTry(r) => CssRuleRef::PositionTry(r.as_ref()),
             CssRule::NestedDeclarations(r) => CssRuleRef::NestedDeclarations(r.as_ref()),
+            CssRule::Function(r) => CssRuleRef::Function(r.as_ref()),
+            CssRule::FunctionDeclarations(r) => CssRuleRef::FunctionDeclarations(r.as_ref()),
         }
     }
 }
@@ -598,8 +612,8 @@ pub enum CssRuleType {
     // CSSCharsetRule (https://drafts.csswg.org/cssom/#changes-from-5-december-2013),
     // so the slot was free. We reuse it for CSS Conditional 5 §3.1
     // `@when`. The numeric ordering does not feed any external IDL
-    // and `CssRuleTypes` is a `u32` bitfield — every discriminant
-    // must stay strictly less than 32.
+    // and `CssRuleTypes` is a `u64` bitfield — every discriminant
+    // must stay strictly less than 64.
     When = 2,
     Import = 3,
     Media = 4,
@@ -621,8 +635,8 @@ pub enum CssRuleType {
     FontFeatureValues = 14,
     // CSS Conditional 5 §3.2 `@else`. Slot 15 was historically
     // unallocated (Viewport occupied a different range), and we
-    // need to keep every discriminant strictly less than 32 so
-    // `CssRuleTypes`' `u32` bitfield can address it.
+    // need to keep every discriminant strictly less than 64 so
+    // `CssRuleTypes`' `u64` bitfield can address it.
     Else = 15,
     // After viewport, all rules should return 0 from the API, but we still need
     // a constant somewhere.
@@ -654,19 +668,23 @@ pub enum CssRuleType {
     /// CSS Color 5 §7 — `@color-profile --name { … }` rule type.
     /// Slots after the existing fork-private extensions at 26–29.
     ColorProfile = 30,
+    // https://drafts.csswg.org/css-mixins-1/#cssfunctionrule
+    Function = 31,
+    // https://drafts.csswg.org/css-mixins-1/#cssfunctiondeclarations
+    FunctionDeclarations = 32,
 }
 
 impl CssRuleType {
     /// Returns a bit that identifies this rule type.
     #[inline]
-    pub const fn bit(self) -> u32 {
-        1 << self as u32
+    pub const fn bit(self) -> u64 {
+        1 << self as u64
     }
 }
 
 /// Set of rule types.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct CssRuleTypes(u32);
+pub struct CssRuleTypes(u64);
 
 impl From<CssRuleType> for CssRuleTypes {
     fn from(ty: CssRuleType) -> Self {
@@ -676,8 +694,9 @@ impl From<CssRuleType> for CssRuleTypes {
 
 impl CssRuleTypes {
     /// Rules where !important declarations are forbidden.
-    pub const IMPORTANT_FORBIDDEN: Self =
-        Self(CssRuleType::PositionTry.bit() | CssRuleType::Keyframe.bit());
+    pub const IMPORTANT_FORBIDDEN: Self = Self(
+        CssRuleType::PositionTry.bit() | CssRuleType::Keyframe.bit() | CssRuleType::Function.bit(),
+    );
 
     /// Returns whether the rule is in the current set.
     #[inline]
@@ -687,13 +706,13 @@ impl CssRuleTypes {
 
     /// Returns all the rules specified in the set.
     #[inline]
-    pub fn bits(self) -> u32 {
+    pub fn bits(self) -> u64 {
         self.0
     }
 
     /// Creates a raw CssRuleTypes bitfield.
     #[inline]
-    pub fn from_bits(bits: u32) -> Self {
+    pub fn from_bits(bits: u64) -> Self {
         Self(bits)
     }
 
@@ -757,6 +776,8 @@ impl CssRule {
             CssRule::StartingStyle(_) => CssRuleType::StartingStyle,
             CssRule::PositionTry(_) => CssRuleType::PositionTry,
             CssRule::NestedDeclarations(_) => CssRuleType::NestedDeclarations,
+            CssRule::Function(_) => CssRuleType::Function,
+            CssRule::FunctionDeclarations(_) => CssRuleType::FunctionDeclarations,
         }
     }
 
@@ -811,6 +832,7 @@ impl CssRule {
             insert_rule_context: Some(insert_rule_context),
             allow_import_rules,
             declaration_parser_state: Default::default(),
+            function_declarations: None,
             first_declaration_block: Default::default(),
             wants_first_declaration_block: false,
             error_reporting_state: Default::default(),
@@ -936,6 +958,10 @@ impl DeepCloneWithLock for CssRule {
                     lock.wrap(decls.deep_clone_with_lock(lock, guard)),
                 ))
             },
+            CssRule::Function(ref arc) => {
+                CssRule::Function(Arc::new(arc.deep_clone_with_lock(lock, guard)))
+            },
+            CssRule::FunctionDeclarations(ref arc) => CssRule::FunctionDeclarations(arc.clone()),
         }
     }
 }
@@ -973,6 +999,8 @@ impl ToCssWithGuard for CssRule {
             CssRule::StartingStyle(ref rule) => rule.to_css(guard, dest),
             CssRule::PositionTry(ref lock) => lock.read_with(guard).to_css(guard, dest),
             CssRule::NestedDeclarations(ref lock) => lock.read_with(guard).to_css(guard, dest),
+            CssRule::Function(ref rule) => rule.to_css(guard, dest),
+            CssRule::FunctionDeclarations(ref rule) => rule.to_css(guard, dest),
         }
     }
 }

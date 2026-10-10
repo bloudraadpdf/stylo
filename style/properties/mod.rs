@@ -837,12 +837,20 @@ fn parse_non_custom_property_declaration_value_into<'i>(
         }
         at_start = false;
     }
-    if !input.seen_arbitrary_substitution_functions() || invalid {
+    let seen_substitution_functions = input.seen_arbitrary_substitution_functions();
+    if invalid {
         return Err(err);
     }
     input.reset(start);
-    let value =
-        custom_properties::VariableValue::parse(input, &context.url_data, &context.namespaces)?;
+    let value = match custom_properties::VariableValue::parse(
+        input,
+        &context.url_data,
+        &context.namespaces,
+    ) {
+        Ok(value) if seen_substitution_functions || value.has_dashed_functions() => value,
+        Err(error) if seen_substitution_functions => return Err(error),
+        _ => return Err(err),
+    };
     parsed_custom(declarations, value);
     Ok(())
 }

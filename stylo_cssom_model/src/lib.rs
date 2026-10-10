@@ -86,14 +86,14 @@ pub use stylesheet_graph::{
     PendingSubstitutionValue, PositionTryDescriptorName, PreparedRuleGraphUpdate,
     RuleBindingContext, RuleBlock, RuleConditionKind, RuleContainerCondition, RuleCssomData,
     RuleCustomMediaQuery, RuleDeclaration, RuleDeclarationBlock, RuleDeclarationDomain,
-    RuleGrammar, RuleGraphError, RuleGroupHeader, RuleHandle, RuleImportCorsMode, RuleImportLayer,
-    RuleImportPrelude, RuleImportReferrerPolicy, RuleImportRequest, RuleImportScope,
-    RuleKeyframeSelector, RuleLease, RuleListHandle, RuleListLease, RuleMutationRevision,
-    RuleNamespaceContext, RuleNode, RuleSourceStamp, StyleOrigin, StyleShadowScopeHandle,
-    StyleSheetAttachmentCandidate, StyleSheetAttachmentHandle, StyleSheetAttachmentLease,
-    StyleSheetAttachmentOwner, StyleSheetCandidate, StyleSheetGraphCandidate, StyleSheetHandle,
-    StyleSheetImportCandidate, StyleSheetLease, StyleSheetSourceContext, StyleSheetSourceKind,
-    StyleTreeScopeHandle, TypedRulePayload,
+    RuleFunctionParameter, RuleGrammar, RuleGraphError, RuleGroupHeader, RuleHandle,
+    RuleImportCorsMode, RuleImportLayer, RuleImportPrelude, RuleImportReferrerPolicy,
+    RuleImportRequest, RuleImportScope, RuleKeyframeSelector, RuleLease, RuleListHandle,
+    RuleListLease, RuleMutationRevision, RuleNamespaceContext, RuleNode, RuleSourceStamp,
+    StyleOrigin, StyleShadowScopeHandle, StyleSheetAttachmentCandidate, StyleSheetAttachmentHandle,
+    StyleSheetAttachmentLease, StyleSheetAttachmentOwner, StyleSheetCandidate,
+    StyleSheetGraphCandidate, StyleSheetHandle, StyleSheetImportCandidate, StyleSheetLease,
+    StyleSheetSourceContext, StyleSheetSourceKind, StyleTreeScopeHandle, TypedRulePayload,
 };
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]

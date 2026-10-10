@@ -438,7 +438,7 @@ impl NonCustomPropertyId {
             "Given rule type does not allow declarations."
         );
 
-        static MAP: [u32; property_counts::NON_CUSTOM] = [
+        static MAP: [u64; property_counts::NON_CUSTOM] = [
             % for property in data.longhands + data.shorthands + data.all_aliases():
             % for name in RULE_VALUES:
             % if property.rule_types_allowed & RULE_VALUES[name] != 0:

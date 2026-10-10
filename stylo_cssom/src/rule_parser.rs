@@ -139,6 +139,8 @@ cssom_rule_interface_names! {
     StartingStyle => "CSSStartingStyleRule",
     PositionTry => "CSSPositionTryRule",
     NestedDeclarations => "CSSNestedDeclarations",
+    Function => "CSSFunctionRule",
+    FunctionDeclarations => "CSSFunctionDeclarations",
     ColorProfile => "CSSColorProfileRule",
 }
 
@@ -189,6 +191,7 @@ impl CssomRuleInterfaceName {
             "starting-style" => Self::StartingStyle,
             "position-try" => Self::PositionTry,
             "color-profile" => Self::ColorProfile,
+            "function" => Self::Function,
             _ => Self::CssRule,
         }
     }
@@ -196,9 +199,12 @@ impl CssomRuleInterfaceName {
     pub const fn parent(self) -> CssomRuleInterfaceParent {
         match self {
             Self::CssRule => CssomRuleInterfaceParent::None,
-            Self::Style | Self::Page | Self::LayerBlock | Self::Scope | Self::StartingStyle => {
-                CssomRuleInterfaceParent::GroupingRule
-            },
+            Self::Style
+            | Self::Page
+            | Self::LayerBlock
+            | Self::Scope
+            | Self::StartingStyle
+            | Self::Function => CssomRuleInterfaceParent::GroupingRule,
             Self::Media | Self::Supports | Self::Container => {
                 CssomRuleInterfaceParent::ConditionRule
             },
@@ -216,6 +222,7 @@ impl CssomRuleInterfaceName {
             | Self::LayerStatement
             | Self::PositionTry
             | Self::NestedDeclarations
+            | Self::FunctionDeclarations
             | Self::ColorProfile => CssomRuleInterfaceParent::CssRule,
         }
     }
@@ -245,6 +252,8 @@ impl CssomRuleInterfaceName {
             | Self::StartingStyle
             | Self::PositionTry
             | Self::NestedDeclarations
+            | Self::Function
+            | Self::FunctionDeclarations
             | Self::ColorProfile => None,
         }
     }
@@ -289,6 +298,8 @@ pub const fn cssom_rule_interface_name_for_grammar(
         RuleGrammar::StartingStyle => CssomRuleInterfaceName::StartingStyle,
         RuleGrammar::PositionTry => CssomRuleInterfaceName::PositionTry,
         RuleGrammar::NestedDeclarations => CssomRuleInterfaceName::NestedDeclarations,
+        RuleGrammar::Function => CssomRuleInterfaceName::Function,
+        RuleGrammar::FunctionDeclarations => CssomRuleInterfaceName::FunctionDeclarations,
         RuleGrammar::ColorProfile => CssomRuleInterfaceName::ColorProfile,
         RuleGrammar::When
         | RuleGrammar::Else
@@ -382,7 +393,18 @@ enum ParsedCssRuleKind {
     CounterStyle(CanonicalCounterStyleRule),
     Property(CanonicalPropertyRule),
     PositionTry(CanonicalPositionTryRule),
+    Function(CanonicalFunctionRule),
+    FunctionDeclarations(CanonicalCssDeclarationBlock),
     Other,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct CanonicalFunctionRule {
+    header: String,
+    name: String,
+    parameters: Box<[stylo_cssom_model::RuleFunctionParameter]>,
+    return_type: String,
+    grouping: CanonicalCssGroupingRule,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -913,7 +935,10 @@ impl ParsedCssRule {
         let location = source::location(rule, guard);
         let text = authored.source.text();
         let span = authored.source.span(location);
-        let projection = if matches!(rule, CssRule::NestedDeclarations(_)) {
+        let projection = if matches!(
+            rule,
+            CssRule::NestedDeclarations(_) | CssRule::FunctionDeclarations(_)
+        ) {
             authored
                 .source
                 .position(location)
@@ -1122,6 +1147,32 @@ impl ParsedCssRule {
                     declarations: canonical_position_try_declarations(rule.block.read_with(guard)),
                 })
             },
+            CssRule::Function(rule) => ParsedCssRuleKind::Function(CanonicalFunctionRule {
+                header: rule.to_css_string(),
+                name: rule.name.0.to_string(),
+                parameters: rule
+                    .parameters
+                    .iter()
+                    .map(|parameter| {
+                        stylo_cssom_model::RuleFunctionParameter::new(
+                            format!("--{}", parameter.name),
+                            parameter.syntax.to_css_string(),
+                            parameter.default.as_ref().map(|value| value.css_text()),
+                        )
+                    })
+                    .collect(),
+                return_type: rule.return_type.to_css_string(),
+                grouping: CanonicalCssGroupingRule {
+                    nested_rules: canonical_nested_rules(
+                        rule.rules.read_with(guard),
+                        guard,
+                        authored,
+                    ),
+                },
+            }),
+            CssRule::FunctionDeclarations(rule) => ParsedCssRuleKind::FunctionDeclarations(
+                canonical_function_declarations(&rule.descriptors),
+            ),
             _ => ParsedCssRuleKind::Other,
         };
         if let ParsedCssRuleKind::Page(page) = kind {
@@ -1269,6 +1320,11 @@ impl ParsedCssRule {
             ParsedCssRuleKind::PositionTry(rule) => RuleCssomData::PositionTry {
                 name: rule.name.as_str().into(),
             },
+            ParsedCssRuleKind::Function(rule) => RuleCssomData::Function {
+                name: rule.name.as_str().into(),
+                parameters: rule.parameters.iter().cloned().collect(),
+                return_type: rule.return_type.as_str().into(),
+            },
             ParsedCssRuleKind::Margin(rule) => RuleCssomData::Margin {
                 name: rule.name.as_str().into(),
             },
@@ -1292,6 +1348,7 @@ impl ParsedCssRule {
             },
             ParsedCssRuleKind::FontFace(_)
             | ParsedCssRuleKind::NestedDeclarations(_)
+            | ParsedCssRuleKind::FunctionDeclarations(_)
             | ParsedCssRuleKind::Grouping { .. }
             | ParsedCssRuleKind::Other => {
                 return None;
@@ -1314,7 +1371,11 @@ impl ParsedCssRule {
             ParsedCssRuleKind::PositionTry(_) => {
                 stylo_cssom_model::RuleDeclarationDomain::PositionTry
             },
-            ParsedCssRuleKind::Keyframes(_)
+            ParsedCssRuleKind::FunctionDeclarations(_) => {
+                stylo_cssom_model::RuleDeclarationDomain::FunctionDescriptors
+            },
+            ParsedCssRuleKind::Function(_)
+            | ParsedCssRuleKind::Keyframes(_)
             | ParsedCssRuleKind::Namespace(_)
             | ParsedCssRuleKind::ConditionalGrouping { .. }
             | ParsedCssRuleKind::Grouping { .. }
@@ -1339,9 +1400,9 @@ impl ParsedCssRule {
                 cssom_declaration_value(&rule.declarations, property)
             },
             ParsedCssRuleKind::Style(rule) => cssom_declaration_value(&rule.declarations, property),
-            ParsedCssRuleKind::FontFace(block) | ParsedCssRuleKind::NestedDeclarations(block) => {
-                block.property_value(property)
-            },
+            ParsedCssRuleKind::FontFace(block)
+            | ParsedCssRuleKind::NestedDeclarations(block)
+            | ParsedCssRuleKind::FunctionDeclarations(block) => block.property_value(property),
             ParsedCssRuleKind::Page(rule) => cssom_declaration_value(&rule.declarations, property),
             ParsedCssRuleKind::Margin(rule) => {
                 cssom_declaration_value(&rule.declarations, property)
@@ -1362,9 +1423,9 @@ impl ParsedCssRule {
         match &self.kind {
             ParsedCssRuleKind::Keyframe(rule) => Some(&rule.declarations),
             ParsedCssRuleKind::Style(rule) => Some(&rule.declarations),
-            ParsedCssRuleKind::FontFace(block) | ParsedCssRuleKind::NestedDeclarations(block) => {
-                Some(block)
-            },
+            ParsedCssRuleKind::FontFace(block)
+            | ParsedCssRuleKind::NestedDeclarations(block)
+            | ParsedCssRuleKind::FunctionDeclarations(block) => Some(block),
             ParsedCssRuleKind::Page(rule) => Some(&rule.declarations),
             ParsedCssRuleKind::Margin(rule) => Some(&rule.declarations),
             ParsedCssRuleKind::PositionTry(rule) => Some(&rule.declarations),
@@ -1381,6 +1442,7 @@ impl ParsedCssRule {
             | ParsedCssRuleKind::LayerBlock(_)
             | ParsedCssRuleKind::LayerStatement(_)
             | ParsedCssRuleKind::Scope(_)
+            | ParsedCssRuleKind::Function(_)
             | ParsedCssRuleKind::CustomMedia { .. }
             | ParsedCssRuleKind::Other => None,
         }
@@ -1421,6 +1483,7 @@ impl ParsedCssRule {
             ParsedCssRuleKind::LayerBlock(rule) => &rule.grouping.nested_rules,
             ParsedCssRuleKind::Scope(rule) => &rule.grouping.nested_rules,
             ParsedCssRuleKind::Page(rule) => &rule.nested_rules,
+            ParsedCssRuleKind::Function(rule) => &rule.grouping.nested_rules,
             _ => return None,
         })
     }
@@ -1465,6 +1528,7 @@ impl ParsedCssRule {
                 CanonicalPageSelector::Anonymous => "@page".to_owned(),
                 CanonicalPageSelector::Named(selector) => format!("@page {selector}"),
             },
+            ParsedCssRuleKind::Function(rule) => rule.header.clone(),
             _ => return None,
         };
         Some(stylo_cssom_model::RuleGroupHeader::new(header))
@@ -1726,6 +1790,29 @@ pub const fn stylo_rule_grammar(rule: &CssRule) -> stylo_cssom_model::RuleGramma
         CssRule::StartingStyle(_) => RuleGrammar::StartingStyle,
         CssRule::PositionTry(_) => RuleGrammar::PositionTry,
         CssRule::NestedDeclarations(_) => RuleGrammar::NestedDeclarations,
+        CssRule::Function(_) => RuleGrammar::Function,
+        CssRule::FunctionDeclarations(_) => RuleGrammar::FunctionDeclarations,
+    }
+}
+
+fn canonical_function_declarations(
+    descriptors: &style::stylesheets::function_rule::FunctionDescriptors,
+) -> CanonicalCssDeclarationBlock {
+    use style::stylesheets::function_rule::FunctionDescriptorName;
+
+    CanonicalCssDeclarationBlock {
+        serialization: descriptors.to_css_string(),
+        declarations: descriptors
+            .iter()
+            .map(|descriptor| {
+                let name = match descriptor.name {
+                    FunctionDescriptorName::Local(ref name) => format!("--{name}"),
+                    FunctionDescriptorName::Result => "result".to_owned(),
+                };
+                stylo_cssom_model::RuleDeclaration::new(name, descriptor.value.css_text())
+            })
+            .collect(),
+        shorthand_values: Box::new([]),
     }
 }
 
@@ -2098,6 +2185,7 @@ pub const fn rule_node_exposes_style(node: &stylo_cssom_model::RuleNode) -> bool
             | stylo_cssom_model::RuleGrammar::Page
             | stylo_cssom_model::RuleGrammar::Margin
             | stylo_cssom_model::RuleGrammar::PositionTry
+            | stylo_cssom_model::RuleGrammar::FunctionDeclarations
     )
 }
 
@@ -2150,6 +2238,7 @@ pub fn replace_rule_selector_in_context(
         | RuleCssomData::CounterStyle { .. }
         | RuleCssomData::Property { .. }
         | RuleCssomData::PositionTry { .. }
+        | RuleCssomData::Function { .. }
         | RuleCssomData::Margin { .. }
         | RuleCssomData::LayerBlock { .. }
         | RuleCssomData::LayerStatement { .. }
@@ -2183,7 +2272,8 @@ pub fn mutate_non_style_rule_declaration(
                 | RuleDeclarationDomain::FontFaceDescriptor
                 | RuleDeclarationDomain::Keyframe
                 | RuleDeclarationDomain::PositionTry
-                | RuleDeclarationDomain::Nested => unreachable!(),
+                | RuleDeclarationDomain::Nested
+                | RuleDeclarationDomain::FunctionDescriptors => unreachable!(),
             };
             crate::declaration_parser::mutate_rule_declaration_block(
                 block, property, value, priority, context,
@@ -2230,6 +2320,30 @@ pub fn mutate_non_style_rule_declaration(
                 crate::declaration_parser::CssomDeclarationContext::Style,
             )?
         },
+        RuleDeclarationDomain::FunctionDescriptors => {
+            let name = property.trim();
+            if priority == crate::declaration_parser::CssomDeclarationPriority::Important
+                || !(name.starts_with("--") || name.eq_ignore_ascii_case("result"))
+            {
+                return None;
+            }
+            let mut declarations = block
+                .declarations()
+                .iter()
+                .filter(|declaration| !declaration.matches_name(name))
+                .cloned()
+                .collect::<Vec<_>>();
+            if !value.is_empty() {
+                if !is_single_css_value(value) {
+                    return None;
+                }
+                let probe =
+                    ParsedCssRule::parse(&format!("@function --cssom() {{ {name}: {value}; }}"))?;
+                let parsed = probe.nested_rules()?.first()?.declarations()?;
+                declarations.extend(parsed.declarations.iter().cloned());
+            }
+            RuleDeclarationBlock::from_declarations(block.domain(), declarations)
+        },
         RuleDeclarationDomain::Nested => {
             return crate::declaration_parser::mutate_style_rule_declaration(
                 node,
@@ -2254,6 +2368,24 @@ pub fn replace_position_try_rule_declarations(
     }
     let parsed = ParsedCssRule::parse(&format!("@position-try --cssom {{ {declarations} }}"))?;
     let block = parsed.to_rule_node().payload().declaration_block()?.clone();
+    Some(node.clone().with_cssom_declaration_block(block))
+}
+
+pub fn replace_function_declarations(
+    node: &stylo_cssom_model::RuleNode,
+    declarations: &str,
+) -> Option<stylo_cssom_model::RuleNode> {
+    if node.grammar() != stylo_cssom_model::RuleGrammar::FunctionDeclarations {
+        return None;
+    }
+    let parsed = ParsedCssRule::parse(&format!("@function --cssom() {{ {declarations} }}"))?;
+    let block = match parsed.nested_rules()?.first() {
+        Some(rule) => rule.to_rule_node().payload().declaration_block()?.clone(),
+        None => stylo_cssom_model::RuleDeclarationBlock::from_declarations(
+            stylo_cssom_model::RuleDeclarationDomain::FunctionDescriptors,
+            Vec::new(),
+        ),
+    };
     Some(node.clone().with_cssom_declaration_block(block))
 }
 
@@ -2286,7 +2418,8 @@ pub fn replace_page_or_margin_rule_declarations(
         | RuleDeclarationDomain::FontFaceDescriptor
         | RuleDeclarationDomain::Keyframe
         | RuleDeclarationDomain::PositionTry
-        | RuleDeclarationDomain::Nested => return None,
+        | RuleDeclarationDomain::Nested
+        | RuleDeclarationDomain::FunctionDescriptors => return None,
     };
     let block = parsed.to_rule_node().payload().declaration_block()?.clone();
     Some(node.clone().with_cssom_declaration_block(block))
@@ -2315,6 +2448,8 @@ fn interface_name_for_rule(rule: &CssRule) -> CssomRuleInterfaceName {
         CssRule::StartingStyle(_) => CssomRuleInterfaceName::StartingStyle,
         CssRule::PositionTry(_) => CssomRuleInterfaceName::PositionTry,
         CssRule::NestedDeclarations(_) => CssomRuleInterfaceName::NestedDeclarations,
+        CssRule::Function(_) => CssomRuleInterfaceName::Function,
+        CssRule::FunctionDeclarations(_) => CssomRuleInterfaceName::FunctionDeclarations,
         CssRule::ColorProfile(_) => CssomRuleInterfaceName::ColorProfile,
         _ => CssomRuleInterfaceName::CssRule,
     }
@@ -2405,6 +2540,7 @@ fn starts_with_typed_rule_at_keyword(css: &str) -> bool {
             "scope",
             "starting-style",
             "position-try",
+            "function",
             "color-profile",
             "when",
             "else",
@@ -4672,6 +4808,8 @@ mod tests {
             CssRule::StartingStyle(_) => "StartingStyle",
             CssRule::PositionTry(_) => "PositionTry",
             CssRule::NestedDeclarations(_) => "NestedDeclarations",
+            CssRule::Function(_) => "Function",
+            CssRule::FunctionDeclarations(_) => "FunctionDeclarations",
         }
     }
 
@@ -4740,6 +4878,12 @@ mod tests {
             (
                 Name::NestedDeclarations,
                 "CSSNestedDeclarations",
+                Parent::CssRule,
+            ),
+            (Name::Function, "CSSFunctionRule", Parent::GroupingRule),
+            (
+                Name::FunctionDeclarations,
+                "CSSFunctionDeclarations",
                 Parent::CssRule,
             ),
             (Name::ColorProfile, "CSSColorProfileRule", Parent::CssRule),
@@ -5844,5 +5988,92 @@ mod tests {
         assert!(super::ParsedContainerQueryList::parse("???").is_none());
         assert!(super::ParsedContainerQueryList::parse("(width > 100px),").is_none());
         assert!(super::ParsedContainerQueryList::parse(",(width > 100px)").is_none());
+    }
+
+    #[test]
+    fn function_rules_expose_parameters_and_descriptor_runs() {
+        use stylo_cssom_model::{
+            RuleCssomData, RuleDeclarationDomain, RuleFunctionParameter, RuleGrammar,
+        };
+
+        let parsed = ParsedCssRule::parse(
+            "@function --f(--x type(<length> | auto): 10px, --y) returns <length> \
+             { --l: 1px; result: 2px; @supports (width: 1px) { result: 3px; } --m: 4px; }",
+        )
+        .unwrap();
+        assert_eq!(parsed.interface_name(), CssomRuleInterfaceName::Function);
+        let node = parsed.to_rule_node();
+        assert_eq!(
+            node.cssom_data(),
+            Some(&RuleCssomData::Function {
+                name: "--f".into(),
+                parameters: [
+                    RuleFunctionParameter::new("--x", "<length> | auto", Some("10px")),
+                    RuleFunctionParameter::new("--y", "*", None::<&str>),
+                ]
+                .into(),
+                return_type: "<length>".into(),
+            })
+        );
+        let children = node.payload().nested();
+        assert_eq!(
+            children
+                .iter()
+                .map(stylo_cssom_model::RuleNode::grammar)
+                .collect::<Vec<_>>(),
+            [
+                RuleGrammar::FunctionDeclarations,
+                RuleGrammar::Supports,
+                RuleGrammar::FunctionDeclarations
+            ]
+        );
+        let block = children[0].payload().declaration_block().unwrap();
+        assert_eq!(block.domain(), RuleDeclarationDomain::FunctionDescriptors);
+        assert_eq!(block.serialization(), "--l: 1px; result: 2px;");
+        assert_eq!(children[2].serialization(), "--m: 4px;");
+    }
+
+    #[test]
+    fn function_descriptor_mutation_accepts_locals_and_result_only() {
+        use crate::declaration_parser::CssomDeclarationPriority;
+
+        let parsed = ParsedCssRule::parse("@function --f() { --x: 1px; }").unwrap();
+        let declarations = parsed.to_rule_node().payload().nested()[0].clone();
+        let mutate = |property, value, priority| {
+            super::mutate_non_style_rule_declaration(&declarations, property, value, priority).map(
+                |node| {
+                    node.payload()
+                        .declaration_block()
+                        .unwrap()
+                        .serialization()
+                        .to_owned()
+                },
+            )
+        };
+        assert_eq!(
+            mutate("result", "3px", CssomDeclarationPriority::Normal).as_deref(),
+            Some("--x: 1px; result: 3px;")
+        );
+        assert_eq!(
+            mutate("color", "red", CssomDeclarationPriority::Normal),
+            None
+        );
+        assert_eq!(
+            mutate("--x", "2px", CssomDeclarationPriority::Important),
+            None
+        );
+        let replaced = super::replace_function_declarations(
+            &declarations,
+            "--x: 1px; color: red; result: 3px; --y: 2px;",
+        )
+        .unwrap();
+        assert_eq!(
+            replaced
+                .payload()
+                .declaration_block()
+                .unwrap()
+                .serialization(),
+            "--x: 1px; result: 3px; --y: 2px;"
+        );
     }
 }

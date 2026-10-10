@@ -4097,6 +4097,7 @@ impl CascadeData {
                         compare_keyframes_in_same_layer,
                     )?;
                 },
+                CssRule::Function(..) => continue,
                 CssRule::Property(ref registration) => {
                     self.custom_property_registrations.try_insert(
                         registration.name.0.clone(),
@@ -4494,6 +4495,8 @@ impl CascadeData {
                 | CssRule::Region(..)
                 | CssRule::Page(..)
                 | CssRule::Property(..)
+                | CssRule::Function(..)
+                | CssRule::FunctionDeclarations(..)
                 | CssRule::Document(..)
                 | CssRule::LayerBlock(..)
                 | CssRule::LayerStatement(..)
