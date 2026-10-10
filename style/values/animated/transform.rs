@@ -1341,15 +1341,20 @@ impl ComputedTransformOperation {
         right: &[Self],
         procedure: Procedure,
     ) -> Result<Self, MismatchedTransformMatrixError> {
-        let (left, _left_3d) = Transform::components_to_transform_3d_matrix(left, None)
+        let (left, left_3d) = Transform::components_to_transform_3d_matrix(left, None)
             .map_err(|()| MismatchedTransformMatrixError::UnresolvedReferenceBox)?;
-        let (right, _right_3d) = Transform::components_to_transform_3d_matrix(right, None)
+        let (right, right_3d) = Transform::components_to_transform_3d_matrix(right, None)
             .map_err(|()| MismatchedTransformMatrixError::UnresolvedReferenceBox)?;
-        Ok(Self::Matrix3D(
-            Matrix3D::from(left)
-                .animate(&Matrix3D::from(right), procedure)
-                .map_err(|()| MismatchedTransformMatrixError::NonInterpolable)?,
-        ))
+        let matrix = Matrix3D::from(left)
+            .animate(&Matrix3D::from(right), procedure)
+            .map_err(|()| MismatchedTransformMatrixError::NonInterpolable)?;
+        if left_3d || right_3d {
+            return Ok(Self::Matrix3D(matrix));
+        }
+        matrix
+            .into_2d()
+            .map(Self::Matrix)
+            .map_err(|()| MismatchedTransformMatrixError::NonInterpolable)
     }
 
     fn animate_mismatched_transforms(
@@ -1878,5 +1883,22 @@ mod tests {
         assert!(singular
             .animate(&translated, Procedure::Accumulate { count: 1 })
             .is_err());
+    }
+
+    #[test]
+    fn mismatched_2d_transform_lists_interpolate_to_a_2d_matrix() {
+        let from = Transform(
+            vec![
+                TransformOperation::TranslateX(LengthPercentage::new_length(Length::new(100.0))),
+                TransformOperation::Scale(2.0, 2.0),
+            ]
+            .into(),
+        );
+        let to = Transform(vec![TransformOperation::Rotate(Angle::from_degrees(180.0))].into());
+        let result = from
+            .animate(&to, Procedure::Interpolate { progress: 0.5 })
+            .expect("mismatched 2D transform lists interpolate");
+
+        assert!(matches!(*result.0, [TransformOperation::Matrix(..)]));
     }
 }
