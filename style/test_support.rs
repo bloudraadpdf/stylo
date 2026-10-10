@@ -6,6 +6,17 @@
 
 use std::sync::{Mutex, OnceLock};
 
+use crate::context::QuirksMode;
+use crate::font_metrics::FontMetrics;
+use crate::media_queries::MediaType;
+use crate::properties::{style_structs::Font, ComputedValues};
+use crate::queries::values::PrefersColorScheme;
+use crate::servo::media_queries::{Device, FontMetricsProvider};
+use crate::values::computed::font::GenericFontFamily;
+use crate::values::computed::{CSSPixelLength, Context, Length};
+use euclid::{Scale, Size2D};
+use style_traits::{CSSPixel, DevicePixel};
+
 /// Serialises tests that mutate global style prefs.
 pub(crate) fn pref_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -31,4 +42,38 @@ impl Drop for BoolPrefGuard {
     fn drop(&mut self) {
         style_config::set_bool(self.key, self.old);
     }
+}
+
+#[derive(Debug)]
+struct TestFontMetricsProvider;
+
+impl FontMetricsProvider for TestFontMetricsProvider {
+    fn query_font_metrics(
+        &self,
+        _vertical: bool,
+        _font: &Font,
+        _base_size: CSSPixelLength,
+        _flags: crate::values::specified::font::QueryFontMetricsFlags,
+    ) -> FontMetrics {
+        FontMetrics::default()
+    }
+
+    fn base_size_for_generic(&self, _generic: GenericFontFamily) -> Length {
+        Length::new(16.0)
+    }
+}
+
+/// Evaluates with a computed-value context of an 800x600 print device.
+pub(crate) fn with_computed_context<R>(evaluate: impl FnOnce(&Context) -> R) -> R {
+    let initial_values = ComputedValues::initial_values_with_font_override(Font::initial_values());
+    let device = Device::new(
+        MediaType::print(),
+        QuirksMode::NoQuirks,
+        Size2D::<f32, CSSPixel>::new(800.0, 600.0),
+        Scale::<f32, CSSPixel, DevicePixel>::new(1.0),
+        Box::new(TestFontMetricsProvider),
+        initial_values,
+        PrefersColorScheme::Light,
+    );
+    Context::for_media_query_evaluation(&device, QuirksMode::NoQuirks, evaluate)
 }
