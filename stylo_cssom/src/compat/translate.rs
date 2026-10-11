@@ -5301,11 +5301,9 @@ fn translate_property(lower_property: &str, raw_value: &str) -> Translated {
             }
         },
 
-        "-prince-trim" => {
-            Translated::Native {
-                native_property: "-bd-prince-trim",
-                native_value: raw_value.trim().to_string(),
-            }
+        "-prince-trim" => Translated::Native {
+            native_property: "-bd-prince-trim",
+            native_value: raw_value.trim().to_string(),
         },
 
         "-prince-footnote-policy" => {
@@ -6627,10 +6625,20 @@ mod prince_trim_tests {
 
     #[test]
     fn prince_trim_preserves_page_edge_lengths_and_cascade_values() {
-        for value in ["auto", "1pt", "1pt 2pt 3pt 4pt", "calc(2pt + 1em)", "var(--trim)"] {
+        for value in [
+            "auto",
+            "1pt",
+            "1pt 2pt 3pt 4pt",
+            "calc(2pt + 1em)",
+            "var(--trim)",
+        ] {
             let source = format!("@page {{ -prince-trim: {value}; }}");
             let translated = translate_compat(&source, CompatMode::Prince);
-            assert!(translated.rewritten.contains(&format!("-bd-prince-trim: {value};")));
+            assert!(
+                translated
+                    .rewritten
+                    .contains(&format!("-bd-prince-trim: {value};"))
+            );
             assert!(!translated.rewritten.contains("-bd-pdf-crop-size"));
         }
     }
