@@ -127,6 +127,13 @@ fn translate_compat_with_registrations<'css>(
         None => f14_working,
     };
 
+    let page_selector_rewritten =
+        rewrite_prince_page_selector_whitespace(f14_working.as_ref(), compat);
+    let f14_working: Cow<'_, str> = match page_selector_rewritten {
+        Some(owned) => Cow::Owned(owned),
+        None => f14_working,
+    };
+
     let (f2_at_rule_rewritten, mut f2_at_rule_warnings) =
         rewrite_spot_colour_at_rules(f14_working.as_ref(), compat);
     let f2_at_rule_working: Cow<'_, str> = match f2_at_rule_rewritten {
@@ -1528,6 +1535,58 @@ fn skip_css_comment(css: &str, at: usize) -> usize {
         .map_or(css.len(), |end| at + 2 + end + 2)
 }
 
+/// Prince accepts whitespace between the page type and a pseudo-class of a page selector
+/// (`@page blank :left`), which css-page-3 § 4.2 forbids ("No whitespace is allowed between
+/// components of a selector"); the rewrite joins them, so the rule keeps its selector.
+fn rewrite_prince_page_selector_whitespace(css: &str, compat: CompatMode) -> Option<String> {
+    if !matches!(compat, CompatMode::Prince) {
+        return None;
+    }
+
+    const PAGE: &[u8] = b"@page";
+    let bytes = css.as_bytes();
+    let mut out = String::new();
+    let mut cursor = 0usize;
+    let mut at = 0usize;
+    while at < bytes.len() {
+        match bytes[at] {
+            b'"' | b'\'' => {
+                at = skip_css_string(bytes, at);
+                continue;
+            },
+            b'/' if bytes.get(at + 1) == Some(&b'*') => {
+                at = skip_css_comment(css, at);
+                continue;
+            },
+            _ => {},
+        }
+        let is_page = bytes.len() >= at + PAGE.len()
+            && bytes[at..at + PAGE.len()].eq_ignore_ascii_case(PAGE)
+            && is_at_keyword_boundary(bytes.get(at + PAGE.len()).copied());
+        if !is_page {
+            at += css[at..].chars().next().map_or(1, char::len_utf8);
+            continue;
+        }
+        let mut position = skip_css_whitespace_and_comments(css, at + PAGE.len());
+        while position < bytes.len() && !matches!(bytes[position], b'{' | b';') {
+            let name_end = position + 1;
+            if bytes[position].is_ascii() && is_name_continuation_byte(bytes[position]) {
+                let colon = skip_css_whitespace_and_comments(css, name_end);
+                if colon > name_end && bytes.get(colon) == Some(&b':') {
+                    out.push_str(&css[cursor..name_end]);
+                    cursor = colon;
+                }
+            }
+            position = name_end;
+        }
+        at = position;
+    }
+    (cursor > 0).then(|| {
+        out.push_str(&css[cursor..]);
+        out
+    })
+}
+
 fn skip_css_whitespace_and_comments(css: &str, mut at: usize) -> usize {
     let bytes = css.as_bytes();
     loop {
@@ -2344,6 +2403,21 @@ pub fn project_compat_root(
         stylo_cssom_model::InternalStylesheetRoot::new(root.origin(), rules),
         translation.warnings,
     )
+}
+
+#[cfg(test)]
+mod prince_page_selector_tests {
+    use super::{CompatMode, translate_compat};
+
+    #[test]
+    fn prince_joins_a_page_type_and_its_pseudo_class() {
+        let css = "@page blank :left { @top-left { content: normal } } @page :right { margin: 0 }";
+        assert_eq!(
+            translate_compat(css, CompatMode::Prince).rewritten,
+            "@page blank:left { @top-left { content: normal } } @page :right { margin: 0 }"
+        );
+        assert_eq!(translate_compat(css, CompatMode::None).rewritten, css);
+    }
 }
 
 #[cfg(test)]
