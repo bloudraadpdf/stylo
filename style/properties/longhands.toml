@@ -8471,6 +8471,7 @@ affects = "layout"
 [box-sizing]
 struct = "position"
 spec = "https://drafts.csswg.org/css-ui/#propdef-box-sizing"
+rule_types_allowed = ["style", "keyframe", "footnote", "scope"]
 animation_type = "discrete"
 affects = "layout"
 extra_prefixes = ["moz:layout.css.prefixes.box-sizing", "webkit"]

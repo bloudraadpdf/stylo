@@ -2448,6 +2448,17 @@ mod prince_rewrite_tests {
     /// Prince 16.2 and PDFreactor 12.7.2 ignore the unprefixed css-gcpm-3 `footnote-policy`; Prince takes its own
     /// `-prince-footnote-policy`.
     #[test]
+    fn prince_resolves_page_viewport_units_against_the_page_area() {
+        let css =
+            "@page { margin: 10vw; @footnote { width: calc(35vw - 1vmin) } } p { width: 10vw }";
+        assert_eq!(
+            translate_compat(css, CompatMode::Prince).rewritten,
+            "@page { margin: 10-bd-aw; @footnote { width: calc(35-bd-aw - 1-bd-amin) } } p { width: 10vw }"
+        );
+        assert_eq!(translate_compat(css, CompatMode::None).rewritten, css);
+    }
+
+    #[test]
     fn prince_drops_the_list_style_types_it_does_not_support() {
         let prince = |css: &str| {
             translate_compat(css, CompatMode::Prince)
@@ -3143,6 +3154,59 @@ fn walk_top_level<'i>(parser: &mut Parser<'i, '_>, state: &mut TranslateState, f
     }
 }
 
+/// Prince 16.2 resolves the viewport units of the page context against the page area: in `@page` they become the
+/// moegoe page-area units, which the page context allows.
+fn rewrite_page_viewport_units(value: &str) -> Option<String> {
+    let mut units = Vec::new();
+    let mut input = ParserInput::new(value);
+    let mut parser = Parser::new(&mut input);
+    collect_page_viewport_units(&mut parser, &mut units);
+    if units.is_empty() {
+        return None;
+    }
+    let mut rewritten = String::with_capacity(value.len() + 4 * units.len());
+    let mut cursor = 0;
+    for (unit_end, unit_len, page_area_unit) in units {
+        rewritten.push_str(&value[cursor..unit_end - unit_len]);
+        rewritten.push_str(page_area_unit);
+        cursor = unit_end;
+    }
+    rewritten.push_str(&value[cursor..]);
+    Some(rewritten)
+}
+
+fn collect_page_viewport_units<'i>(
+    parser: &mut Parser<'i, '_>,
+    units: &mut Vec<(usize, usize, &'static str)>,
+) {
+    while let Ok(token) = parser.next_including_whitespace_and_comments() {
+        match token.clone() {
+            Token::Dimension { unit, .. } => {
+                let page_area_unit = match unit.to_ascii_lowercase().as_str() {
+                    "vw" => "-bd-aw",
+                    "vh" => "-bd-ah",
+                    "vi" => "-bd-ai",
+                    "vb" => "-bd-ab",
+                    "vmin" => "-bd-amin",
+                    "vmax" => "-bd-amax",
+                    _ => continue,
+                };
+                units.push((parser.position().byte_index(), unit.len(), page_area_unit));
+            },
+            Token::Function(_)
+            | Token::ParenthesisBlock
+            | Token::SquareBracketBlock
+            | Token::CurlyBracketBlock => {
+                let _ = parser.parse_nested_block(|inner| -> Result<(), ParseError<'i, ()>> {
+                    collect_page_viewport_units(inner, units);
+                    Ok(())
+                });
+            },
+            _ => {},
+        }
+    }
+}
+
 /// Prince 16.2 does not know `@counter-style` ("unknown '@counter-style' rule").
 fn engine_ignores_at_rule(compat: CompatMode, at_keyword: &str) -> bool {
     compat == CompatMode::Prince && at_keyword.eq_ignore_ascii_case("counter-style")
@@ -3432,6 +3496,17 @@ fn scan_block<'i>(parser: &mut Parser<'i, '_>, state: &mut TranslateState, full_
                         && state.at_font_face_depth == 0
                         && name.eq_ignore_ascii_case("font-family")
                         && let Some(replacement) = rewrite_pdfreactor_font_family_value(value)
+                    {
+                        state.value_replacements.push(ValueReplacement {
+                            start_byte: value_start,
+                            end_byte: value_end,
+                            replacement,
+                        });
+                    }
+
+                    if state.compat == CompatMode::Prince
+                        && state.at_page_depth > 0
+                        && let Some(replacement) = rewrite_page_viewport_units(value)
                     {
                         state.value_replacements.push(ValueReplacement {
                             start_byte: value_start,

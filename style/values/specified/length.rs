@@ -1099,6 +1099,24 @@ pub enum PageRelativeLength {
     /// 1% of `max(bleed-width, bleed-height)`.
     #[css(dimension)]
     Bmax(CSSFloat),
+    /// 1% of page-area width: the Prince compat translation of `vw` in `@page`.
+    #[css(dimension)]
+    Aw(CSSFloat),
+    /// 1% of page-area inline-size: the Prince compat translation of `vi` in `@page`.
+    #[css(dimension)]
+    Ai(CSSFloat),
+    /// 1% of page-area height: the Prince compat translation of `vh` in `@page`.
+    #[css(dimension)]
+    Ah(CSSFloat),
+    /// 1% of page-area block-size: the Prince compat translation of `vb` in `@page`.
+    #[css(dimension)]
+    Ab(CSSFloat),
+    /// 1% of `min(page-area width, page-area height)`: `vmin` in `@page`.
+    #[css(dimension)]
+    Amin(CSSFloat),
+    /// 1% of `max(page-area width, page-area height)`: `vmax` in `@page`.
+    #[css(dimension)]
+    Amax(CSSFloat),
 }
 
 impl PageRelativeLength {
@@ -1116,7 +1134,13 @@ impl PageRelativeLength {
             | Self::Bh(v)
             | Self::Bb(v)
             | Self::Bmin(v)
-            | Self::Bmax(v) => v,
+            | Self::Bmax(v)
+            | Self::Aw(v)
+            | Self::Ai(v)
+            | Self::Ah(v)
+            | Self::Ab(v)
+            | Self::Amin(v)
+            | Self::Amax(v) => v,
         }
     }
 
@@ -1135,6 +1159,12 @@ impl PageRelativeLength {
             Self::Bb(_) => "-bd-bb",
             Self::Bmin(_) => "-bd-bmin",
             Self::Bmax(_) => "-bd-bmax",
+            Self::Aw(_) => "-bd-aw",
+            Self::Ai(_) => "-bd-ai",
+            Self::Ah(_) => "-bd-ah",
+            Self::Ab(_) => "-bd-ab",
+            Self::Amin(_) => "-bd-amin",
+            Self::Amax(_) => "-bd-amax",
         }
     }
 
@@ -1159,10 +1189,17 @@ impl PageRelativeLength {
             (&Bb(one), &Bb(other)) => Bb(op(one, other)),
             (&Bmin(one), &Bmin(other)) => Bmin(op(one, other)),
             (&Bmax(one), &Bmax(other)) => Bmax(op(one, other)),
+            (&Aw(one), &Aw(other)) => Aw(op(one, other)),
+            (&Ai(one), &Ai(other)) => Ai(op(one, other)),
+            (&Ah(one), &Ah(other)) => Ah(op(one, other)),
+            (&Ab(one), &Ab(other)) => Ab(op(one, other)),
+            (&Amin(one), &Amin(other)) => Amin(op(one, other)),
+            (&Amax(one), &Amax(other)) => Amax(op(one, other)),
             _ => unsafe {
                 match *self {
                     Pw(..) | Pi(..) | Ph(..) | Pb(..) | Pmin(..) | Pmax(..) | Bw(..) | Bi(..)
-                    | Bh(..) | Bb(..) | Bmin(..) | Bmax(..) => {},
+                    | Bh(..) | Bb(..) | Bmin(..) | Bmax(..) | Aw(..) | Ai(..) | Ah(..) | Ab(..)
+                    | Amin(..) | Amax(..) => {},
                 }
                 debug_unreachable!("Forgot to handle unit in try_op()")
             },
@@ -1183,6 +1220,12 @@ impl PageRelativeLength {
             Self::Bb(x) => Self::Bb(op(*x)),
             Self::Bmin(x) => Self::Bmin(op(*x)),
             Self::Bmax(x) => Self::Bmax(op(*x)),
+            Self::Aw(x) => Self::Aw(op(*x)),
+            Self::Ai(x) => Self::Ai(op(*x)),
+            Self::Ah(x) => Self::Ah(op(*x)),
+            Self::Ab(x) => Self::Ab(op(*x)),
+            Self::Amin(x) => Self::Amin(op(*x)),
+            Self::Amax(x) => Self::Amax(op(*x)),
         }
     }
 
@@ -1272,6 +1315,26 @@ impl PageRelativeLength {
             Bmax(v) => {
                 let size = context.viewport_size_for_bleed_box_resolution();
                 (v, cmp::max(size.width, size.height))
+            },
+            Aw(v) | Ai(v) | Ah(v) | Ab(v) | Amin(v) | Amax(v) => {
+                let size =
+                    context.viewport_size_for_viewport_unit_resolution(ViewportVariant::UADefault);
+                let (inline, block) = if writing_mode_vertical {
+                    (size.height, size.width)
+                } else {
+                    (size.width, size.height)
+                };
+                (
+                    v,
+                    match *self {
+                        Aw(_) => size.width,
+                        Ah(_) => size.height,
+                        Ai(_) => inline,
+                        Ab(_) => block,
+                        Amin(_) => cmp::min(size.width, size.height),
+                        _ => cmp::max(size.width, size.height),
+                    },
+                )
             },
         };
 
@@ -1514,6 +1577,12 @@ impl NoCalcLength {
             "-bd-bb" => Self::PageRelative(PageRelativeLength::Bb(value)),
             "-bd-bmin" => Self::PageRelative(PageRelativeLength::Bmin(value)),
             "-bd-bmax" => Self::PageRelative(PageRelativeLength::Bmax(value)),
+            "-bd-aw" => Self::PageRelative(PageRelativeLength::Aw(value)),
+            "-bd-ai" => Self::PageRelative(PageRelativeLength::Ai(value)),
+            "-bd-ah" => Self::PageRelative(PageRelativeLength::Ah(value)),
+            "-bd-ab" => Self::PageRelative(PageRelativeLength::Ab(value)),
+            "-bd-amin" => Self::PageRelative(PageRelativeLength::Amin(value)),
+            "-bd-amax" => Self::PageRelative(PageRelativeLength::Amax(value)),
             _ => return Err(()),
         })
     }

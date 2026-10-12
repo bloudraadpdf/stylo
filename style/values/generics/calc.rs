@@ -269,6 +269,12 @@ pub enum SortKey {
     BdBmin,
     #[strum(serialize = "-bd-bmax")]
     BdBmax,
+    BdAw,
+    BdAi,
+    BdAh,
+    BdAb,
+    BdAmin,
+    BdAmax,
     #[css(skip)]
     ColorComponent,
     #[css(skip)]

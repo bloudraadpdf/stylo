@@ -3347,6 +3347,13 @@ mod tests {
             6,
             "inset should expand to four longhands, alongside position and inset-inline-start",
         );
+        assert_eq!(
+            footnote_rule_declaration_count(
+                "@page { @footnote { width: 35-bd-aw; padding-left: 8-bd-aw; box-sizing: border-box } }",
+            ),
+            3,
+            "the page-area units and box-sizing should apply in @footnote",
+        );
     }
 
     #[test]
