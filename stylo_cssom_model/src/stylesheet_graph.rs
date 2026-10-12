@@ -1514,7 +1514,10 @@ impl RuleNode {
         self.payload()
             .projection_serialization
             .as_deref()
-            .map_or_else(|| self.serialization(), str::to_owned)
+            .map_or_else(
+                || self.serialization_with(Self::projection_serialization),
+                str::to_owned,
+            )
     }
 
     #[must_use]
@@ -1597,7 +1600,14 @@ impl RuleNode {
             RuleImportScope::Explicit(boundaries) => format!(" {boundaries}"),
         };
         let header = format!("@scope{prelude}");
-        let serialization = format!("{header} {{ {} }}", serialise_rules(&rules));
+        let serialization = format!(
+            "{header} {{ {} }}",
+            serialise_rules(&rules, RuleNode::serialization)
+        );
+        let projection = format!(
+            "{header} {{ {} }}",
+            serialise_rules(&rules, RuleNode::projection_serialization)
+        );
         let mut payload = TypedRulePayload::authored_with_group_header(
             RuleGrammar::Scope,
             serialization.into(),
@@ -1605,6 +1615,7 @@ impl RuleNode {
             RuleGroupHeader::new(header),
         );
         payload.imported_scope = true;
+        payload.projection_serialization = Some(projection.into());
         Self::Scope(payload)
     }
 
@@ -1752,13 +1763,18 @@ impl RuleNode {
     }
 
     pub fn serialization(&self) -> String {
+        self.serialization_with(Self::serialization)
+    }
+
+    /// The serialization of the rule, with `child` for each nested rule.
+    fn serialization_with(&self, child: fn(&Self) -> String) -> String {
         let payload = self.payload();
         if payload.authored {
             return payload.prelude().to_owned();
         }
         match self {
             Self::Style(_) => {
-                serialise_qualified_rule(payload.prelude(), &serialise_rule_body(payload))
+                serialise_qualified_rule(payload.prelude(), &serialise_rule_body(payload, child))
             },
             Self::Keyframe(_) => format!(
                 "{} {{ {} }}",
@@ -1768,11 +1784,14 @@ impl RuleNode {
             Self::Media(_) => format!(
                 "@media {} {{ {} }}",
                 payload.prelude(),
-                serialise_rules(payload.nested())
+                serialise_rules(payload.nested(), child)
             ),
             Self::Page(_) => {
                 let prelude = at_rule_prelude(payload.prelude());
-                serialise_qualified_rule(&format!("@page{prelude}"), &serialise_rule_body(payload))
+                serialise_qualified_rule(
+                    &format!("@page{prelude}"),
+                    &serialise_rule_body(payload, child),
+                )
             },
             Self::NestedDeclarations(_) | Self::FunctionDeclarations(_) => {
                 canonical_declaration_block(payload.block().unwrap_or_default())
@@ -1793,7 +1812,7 @@ impl RuleNode {
                 format!(
                     "@{}{prelude} {{ {} }}",
                     grammar_name(payload.grammar()),
-                    serialise_rules(payload.nested())
+                    serialise_rules(payload.nested(), child)
                 )
             },
         }
@@ -1808,9 +1827,9 @@ fn serialise_qualified_rule(prelude: &str, body: &str) -> String {
     }
 }
 
-fn serialise_rule_body(payload: &TypedRulePayload) -> String {
+fn serialise_rule_body(payload: &TypedRulePayload, child: fn(&RuleNode) -> String) -> String {
     let declarations = canonical_declaration_block(payload.block().unwrap_or_default());
-    let nested = serialise_rules(payload.nested());
+    let nested = serialise_rules(payload.nested(), child);
     [declarations.as_str(), nested.as_str()]
         .into_iter()
         .filter(|part| !part.is_empty())
@@ -1887,12 +1906,8 @@ fn canonical_declaration_block(source: &str) -> String {
     }
 }
 
-fn serialise_rules(rules: &[RuleNode]) -> String {
-    rules
-        .iter()
-        .map(RuleNode::serialization)
-        .collect::<Vec<_>>()
-        .join(" ")
+fn serialise_rules(rules: &[RuleNode], child: fn(&RuleNode) -> String) -> String {
+    rules.iter().map(child).collect::<Vec<_>>().join(" ")
 }
 
 const fn grammar_name(grammar: RuleGrammar) -> &'static str {

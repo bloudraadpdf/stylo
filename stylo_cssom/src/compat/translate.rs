@@ -2429,6 +2429,26 @@ mod prince_rewrite_tests {
         );
         assert_eq!(translate_compat(css, CompatMode::None).rewritten, css);
     }
+
+    /// A `<link media=print>` sheet projects its rules inside a media rule without source text; its compat projection
+    /// must see the source of its rules.
+    #[test]
+    fn prince_rewrites_the_rules_of_a_sheet_with_a_media_list() {
+        let rules =
+            crate::authored_rules::ParsedStylesheet::parse(".fn { display: prince-footnote }")
+                .expect("the rule must parse")
+                .rule_nodes()
+                .to_vec();
+        let root = stylo_cssom_model::InternalStylesheetRoot::new(
+            stylo_cssom_model::StyleOrigin::Author,
+            vec![stylo_cssom_model::RuleNode::media("print", rules)],
+        );
+        let (projected, _) = super::project_compat_root(&root, CompatMode::Prince);
+        assert_eq!(
+            projected.projection_serialization(),
+            "@media print { .fn { display: block; float: footnote } }"
+        );
+    }
 }
 
 #[cfg(test)]
@@ -3218,7 +3238,7 @@ fn scan_block<'i>(parser: &mut Parser<'i, '_>, state: &mut TranslateState, full_
                     {
                         state.value_replacements.push(ValueReplacement {
                             start_byte: decl_start_byte,
-                            end_byte: value_end,
+                            end_byte: value_start + value.trim_end().len(),
                             replacement: "display: block; float: footnote".to_string(),
                         });
                     }
