@@ -14,6 +14,9 @@ Tree-counting functions resolve sibling positions only when a computed value
 needs them. Each computed-value context reuses its first result, so ordinary
 styles do not scan siblings.
 
+Text justification applies to first-line and first-letter pseudo-elements.
+Their text-justify declarations retain the specified keyword after cascade.
+
 Coordination of Stylo development happens:
 
 - Here in Github Issues

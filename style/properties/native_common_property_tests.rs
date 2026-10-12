@@ -38,6 +38,20 @@ fn assert_serialization(name: &str, input: &str, expected: Option<&str>) {
 }
 
 #[test]
+fn text_justify_applies_to_first_line_and_first_letter() {
+    for restriction in [
+        super::PropertyFlags::APPLIES_TO_FIRST_LINE,
+        super::PropertyFlags::APPLIES_TO_FIRST_LETTER,
+    ] {
+        assert!(super::LonghandId::TextJustify.flags().contains(restriction));
+        assert!(!super::LonghandId::TextIndent.flags().contains(restriction));
+    }
+    for value in ["auto", "none", "inter-word", "inter-character"] {
+        assert_serialization("text-justify", value, Some(value));
+    }
+}
+
+#[test]
 fn sizing_shorthands_expand_both_axes_and_css_wide_values() {
     for prefix in ["", "min-", "max-"] {
         let name = format!("{prefix}size");
