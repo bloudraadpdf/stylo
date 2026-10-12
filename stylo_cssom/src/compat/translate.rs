@@ -2445,6 +2445,29 @@ mod prince_rewrite_tests {
         }
     }
 
+    /// Prince 16.2 and PDFreactor 12.7.2 ignore the unprefixed css-gcpm-3 `footnote-policy`; Prince takes its own
+    /// `-prince-footnote-policy`.
+    #[test]
+    fn prince_and_pdfreactor_ignore_an_unprefixed_footnote_policy() {
+        let css = "p { footnote-policy: line; margin: 0 }";
+        for compat in [CompatMode::Prince, CompatMode::PdfReactor] {
+            assert_eq!(
+                translate_compat(css, compat).rewritten,
+                "p { margin: 0 }",
+                "{compat:?}"
+            );
+        }
+        assert_eq!(translate_compat(css, CompatMode::None).rewritten, css);
+        assert_eq!(
+            translate_compat(
+                "p { -prince-footnote-policy: keep-with-line }",
+                CompatMode::Prince
+            )
+            .rewritten,
+            "p { -prince-footnote-policy: keep-with-line ; footnote-policy: line;}"
+        );
+    }
+
     /// A `<link media=print>` sheet projects its rules inside a media rule without source text; its compat projection
     /// must see the source of its rules.
     #[test]
@@ -3244,6 +3267,18 @@ fn scan_block<'i>(parser: &mut Parser<'i, '_>, state: &mut TranslateState, full_
                             start_byte: decl_start_byte,
                             end_byte: name_end_byte,
                             replacement: "-bd-prince-bleed".to_string(),
+                        });
+                    }
+
+                    if matches!(state.compat, CompatMode::Prince | CompatMode::PdfReactor)
+                        && name.eq_ignore_ascii_case("footnote-policy")
+                    {
+                        let rest = &full_css[value_end..];
+                        let after_semicolon = rest.strip_prefix(';').unwrap_or(rest);
+                        state.value_replacements.push(ValueReplacement {
+                            start_byte: decl_start_byte,
+                            end_byte: full_css.len() - after_semicolon.trim_start().len(),
+                            replacement: String::new(),
                         });
                     }
 
