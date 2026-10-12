@@ -17,6 +17,10 @@ styles do not scan siblings.
 Text justification applies to first-line and first-letter pseudo-elements.
 Their text-justify declarations retain the specified keyword after cascade.
 
+First-line reparenting recomputes font-dependent reset values when the child
+font size changes. The normal parent supplies reset and custom-property
+inheritance; the first-line parent supplies fragment font inheritance.
+
 Coordination of Stylo development happens:
 
 - Here in Github Issues

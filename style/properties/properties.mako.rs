@@ -2280,6 +2280,7 @@ pub struct StyleBuilder<'a> {
     /// This is effectively
     /// `parent_style.unwrap_or(device.default_computed_values())`.
     inherited_style: &'a ComputedValues,
+    non_first_line_inherited_style: &'a ComputedValues,
 
     /// The style we're getting reset structs from.
     reset_style: &'a ComputedValues,
@@ -2359,6 +2360,7 @@ impl<'a> StyleBuilder<'a> {
             device,
             stylist,
             inherited_style,
+            non_first_line_inherited_style: inherited_style,
             reset_style,
             pseudo,
             rules,
@@ -2403,6 +2405,7 @@ impl<'a> StyleBuilder<'a> {
             device,
             stylist,
             inherited_style,
+            non_first_line_inherited_style: inherited_style,
             reset_style,
             pseudo: None,
             modified_reset: false,
@@ -2450,7 +2453,7 @@ impl<'a> StyleBuilder<'a> {
     #[allow(non_snake_case)]
     pub fn inherit_${property.ident}(&mut self) {
         let inherited_struct =
-            self.inherited_style.get_${property.style_struct.name_lower}();
+            self.non_first_line_inherited_style.get_${property.style_struct.name_lower}();
 
         self.modified_reset = true;
         self.add_flags(ComputedValueFlags::INHERITS_RESET_STYLE);
@@ -2679,6 +2682,10 @@ impl<'a> StyleBuilder<'a> {
         )
     }
 
+    pub(crate) fn set_first_line_inheritance_parent(&mut self, parent: &'a ComputedValues) {
+        self.non_first_line_inherited_style = parent;
+    }
+
     /// Get the custom properties map if necessary.
     pub fn custom_properties(&self) -> &crate::custom_properties::ComputedCustomProperties {
         &self.custom_properties
@@ -2687,7 +2694,7 @@ impl<'a> StyleBuilder<'a> {
 
     /// Get the inherited custom properties map.
     pub fn inherited_custom_properties(&self) -> &crate::custom_properties::ComputedCustomProperties {
-        &self.inherited_style.custom_properties
+        &self.non_first_line_inherited_style.custom_properties
     }
 
     /// Access to various information about our inherited styles.  We don't

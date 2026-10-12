@@ -42,10 +42,10 @@ use std::borrow::Cow;
 pub enum FirstLineReparenting<'a> {
     No,
     Yes {
-        /// The style we're re-parenting for ::first-line. ::first-line only affects inherited
-        /// properties so we use this to avoid some work and also ensure correctness by copying the
-        /// reset structs from this style.
+        /// The normal child style whose independent reset values can be reused.
         style_to_reparent: &'a ComputedValues,
+        /// The normal parent for reset and custom-property inheritance.
+        normal_parent_style: &'a ComputedValues,
     },
 }
 
@@ -310,6 +310,15 @@ where
         rule_cache_conditions,
         container_size_query,
     );
+    if let FirstLineReparenting::Yes {
+        normal_parent_style,
+        ..
+    } = first_line_reparenting
+    {
+        context
+            .builder
+            .set_first_line_inheritance_parent(normal_parent_style);
+    }
     context.set_tree_counting_element(element);
 
     if let Some(element) = element {
@@ -856,6 +865,78 @@ struct Cascade<'b> {
     reverted: FxHashMap<LonghandId, (CascadePriority, bool)>,
     reverted_rules: FxHashMap<LonghandId, FxHashMap<usize, CascadePriority>>,
     declarations_to_apply_unless_overridden: DeclarationsToApplyUnlessOverriden,
+}
+
+#[cfg(all(test, feature = "servo"))]
+mod first_line_reset_tests {
+    use super::*;
+    use crate::values::computed::{Length, NonNegativeFiniteLength};
+
+    #[test]
+    fn first_line_reset_inheritance_uses_the_normal_parent() {
+        let device = crate::test_support::test_device();
+        let mut normal = StyleBuilder::for_inheritance(&device, None, None, None);
+        normal
+            .mutate_border()
+            .set_border_left_style(crate::values::computed::BorderStyle::Solid);
+        let normal = normal.build();
+        let mut first_line = StyleBuilder::for_inheritance(&device, None, None, None);
+        let mut size = first_line.get_font().clone_font_size();
+        size.computed_size = NonNegativeFiniteLength::new_censored(Length::new(10.0));
+        size.used_size = size.computed_size;
+        first_line.mutate_font().set_font_size(size);
+        let first_line = first_line.build();
+        let mut child = StyleBuilder::for_inheritance(&device, None, Some(&first_line), None);
+        child.set_first_line_inheritance_parent(&normal);
+        child.inherit_border_left_style();
+        assert_eq!(
+            child.get_border().clone_border_left_style(),
+            crate::values::computed::BorderStyle::Solid
+        );
+        assert_eq!(
+            child.get_font().clone_font_size().computed_size,
+            size.computed_size
+        );
+    }
+
+    #[test]
+    fn first_line_reset_reuse_respects_self_font_size_dependencies() {
+        let device = crate::test_support::test_device();
+        let lock = crate::shared_lock::SharedRwLock::new();
+        let guard = lock.read();
+        let guards = StylesheetGuards::same(&guard);
+        let tactic = PositionTryFallbacksTryTactic::default();
+        for dependent in [false, true] {
+            let mut original = StyleBuilder::for_inheritance(&device, None, None, None);
+            if dependent {
+                original.add_flags(ComputedValueFlags::DEPENDS_ON_SELF_FONT_METRICS);
+            }
+            let original = original.build();
+            for changed in [false, true] {
+                let mut fragment =
+                    StyleBuilder::for_inheritance(&device, None, Some(&original), None);
+                if changed {
+                    let mut size = fragment.get_font().clone_font_size();
+                    size.computed_size = NonNegativeFiniteLength::new_censored(Length::new(10.0));
+                    size.used_size = size.computed_size;
+                    fragment.mutate_font().set_font_size(size);
+                }
+                let cascade = Cascade::new(
+                    FirstLineReparenting::Yes {
+                        style_to_reparent: &original,
+                        normal_parent_style: &original,
+                    },
+                    &tactic,
+                    false,
+                );
+                assert_eq!(
+                    cascade.try_to_use_cached_reset_properties(&mut fragment, None, &guards),
+                    !(dependent && changed),
+                    "dependent={dependent}, changed={changed}"
+                );
+            }
+        }
+    }
 }
 
 impl<'b> Cascade<'b> {
@@ -1507,7 +1588,19 @@ impl<'b> Cascade<'b> {
         guards: &StylesheetGuards,
     ) -> bool {
         let style = match self.first_line_reparenting {
-            FirstLineReparenting::Yes { style_to_reparent } => style_to_reparent,
+            FirstLineReparenting::Yes {
+                style_to_reparent, ..
+            } => {
+                if style_to_reparent
+                    .flags
+                    .contains(ComputedValueFlags::DEPENDS_ON_SELF_FONT_METRICS)
+                    && style_to_reparent.get_font().clone_font_size().computed_size
+                        != builder.get_font().clone_font_size().computed_size
+                {
+                    return false;
+                }
+                style_to_reparent
+            },
             FirstLineReparenting::No => {
                 let Some(cache) = cache else { return false };
                 let Some(style) = cache.find(guards, builder) else {
