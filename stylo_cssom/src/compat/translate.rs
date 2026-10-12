@@ -2430,6 +2430,21 @@ mod prince_rewrite_tests {
         assert_eq!(translate_compat(css, CompatMode::None).rewritten, css);
     }
 
+    /// Prince 16.2 lays out `inline-footnote` exactly as `float: footnote; footnote-display: inline`.
+    #[test]
+    fn prince_takes_an_inline_footnote_float_as_an_inline_footnote() {
+        for property in ["float", "-prince-float", "-prince-float-placement"] {
+            let css = format!(".fn {{ {property}: inline-footnote }}");
+            assert_eq!(
+                translate_compat(&css, CompatMode::Prince).rewritten,
+                format!(
+                    ".fn {{ {property}: inline-footnote ; float: footnote; footnote-display: inline;}}"
+                ),
+                "{property}"
+            );
+        }
+    }
+
     /// A `<link media=print>` sheet projects its rules inside a media rule without source text; its compat projection
     /// must see the source of its rules.
     #[test]
@@ -4106,6 +4121,7 @@ enum PrinceFloatPlacementComponent {
     Bottom,
     TopBottom,
     Footnote,
+    InlineFootnote,
     Unsupported,
 }
 
@@ -4121,7 +4137,8 @@ impl PrinceFloatPlacementComponent {
             "bottom" => Some(Self::Bottom),
             "top-bottom" => Some(Self::TopBottom),
             "footnote" => Some(Self::Footnote),
-            "snap" | "align-top" | "align-bottom" | "inline-footnote" => Some(Self::Unsupported),
+            "inline-footnote" => Some(Self::InlineFootnote),
+            "snap" | "align-top" | "align-bottom" => Some(Self::Unsupported),
             _ => None,
         }
     }
@@ -4137,12 +4154,16 @@ impl PrinceFloatPlacementComponent {
             Self::Bottom => Some(PrinceNativeFloatPlacement::Bottom),
             Self::TopBottom => Some(PrinceNativeFloatPlacement::TopUnlessRoom),
             Self::Footnote => Some(PrinceNativeFloatPlacement::Footnote),
+            Self::InlineFootnote => Some(PrinceNativeFloatPlacement::InlineFootnote),
             Self::Unsupported => None,
         }
     }
 
     const fn needs_prince_compat(self) -> bool {
-        matches!(self, Self::TopBottom | Self::Unsupported)
+        matches!(
+            self,
+            Self::TopBottom | Self::InlineFootnote | Self::Unsupported
+        )
     }
 }
 
@@ -4259,6 +4280,7 @@ enum PrinceNativeFloatPlacement {
     Bottom,
     TopUnlessRoom,
     Footnote,
+    InlineFootnote,
 }
 
 impl PrinceNativeFloatPlacement {
@@ -4272,7 +4294,15 @@ impl PrinceNativeFloatPlacement {
             Self::Top => "top",
             Self::Bottom => "bottom",
             Self::TopUnlessRoom => "top-unless-room",
-            Self::Footnote => "footnote",
+            Self::Footnote | Self::InlineFootnote => "footnote",
+        }
+    }
+
+    /// The `footnote-display` that Prince gives the placement.
+    const fn footnote_display(self) -> Option<&'static str> {
+        match self {
+            Self::InlineFootnote => Some("inline"),
+            _ => None,
         }
     }
 }
@@ -4285,20 +4315,27 @@ struct PrinceFloatLonghands {
 
 impl PrinceFloatLonghands {
     fn into_translated(self) -> Translated {
-        match (self.reference, self.placement) {
-            (None, None) => Translated::ValueDropped,
-            (Some(reference), None) => Translated::Native {
-                native_property: "float-reference",
-                native_value: reference.css().to_string(),
+        let reference = self
+            .reference
+            .map(|reference| ("float-reference", reference.css().to_string()));
+        let placement = self.placement.into_iter().flat_map(|placement| {
+            std::iter::once(("float", placement.css().to_string())).chain(
+                placement
+                    .footnote_display()
+                    .map(|display| ("footnote-display", display.to_string())),
+            )
+        });
+        let mut natives: Vec<_> = reference.into_iter().chain(placement).collect();
+        match natives.len() {
+            0 => Translated::ValueDropped,
+            1 => {
+                let (native_property, native_value) = natives.remove(0);
+                Translated::Native {
+                    native_property,
+                    native_value,
+                }
             },
-            (None, Some(placement)) => Translated::Native {
-                native_property: "float",
-                native_value: placement.css().to_string(),
-            },
-            (Some(reference), Some(placement)) => Translated::Natives(vec![
-                ("float-reference", reference.css().to_string()),
-                ("float", placement.css().to_string()),
-            ]),
+            _ => Translated::Natives(natives),
         }
     }
 }
@@ -5965,20 +6002,15 @@ fn translate_property(lower_property: &str, raw_value: &str) -> Translated {
             }
         },
         "-prince-float-placement" => {
-            let v = raw_value.trim().to_ascii_lowercase();
-            match v.as_str() {
-                "none" | "left" | "right" | "inside" | "outside" | "top" | "bottom"
-                | "footnote" => Translated::Native {
-                    native_property: "float",
-                    native_value: v,
-                },
-
-                "top-bottom" => Translated::Native {
-                    native_property: "float",
-                    native_value: "top-unless-room".to_string(),
-                },
-                _ => Translated::ValueDropped,
-            }
+            PrinceFloatPlacementComponent::parse(&raw_value.trim().to_ascii_lowercase())
+                .and_then(PrinceFloatPlacementComponent::native)
+                .map_or(Translated::ValueDropped, |placement| {
+                    PrinceFloatLonghands {
+                        reference: None,
+                        placement: Some(placement),
+                    }
+                    .into_translated()
+                })
         },
 
         "-ro-colorbar-top-left" => Translated::Native {
