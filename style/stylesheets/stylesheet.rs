@@ -3300,14 +3300,8 @@ mod tests {
         assert_eq!(parsed.to_css_string(), "25mm");
     }
 
-    #[test]
-    fn servo_parses_footnote_rules_inside_page() {
-        let _guard = pref_lock().lock().unwrap();
-        let _columns_pref = BoolPrefGuard::set("layout.columns.enabled", true);
-
-        let stylesheet = parse_stylesheet(
-            "@page { @footnote { border-top: 1pt solid black; column-span: all; max-height: 100pt; } }",
-        );
+    fn footnote_rule_declaration_count(css: &str) -> usize {
+        let stylesheet = parse_stylesheet(css);
         let guard = stylesheet.shared_lock.read();
         let contents = stylesheet.contents.read_with(&guard);
         let rules = contents.rules(&guard);
@@ -3327,10 +3321,31 @@ mod tests {
                 _ => None,
             })
             .expect("expected nested @footnote rule");
+        footnote.block.read_with(&guard).len()
+    }
+
+    #[test]
+    fn servo_parses_footnote_rules_inside_page() {
+        let _guard = pref_lock().lock().unwrap();
+        let _columns_pref = BoolPrefGuard::set("layout.columns.enabled", true);
+
         assert_eq!(
-            footnote.block.read_with(&guard).len(),
+            footnote_rule_declaration_count(
+                "@page { @footnote { border-top: 1pt solid black; column-span: all; max-height: 100pt; } }",
+            ),
             5,
             "border-top should expand to three longhands, alongside column-span and max-height",
+        );
+    }
+
+    #[test]
+    fn servo_parses_positioned_footnote_rules_inside_page() {
+        assert_eq!(
+            footnote_rule_declaration_count(
+                "@page { @footnote { position: absolute; inset: 1pt; inset-inline-start: 2pt; } }",
+            ),
+            6,
+            "inset should expand to four longhands, alongside position and inset-inline-start",
         );
     }
 
