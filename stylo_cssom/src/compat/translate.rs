@@ -2406,7 +2406,7 @@ pub fn project_compat_root(
 }
 
 #[cfg(test)]
-mod prince_page_selector_tests {
+mod prince_rewrite_tests {
     use super::{CompatMode, translate_compat};
 
     #[test]
@@ -2415,6 +2415,17 @@ mod prince_page_selector_tests {
         assert_eq!(
             translate_compat(css, CompatMode::Prince).rewritten,
             "@page blank:left { @top-left { content: normal } } @page :right { margin: 0 }"
+        );
+        assert_eq!(translate_compat(css, CompatMode::None).rewritten, css);
+    }
+
+    /// Prince 16.2 lays out `display: prince-footnote` as `float: footnote`; it replaces an earlier `display: none`.
+    #[test]
+    fn prince_takes_a_prince_footnote_display_as_a_footnote_float() {
+        let css = ".fn { display: none; display: prince-footnote; margin: 0 }";
+        assert_eq!(
+            translate_compat(css, CompatMode::Prince).rewritten,
+            ".fn { display: none; display: block; float: footnote; margin: 0 }"
         );
         assert_eq!(translate_compat(css, CompatMode::None).rewritten, css);
     }
@@ -3198,6 +3209,17 @@ fn scan_block<'i>(parser: &mut Parser<'i, '_>, state: &mut TranslateState, full_
                             start_byte: decl_start_byte,
                             end_byte: name_end_byte,
                             replacement: "-bd-prince-bleed".to_string(),
+                        });
+                    }
+
+                    if state.compat == CompatMode::Prince
+                        && name.eq_ignore_ascii_case("display")
+                        && raw_value.eq_ignore_ascii_case("prince-footnote")
+                    {
+                        state.value_replacements.push(ValueReplacement {
+                            start_byte: decl_start_byte,
+                            end_byte: value_end,
+                            replacement: "display: block; float: footnote".to_string(),
                         });
                     }
 
