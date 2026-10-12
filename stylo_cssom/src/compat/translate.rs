@@ -2448,6 +2448,41 @@ mod prince_rewrite_tests {
     /// Prince 16.2 and PDFreactor 12.7.2 ignore the unprefixed css-gcpm-3 `footnote-policy`; Prince takes its own
     /// `-prince-footnote-policy`.
     #[test]
+    fn prince_drops_the_list_style_types_it_does_not_support() {
+        let prince = |css: &str| {
+            translate_compat(css, CompatMode::Prince)
+                .rewritten
+                .into_owned()
+        };
+        for kept in [
+            "ol { list-style-type: lower-roman }",
+            "ul { list-style: square inside }",
+            "ol { list-style-type: japanese-informal }",
+            "ol { list-style-type: var(--type) }",
+            "ul { list-style: inside url(\"a b.png\") }",
+        ] {
+            assert_eq!(prince(kept), kept);
+        }
+        assert_eq!(
+            prince("ol { list-style-type: hebrew; margin: 0 }"),
+            "ol { margin: 0 }"
+        );
+        assert_eq!(prince("ul { list-style: hebrew inside }"), "ul { }");
+        assert_eq!(prince("ul { list-style-type: \"-\" }"), "ul { }");
+        assert_eq!(
+            prince("ul { list-style-type: symbols(cyclic \"*\") }"),
+            "ul { }"
+        );
+        assert_eq!(
+            prince("@counter-style x { system: cyclic; symbols: '*' } ol { margin: 0 }"),
+            " ol { margin: 0 }"
+        );
+        let css = "@counter-style x { system: cyclic } ol { list-style-type: hebrew }";
+        assert_eq!(translate_compat(css, CompatMode::None).rewritten, css);
+        assert_eq!(translate_compat(css, CompatMode::PdfReactor).rewritten, css);
+    }
+
+    #[test]
     fn prince_and_pdfreactor_ignore_an_unprefixed_footnote_policy() {
         let css = "p { footnote-policy: line; margin: 0 }";
         for compat in [CompatMode::Prince, CompatMode::PdfReactor] {
@@ -3080,6 +3115,14 @@ fn walk_top_level<'i>(parser: &mut Parser<'i, '_>, state: &mut TranslateState, f
         let snapshot = parser.state();
         match parser.next_including_whitespace_and_comments() {
             Ok(token) => match token.clone() {
+                Token::AtKeyword(ref name) if engine_ignores_at_rule(state.compat, name) => {
+                    skip_at_rule(parser);
+                    state.value_replacements.push(ValueReplacement {
+                        start_byte: snapshot.position().byte_index(),
+                        end_byte: parser.position().byte_index(),
+                        replacement: String::new(),
+                    });
+                },
                 Token::AtKeyword(ref name) => {
                     consume_at_rule(parser, state, full_css, name.as_ref());
                 },
@@ -3098,6 +3141,100 @@ fn walk_top_level<'i>(parser: &mut Parser<'i, '_>, state: &mut TranslateState, f
             Err(_) => return,
         }
     }
+}
+
+/// Prince 16.2 does not know `@counter-style` ("unknown '@counter-style' rule").
+fn engine_ignores_at_rule(compat: CompatMode, at_keyword: &str) -> bool {
+    compat == CompatMode::Prince && at_keyword.eq_ignore_ascii_case("counter-style")
+}
+
+fn skip_at_rule<'i>(parser: &mut Parser<'i, '_>) {
+    while let Ok(token) = parser.next_including_whitespace_and_comments() {
+        match token {
+            Token::Semicolon => return,
+            Token::CurlyBracketBlock => {
+                let _ = parser.parse_nested_block(|inner| -> Result<(), ParseError<'i, ()>> {
+                    while inner.next_including_whitespace_and_comments().is_ok() {}
+                    Ok(())
+                });
+                return;
+            },
+            _ => {},
+        }
+    }
+}
+
+/// Whether the engine of `compat` ignores the declaration `name: value`: Prince 16.2 and PDFreactor 12.7.2 the
+/// unprefixed css-gcpm-3 `footnote-policy`, Prince a list style type that it does not support.
+fn engine_ignores_declaration(compat: CompatMode, name: &str, value: &str) -> bool {
+    match compat {
+        CompatMode::None => false,
+        CompatMode::PdfReactor => name.eq_ignore_ascii_case("footnote-policy"),
+        CompatMode::Prince => {
+            name.eq_ignore_ascii_case("footnote-policy")
+                || ((name.eq_ignore_ascii_case("list-style-type")
+                    || name.eq_ignore_ascii_case("list-style"))
+                    && names_list_style_type_unsupported_by_prince(value))
+        },
+    }
+}
+
+/// The list style types of Prince 16.2: it drops a declaration with another type, a string or `symbols()`.
+const PRINCE_LIST_STYLE_TYPES: &[&str] = &[
+    "none",
+    "disc",
+    "circle",
+    "square",
+    "decimal",
+    "decimal-leading-zero",
+    "lower-roman",
+    "upper-roman",
+    "lower-greek",
+    "upper-greek",
+    "lower-alpha",
+    "lower-latin",
+    "upper-alpha",
+    "upper-latin",
+    "cjk-decimal",
+    "arabic-indic",
+    "persian",
+    "urdu",
+    "japanese-informal",
+    "japanese-formal",
+    "simp-chinese-informal",
+    "simp-chinese-formal",
+    "trad-chinese-informal",
+    "trad-chinese-formal",
+];
+
+fn names_list_style_type_unsupported_by_prince(value: &str) -> bool {
+    let mut input = ParserInput::new(value);
+    let mut parser = Parser::new(&mut input);
+    let mut unsupported = false;
+    while let Ok(token) = parser.next() {
+        match token {
+            Token::Ident(ident) => {
+                let ident = ident.to_ascii_lowercase();
+                if matches!(
+                    ident.as_str(),
+                    "inherit" | "initial" | "unset" | "revert" | "revert-layer"
+                ) {
+                    return false;
+                }
+                unsupported |= !matches!(ident.as_str(), "inside" | "outside")
+                    && !PRINCE_LIST_STYLE_TYPES.contains(&ident.as_str());
+            },
+            Token::Function(name)
+                if name.eq_ignore_ascii_case("var") || name.eq_ignore_ascii_case("env") =>
+            {
+                return false;
+            },
+            Token::QuotedString(_) => unsupported = true,
+            Token::Function(name) if name.eq_ignore_ascii_case("symbols") => unsupported = true,
+            _ => {},
+        }
+    }
+    unsupported
 }
 
 fn consume_at_rule<'i>(
@@ -3270,9 +3407,7 @@ fn scan_block<'i>(parser: &mut Parser<'i, '_>, state: &mut TranslateState, full_
                         });
                     }
 
-                    if matches!(state.compat, CompatMode::Prince | CompatMode::PdfReactor)
-                        && name.eq_ignore_ascii_case("footnote-policy")
-                    {
+                    if engine_ignores_declaration(state.compat, &name, raw_value) {
                         let rest = &full_css[value_end..];
                         let after_semicolon = rest.strip_prefix(';').unwrap_or(rest);
                         state.value_replacements.push(ValueReplacement {
