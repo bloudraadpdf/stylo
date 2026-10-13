@@ -187,8 +187,7 @@ fn translate_compat_with_registrations<'css>(
         None => cmyk_working,
     };
 
-    let string_set_rewritten =
-        rewrite_pdfreactor_string_set_self_keyword(cmyk_working.as_ref(), compat);
+    let string_set_rewritten = rewrite_string_set_keywords(cmyk_working.as_ref(), compat);
     let cmyk_working: Cow<'_, str> = match string_set_rewritten {
         Some(owned) => Cow::Owned(owned),
         None => cmyk_working,
@@ -2470,6 +2469,32 @@ mod prince_rewrite_tests {
         assert_eq!(translate_compat(css, CompatMode::None).rewritten, css);
     }
 
+    /// Prince 16.2 takes the `contents` keyword of the 2006 css3-gcpm draft as `content()`; the name of a string is
+    /// never a keyword.
+    #[test]
+    fn prince_takes_the_string_set_contents_keyword_as_the_element_text() {
+        let css = "h2 { string-set: title contents, contents '<' contents }";
+        assert_eq!(
+            translate_compat(css, CompatMode::Prince).rewritten,
+            "h2 { string-set: title content(text), contents '<' content(text) }"
+        );
+        assert_eq!(translate_compat(css, CompatMode::None).rewritten, css);
+    }
+
+    /// PDFreactor 12.7.2 takes `self`, `before`, `after` and `first-letter` as `content()` sources; the name of a
+    /// string is never a keyword.
+    #[test]
+    fn pdfreactor_takes_the_string_set_keywords_as_content_sources() {
+        let css =
+            "h2 { string-set: before self, after before counter(c, upper-roman) first-letter }";
+        assert_eq!(
+            translate_compat(css, CompatMode::PdfReactor).rewritten,
+            "h2 { string-set: before content(text), after content(before) counter(c, upper-roman) \
+             content(first-letter) }"
+        );
+        assert_eq!(translate_compat(css, CompatMode::Prince).rewritten, css);
+    }
+
     /// Prince 16.2 has no `inline` float reference: its initial `column` makes `top`, `bottom` and `top-bottom`
     /// column floats, which the native keywords keep for the initial reference.
     #[test]
@@ -3008,10 +3033,28 @@ fn ident_at(bytes: &[u8], at: usize, needle: &[u8]) -> bool {
             .is_none_or(|&b| !is_name_continuation_byte(b))
 }
 
+/// The identifiers of a declaration value that a keyword rewrite may replace.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ValueGrammar {
+    /// Every identifier outside a function is a keyword.
+    Keywords,
+    /// A comma-separated list of `<custom-ident> <component>+` pairs: each pair's name is never a keyword.
+    NamedPairs,
+}
+
 fn rewrite_declaration_value_idents(
     css: &str,
     property: &[u8],
     replacements: &[(&[u8], &str)],
+) -> Option<String> {
+    rewrite_declaration_value_idents_in(css, property, replacements, ValueGrammar::Keywords)
+}
+
+fn rewrite_declaration_value_idents_in(
+    css: &str,
+    property: &[u8],
+    replacements: &[(&[u8], &str)],
+    grammar: ValueGrammar,
 ) -> Option<String> {
     let bytes = css.as_bytes();
     let mut out = String::with_capacity(css.len());
@@ -3043,11 +3086,28 @@ fn rewrite_declaration_value_idents(
         }
         out.push_str(&css[i..=colon]);
         i = colon + 1;
+        let mut depth = 0usize;
+        let mut expects_name = grammar == ValueGrammar::NamedPairs;
 
         while i < bytes.len() && bytes[i] != b';' && bytes[i] != b'}' {
             if let Some(next) = copy_opaque_token(css, i, &mut out) {
                 i = next;
                 continue;
+            }
+            match bytes[i] {
+                b'(' => depth += 1,
+                b')' => depth = depth.saturating_sub(1),
+                b',' if depth == 0 => expects_name = grammar == ValueGrammar::NamedPairs,
+                b if expects_name && is_name_continuation_byte(b) => {
+                    let end = (i..bytes.len())
+                        .find(|&at| !is_name_continuation_byte(bytes[at]))
+                        .unwrap_or(bytes.len());
+                    out.push_str(&css[i..end]);
+                    i = end;
+                    expects_name = false;
+                    continue;
+                },
+                _ => {},
             }
 
             let is_function_argument = out.trim_end().ends_with('(');
@@ -3180,30 +3240,22 @@ fn rewrite_position_visibility_value(value: &str) -> Option<String> {
     rewrite_css_identifier_tokens(value, stylo_backing_keyword, false)
 }
 
-fn rewrite_pdfreactor_string_set_self_keyword(css: &str, compat: CompatMode) -> Option<String> {
-    if !matches!(compat, CompatMode::PdfReactor) {
-        return None;
-    }
-
-    if !mentions_ident(css, "string-set")
-        || !(mentions_ident(css, "self")
-            || mentions_ident(css, "before")
-            || mentions_ident(css, "after")
-            || mentions_ident(css, "first-letter"))
-    {
-        return None;
-    }
-
-    rewrite_declaration_value_idents(
-        css,
-        b"string-set",
-        &[
+fn rewrite_string_set_keywords(css: &str, compat: CompatMode) -> Option<String> {
+    let keywords: &[(&[u8], &str)] = match compat {
+        CompatMode::None => return None,
+        CompatMode::PdfReactor => &[
             (b"self", "content(text)"),
             (b"first-letter", "content(first-letter)"),
             (b"before", "content(before)"),
             (b"after", "content(after)"),
         ],
-    )
+        CompatMode::Prince => &[(b"contents", "content(text)")],
+    };
+    if !mentions_ident(css, "string-set") {
+        return None;
+    }
+
+    rewrite_declaration_value_idents_in(css, b"string-set", keywords, ValueGrammar::NamedPairs)
 }
 
 fn mentions_ident(css: &str, name: &str) -> bool {
