@@ -868,6 +868,9 @@ struct Cascade<'b> {
 }
 
 #[cfg(all(test, feature = "servo"))]
+mod marker_tests;
+
+#[cfg(all(test, feature = "servo"))]
 mod first_line_reset_tests {
     use super::*;
     use crate::values::computed::{Length, NonNegativeFiniteLength};
