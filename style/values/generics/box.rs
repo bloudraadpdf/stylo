@@ -368,6 +368,12 @@ pub enum GenericFloat<LengthPercentage> {
     /// `bottom` value, pagination compatibility heuristics do not demote it to
     /// a natural-flow placement.
     BdBottom,
+    /// Prince 16.2 `top`: its float reference `inline`, which Prince does not have, is the column.
+    BdPrinceTop,
+    /// Prince 16.2 `bottom`: its float reference `inline`, which Prince does not have, is the column.
+    BdPrinceBottom,
+    /// Prince 16.2 `top-bottom`: its float reference `inline`, which Prince does not have, is the column.
+    BdPrinceTopUnlessRoom,
     TopUnlessRoom,
     BottomUnlessRoom,
     SnapBlock(GenericSnapBlock<LengthPercentage>),
@@ -391,6 +397,9 @@ impl<LengthPercentage> GenericFloat<LengthPercentage> {
                 | Self::Bottom
                 | Self::BdTop
                 | Self::BdBottom
+                | Self::BdPrinceTop
+                | Self::BdPrinceBottom
+                | Self::BdPrinceTopUnlessRoom
                 | Self::TopUnlessRoom
                 | Self::BottomUnlessRoom
                 | Self::SnapBlock(..)
@@ -419,6 +428,9 @@ impl<LengthPercentage: ToCss> ToCss for GenericFloat<LengthPercentage> {
             Self::Bottom => dest.write_str("bottom"),
             Self::BdTop => dest.write_str("-bd-top"),
             Self::BdBottom => dest.write_str("-bd-bottom"),
+            Self::BdPrinceTop => dest.write_str("-bd-prince-top"),
+            Self::BdPrinceBottom => dest.write_str("-bd-prince-bottom"),
+            Self::BdPrinceTopUnlessRoom => dest.write_str("-bd-prince-top-unless-room"),
             Self::TopUnlessRoom => dest.write_str("top-unless-room"),
             Self::BottomUnlessRoom => dest.write_str("bottom-unless-room"),
             Self::SnapBlock(snap_block) => snap_block.to_css(dest),

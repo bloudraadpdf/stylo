@@ -2430,6 +2430,24 @@ mod prince_rewrite_tests {
         assert_eq!(translate_compat(css, CompatMode::None).rewritten, css);
     }
 
+    /// Prince 16.2 has no `inline` float reference: its initial `column` makes `top`, `bottom` and `top-bottom`
+    /// column floats, which the native keywords keep for the initial reference.
+    #[test]
+    fn prince_takes_top_and_bottom_floats_as_column_floats() {
+        for (value, native) in [
+            ("top", "-bd-prince-top"),
+            ("bottom", "-bd-prince-bottom"),
+            ("top-bottom", "-bd-prince-top-unless-room"),
+        ] {
+            let css = format!(".f {{ float: {value} }}");
+            assert_eq!(
+                translate_compat(&css, CompatMode::Prince).rewritten,
+                format!(".f {{ float: {value} ; float: {native};}}")
+            );
+            assert_eq!(translate_compat(&css, CompatMode::None).rewritten, css);
+        }
+    }
+
     /// Prince 16.2 lays out `inline-footnote` exactly as `float: footnote; footnote-display: inline`.
     #[test]
     fn prince_takes_an_inline_footnote_float_as_an_inline_footnote() {
@@ -4430,7 +4448,7 @@ impl PrinceFloatPlacementComponent {
     const fn needs_prince_compat(self) -> bool {
         matches!(
             self,
-            Self::TopBottom | Self::InlineFootnote | Self::Unsupported
+            Self::Top | Self::Bottom | Self::TopBottom | Self::InlineFootnote | Self::Unsupported
         )
     }
 }
@@ -4559,9 +4577,9 @@ impl PrinceNativeFloatPlacement {
             Self::Right => "right",
             Self::Inside => "inside",
             Self::Outside => "outside",
-            Self::Top => "top",
-            Self::Bottom => "bottom",
-            Self::TopUnlessRoom => "top-unless-room",
+            Self::Top => "-bd-prince-top",
+            Self::Bottom => "-bd-prince-bottom",
+            Self::TopUnlessRoom => "-bd-prince-top-unless-room",
             Self::Footnote | Self::InlineFootnote => "footnote",
         }
     }
