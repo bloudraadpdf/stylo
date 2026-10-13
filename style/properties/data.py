@@ -1323,6 +1323,10 @@ class PropertyRestrictions:
                 "unicode-bidi",
                 "-moz-osx-font-smoothing",
             ]
+            + [
+                p.name for p in data.longhands
+                if p.style_struct.inherited and "css-text" in p.spec
+            ]
             + PropertyRestrictions.shorthand(data, "text-wrap")
             + PropertyRestrictions.shorthand(data, "white-space")
             + PropertyRestrictions.spec(data, "css-fonts")

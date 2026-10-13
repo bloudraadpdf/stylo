@@ -478,7 +478,6 @@ impl PseudoElement {
         match *self {
             PseudoElement::FirstLetter => Some(PropertyFlags::APPLIES_TO_FIRST_LETTER),
             PseudoElement::FirstLine => Some(PropertyFlags::APPLIES_TO_FIRST_LINE),
-            PseudoElement::Marker => Some(PropertyFlags::APPLIES_TO_MARKER),
             _ => None,
         }
     }

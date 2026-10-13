@@ -69,8 +69,32 @@ fn marker_animation_and_transition_cascades_keep_property_restrictions() {
 }
 
 #[test]
+fn inheritable_text_effects_retain_marker_property_flags() {
+    for id in [
+        LonghandId::LetterSpacing,
+        LonghandId::WordSpacing,
+        LonghandId::LineBreak,
+        LonghandId::OverflowWrap,
+        LonghandId::TabSize,
+        LonghandId::WordBreak,
+        LonghandId::TextDecorationSkipInk,
+    ] {
+        assert!(
+            id.flags()
+                .contains(crate::properties::PropertyFlags::APPLIES_TO_MARKER),
+            "{id:?}"
+        );
+    }
+}
+
+#[test]
 fn marker_ua_and_ordinary_element_effects_keep_all_properties() {
-    assert_cascade_restriction(CascadeLevel::UANormal, Some(&PseudoElement::Marker), false);
+    for level in [
+        CascadeLevel::UANormal,
+        CascadeLevel::same_tree_author_normal(),
+    ] {
+        assert_cascade_restriction(level, Some(&PseudoElement::Marker), false);
+    }
     for level in [CascadeLevel::Animations, CascadeLevel::Transitions] {
         assert_cascade_restriction(level, None, false);
     }
