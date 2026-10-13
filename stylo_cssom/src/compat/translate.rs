@@ -2361,8 +2361,8 @@ fn rewrite_pdfreactor_legacy_attr_types(css: &str, compat: CompatMode) -> Option
     changed.then_some(out)
 }
 
-/// The counter styles a vendor predefines beyond CSS Counter Styles 3: `asterisks` in Prince 16.2 and PDFreactor
-/// 12.7.2, `-ro-footnote` in PDFreactor.
+/// The counter styles a vendor predefines beyond CSS Counter Styles 3: `asterisks` (PDFreactor 12.7.2 marker `* `) in
+/// Prince 16.2 and PDFreactor, `-ro-footnote` in PDFreactor.
 pub fn compat_builtin_counter_stylesheet_root(
     compat: CompatMode,
 ) -> Option<stylo_cssom_model::InternalStylesheetRoot> {
@@ -2372,6 +2372,7 @@ pub fn compat_builtin_counter_stylesheet_root(
             [
                 stylo_cssom_model::RuleDeclaration::new("system", "symbolic"),
                 stylo_cssom_model::RuleDeclaration::new("symbols", r#""*""#),
+                stylo_cssom_model::RuleDeclaration::new("suffix", r#"" ""#),
             ],
         )
     };
@@ -2659,7 +2660,7 @@ mod internal_stylesheet_root_tests {
             compat_builtin_counter_stylesheet_root(CompatMode::Prince)
                 .expect("Prince compatibility must supply its counter styles")
                 .projection_serialization(),
-            "@counter-style asterisks { system: symbolic; symbols: \"*\"; }",
+            "@counter-style asterisks { system: symbolic; symbols: \"*\"; suffix: \" \"; }",
         );
         assert!(compat_builtin_counter_stylesheet_root(CompatMode::None).is_none());
         let counters = compat_builtin_counter_stylesheet_root(CompatMode::PdfReactor)
@@ -2667,7 +2668,7 @@ mod internal_stylesheet_root_tests {
         assert_eq!(
             counters.projection_serialization(),
             concat!(
-                "@counter-style asterisks { system: symbolic; symbols: \"*\"; }\n",
+                "@counter-style asterisks { system: symbolic; symbols: \"*\"; suffix: \" \"; }\n",
                 "@counter-style -ro-footnote { system: symbolic; symbols: \"*\" \"\\2051 \" \"\\2020 \" \"\\2021 \"; suffix: \" \"; }",
             )
         );
