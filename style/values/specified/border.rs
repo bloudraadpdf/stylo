@@ -172,9 +172,9 @@ impl ToComputedValue for LineWidth {
                 Au::from_f32_px(1.0 / dppx).min(Au::from_px(1))
             },
             // https://drafts.csswg.org/css-backgrounds-3/#line-width
-            Self::Thin => Au::from_px(1),
-            Self::Medium => Au::from_px(3),
-            Self::Thick => Au::from_px(5),
+            Self::Thin => context.device().line_width_keywords().thin,
+            Self::Medium => context.device().line_width_keywords().medium,
+            Self::Thick => context.device().line_width_keywords().thick,
             Self::Length(ref length) => Au::from_f32_px(length.to_computed_value(context).px()),
         }
     }

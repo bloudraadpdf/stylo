@@ -49,7 +49,29 @@ pub(crate) fn snap_as_border_width(len: Au, app_units_per_device_pixel: i32) -> 
 impl BorderSideWidth {
     /// The `medium` value.
     pub fn medium() -> Self {
-        Self(Au::from_px(3))
+        Self(LineWidthKeywords::css().medium)
+    }
+}
+
+/// The lengths of the `thin`, `medium` and `thick` line widths of a device.
+#[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq)]
+pub struct LineWidthKeywords {
+    /// `thin`
+    pub thin: Au,
+    /// `medium`, also the initial width of borders, outlines and gap rules
+    pub medium: Au,
+    /// `thick`
+    pub thick: Au,
+}
+
+impl LineWidthKeywords {
+    /// CSS Backgrounds 3 § 3.3: 1px, 3px and 5px.
+    pub fn css() -> Self {
+        Self {
+            thin: Au::from_px(1),
+            medium: Au::from_px(3),
+            thick: Au::from_px(5),
+        }
     }
 }
 

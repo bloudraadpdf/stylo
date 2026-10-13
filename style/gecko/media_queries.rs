@@ -652,6 +652,12 @@ impl Device {
         }
     }
 
+    /// The lengths of the `thin`, `medium` and `thick` line widths.
+    #[inline]
+    pub fn line_width_keywords(&self) -> crate::values::computed::border::LineWidthKeywords {
+        crate::values::computed::border::LineWidthKeywords::css()
+    }
+
     /// Returns the device pixel ratio, ignoring the full zoom factor.
     pub fn device_pixel_ratio_ignoring_full_zoom(&self) -> Scale<f32, CSSPixel, DevicePixel> {
         let au_per_px = AU_PER_PX as f32;

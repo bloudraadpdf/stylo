@@ -15,6 +15,8 @@ use crate::properties::style_structs::Font;
 use crate::properties::ComputedValues;
 use crate::queries::feature::{AllowsRanges, Evaluator, FeatureFlags, QueryFeatureDescription};
 use crate::queries::values::{Orientation, PrefersColorScheme};
+use crate::values::computed::bd_gaps::{GapRuleList, GapRuleWidth};
+use crate::values::computed::border::{BorderSideWidth, LineWidthKeywords};
 use crate::values::computed::font::{FontFamilyList, GenericFontFamily};
 use crate::values::computed::{
     CSSPixelLength, Context, Length, LineHeight, NonNegativeLength, Ratio, Resolution,
@@ -165,6 +167,8 @@ pub struct Device {
     /// The default computed values for this Device.
     #[ignore_malloc_size_of = "Arc is shared"]
     default_computed_values: Arc<ComputedValues>,
+    /// The lengths of the line width keywords.
+    line_width_keywords: LineWidthKeywords,
 }
 
 impl Device {
@@ -205,7 +209,33 @@ impl Device {
             environment: CssEnvironment::default(),
             font_metrics_provider,
             default_computed_values,
+            line_width_keywords: LineWidthKeywords::css(),
         }
+    }
+
+    /// The lengths of the `thin`, `medium` and `thick` line widths.
+    #[inline]
+    pub fn line_width_keywords(&self) -> LineWidthKeywords {
+        self.line_width_keywords
+    }
+
+    /// Sets the lengths of the line width keywords, and `medium` as the initial width of borders, outlines and gap
+    /// rules.
+    pub fn set_line_width_keywords(&mut self, keywords: LineWidthKeywords) {
+        let medium = BorderSideWidth(keywords.medium);
+        let gap_rule = GapRuleList::single(GapRuleWidth::new(keywords.medium, Au::from_px(1)));
+        let mut values = (*self.default_computed_values).clone();
+        let border = values.mutate_border();
+        border.set_border_top_width(medium.clone());
+        border.set_border_right_width(medium.clone());
+        border.set_border_bottom_width(medium.clone());
+        border.set_border_left_width(medium.clone());
+        values.mutate_outline().set_outline_width(medium);
+        let column = values.mutate_column();
+        column.set_column_rule_width(gap_rule.clone());
+        column.set_row_rule_width(gap_rule);
+        self.default_computed_values = Arc::new(values);
+        self.line_width_keywords = keywords;
     }
 
     /// Get the relevant environment to resolve `env()` functions.
