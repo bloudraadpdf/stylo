@@ -11,6 +11,7 @@ use crate::logical_geometry::PhysicalSide;
 use crate::properties::longhands::display::computed_value::T as Display;
 use crate::properties::longhands::float::computed_value::T as Float;
 use crate::properties::longhands::position::computed_value::T as Position;
+use crate::properties::longhands::list_style_position::computed_value::T as ListStylePosition;
 #[cfg(feature = "gecko")]
 use crate::properties::longhands::{
     contain::computed_value::T as Contain, container_type::computed_value::T as ContainerType,
@@ -258,10 +259,11 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
     /// have its 'display' blockified, unless the ::marker is for an inline
     /// list-item (for which 'list-style-position:outside' behaves as 'inside').
     /// https://drafts.csswg.org/css-lists-3/#list-style-position-property
-    fn blockify_if_necessary<E>(&mut self, layout_parent_style: &ComputedValues, element: Option<E>)
-    where
-        E: TElement,
-    {
+    fn blockify_if_necessary(
+        &mut self,
+        layout_parent_style: &ComputedValues,
+        skip_item_display_fixup: bool,
+    ) {
         let mut blockify = false;
         macro_rules! blockify_if {
             ($if_what:expr) => {
@@ -272,12 +274,21 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
         }
 
         blockify_if!(self.style.is_root_element);
-        if !self.skip_item_display_fixup(element) {
+        if !skip_item_display_fixup {
             let parent_display = layout_parent_style.get_box().clone_display();
             blockify_if!(parent_display.is_item_container());
         }
 
         let is_item_or_root = blockify;
+
+        let parent_display = layout_parent_style.get_box().clone_display();
+        blockify_if!(
+            self.style.pseudo.is_some_and(|pseudo| pseudo.is_marker())
+                && parent_display.is_list_item()
+                && !parent_display.is_inline_flow()
+                && layout_parent_style.get_list().clone_list_style_position()
+                    == ListStylePosition::Outside
+        );
 
         blockify_if!(
             self.style.is_floating()
@@ -1129,7 +1140,7 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
         }
         self.adjust_for_top_layer();
         self.adjust_for_math_display(element);
-        self.blockify_if_necessary(layout_parent_style, element);
+        self.blockify_if_necessary(layout_parent_style, self.skip_item_display_fixup(element));
         #[cfg(feature = "gecko")]
         self.adjust_for_webkit_line_clamp();
         self.adjust_for_position();
@@ -1154,3 +1165,7 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
         self.set_bits();
     }
 }
+
+#[cfg(all(test, feature = "servo"))]
+#[path = "style_adjuster/marker_tests.rs"]
+mod marker_tests;
