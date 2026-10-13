@@ -2552,6 +2552,39 @@ mod prince_rewrite_tests {
         assert_eq!(translate_compat(css, CompatMode::Prince).rewritten, css);
     }
 
+    /// Prince 16.2 takes `symbols()` with strings separated by commas as a fixed system from 1 and drops a
+    /// declaration with the standard form.
+    #[test]
+    fn prince_takes_comma_separated_symbols_as_a_fixed_system() {
+        let prince = |css: &str| {
+            translate_compat(css, CompatMode::Prince)
+                .rewritten
+                .into_owned()
+        };
+        assert_eq!(
+            prince("p::before { content: counter(c, symbols('*', '\\2020')) \"|\" }"),
+            "p::before { content: counter(c, symbols(fixed '*' '\\2020')) \"|\" }"
+        );
+        assert_eq!(
+            prince("ol { list-style-type: symbols(\"x\", \"y\"); margin: 0 }"),
+            "ol { list-style-type: symbols(fixed \"x\" \"y\"); margin: 0 }"
+        );
+        for dropped in [
+            "symbols(symbolic '*' '+')",
+            "symbols('*' '+')",
+            "symbols(fixed '*')",
+        ] {
+            assert_eq!(
+                prince(&format!(
+                    "p::before {{ content: counter(c, {dropped}); margin: 0 }}"
+                )),
+                "p::before { margin: 0 }"
+            );
+        }
+        let css = "p::before { content: counter(c, symbols('*', '+')) }";
+        assert_eq!(translate_compat(css, CompatMode::None).rewritten, css);
+    }
+
     #[test]
     fn prince_drops_the_list_style_types_it_does_not_support() {
         let prince = |css: &str| {
@@ -3339,11 +3372,14 @@ fn engine_ignores_declaration(compat: CompatMode, name: &str, value: &str) -> bo
                 || ((name.eq_ignore_ascii_case("list-style-type")
                     || name.eq_ignore_ascii_case("list-style"))
                     && names_list_style_type_unsupported_by_prince(value))
+                || prince_symbols_functions(value)
+                    .iter()
+                    .any(|(_, symbols)| symbols.is_none())
         },
     }
 }
 
-/// The list style types of Prince 16.2: it drops a declaration with another type, a string or `symbols()`.
+/// The list style types of Prince 16.2: it drops a declaration with another type or a string.
 const PRINCE_LIST_STYLE_TYPES: &[&str] = &[
     "none",
     "disc",
@@ -3395,11 +3431,77 @@ fn names_list_style_type_unsupported_by_prince(value: &str) -> bool {
                 return false;
             },
             Token::QuotedString(_) => unsupported = true,
-            Token::Function(name) if name.eq_ignore_ascii_case("symbols") => unsupported = true,
             _ => {},
         }
     }
     unsupported
+}
+
+/// The `symbols()` functions of a value with their byte ranges: Prince 16.2 takes strings separated by commas as a
+/// fixed system from 1 (`symbols('*', '+')` is `symbols(fixed '*' '+')`); it drops a declaration with any other form,
+/// none here.
+fn prince_symbols_functions(value: &str) -> Vec<(std::ops::Range<usize>, Option<String>)> {
+    let mut input = ParserInput::new(value);
+    let mut functions = Vec::new();
+    collect_prince_symbols_functions(&mut Parser::new(&mut input), &mut functions);
+    functions
+}
+
+fn collect_prince_symbols_functions(
+    parser: &mut Parser<'_, '_>,
+    functions: &mut Vec<(std::ops::Range<usize>, Option<String>)>,
+) {
+    loop {
+        parser.skip_whitespace();
+        let start = parser.position().byte_index();
+        let symbols = match parser.next() {
+            Ok(Token::Function(name)) => name.eq_ignore_ascii_case("symbols"),
+            Ok(Token::ParenthesisBlock | Token::SquareBracketBlock | Token::CurlyBracketBlock) => {
+                false
+            },
+            Ok(_) => continue,
+            Err(_) => return,
+        };
+        if !symbols {
+            let _ = parser.parse_nested_block(|inner| -> Result<(), ParseError<'_, ()>> {
+                collect_prince_symbols_functions(inner, functions);
+                Ok(())
+            });
+            continue;
+        }
+        let fixed = parser
+            .parse_nested_block(|inner| -> Result<String, ParseError<'_, ()>> {
+                let mut symbols = Vec::new();
+                loop {
+                    let symbol_start = inner.position();
+                    inner.expect_string()?;
+                    symbols.push(inner.slice_from(symbol_start).trim());
+                    if inner.is_exhausted() {
+                        return Ok(format!("symbols(fixed {})", symbols.join(" ")));
+                    }
+                    inner.expect_comma()?;
+                }
+            })
+            .ok();
+        functions.push((start..parser.position().byte_index(), fixed));
+    }
+}
+
+/// Prince 16.2 `symbols()` in the standard form, see [`prince_symbols_functions`].
+fn rewrite_prince_symbols(value: &str) -> Option<String> {
+    let functions = prince_symbols_functions(value);
+    if functions.is_empty() {
+        return None;
+    }
+    let mut rewritten = String::with_capacity(value.len());
+    let mut cursor = 0;
+    for (range, fixed) in functions {
+        rewritten.push_str(&value[cursor..range.start]);
+        rewritten.push_str(fixed.as_deref()?);
+        cursor = range.end;
+    }
+    rewritten.push_str(&value[cursor..]);
+    Some(rewritten)
 }
 
 fn consume_at_rule<'i>(
@@ -3597,6 +3699,16 @@ fn scan_block<'i>(parser: &mut Parser<'i, '_>, state: &mut TranslateState, full_
                         && state.at_font_face_depth == 0
                         && name.eq_ignore_ascii_case("font-family")
                         && let Some(replacement) = rewrite_pdfreactor_font_family_value(value)
+                    {
+                        state.value_replacements.push(ValueReplacement {
+                            start_byte: value_start,
+                            end_byte: value_end,
+                            replacement,
+                        });
+                    }
+
+                    if state.compat == CompatMode::Prince
+                        && let Some(replacement) = rewrite_prince_symbols(value)
                     {
                         state.value_replacements.push(ValueReplacement {
                             start_byte: value_start,
