@@ -2538,6 +2538,12 @@ mod prince_rewrite_tests {
     }
 
     #[test]
+    fn prince_keeps_the_logical_viewport_units_it_does_not_know_in_page() {
+        let css = "@page { margin: 10vi 10vb }";
+        assert_eq!(translate_compat(css, CompatMode::Prince).rewritten, css);
+    }
+
+    #[test]
     fn prince_drops_the_list_style_types_it_does_not_support() {
         let prince = |css: &str| {
             translate_compat(css, CompatMode::Prince)
@@ -3264,8 +3270,6 @@ fn collect_page_viewport_units<'i>(
                 let page_area_unit = match unit.to_ascii_lowercase().as_str() {
                     "vw" => "-bd-aw",
                     "vh" => "-bd-ah",
-                    "vi" => "-bd-ai",
-                    "vb" => "-bd-ab",
                     "vmin" => "-bd-amin",
                     "vmax" => "-bd-amax",
                     _ => continue,
