@@ -2445,6 +2445,17 @@ mod prince_rewrite_tests {
         }
     }
 
+    /// Prince 16.2 also names the footnote area `@footnotes`.
+    #[test]
+    fn prince_takes_footnotes_as_the_footnote_area() {
+        let css = "@page { @footnotes { border-top: thin solid; width: 35vw } }";
+        assert_eq!(
+            translate_compat(css, CompatMode::Prince).rewritten,
+            "@page { @footnote { border-top: thin solid; width: 35-bd-aw } }"
+        );
+        assert_eq!(translate_compat(css, CompatMode::None).rewritten, css);
+    }
+
     /// Prince 16.2 and PDFreactor 12.7.2 ignore the unprefixed css-gcpm-3 `footnote-policy`; Prince takes its own
     /// `-prince-footnote-policy`.
     #[test]
@@ -3534,6 +3545,18 @@ fn scan_block<'i>(parser: &mut Parser<'i, '_>, state: &mut TranslateState, full_
                         decl_start.column,
                         BlockKind::StyleRule,
                     );
+                },
+                Token::AtKeyword(ref at_name)
+                    if state.compat == CompatMode::Prince
+                        && state.at_page_depth > 0
+                        && at_name.eq_ignore_ascii_case("footnotes") =>
+                {
+                    state.value_replacements.push(ValueReplacement {
+                        start_byte: decl_start_byte,
+                        end_byte: parser.position().byte_index(),
+                        replacement: "@footnote".to_string(),
+                    });
+                    consume_at_rule(parser, state, full_css, "footnote");
                 },
                 Token::AtKeyword(ref at_name) => {
                     consume_at_rule(parser, state, full_css, at_name.as_ref());
