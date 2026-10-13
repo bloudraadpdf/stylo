@@ -5,6 +5,32 @@ use std::collections::HashSet;
 use std::sync::LazyLock;
 use style::stylesheets::UrlExtraData;
 
+/// The declarations of a `style` attribute under `compat`: its text takes the translation of a style sheet.
+pub fn project_inline_style_with_compat(
+    projection: &stylo_cssom_model::InlineStyleProjection,
+    compat: crate::compat::CompatMode,
+    url_data: &UrlExtraData,
+) -> Vec<stylo_cssom_model::RuleDeclaration> {
+    let translated = projection
+        .presentation()
+        .map(|css| crate::compat::translate::translate_compat_declarations(css, compat))
+        .filter(|translation| !translation.is_borrowed())
+        .map(|translation| {
+            crate::declaration_parser::parse_inline_style_declarations(
+                &translation.rewritten,
+                projection.context().base_url.clone(),
+            )
+        });
+    translated
+        .as_deref()
+        .unwrap_or_else(|| projection.declarations())
+        .iter()
+        .flat_map(|declaration| {
+            project_inline_style_declaration_with_compat(declaration, compat, url_data)
+        })
+        .collect()
+}
+
 pub fn project_inline_style_declaration_with_compat(
     declaration: &stylo_cssom_model::SpecifiedDeclaration,
     compat: crate::compat::CompatMode,

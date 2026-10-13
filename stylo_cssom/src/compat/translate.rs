@@ -45,13 +45,35 @@ impl CompatTranslation<'_> {
 }
 
 pub fn translate_compat(css: &str, compat: CompatMode) -> CompatTranslation<'_> {
-    translate_compat_with_registrations(css, compat, ColourRegistrationOutput::Append)
+    translate_compat_with_registrations(
+        css,
+        compat,
+        ColourRegistrationOutput::Append,
+        TranslationScope::Stylesheet,
+    )
+}
+
+/// Translates a declaration list, as a `style` attribute holds it.
+pub fn translate_compat_declarations(css: &str, compat: CompatMode) -> CompatTranslation<'_> {
+    translate_compat_with_registrations(
+        css,
+        compat,
+        ColourRegistrationOutput::SourceOnly,
+        TranslationScope::Declarations,
+    )
+}
+
+#[derive(Clone, Copy)]
+enum TranslationScope {
+    Stylesheet,
+    Declarations,
 }
 
 fn translate_compat_with_registrations<'css>(
     css: &'css str,
     compat: CompatMode,
     registrations: ColourRegistrationOutput<'_>,
+    scope: TranslationScope,
 ) -> CompatTranslation<'css> {
     let grid_lanes_rewritten = rewrite_grid_lanes_properties(css);
     let grid_lanes_working: Cow<'_, str> = match grid_lanes_rewritten {
@@ -263,7 +285,10 @@ fn translate_compat_with_registrations<'css>(
             at_page_depth: 0,
             at_font_face_depth: 0,
         };
-        walk_top_level(&mut parser, &mut state, working);
+        match scope {
+            TranslationScope::Stylesheet => walk_top_level(&mut parser, &mut state, working),
+            TranslationScope::Declarations => scan_block(&mut parser, &mut state, working),
+        }
         let body_rewrites = !state.injections.is_empty()
             || !state.value_replacements.is_empty()
             || !state.tail_descriptors.is_empty();
@@ -2380,14 +2405,20 @@ pub fn project_compat_root(
         &serialization,
         compat,
         ColourRegistrationOutput::Collect(&mut registrations),
+        TranslationScope::Stylesheet,
     );
     let mut rules = if translation.rewritten == serialization {
         root.rules().to_vec()
     } else {
         crate::author_rule_projection::project_rule_sources(root.rules(), &mut |css| {
-            translate_compat_with_registrations(css, compat, ColourRegistrationOutput::SourceOnly)
-                .rewritten
-                .into_owned()
+            translate_compat_with_registrations(
+                css,
+                compat,
+                ColourRegistrationOutput::SourceOnly,
+                TranslationScope::Stylesheet,
+            )
+            .rewritten
+            .into_owned()
         })
     };
     for registration in registrations {
@@ -2407,7 +2438,7 @@ pub fn project_compat_root(
 
 #[cfg(test)]
 mod prince_rewrite_tests {
-    use super::{CompatMode, translate_compat};
+    use super::{CompatMode, translate_compat, translate_compat_declarations};
 
     #[test]
     fn prince_joins_a_page_type_and_its_pseudo_class() {
@@ -2445,6 +2476,25 @@ mod prince_rewrite_tests {
                 format!(".f {{ float: {value} ; float: {native};}}")
             );
             assert_eq!(translate_compat(&css, CompatMode::None).rewritten, css);
+        }
+    }
+
+    /// A `style` attribute takes the translation of a declaration block: Prince 16.2 and PDFreactor 12.7.2 read
+    /// their extensions there too.
+    #[test]
+    fn a_declaration_list_takes_the_translation_of_a_declaration_block() {
+        for (css, translated) in [
+            ("float: top", "float: top; float: -bd-prince-top;"),
+            (
+                "display: prince-footnote; margin: 0",
+                "display: block; float: footnote; margin: 0",
+            ),
+        ] {
+            assert_eq!(
+                translate_compat_declarations(css, CompatMode::Prince).rewritten,
+                translated
+            );
+            assert!(translate_compat_declarations(css, CompatMode::None).is_borrowed());
         }
     }
 
@@ -7033,7 +7083,7 @@ fn find_containing_close_brace(full_css: &str, line: u32, column: u32) -> Option
             _ => i += 1,
         }
     }
-    None
+    (depth == 0).then_some(bytes.len())
 }
 
 fn line_column_to_byte(css: &str, line: u32, column: u32) -> Option<usize> {

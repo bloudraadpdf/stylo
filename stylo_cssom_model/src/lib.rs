@@ -978,7 +978,7 @@ pub struct InlineStyleProjection {
     handle: DeclarationHandle,
     revision: u64,
     context: InlineStyleContext,
-    present: bool,
+    presentation: Option<Arc<str>>,
     declarations: Arc<[SpecifiedDeclaration]>,
     diagnostics: Arc<[InlineDeclarationDiagnostic]>,
 }
@@ -992,6 +992,7 @@ pub struct InlineStyleFingerprint {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct InlineStyleSemanticFingerprint {
+    presentation: Option<Arc<str>>,
     declarations: Arc<[SpecifiedDeclaration]>,
 }
 
@@ -1013,7 +1014,13 @@ impl InlineStyleProjection {
 
     #[must_use]
     pub const fn is_present(&self) -> bool {
-        self.present
+        self.presentation.is_some()
+    }
+
+    /// The text of the `style` attribute.
+    #[must_use]
+    pub fn presentation(&self) -> Option<&str> {
+        self.presentation.as_deref()
     }
 
     #[must_use]
@@ -1038,6 +1045,7 @@ impl InlineStyleProjection {
     #[must_use]
     pub fn semantic_fingerprint(&self) -> InlineStyleSemanticFingerprint {
         InlineStyleSemanticFingerprint {
+            presentation: self.presentation.clone(),
             declarations: self.declarations.clone(),
         }
     }
@@ -1084,7 +1092,7 @@ impl DeclarationLease {
             handle: record.handle,
             revision: record.revision,
             context: record.context.clone(),
-            present: record.presentation.is_some(),
+            presentation: record.presentation.clone(),
             declarations: record.declarations.clone(),
             diagnostics: record.diagnostics.clone(),
         }
