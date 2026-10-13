@@ -2361,34 +2361,42 @@ fn rewrite_pdfreactor_legacy_attr_types(css: &str, compat: CompatMode) -> Option
     changed.then_some(out)
 }
 
-pub fn pdfreactor_builtin_counter_stylesheet_root(
+/// The counter styles a vendor predefines beyond CSS Counter Styles 3: `asterisks` in Prince 16.2 and PDFreactor
+/// 12.7.2, `-ro-footnote` in PDFreactor.
+pub fn compat_builtin_counter_stylesheet_root(
     compat: CompatMode,
 ) -> Option<stylo_cssom_model::InternalStylesheetRoot> {
-    matches!(compat, CompatMode::PdfReactor).then(|| {
-        stylo_cssom_model::InternalStylesheetRoot::new(
-            stylo_cssom_model::StyleOrigin::Author,
+    let asterisks = || {
+        stylo_cssom_model::RuleNode::counter_style(
+            "asterisks",
             [
-                stylo_cssom_model::RuleNode::counter_style(
-                    "asterisks",
-                    [
-                        stylo_cssom_model::RuleDeclaration::new("system", "symbolic"),
-                        stylo_cssom_model::RuleDeclaration::new("symbols", r#""*""#),
-                    ],
-                ),
-                stylo_cssom_model::RuleNode::counter_style(
-                    "-ro-footnote",
-                    [
-                        stylo_cssom_model::RuleDeclaration::new("system", "symbolic"),
-                        stylo_cssom_model::RuleDeclaration::new(
-                            "symbols",
-                            r#""*" "\2051 " "\2020 " "\2021 ""#,
-                        ),
-                        stylo_cssom_model::RuleDeclaration::new("suffix", r#"" ""#),
-                    ],
-                ),
+                stylo_cssom_model::RuleDeclaration::new("system", "symbolic"),
+                stylo_cssom_model::RuleDeclaration::new("symbols", r#""*""#),
             ],
         )
-    })
+    };
+    let rules = match compat {
+        CompatMode::None => return None,
+        CompatMode::Prince => vec![asterisks()],
+        CompatMode::PdfReactor => vec![
+            asterisks(),
+            stylo_cssom_model::RuleNode::counter_style(
+                "-ro-footnote",
+                [
+                    stylo_cssom_model::RuleDeclaration::new("system", "symbolic"),
+                    stylo_cssom_model::RuleDeclaration::new(
+                        "symbols",
+                        r#""*" "\2051 " "\2020 " "\2021 ""#,
+                    ),
+                    stylo_cssom_model::RuleDeclaration::new("suffix", r#"" ""#),
+                ],
+            ),
+        ],
+    };
+    Some(stylo_cssom_model::InternalStylesheetRoot::new(
+        stylo_cssom_model::StyleOrigin::Author,
+        rules,
+    ))
 }
 
 #[must_use]
@@ -2554,6 +2562,7 @@ mod prince_rewrite_tests {
             "ol { list-style-type: lower-roman }",
             "ul { list-style: square inside }",
             "ol { list-style-type: japanese-informal }",
+            "ol { list-style-type: asterisks }",
             "ol { list-style-type: var(--type) }",
             "ul { list-style: inside url(\"a b.png\") }",
         ] {
@@ -2626,7 +2635,7 @@ mod internal_stylesheet_root_tests {
         InternalStylesheetRoot, RuleDeclaration, RuleGrammar, RuleNode, StyleOrigin,
     };
 
-    use super::{CompatMode, pdfreactor_builtin_counter_stylesheet_root, project_compat_root};
+    use super::{CompatMode, compat_builtin_counter_stylesheet_root, project_compat_root};
 
     #[test]
     fn compatibility_projection_rewrites_retained_shorthand_tokens() {
@@ -2646,7 +2655,14 @@ mod internal_stylesheet_root_tests {
 
     #[test]
     fn vendor_and_compatibility_projections_retain_typed_rule_grammars() {
-        let counters = pdfreactor_builtin_counter_stylesheet_root(CompatMode::PdfReactor)
+        assert_eq!(
+            compat_builtin_counter_stylesheet_root(CompatMode::Prince)
+                .expect("Prince compatibility must supply its counter styles")
+                .projection_serialization(),
+            "@counter-style asterisks { system: symbolic; symbols: \"*\"; }",
+        );
+        assert!(compat_builtin_counter_stylesheet_root(CompatMode::None).is_none());
+        let counters = compat_builtin_counter_stylesheet_root(CompatMode::PdfReactor)
             .expect("PDFreactor compatibility must supply its counter styles");
         assert_eq!(
             counters.projection_serialization(),
@@ -3352,6 +3368,7 @@ const PRINCE_LIST_STYLE_TYPES: &[&str] = &[
     "simp-chinese-formal",
     "trad-chinese-informal",
     "trad-chinese-formal",
+    "asterisks",
 ];
 
 fn names_list_style_type_unsupported_by_prince(value: &str) -> bool {
