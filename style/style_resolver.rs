@@ -358,6 +358,20 @@ where
         pseudo: &PseudoElement,
         primary_style: &PrimaryStyle,
     ) -> ResolvedStyle {
+        if pseudo.is_lazy() {
+            return ResolvedStyle(
+                self.context
+                    .shared
+                    .stylist
+                    .compute_pseudo_element_style_with_inputs(
+                        inputs,
+                        pseudo,
+                        &self.context.shared.guards,
+                        Some(primary_style.style()),
+                        Some(self.element),
+                    ),
+            );
+        }
         with_default_parent_styles(self.element, |_, layout_parent_style| {
             let layout_parent_style_for_pseudo =
                 layout_parent_style_for_pseudo(primary_style, layout_parent_style);
