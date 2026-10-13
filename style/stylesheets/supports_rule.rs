@@ -220,12 +220,29 @@ impl SupportsCondition {
 
     /// Evaluate a supports condition
     pub fn eval(&self, cx: &ParserContext) -> bool {
+        self.eval_with_declarations(cx, &Declaration::eval)
+    }
+
+    /// Evaluate using the consumer's declaration support policy.
+    pub fn eval_with_declarations(
+        &self,
+        cx: &ParserContext,
+        declaration_support: &impl Fn(&Declaration, &ParserContext) -> bool,
+    ) -> bool {
         match *self {
-            SupportsCondition::Not(ref cond) => !cond.eval(cx),
-            SupportsCondition::Parenthesized(ref cond) => cond.eval(cx),
-            SupportsCondition::And(ref vec) => vec.iter().all(|c| c.eval(cx)),
-            SupportsCondition::Or(ref vec) => vec.iter().any(|c| c.eval(cx)),
-            SupportsCondition::Declaration(ref decl) => decl.eval(cx),
+            SupportsCondition::Not(ref cond) => {
+                !cond.eval_with_declarations(cx, declaration_support)
+            },
+            SupportsCondition::Parenthesized(ref cond) => {
+                cond.eval_with_declarations(cx, declaration_support)
+            },
+            SupportsCondition::And(ref vec) => vec
+                .iter()
+                .all(|c| c.eval_with_declarations(cx, declaration_support)),
+            SupportsCondition::Or(ref vec) => vec
+                .iter()
+                .any(|c| c.eval_with_declarations(cx, declaration_support)),
+            SupportsCondition::Declaration(ref decl) => declaration_support(decl, cx),
             SupportsCondition::Selector(ref selector) => selector.eval(cx),
             SupportsCondition::FontFormat(ref format) => eval_font_format(format),
             SupportsCondition::FontTech(ref tech) => eval_font_tech(tech),

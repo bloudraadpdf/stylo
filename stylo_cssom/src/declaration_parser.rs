@@ -194,6 +194,36 @@ pub fn position_try_shorthand_is_valid(value: &str) -> bool {
     SpecifiedPositionTryShorthand::parse(value).is_some()
 }
 
+pub(crate) fn adapter_shorthand_is_valid(property: &str, value: &str) -> Option<bool> {
+    use stylo_cssom_model::AdapterRoute;
+
+    match inline_style_cssom_property_schema(property)?.parser {
+        AdapterRoute::ContainerShorthand => {
+            Some(SpecifiedContainerShorthand::parse(value).is_some())
+        },
+        AdapterRoute::PositionTryShorthand => Some(position_try_shorthand_is_valid(value)),
+        AdapterRoute::Stylo | AdapterRoute::Unsupported => None,
+    }
+}
+
+pub(crate) fn adapter_supports_declaration(css: &str) -> Option<bool> {
+    parse_fragment_with(css, |_, input| {
+        let property = input.expect_ident_cloned()?;
+        input.expect_colon()?;
+        let supported = input.parse_until_before(cssparser::Delimiter::Bang, |input| {
+            let start = input.position();
+            input.expect_no_error_token()?;
+            Ok(adapter_shorthand_is_valid(
+                &property,
+                input.slice_from(start),
+            ))
+        })?;
+        let _ = input.try_parse(cssparser::parse_important);
+        Ok(supported)
+    })
+    .flatten()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PositionTryShorthandLonghands {
     order: String,

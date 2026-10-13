@@ -78,8 +78,10 @@ pub fn css_supports(query: CssSupportsQuery<'_>) -> bool {
     crate::context::initialise_required_servo_style_prefs();
     match query {
         CssSupportsQuery::Declaration { property, value } => {
-            if property.eq_ignore_ascii_case("position-try") {
-                return crate::declaration_parser::position_try_shorthand_is_valid(value);
+            if let Some(supported) =
+                crate::declaration_parser::adapter_shorthand_is_valid(property, value)
+            {
+                return supported;
             }
             if property.starts_with("--") {
                 if !crate::is_valid_custom_property_name(property) {
@@ -108,7 +110,12 @@ pub fn css_supports(query: CssSupportsQuery<'_>) -> bool {
         },
         CssSupportsQuery::Condition(condition) => {
             parse_fragment_with(condition, |context, input| {
-                parse_condition_or_declaration(input).map(|condition| condition.eval(context))
+                parse_condition_or_declaration(input).map(|condition| {
+                    condition.eval_with_declarations(context, &|declaration, context| {
+                        crate::declaration_parser::adapter_supports_declaration(&declaration.0)
+                            .unwrap_or_else(|| declaration.eval(context))
+                    })
+                })
             })
             .unwrap_or(false)
         },
