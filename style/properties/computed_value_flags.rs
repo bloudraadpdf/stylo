@@ -91,6 +91,9 @@ bitflags! {
         /// https://github.com/w3c/csswg-drafts/issues/4777#issuecomment-604424845
         const HAS_AUTHOR_SPECIFIED_BORDER_BACKGROUND = 1 << 14;
 
+        /// Whether a reset value depends on the element's computed font size.
+        const RESET_STYLE_DEPENDS_ON_SELF_FONT_SIZE = 1 << 15;
+
         /// Whether there are author-specified rules for `font-family`.
         const HAS_AUTHOR_SPECIFIED_FONT_FAMILY = 1 << 16;
 

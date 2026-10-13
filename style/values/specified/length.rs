@@ -373,6 +373,7 @@ impl FontRelativeLength {
             // Local font-relative units
             Self::Em(length) => {
                 if context.for_non_inherited_property && base_size == FontBaseSize::CurrentStyle {
+                    context.style().add_flags(crate::computed_value_flags::ComputedValueFlags::RESET_STYLE_DEPENDS_ON_SELF_FONT_SIZE);
                     context
                         .rule_cache_conditions
                         .borrow_mut()
@@ -2881,6 +2882,54 @@ impl Parse for Margin {
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
         Self::parse_quirky(context, input, AllowQuirks::No)
+    }
+}
+
+#[cfg(all(test, feature = "servo"))]
+mod reset_font_size_tests {
+    use super::*;
+    use crate::context::QuirksMode;
+    use crate::computed_value_flags::ComputedValueFlags;
+    use crate::properties::StyleBuilder;
+    use crate::rule_cache::RuleCacheConditions;
+    use crate::stylesheets::container_rule::ContainerSizeQuery;
+
+    #[test]
+    fn reset_em_lengths_retain_the_self_font_size_dependency() {
+        let device = crate::test_support::test_device();
+        for reset in [false, true] {
+            let mut conditions = RuleCacheConditions::default();
+            let mut context = Context::new(
+                StyleBuilder::for_inheritance(&device, None, None, None),
+                QuirksMode::NoQuirks,
+                &mut conditions,
+                ContainerSizeQuery::none(),
+            );
+            context.for_non_inherited_property = reset;
+            let (font_size, factor) = FontRelativeLength::Em(1.0).reference_font_size_and_length(
+                &context,
+                FontBaseSize::CurrentStyle,
+                LineHeightBase::CurrentStyle,
+            );
+            assert_eq!(
+                font_size.px(),
+                context
+                    .style()
+                    .get_font()
+                    .clone_font_size()
+                    .computed_size
+                    .px()
+            );
+            assert_eq!(factor, 1.0);
+            assert_eq!(
+                context
+                    .style()
+                    .flags
+                    .get()
+                    .contains(ComputedValueFlags::RESET_STYLE_DEPENDS_ON_SELF_FONT_SIZE),
+                reset
+            );
+        }
     }
 }
 

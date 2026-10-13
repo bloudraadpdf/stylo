@@ -906,11 +906,13 @@ mod first_line_reset_tests {
         let guard = lock.read();
         let guards = StylesheetGuards::same(&guard);
         let tactic = PositionTryFallbacksTryTactic::default();
-        for dependent in [false, true] {
-            let mut original = StyleBuilder::for_inheritance(&device, None, None, None);
-            if dependent {
-                original.add_flags(ComputedValueFlags::DEPENDS_ON_SELF_FONT_METRICS);
-            }
+        for dependency in [
+            ComputedValueFlags::empty(),
+            ComputedValueFlags::DEPENDS_ON_SELF_FONT_METRICS,
+            ComputedValueFlags::RESET_STYLE_DEPENDS_ON_SELF_FONT_SIZE,
+        ] {
+            let original = StyleBuilder::for_inheritance(&device, None, None, None);
+            original.add_flags(dependency);
             let original = original.build();
             for changed in [false, true] {
                 let mut fragment =
@@ -929,11 +931,16 @@ mod first_line_reset_tests {
                     &tactic,
                     false,
                 );
+                let reused =
+                    cascade.try_to_use_cached_reset_properties(&mut fragment, None, &guards);
                 assert_eq!(
-                    cascade.try_to_use_cached_reset_properties(&mut fragment, None, &guards),
-                    !(dependent && changed),
-                    "dependent={dependent}, changed={changed}"
+                    reused,
+                    dependency.is_empty() || !changed,
+                    "dependency={dependency:?}, changed={changed}"
                 );
+                if reused {
+                    assert!(fragment.flags.get().contains(dependency));
+                }
             }
         }
     }
@@ -1591,11 +1598,11 @@ impl<'b> Cascade<'b> {
             FirstLineReparenting::Yes {
                 style_to_reparent, ..
             } => {
-                if style_to_reparent
-                    .flags
-                    .contains(ComputedValueFlags::DEPENDS_ON_SELF_FONT_METRICS)
-                    && style_to_reparent.get_font().clone_font_size().computed_size
-                        != builder.get_font().clone_font_size().computed_size
+                if style_to_reparent.flags.intersects(
+                    ComputedValueFlags::DEPENDS_ON_SELF_FONT_METRICS
+                        | ComputedValueFlags::RESET_STYLE_DEPENDS_ON_SELF_FONT_SIZE,
+                ) && style_to_reparent.get_font().clone_font_size().computed_size
+                    != builder.get_font().clone_font_size().computed_size
                 {
                     return false;
                 }
@@ -1627,6 +1634,7 @@ impl<'b> Cascade<'b> {
             | ComputedValueFlags::HAS_AUTHOR_SPECIFIED_BACKGROUND_COLOR
             | ComputedValueFlags::HAS_AUTHOR_SPECIFIED_BD_FLOAT_DISPLACE
             | ComputedValueFlags::DEPENDS_ON_SELF_FONT_METRICS
+            | ComputedValueFlags::RESET_STYLE_DEPENDS_ON_SELF_FONT_SIZE
             | ComputedValueFlags::DEPENDS_ON_INHERITED_FONT_METRICS
             | ComputedValueFlags::USES_CONTAINER_UNITS
             | ComputedValueFlags::USES_VIEWPORT_UNITS;
