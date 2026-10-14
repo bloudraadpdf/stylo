@@ -63,18 +63,23 @@ pub fn requires_source_lowering(rules: &[RuleNode]) -> bool {
 fn split_rule_block(css: &str) -> Option<(&str, &str)> {
     let mut input = cssparser::ParserInput::new(css);
     let mut parser = cssparser::Parser::new(&mut input);
-    loop {
-        let start = parser.position().byte_index();
-        if matches!(
-            parser.next_including_whitespace_and_comments().ok()?,
-            cssparser::Token::CurlyBracketBlock
-        ) {
-            let body = css[parser.position().byte_index()..]
-                .trim_end()
-                .strip_suffix('}')?;
-            return Some((&css[..start], body));
-        }
+    parser
+        .parse_until_before(cssparser::Delimiter::CurlyBracketBlock, |prelude| {
+            while prelude.next_including_whitespace_and_comments().is_ok() {}
+            Ok::<_, cssparser::ParseError<'_, ()>>(())
+        })
+        .ok()?;
+    let start = parser.position().byte_index();
+    if !matches!(
+        parser.next_including_whitespace_and_comments().ok()?,
+        cssparser::Token::CurlyBracketBlock
+    ) {
+        return None;
     }
+    let body = css[parser.position().byte_index()..]
+        .trim_end()
+        .strip_suffix('}')?;
+    Some((&css[..start], body))
 }
 
 pub fn expand_view_transition_rules(
@@ -507,6 +512,24 @@ mod tests {
                         matches!(component, selectors::parser::Component::ImplicitScope)
                     })
                 })
+        );
+    }
+
+    #[test]
+    fn view_transition_expansion_keeps_functional_pseudo_class_arguments() {
+        let source = crate::authored_rules::ParsedStylesheet::parse(
+            ".e:nth-child(3){color:red} .f:not(.g){color:red}",
+        )
+        .expect("the sheet parses");
+        let expanded = super::expand_view_transition_rules(source.rule_nodes())
+            .expect("the style rules expand");
+        let selectors: Vec<_> = expanded
+            .iter()
+            .map(|rule| rule.projection_serialization())
+            .collect();
+        assert_eq!(
+            selectors,
+            [".e:nth-child(3){color:red}", ".f:not(.g){color:red}"]
         );
     }
 
