@@ -5525,6 +5525,14 @@ fn translate_property(lower_property: &str, raw_value: &str) -> Translated {
             native_property: "-bd-page-crop-mark-offset",
             native_value: raw_value.trim().to_string(),
         },
+        "-ro-bleed-width" => Translated::Native {
+            native_property: "bleed",
+            native_value: raw_value.trim().to_string(),
+        },
+        "-ro-pdf-bookmark-level" => Translated::Native {
+            native_property: "bookmark-level",
+            native_value: raw_value.trim().to_string(),
+        },
         "-ro-bleed-mark-length" => Translated::Native {
             native_property: "-bd-page-bleed-mark-length",
             native_value: raw_value.trim().to_string(),
@@ -6831,6 +6839,8 @@ pub(crate) fn required_compat_for(lower_property: &str) -> Option<CompatMode> {
         | "-ro-page-clip"
         | "-ro-crop-mark-length"
         | "-ro-crop-mark-offset"
+        | "-ro-bleed-width"
+        | "-ro-pdf-bookmark-level"
         | "-ro-bleed-mark-length"
         | "-ro-bleed-mark-offset"
         | "-ro-registration-mark-offset"
@@ -7362,6 +7372,25 @@ mod prince_bookmark_tests {
             "h2 { prince-bookmark-level: 1; prince-bookmark-label: 'L'; prince-bookmark-state: closed; \
              prince-bookmark-target: url(#t) ; bookmark-level: 1; bookmark-label: 'L'; bookmark-state: closed; \
              bookmark-target: url(#t);}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod pdfreactor_page_and_bookmark_tests {
+    use super::{CompatMode, translate_compat};
+
+    /// PDFreactor 12.7.2 gives `-ro-bleed-width: 10pt` the page boxes of `bleed: 10pt` and outlines a `div` with
+    /// `-ro-pdf-bookmark-level: 1` as with `bookmark-level: 1`.
+    #[test]
+    fn pdfreactor_takes_bleed_width_as_bleed_and_pdf_bookmark_level_as_bookmark_level() {
+        assert_eq!(
+            translate_compat(
+                "@page { -ro-bleed-width: 10pt } div { -ro-pdf-bookmark-level: 1 }",
+                CompatMode::PdfReactor,
+            )
+            .rewritten,
+            "@page { -ro-bleed-width: 10pt ; bleed: 10pt;} div { -ro-pdf-bookmark-level: 1 ; bookmark-level: 1;}"
         );
     }
 }
