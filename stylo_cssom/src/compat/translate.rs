@@ -282,6 +282,7 @@ fn translate_compat_with_registrations<'css>(
             tail_descriptors: Vec::new(),
             warnings: Vec::new(),
             at_page_depth: 0,
+            at_footnote_depth: 0,
             at_font_face_depth: 0,
         };
         match scope {
@@ -2572,6 +2573,22 @@ mod prince_rewrite_tests {
     }
 
     #[test]
+    fn prince_takes_a_footnote_border_clip_length_as_its_rule_length() {
+        let css = "@page { @footnote { border-top: thin solid; border-clip: 3em } } p { border-clip: 3em }";
+        assert_eq!(
+            translate_compat(css, CompatMode::Prince).rewritten,
+            "@page { @footnote { border-top: thin solid; -bd-footnote-rule-length: 3em } } p { border-clip: 3em }"
+        );
+        for kept in [
+            "@page { @footnote { border-clip: 25% } }",
+            "@page { @footnote { border-clip: 10pt 1fr 10pt } }",
+        ] {
+            assert_eq!(translate_compat(kept, CompatMode::Prince).rewritten, kept);
+        }
+        assert_eq!(translate_compat(css, CompatMode::None).rewritten, css);
+    }
+
+    #[test]
     fn prince_keeps_the_logical_viewport_units_it_does_not_know_in_page() {
         let css = "@page { margin: 10vi 10vb }";
         assert_eq!(translate_compat(css, CompatMode::Prince).rewritten, css);
@@ -3303,6 +3320,7 @@ struct TranslateState {
     warnings: Vec<CompatWarning>,
 
     at_page_depth: u32,
+    at_footnote_depth: u32,
 
     at_font_face_depth: u32,
 }
@@ -3390,6 +3408,18 @@ fn collect_page_viewport_units<'i>(
             _ => {},
         }
     }
+}
+
+/// Prince 16.2 clips the top border of the footnote area to `border-clip` when it is a single length, as the footnote
+/// rule length; it ignores percentages and lists of parts.
+fn is_single_length(value: &str) -> bool {
+    let mut input = ParserInput::new(value);
+    let mut parser = Parser::new(&mut input);
+    let length = matches!(
+        parser.next(),
+        Ok(Token::Dimension { .. }) | Ok(Token::Number { value: 0., .. })
+    );
+    length && parser.is_exhausted()
 }
 
 /// Prince 16.2 does not know `@counter-style` ("unknown '@counter-style' rule").
@@ -3567,6 +3597,7 @@ fn consume_at_rule<'i>(
     let is_ro_preferences = at_keyword.eq_ignore_ascii_case("-ro-preferences");
 
     let is_page_at_rule = at_keyword.eq_ignore_ascii_case("page");
+    let is_footnote_at_rule = at_keyword.eq_ignore_ascii_case("footnote");
     let is_font_face_at_rule = at_keyword.eq_ignore_ascii_case("font-face");
 
     let body_is_declaration_block = matches!(
@@ -3634,6 +3665,9 @@ fn consume_at_rule<'i>(
                         if is_page_at_rule {
                             state.at_page_depth += 1;
                         }
+                        if is_footnote_at_rule {
+                            state.at_footnote_depth += 1;
+                        }
                         if is_font_face_at_rule {
                             state.at_font_face_depth += 1;
                         }
@@ -3647,6 +3681,9 @@ fn consume_at_rule<'i>(
                         }
                         if is_page_at_rule {
                             state.at_page_depth -= 1;
+                        }
+                        if is_footnote_at_rule {
+                            state.at_footnote_depth -= 1;
                         }
                     } else {
                         let _ =
@@ -3723,6 +3760,18 @@ fn scan_block<'i>(parser: &mut Parser<'i, '_>, state: &mut TranslateState, full_
                             start_byte: decl_start_byte,
                             end_byte: name_end_byte,
                             replacement: "-bd-prince-bleed".to_string(),
+                        });
+                    }
+
+                    if state.compat == CompatMode::Prince
+                        && state.at_footnote_depth > 0
+                        && name.eq_ignore_ascii_case("border-clip")
+                        && is_single_length(raw_value)
+                    {
+                        state.value_replacements.push(ValueReplacement {
+                            start_byte: decl_start_byte,
+                            end_byte: name_end_byte,
+                            replacement: "-bd-footnote-rule-length".to_string(),
                         });
                     }
 
