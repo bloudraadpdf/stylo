@@ -5956,20 +5956,22 @@ fn translate_property(lower_property: &str, raw_value: &str) -> Translated {
             native_value: raw_value.trim().to_ascii_lowercase(),
         },
 
-        "-prince-bookmark-target" | "-bfo-bookmark-target" => Translated::Native {
-            native_property: "bookmark-target",
-            native_value: raw_value.trim().to_string(),
+        "-prince-bookmark-target" | "prince-bookmark-target" | "-bfo-bookmark-target" => {
+            Translated::Native {
+                native_property: "bookmark-target",
+                native_value: raw_value.trim().to_string(),
+            }
         },
 
-        "-prince-bookmark-label" => Translated::Native {
+        "-prince-bookmark-label" | "prince-bookmark-label" => Translated::Native {
             native_property: "bookmark-label",
             native_value: raw_value.trim().to_string(),
         },
-        "-prince-bookmark-level" => Translated::Native {
+        "-prince-bookmark-level" | "prince-bookmark-level" => Translated::Native {
             native_property: "bookmark-level",
             native_value: raw_value.trim().to_string(),
         },
-        "-prince-bookmark-state" => Translated::Native {
+        "-prince-bookmark-state" | "prince-bookmark-state" => Translated::Native {
             native_property: "bookmark-state",
             native_value: raw_value.trim().to_ascii_lowercase(),
         },
@@ -7041,9 +7043,13 @@ pub(crate) fn required_compat_for(lower_property: &str) -> Option<CompatMode> {
         | "-prince-pdf-destination"
         | "-prince-pdf-page-label"
         | "-prince-bookmark-target"
+        | "prince-bookmark-target"
         | "-prince-bookmark-label"
+        | "prince-bookmark-label"
         | "-prince-bookmark-level"
+        | "prince-bookmark-level"
         | "-prince-bookmark-state"
+        | "prince-bookmark-state"
         | "-prince-clear"
         | "-prince-hyphenate-character"
         | "-prince-text-justify"
@@ -7336,6 +7342,28 @@ fn line_column_to_byte(css: &str, line: u32, column: u32) -> Option<usize> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod prince_bookmark_tests {
+    use super::{CompatMode, translate_compat};
+
+    /// Prince 16.2 takes the bookmark properties also without the leading hyphen (`prince-bookmark-level`, as in
+    /// style sheets written for Prince 5): the vendored Prince bookmarks `div.x { prince-bookmark-level: 2 }`.
+    #[test]
+    fn prince_takes_the_bookmark_properties_without_the_leading_hyphen() {
+        assert_eq!(
+            translate_compat(
+                "h2 { prince-bookmark-level: 1; prince-bookmark-label: 'L'; prince-bookmark-state: closed; \
+                 prince-bookmark-target: url(#t) }",
+                CompatMode::Prince,
+            )
+            .rewritten,
+            "h2 { prince-bookmark-level: 1; prince-bookmark-label: 'L'; prince-bookmark-state: closed; \
+             prince-bookmark-target: url(#t) ; bookmark-level: 1; bookmark-label: 'L'; bookmark-state: closed; \
+             bookmark-target: url(#t);}"
+        );
+    }
 }
 
 #[cfg(test)]
