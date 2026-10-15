@@ -5872,9 +5872,16 @@ fn translate_property(lower_property: &str, raw_value: &str) -> Translated {
             native_property: "float-offset",
             native_value: raw_value.trim().to_string(),
         },
-        "-ro-footnote-fragmentation" => Translated::Native {
-            native_property: "-bd-footnote-fragmentation",
-            native_value: raw_value.trim().to_ascii_lowercase(),
+        "-ro-footnote-fragmentation" => match raw_value.trim().to_ascii_lowercase().as_str() {
+            "auto" => Translated::Native {
+                native_property: "-bd-footnote-fragmentation",
+                native_value: "continue".to_string(),
+            },
+            "none" => Translated::Native {
+                native_property: "-bd-footnote-fragmentation",
+                native_value: "break".to_string(),
+            },
+            _ => Translated::ValueDropped,
         },
 
         "-ro-sidenote-align" => Translated::Native {
@@ -7391,6 +7398,26 @@ mod pdfreactor_page_and_bookmark_tests {
             )
             .rewritten,
             "@page { -ro-bleed-width: 10pt ; bleed: 10pt;} div { -ro-pdf-bookmark-level: 1 ; bookmark-level: 1;}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod pdfreactor_footnote_fragmentation_tests {
+    use super::{CompatMode, translate_compat};
+
+    /// PDFreactor 12.7.2 splits footnote bodies under `-ro-footnote-fragmentation: auto` and, under `none`, keeps a
+    /// body whole on the page of its call, which moves with it (`-bd-footnote-fragmentation: break`).
+    #[test]
+    fn pdfreactor_takes_footnote_fragmentation_auto_as_continue_and_none_as_break() {
+        assert_eq!(
+            translate_compat(
+                "a { -ro-footnote-fragmentation: auto } b { -ro-footnote-fragmentation: none }",
+                CompatMode::PdfReactor,
+            )
+            .rewritten,
+            "a { -ro-footnote-fragmentation: auto ; -bd-footnote-fragmentation: continue;} \
+             b { -ro-footnote-fragmentation: none ; -bd-footnote-fragmentation: break;}"
         );
     }
 }

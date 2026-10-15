@@ -80,10 +80,9 @@ pub enum FootnoteStylePosition {
 ///   footnote marker at the start of every continuation page.
 /// - `break`            — force a page break *before* the
 ///   footnote's call so the entire body fits on one page (the
-///   call moves with the body).
+///   call moves with the body). Matches PDFreactor `none`.
 /// - `avoid`            — keep the call on its current page but
-///   defer the body to the next page's footnote area. Matches
-///   PDFreactor `none`.
+///   defer the body to the next page's footnote area.
 ///
 /// Inherits per CSS GCPM 3 §2.5 and PDFreactor.
 #[repr(u8)]
