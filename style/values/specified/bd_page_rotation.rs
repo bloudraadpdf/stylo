@@ -116,8 +116,8 @@ impl Parse for BdPdfPageRotation {
 /// Specified value of `-bd-rotate-body`.
 ///
 /// `none` (initial) leaves the body content unrotated. An `<angle>`
-/// rotates the content frame; Prince accepts arbitrary angles though
-/// in practice only multiples of 90 are useful.
+/// turns the content frame: Prince 16.2 takes a multiple of 90deg from
+/// -360deg to 360deg and drops any other angle.
 ///
 /// `ToComputedValue` is implemented manually in
 /// [`crate::values::computed::bd_page_rotation`] so the inner `Angle`
@@ -153,7 +153,14 @@ impl Parse for BdRotateBody {
         if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
-        Ok(Self::Angle(Angle::parse(context, input)?))
+        let location = input.current_source_location();
+        let angle = Angle::parse(context, input)?;
+        match angle.degrees_without_context() {
+            Ok(degrees) if degrees.fract() == 0.0 && degrees % 90.0 == 0.0 && degrees.abs() <= 360.0 => {
+                Ok(Self::Angle(angle))
+            },
+            _ => Err(location.new_custom_error(StyleParseErrorKind::UnspecifiedError)),
+        }
     }
 }
 
@@ -186,6 +193,33 @@ mod tests {
         parser
             .parse_entirely(|input| BdPdfPageRotation::parse(&context, input))
             .expect("page rotation should parse")
+    }
+
+    #[test]
+    fn rotate_body_takes_quarter_turns_from_minus_to_plus_one_turn() {
+        let url_data = make_url();
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Page),
+            ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let parses = |css: &str| {
+            let mut input = ParserInput::new(css);
+            Parser::new(&mut input)
+                .parse_entirely(|input| BdRotateBody::parse(&context, input))
+                .is_ok()
+        };
+        for css in ["none", "90deg", "-90deg", "180deg", "270deg", "-360deg", "360deg", "0.25turn"] {
+            assert!(parses(css), "expected `{css}` to parse");
+        }
+        for css in ["45deg", "100deg", "450deg", "1.5rad"] {
+            assert!(!parses(css), "expected `{css}` to fail to parse");
+        }
     }
 
     #[test]

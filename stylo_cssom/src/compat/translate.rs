@@ -5633,7 +5633,7 @@ fn translate_property(lower_property: &str, raw_value: &str) -> Translated {
             native_property: "-bd-pdf-page-rotation",
             native_value: raw_value.trim().to_string(),
         },
-        "-prince-rotate-body" => Translated::Native {
+        "-prince-rotate-body" | "prince-rotate-body" => Translated::Native {
             native_property: "-bd-rotate-body",
             native_value: raw_value.trim().to_string(),
         },
@@ -7029,6 +7029,7 @@ pub(crate) fn required_compat_for(lower_property: &str) -> Option<CompatMode> {
         | "-prince-background-image-resolution"
         | "background-image-resolution"
         | "-prince-rotate-body"
+        | "prince-rotate-body"
         | "text-overline"
         | "text-overline-color"
         | "text-overline-style"
@@ -7379,6 +7380,21 @@ mod prince_bookmark_tests {
             "h2 { prince-bookmark-level: 1; prince-bookmark-label: 'L'; prince-bookmark-state: closed; \
              prince-bookmark-target: url(#t) ; bookmark-level: 1; bookmark-label: 'L'; bookmark-state: closed; \
              bookmark-target: url(#t);}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod prince_rotate_body_tests {
+    use super::{CompatMode, translate_compat};
+
+    /// Prince 16.2 turns the page body for `prince-rotate-body` without the leading hyphen (the print-css.rocks
+    /// prince-table-tricks lesson).
+    #[test]
+    fn prince_takes_rotate_body_without_the_leading_hyphen() {
+        assert_eq!(
+            translate_compat("@page { prince-rotate-body: 90deg }", CompatMode::Prince).rewritten,
+            "@page { prince-rotate-body: 90deg ; -bd-rotate-body: 90deg;}"
         );
     }
 }
