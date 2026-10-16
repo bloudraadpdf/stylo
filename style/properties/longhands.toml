@@ -6447,9 +6447,9 @@ affects = "layout"
 # F32.6 — caption page placement (Prince caption-page).
 [-bd-caption-page]
 type = "BdCaptionPage"
-initial = "computed::BdCaptionPage::All"
-struct = "counters"
-initial_specified_value = "specified::BdCaptionPage::All"
+initial = "computed::BdCaptionPage::Auto"
+struct = "inherited_table"
+initial_specified_value = "specified::BdCaptionPage::Auto"
 spec = "Nonstandard (moegoe -bd-* fork extension; F32.6 caption page placement)"
 animation_type = "none"
 affects = "layout"

@@ -225,10 +225,11 @@ impl ToComputedValueTrait for BdIntegerAuto {
 
 /// Specified value of `-bd-caption-page` (F32.6).
 ///
-/// Prince `caption-page*` — which page in a multi-page table the
-/// `<caption>` element appears on. `all` is the spec default for
-/// HTML tables; PDFreactor / Prince allow restricting to the first
-/// or following pages.
+/// Prince `caption-page` — the fragments of a table that show the
+/// caption. `auto` (initial) is CSS: a top caption on the first
+/// fragment, a bottom caption on the last. Prince 16.2: `first` on the
+/// first fragment, `following` on each later fragment, `all` on each
+/// fragment.
 #[repr(u8)]
 #[derive(
     Clone,
@@ -248,9 +249,10 @@ impl ToComputedValueTrait for BdIntegerAuto {
 #[allow(missing_docs)]
 pub enum BdCaptionPage {
     #[default]
-    All,
+    Auto,
     First,
     Following,
+    All,
 }
 
 /// Specified value of `-bd-target-candidate` (F32.7).

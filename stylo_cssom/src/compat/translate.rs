@@ -5769,7 +5769,7 @@ fn translate_property(lower_property: &str, raw_value: &str) -> Translated {
             native_property: "-bd-table-row-span",
             native_value: raw_value.trim().to_string(),
         },
-        "-prince-caption-page" => Translated::Native {
+        "-prince-caption-page" | "prince-caption-page" | "caption-page" => Translated::Native {
             native_property: "-bd-caption-page",
             native_value: raw_value.trim().to_string(),
         },
@@ -7053,6 +7053,8 @@ pub(crate) fn required_compat_for(lower_property: &str) -> Option<CompatMode> {
         | "-prince-table-column-span"
         | "-prince-table-row-span"
         | "-prince-caption-page"
+        | "prince-caption-page"
+        | "caption-page"
         | "-prince-flow"
         | "-prince-tab-size"
         | "-prince-border-clip"
@@ -7395,6 +7397,26 @@ mod prince_rotate_body_tests {
         assert_eq!(
             translate_compat("@page { prince-rotate-body: 90deg }", CompatMode::Prince).rewritten,
             "@page { prince-rotate-body: 90deg ; -bd-rotate-body: 90deg;}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod prince_caption_page_tests {
+    use super::{CompatMode, translate_compat};
+
+    /// Prince 16.2 places captions by `prince-caption-page` and its alias `caption-page`, both without the leading
+    /// hyphen (the print-css.rocks prince-table-tricks lesson; a probe of `caption-page: following`).
+    #[test]
+    fn prince_takes_caption_page_without_the_leading_hyphen() {
+        assert_eq!(
+            translate_compat(
+                "caption { prince-caption-page: following } table { caption-page: all }",
+                CompatMode::Prince
+            )
+            .rewritten,
+            "caption { prince-caption-page: following ; -bd-caption-page: following;} table { caption-page: all ; \
+             -bd-caption-page: all;}"
         );
     }
 }
