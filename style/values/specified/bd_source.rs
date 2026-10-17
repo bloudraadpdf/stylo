@@ -32,6 +32,7 @@
 
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
+use crate::stylesheets::CorsMode;
 use crate::values::generics::GreaterThanOrEqualToOne;
 use crate::values::specified::length::NonNegativeLength;
 use crate::values::specified::url::SpecifiedUrl;
@@ -46,6 +47,9 @@ use style_traits::{CssWriter, ParseError, ToCss};
 /// surface; cascade walks contribute no entry. `url(<pdf-url>)` —
 /// the renderer fetches the URL via the embedder's `ResourceLoader`
 /// and paints the selected page over the element's content box.
+/// `<string>` — the same URL as a string, as PDFreactor's
+/// `-ro-source` takes the string of `-ro-attr()` (an attribute
+/// value is a source URL by design, so it is not `attr()`-tainted).
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToShmem, ToTyped)]
 #[repr(C, u8)]
 pub enum BdSource {
@@ -85,6 +89,9 @@ impl Parse for BdSource {
     ) -> Result<Self, ParseError<'i>> {
         if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
+        }
+        if let Ok(url) = input.try_parse(|i| i.expect_string().map(|url| url.as_ref().to_owned())) {
+            return Ok(Self::Url(SpecifiedUrl::parse_from_string(url, context, CorsMode::None)));
         }
         Ok(Self::Url(SpecifiedUrl::parse(context, input)?))
     }
