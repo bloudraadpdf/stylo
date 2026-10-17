@@ -1513,7 +1513,8 @@ impl ToCss for AttrSyntax {
 /// resolve to the value of the named attribute on the nearest
 /// ancestor that carries it. The compat translator rewrites the
 /// PDFreactor spellings to `-bd-attr` / `-bd-attr-ancestor` before
-/// Stylo parses; the function-name dispatch below tags the
+/// Stylo parses (`-ro-attr(name)` becomes the standard `attr(name)`,
+/// which substitutes in every property); the function-name dispatch below tags the
 /// resulting `Attr` with the appropriate scope so downstream
 /// (`moegoe-css::computed_to_ir`) can choose `self` vs ancestor
 /// lookup.

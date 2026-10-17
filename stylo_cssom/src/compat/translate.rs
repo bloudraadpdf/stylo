@@ -897,8 +897,12 @@ fn rewrite_attr_function_tokens(css: &str, compat: CompatMode) -> Option<String>
             continue;
         }
         if lower_n.starts_with(b"-ro-attr(") {
-            out.push_str("-bd-attr(");
             i += "-ro-attr(".len();
+            let arguments = css[i..].split_once(')').map_or(&css[i..], |(arguments, _)| arguments);
+            let ancestor = arguments
+                .split_once(',')
+                .is_some_and(|(_, scope)| scope.trim().eq_ignore_ascii_case("ancestor"));
+            out.push_str(if ancestor { "-bd-attr(" } else { "attr(" });
             changed = true;
             continue;
         }
