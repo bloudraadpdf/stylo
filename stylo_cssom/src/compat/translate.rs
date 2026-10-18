@@ -113,28 +113,10 @@ fn translate_compat_with_registrations<'css>(
         None => f14_working,
     };
 
-    let lh_working: Cow<'_, str> = if matches!(compat, CompatMode::PdfReactor) {
-        match rewrite_percentage_line_height(f14_working.as_ref()) {
-            Some(owned) => Cow::Owned(owned),
-            None => f14_working,
-        }
-    } else {
-        f14_working
-    };
-
-    let lh_working: Cow<'_, str> = if matches!(compat, CompatMode::PdfReactor) {
-        match rewrite_trailing_content_line_break(lh_working.as_ref()) {
-            Some(owned) => Cow::Owned(owned),
-            None => lh_working,
-        }
-    } else {
-        lh_working
-    };
-
-    let break_pseudo_rewritten = rewrite_break_pseudo_aliases(lh_working.as_ref(), compat);
+    let break_pseudo_rewritten = rewrite_break_pseudo_aliases(f14_working.as_ref(), compat);
     let f14_working: Cow<'_, str> = match break_pseudo_rewritten {
         Some(owned) => Cow::Owned(owned),
-        None => lh_working,
+        None => f14_working,
     };
 
     let no_content_rewritten = rewrite_no_content_pseudo_alias(f14_working.as_ref(), compat);
@@ -527,60 +509,6 @@ fn skip_css_trivia(bytes: &[u8], mut index: usize) -> usize {
     }
 }
 
-fn rewrite_percentage_line_height(css: &str) -> Option<String> {
-    use std::fmt::Write as _;
-
-    const MARKER: &[u8] = b"line-height";
-    let bytes = css.as_bytes();
-    if !bytes
-        .windows(MARKER.len())
-        .any(|w| w.eq_ignore_ascii_case(MARKER))
-    {
-        return None;
-    }
-    let mut out = String::with_capacity(css.len());
-    let mut cursor = 0usize;
-    let mut changed = false;
-    while let Some(found) = bytes[cursor..]
-        .windows(MARKER.len())
-        .position(|w| w.eq_ignore_ascii_case(MARKER))
-    {
-        let name_start = cursor + found;
-        let name_end = name_start + MARKER.len();
-        out.push_str(&css[cursor..name_end]);
-        cursor = name_end;
-
-        let preceded_by_ident = name_start > 0
-            && matches!(bytes[name_start - 1], b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'_');
-        let after = css[name_end..].trim_start();
-        if preceded_by_ident || !after.starts_with(':') {
-            continue;
-        }
-        let colon_offset = name_end + (css.len() - name_end - after.len());
-        let value_start = colon_offset + 1;
-        let value_end = css[value_start..]
-            .find([';', '}'])
-            .map_or(css.len(), |i| value_start + i);
-        let value = css[value_start..value_end].trim();
-        let Some(number) = value.strip_suffix('%') else {
-            out.push_str(&css[cursor..value_end]);
-            cursor = value_end;
-            continue;
-        };
-        let Ok(percent) = number.trim().parse::<f32>() else {
-            out.push_str(&css[cursor..value_end]);
-            cursor = value_end;
-            continue;
-        };
-        out.push_str(&css[cursor..value_start]);
-        let _ = write!(out, " {}", percent / 100.0);
-        cursor = value_end;
-        changed = true;
-    }
-    out.push_str(&css[cursor..]);
-    changed.then_some(out)
-}
-
 fn skip_css_string(bytes: &[u8], start: usize) -> usize {
     let quote = bytes[start];
     let mut i = start + 1;
@@ -593,162 +521,6 @@ fn skip_css_string(bytes: &[u8], start: usize) -> usize {
         }
     }
     i
-}
-
-fn ends_with_newline_escape(inner: &str) -> bool {
-    let inner = inner.strip_suffix(' ').unwrap_or(inner);
-    let Some(rest) = inner.strip_suffix(['A', 'a']) else {
-        return false;
-    };
-    let backslashes = rest
-        .chars()
-        .rev()
-        .take_while(|&c| c == char::from(92))
-        .count();
-    backslashes % 2 == 1
-}
-
-fn rewrite_trailing_content_line_break(css: &str) -> Option<String> {
-    let bytes = css.as_bytes();
-    let has = |needle: &[u8]| {
-        bytes
-            .windows(needle.len())
-            .any(|w| w.eq_ignore_ascii_case(needle))
-    };
-    if !has(b"content") || !has(b"white-space") {
-        return None;
-    }
-
-    let mut opens: Vec<(usize, usize)> = Vec::new();
-    let mut blocks: Vec<(usize, usize)> = Vec::new();
-    let mut pops = 0usize;
-    let mut i = 0usize;
-    while i < bytes.len() {
-        match bytes[i] {
-            b'"' | b'\'' => i = skip_css_string(bytes, i),
-            b'{' => {
-                opens.push((i, pops));
-                i += 1;
-            },
-            b'}' => {
-                if let Some((start, pops_at_open)) = opens.pop() {
-                    if pops == pops_at_open {
-                        blocks.push((start + 1, i));
-                    }
-                    pops += 1;
-                }
-                i += 1;
-            },
-            _ => i += 1,
-        }
-    }
-
-    let mut insertions: Vec<usize> = Vec::new();
-    for &(body_start, body_end) in &blocks {
-        if let Some(close_quote) = trailing_break_insertion_for_block(css, body_start, body_end) {
-            insertions.push(close_quote);
-        }
-    }
-    if insertions.is_empty() {
-        return None;
-    }
-    insertions.sort_unstable();
-    let mut out = String::with_capacity(css.len() + insertions.len() * 2);
-    let mut cursor = 0usize;
-    for pos in insertions {
-        out.push_str(&css[cursor..pos]);
-        out.push(char::from(92));
-        out.push('A');
-        cursor = pos;
-    }
-    out.push_str(&css[cursor..]);
-    Some(out)
-}
-
-fn trailing_break_insertion_for_block(
-    css: &str,
-    body_start: usize,
-    body_end: usize,
-) -> Option<usize> {
-    let bytes = css.as_bytes();
-    let mut preserving_white_space = false;
-    let mut content_close_quote: Option<usize> = None;
-
-    let mut decl_start = body_start;
-    let mut i = body_start;
-    loop {
-        let at_end = i >= body_end;
-        if !at_end && (bytes[i] == b'"' || bytes[i] == b'\'') {
-            i = skip_css_string(bytes, i);
-            continue;
-        }
-        if at_end || bytes[i] == b';' {
-            let decl = &css[decl_start..i.min(body_end)];
-            if let Some(colon) = decl.find(':') {
-                let name = decl[..colon].trim();
-                let value_start = decl_start + colon + 1;
-                let value_end = i.min(body_end);
-                if name.eq_ignore_ascii_case("content") {
-                    content_close_quote =
-                        final_string_newline_escape_close(css, value_start, value_end);
-                } else if name.eq_ignore_ascii_case("white-space") {
-                    let first = css[value_start..value_end]
-                        .split_whitespace()
-                        .next()
-                        .unwrap_or("");
-                    preserving_white_space |= ["pre", "pre-wrap", "pre-line", "break-spaces"]
-                        .iter()
-                        .any(|kw| first.eq_ignore_ascii_case(kw));
-                }
-            }
-            if at_end {
-                break;
-            }
-            decl_start = i + 1;
-        }
-        i += 1;
-    }
-    if preserving_white_space {
-        content_close_quote
-    } else {
-        None
-    }
-}
-
-fn final_string_newline_escape_close(
-    css: &str,
-    value_start: usize,
-    value_end: usize,
-) -> Option<usize> {
-    let bytes = css.as_bytes();
-    let mut last_string: Option<(usize, usize)> = None;
-    let mut i = value_start;
-    while i < value_end {
-        if bytes[i] == b'"' || bytes[i] == b'\'' {
-            let after = skip_css_string(bytes, i);
-            let close = after
-                .checked_sub(1)
-                .filter(|&c| bytes.get(c) == Some(&bytes[i]))?;
-            last_string = Some((i, close));
-            i = after;
-        } else {
-            i += 1;
-        }
-    }
-    let (open, close) = last_string?;
-    let tail = css[close + 1..value_end].trim();
-    if !(tail.is_empty() || tail.eq_ignore_ascii_case("!important")) {
-        return None;
-    }
-    let inner = &css[open + 1..close];
-    if !ends_with_newline_escape(inner) {
-        return None;
-    }
-
-    let without_escape_terminator = inner.strip_suffix(' ').unwrap_or(inner);
-    let before_escape = &without_escape_terminator[..without_escape_terminator.len() - 2];
-    let preceding_value = &css[value_start..open];
-    (!before_escape.is_empty() || !preceding_value.trim().is_empty()).then_some(close)
 }
 
 fn rewrite_bd_barcode_kebab_aliases(css: &str) -> Option<String> {
@@ -7560,5 +7332,33 @@ mod position_visibility_syntax_adapter_tests {
         let stylesheet = r#".x { --condition: anchor-visible; content: "position-visibility: anchor-valid"; position-visibility: var(--condition) }"#;
 
         assert!(translate_compat(stylesheet, CompatMode::None).is_borrowed());
+    }
+}
+
+#[cfg(test)]
+mod pdfreactor_line_tests {
+    use super::{CompatMode, translate_compat};
+
+    /// PDFreactor 12.7.2 inherits a percentage line-height as the length it computes to (CSS 2.1 §10.8.1): a 30px
+    /// child of `line-height: 200%; font-size: 10px` takes 20px lines, as in Chromium.
+    #[test]
+    fn pdfreactor_keeps_a_percentage_line_height() {
+        assert!(
+            translate_compat("div { line-height: 130% }", CompatMode::PdfReactor).is_borrowed()
+        );
+    }
+
+    /// PDFreactor 12.7.2 breaks a line once for a preserved `\A` that ends a content string (CSS Text 3 §4.1.2):
+    /// `::before { content: "Alpha\A"; white-space: pre }` puts the following text on the next line, as in
+    /// Chromium.
+    #[test]
+    fn pdfreactor_keeps_a_content_string_that_ends_in_a_line_break() {
+        assert!(
+            translate_compat(
+                r#"p::before { content: "Alpha\A"; white-space: pre }"#,
+                CompatMode::PdfReactor
+            )
+            .is_borrowed()
+        );
     }
 }
