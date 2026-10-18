@@ -113,6 +113,12 @@ fn translate_compat_with_registrations<'css>(
         None => f14_working,
     };
 
+    let oblique_rewritten = rewrite_pdfreactor_oblique_font_style(f14_working.as_ref(), compat);
+    let f14_working: Cow<'_, str> = match oblique_rewritten {
+        Some(owned) => Cow::Owned(owned),
+        None => f14_working,
+    };
+
     let break_pseudo_rewritten = rewrite_break_pseudo_aliases(f14_working.as_ref(), compat);
     let f14_working: Cow<'_, str> = match break_pseudo_rewritten {
         Some(owned) => Cow::Owned(owned),
@@ -2718,6 +2724,110 @@ fn rewrite_pdfreactor_text_overflow_scale_down(css: &str, compat: CompatMode) ->
         b"text-overflow",
         &[(b"-ro-scale-down", "-bd-scale-down")],
     )
+}
+
+/// PDFreactor 12.7.2 sets `oblique` in the italic face and ignores a `font-style` or `font` declaration that gives
+/// an oblique angle.
+fn rewrite_pdfreactor_oblique_font_style(css: &str, compat: CompatMode) -> Option<String> {
+    const PROPERTIES: [&[u8]; 2] = [b"font-style", b"font"];
+    if !matches!(compat, CompatMode::PdfReactor) || !mentions_ident(css, "oblique") {
+        return None;
+    }
+    let dropped = drop_declarations(css, &PROPERTIES, has_oblique_angle);
+    let working = dropped.as_deref().unwrap_or(css);
+    PROPERTIES
+        .iter()
+        .fold(None, |rewritten: Option<String>, property| {
+            rewrite_declaration_value_idents(
+                rewritten.as_deref().unwrap_or(working),
+                property,
+                &[(b"oblique", "italic")],
+            )
+            .or(rewritten)
+        })
+        .or(dropped)
+}
+
+fn has_oblique_angle(value: &str) -> bool {
+    let mut input = ParserInput::new(value);
+    let mut parser = Parser::new(&mut input);
+    let mut follows_oblique = false;
+    while let Ok(token) = parser.next() {
+        match token {
+            Token::Dimension { unit, .. }
+                if follows_oblique
+                    && ["deg", "grad", "rad", "turn"]
+                        .iter()
+                        .any(|angle| unit.eq_ignore_ascii_case(angle)) =>
+            {
+                return true;
+            },
+            Token::Ident(name) => follows_oblique = name.eq_ignore_ascii_case("oblique"),
+            _ => follows_oblique = false,
+        }
+    }
+    false
+}
+
+/// Removes each declaration of one of `properties` whose value satisfies `drops`.
+fn drop_declarations(
+    css: &str,
+    properties: &[&[u8]],
+    drops: impl Fn(&str) -> bool,
+) -> Option<String> {
+    let bytes = css.as_bytes();
+    let mut out = String::with_capacity(css.len());
+    let mut i = 0usize;
+    let mut changed = false;
+    while i < bytes.len() {
+        if let Some(next) = copy_opaque_token(css, i, &mut out) {
+            i = next;
+            continue;
+        }
+        if let Some(property) = properties
+            .iter()
+            .find(|property| ident_at(bytes, i, property))
+        {
+            let colon = (i + property.len()..bytes.len())
+                .find(|&at| !bytes[at].is_ascii_whitespace())
+                .filter(|&at| bytes[at] == b':');
+            if let Some(colon) = colon {
+                let value_end = declaration_value_end(css, colon + 1);
+                if drops(&css[colon + 1..value_end]) {
+                    i = value_end + usize::from(bytes.get(value_end) == Some(&b';'));
+                    changed = true;
+                    continue;
+                }
+            }
+        }
+        let Some(ch) = css[i..].chars().next() else {
+            break;
+        };
+        out.push(ch);
+        i += ch.len_utf8();
+    }
+    changed.then_some(out)
+}
+
+fn declaration_value_end(css: &str, start: usize) -> usize {
+    let bytes = css.as_bytes();
+    let mut depth = 0usize;
+    let mut i = start;
+    let mut scratch = String::new();
+    while i < bytes.len() {
+        if let Some(next) = copy_opaque_token(css, i, &mut scratch) {
+            i = next;
+            continue;
+        }
+        match bytes[i] {
+            b'(' => depth += 1,
+            b')' => depth = depth.saturating_sub(1),
+            b';' | b'}' if depth == 0 => return i,
+            _ => {},
+        }
+        i += 1;
+    }
+    i
 }
 
 fn rewrite_pdfreactor_marks_bleed_keyword(css: &str, compat: CompatMode) -> Option<String> {
@@ -7362,5 +7472,35 @@ mod pdfreactor_line_tests {
             )
             .is_borrowed()
         );
+    }
+}
+
+#[cfg(test)]
+mod pdfreactor_oblique_tests {
+    use super::{CompatMode, translate_compat};
+
+    /// PDFreactor 12.7.2 sets `oblique` in the italic face (Tinos-Italic, no shear) and ignores a declaration with an
+    /// oblique angle (`font-style: oblique 30deg` and `font: oblique 30deg 40px Tinos` stay upright at the inherited
+    /// size).
+    #[test]
+    fn pdfreactor_takes_oblique_as_italic_and_ignores_an_oblique_angle() {
+        for (css, expected) in [
+            ("p { font-style: oblique }", "p { font-style: italic }"),
+            (
+                "p { font: oblique 105% serif }",
+                "p { font: italic 105% serif }",
+            ),
+            (
+                "p { color: red; font-style: oblique -14deg; margin: 0 }",
+                "p { color: red;  margin: 0 }",
+            ),
+            ("p { font: oblique 30deg 40px Tinos }", "p { }"),
+        ] {
+            assert_eq!(
+                translate_compat(css, CompatMode::PdfReactor).rewritten,
+                expected
+            );
+        }
+        assert!(translate_compat("p { font-style: oblique }", CompatMode::None).is_borrowed());
     }
 }
