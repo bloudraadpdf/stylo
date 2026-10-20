@@ -981,6 +981,7 @@ pub struct InlineStyleProjection {
     presentation: Option<Arc<str>>,
     declarations: Arc<[SpecifiedDeclaration]>,
     diagnostics: Arc<[InlineDeclarationDiagnostic]>,
+    hydrated: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1023,9 +1024,30 @@ impl InlineStyleProjection {
         self.presentation.as_deref()
     }
 
+    /// The declarations of the model: empty before the hydration of a present `style` attribute.
     #[must_use]
-    pub fn declarations(&self) -> &[SpecifiedDeclaration] {
+    pub const fn declarations(&self) -> &Arc<[SpecifiedDeclaration]> {
         &self.declarations
+    }
+
+    /// Whether the model holds the declarations of the `style` attribute.
+    #[must_use]
+    pub const fn is_hydrated(&self) -> bool {
+        self.hydrated
+    }
+
+    /// This projection with the `declarations` and `diagnostics` of its `style` attribute that a parse gives, which its
+    /// declaration does not store.
+    #[must_use]
+    pub fn with_parsed(
+        mut self,
+        declarations: Arc<[SpecifiedDeclaration]>,
+        diagnostics: Arc<[InlineDeclarationDiagnostic]>,
+    ) -> Self {
+        self.declarations = declarations;
+        self.diagnostics = diagnostics;
+        self.hydrated = true;
+        self
     }
 
     #[must_use]
@@ -1095,6 +1117,7 @@ impl DeclarationLease {
             presentation: record.presentation.clone(),
             declarations: record.declarations.clone(),
             diagnostics: record.diagnostics.clone(),
+            hydrated: record.hydrated,
         }
     }
 

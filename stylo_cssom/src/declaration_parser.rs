@@ -506,6 +506,19 @@ fn parse_specified_component_values(
     parse(&mut parser, base_url).map(Vec::into_boxed_slice)
 }
 
+/// The declarations of `projection`: those of its model once hydrated, else a parse of its `style` attribute.
+#[must_use]
+pub fn inline_style_declarations(
+    projection: &stylo_cssom_model::InlineStyleProjection,
+) -> Arc<[stylo_cssom_model::SpecifiedDeclaration]> {
+    match projection.presentation() {
+        Some(css) if !projection.is_hydrated() => {
+            parse_inline_style_declarations(css, projection.context().base_url.clone())
+        },
+        _ => Arc::clone(projection.declarations()),
+    }
+}
+
 pub fn parse_inline_style_declarations(
     css: &str,
     base_url: Arc<str>,

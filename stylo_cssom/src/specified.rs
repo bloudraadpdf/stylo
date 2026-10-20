@@ -11,19 +11,19 @@ pub fn project_inline_style_with_compat(
     compat: crate::compat::CompatMode,
     url_data: &UrlExtraData,
 ) -> Vec<stylo_cssom_model::RuleDeclaration> {
-    let translated = projection
+    projection
         .presentation()
         .map(|css| crate::compat::translate::translate_compat_declarations(css, compat))
         .filter(|translation| !translation.is_borrowed())
-        .map(|translation| {
-            crate::declaration_parser::parse_inline_style_declarations(
-                &translation.rewritten,
-                projection.context().base_url.clone(),
-            )
-        });
-    translated
-        .as_deref()
-        .unwrap_or_else(|| projection.declarations())
+        .map_or_else(
+            || crate::declaration_parser::inline_style_declarations(projection),
+            |translation| {
+                crate::declaration_parser::parse_inline_style_declarations(
+                    &translation.rewritten,
+                    projection.context().base_url.clone(),
+                )
+            },
+        )
         .iter()
         .flat_map(|declaration| {
             project_inline_style_declaration_with_compat(declaration, compat, url_data)
