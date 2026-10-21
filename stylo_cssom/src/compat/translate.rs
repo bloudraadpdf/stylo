@@ -2280,6 +2280,31 @@ mod prince_rewrite_tests {
         assert_eq!(translate_compat(css, CompatMode::Prince).rewritten, css);
     }
 
+    /// Prince's `flow: static(<name>)` takes the element out of the normal flow into a named flow that a margin box shows
+    /// with `content: flow(<name>)`: a running element.
+    #[test]
+    fn prince_static_flows_are_running_elements() {
+        for property in ["flow", "-prince-flow"] {
+            for value in ["static(head)", "static(head, start)"] {
+                let css = format!(".h {{ {property}: {value} }}");
+                assert_eq!(
+                    translate_compat(&css, CompatMode::Prince).rewritten,
+                    format!(".h {{ {property}: {value} ; position: running(head);}}")
+                );
+            }
+        }
+        assert_eq!(
+            translate_compat(
+                "@page { @top-left { content: flow(head) } }",
+                CompatMode::Prince
+            )
+            .rewritten,
+            "@page { @top-left { content: element(head) } }"
+        );
+        let css = "@page { @top-left { content: flow(head) } } .h { flow: static(head) }";
+        assert_eq!(translate_compat(css, CompatMode::None).rewritten, css);
+    }
+
     /// Prince 16.2 has no `inline` float reference: its initial `column` makes `top`, `bottom` and `top-bottom`
     /// column floats, which the native keywords keep for the initial reference.
     #[test]
@@ -3640,6 +3665,18 @@ fn scan_block<'i>(parser: &mut Parser<'i, '_>, state: &mut TranslateState, full_
 
                     if state.compat == CompatMode::Prince
                         && state.at_page_depth > 0
+                        && name.eq_ignore_ascii_case("content")
+                        && let Some(flow) = prince_flow_content_name(raw_value)
+                    {
+                        state.value_replacements.push(ValueReplacement {
+                            start_byte: value_start,
+                            end_byte: value_end,
+                            replacement: value.replacen(raw_value, &format!("element({flow})"), 1),
+                        });
+                    }
+
+                    if state.compat == CompatMode::Prince
+                        && state.at_page_depth > 0
                         && (name.eq_ignore_ascii_case("bleed")
                             || name.eq_ignore_ascii_case("prince-bleed")
                             || name.eq_ignore_ascii_case("-prince-bleed"))
@@ -4089,6 +4126,51 @@ enum BlockKind {
     PrincePdfAtRule,
 }
 
+/// The flow name of a Prince `static(<name>)` or `static(<name>, start)` value: Prince takes the element out of the
+/// normal flow into the named flow, as `position: running(<name>)` does.
+fn prince_static_flow_name(raw_value: &str) -> Option<String> {
+    let mut input = ParserInput::new(raw_value);
+    let mut parser = Parser::new(&mut input);
+    parser.skip_whitespace();
+    let Token::Function(function_name) = parser.next().ok()?.clone() else {
+        return None;
+    };
+    if !function_name.eq_ignore_ascii_case("static") {
+        return None;
+    }
+    let name = parser
+        .parse_nested_block(|inner| -> Result<String, ParseError<'_, ()>> {
+            let name = inner.expect_ident_cloned()?.to_string();
+            if inner.try_parse(|inner| inner.expect_comma()).is_ok() {
+                inner.expect_ident_matching("start")?;
+            }
+            Ok(name)
+        })
+        .ok()?;
+    parser.skip_whitespace();
+    parser.is_exhausted().then_some(name)
+}
+
+/// The flow name of a Prince `flow(<name>)` margin box content, which `element(<name>)` shows.
+fn prince_flow_content_name(raw_value: &str) -> Option<String> {
+    let mut input = ParserInput::new(raw_value);
+    let mut parser = Parser::new(&mut input);
+    parser.skip_whitespace();
+    let Token::Function(function_name) = parser.next().ok()?.clone() else {
+        return None;
+    };
+    if !function_name.eq_ignore_ascii_case("flow") {
+        return None;
+    }
+    let name = parser
+        .parse_nested_block(|inner| -> Result<String, ParseError<'_, ()>> {
+            Ok(inner.expect_ident_cloned()?.to_string())
+        })
+        .ok()?;
+    parser.skip_whitespace();
+    parser.is_exhausted().then_some(name)
+}
+
 fn pdfreactor_sidenote_float_native_value(raw_value: &str) -> Option<&'static str> {
     let mut input = ParserInput::new(raw_value);
     let mut parser = Parser::new(&mut input);
@@ -4139,6 +4221,21 @@ fn handle_property(
     block: BlockKind,
 ) {
     let lower = ascii_lower(property);
+
+    if matches!(state.compat, CompatMode::Prince)
+        && matches!(lower.as_str(), "flow" | "-prince-flow")
+        && matches!(block, BlockKind::StyleRule)
+        && let Some(name) = prince_static_flow_name(raw_value)
+    {
+        let outcome = Translated::Native {
+            native_property: "position",
+            native_value: format!("running({name})"),
+        };
+        apply_translation_outcome(
+            state, full_css, property, raw_value, line, column, block, outcome,
+        );
+        return;
+    }
 
     if matches!(state.compat, CompatMode::Prince)
         && lower == "float"
