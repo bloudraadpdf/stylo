@@ -669,7 +669,7 @@ impl Parse for Content {
                 alt_start.is_none(),
                 alt_start.is_none(),
                 alt_start.is_none(),
-                false,
+                alt_start.is_none(),
                 alt_start.is_none(),
             )?;
             items.push(item);
@@ -752,6 +752,27 @@ mod tests {
             .expect("content value should parse")
     }
 
+    /// css-content-3 § 1: `<content-list>` takes `<content()>`, the string value of the element.
+    #[test]
+    fn content_takes_the_content_function() {
+        for (css, keyword) in [
+            ("content()", generics::StringSetContentKeyword::Text),
+            (
+                "content(first-letter)",
+                generics::StringSetContentKeyword::FirstLetter,
+            ),
+        ] {
+            let generics::Content::Items(items) = parse_content_value(css) else {
+                panic!("{css} is a content list");
+            };
+            assert_eq!(
+                items.items.as_slice(),
+                [generics::ContentItem::ContentFunction(keyword)],
+                "{css}"
+            );
+        }
+    }
+
     #[test]
     fn content_counter_functions_reject_none_as_a_counter_style() {
         let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
@@ -768,7 +789,12 @@ mod tests {
         for css in ["counter(foo, none)", "counters(foo, '', none)"] {
             let mut input = ParserInput::new(css);
             let mut parser = Parser::new(&mut input);
-            assert!(parser.parse_entirely(|input| Content::parse(&context, input)).is_err(), "{css}");
+            assert!(
+                parser
+                    .parse_entirely(|input| Content::parse(&context, input))
+                    .is_err(),
+                "{css}"
+            );
         }
     }
 
