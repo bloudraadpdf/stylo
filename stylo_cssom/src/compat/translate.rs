@@ -6201,7 +6201,7 @@ fn translate_property(lower_property: &str, raw_value: &str) -> Translated {
             native_value: raw_value.trim().to_ascii_lowercase(),
         },
 
-        "-ro-text-replace" | "-prince-text-replace" => Translated::Native {
+        "-ro-text-replace" | "-prince-text-replace" | "prince-text-replace" => Translated::Native {
             native_property: "-bd-text-replace",
             native_value: raw_value.trim().to_string(),
         },
@@ -7069,6 +7069,7 @@ pub(crate) fn required_compat_for(lower_property: &str) -> Option<CompatMode> {
         | "-prince-expansion-text"
         | "-prince-link"
         | "-prince-text-replace"
+        | "prince-text-replace"
         | "-prince-tooltip"
         | "-prince-alt-text"
         | "-prince-page-fill"
@@ -7368,6 +7369,25 @@ mod prince_bookmark_tests {
              prince-bookmark-target: url(#t) ; bookmark-level: 1; bookmark-label: 'L'; bookmark-state: closed; \
              bookmark-target: url(#t);}"
         );
+    }
+}
+
+#[cfg(test)]
+mod prince_text_replace_tests {
+    use super::{CompatMode, translate_compat};
+
+    /// Prince 16.2 takes `text-replace` pairs also without the leading hyphen (`prince-text-replace`).
+    #[test]
+    fn prince_takes_text_replace_without_the_leading_hyphen() {
+        for property in ["prince-text-replace", "-prince-text-replace"] {
+            let css = format!(r#"p {{ {property}: "s" "f" "'" "`" }}"#);
+            assert_eq!(
+                translate_compat(&css, CompatMode::Prince).rewritten,
+                format!(
+                    r#"p {{ {property}: "s" "f" "'" "`" ; -bd-text-replace: "s" "f" "'" "`";}}"#
+                )
+            );
+        }
     }
 }
 
