@@ -4996,6 +4996,8 @@ pub(crate) fn inline_vendor_declarations(
 }
 
 fn translate_property(lower_property: &str, raw_value: &str) -> Translated {
+    let canonical = prince_canonical_property(lower_property);
+    let lower_property = &*canonical;
     match lower_property {
         "-ro-height" => Translated::Natives(vec![
             ("height", raw_value.trim().to_string()),
@@ -5618,7 +5620,7 @@ fn translate_property(lower_property: &str, raw_value: &str) -> Translated {
             native_property: "-bd-pdf-page-rotation",
             native_value: raw_value.trim().to_string(),
         },
-        "-prince-rotate-body" | "prince-rotate-body" => Translated::Native {
+        "-prince-rotate-body" => Translated::Native {
             native_property: "-bd-rotate-body",
             native_value: raw_value.trim().to_string(),
         },
@@ -5754,7 +5756,7 @@ fn translate_property(lower_property: &str, raw_value: &str) -> Translated {
             native_property: "-bd-table-row-span",
             native_value: raw_value.trim().to_string(),
         },
-        "-prince-caption-page" | "prince-caption-page" | "caption-page" => Translated::Native {
+        "-prince-caption-page" | "caption-page" => Translated::Native {
             native_property: "-bd-caption-page",
             native_value: raw_value.trim().to_string(),
         },
@@ -5956,22 +5958,22 @@ fn translate_property(lower_property: &str, raw_value: &str) -> Translated {
             native_value: raw_value.trim().to_ascii_lowercase(),
         },
 
-        "-prince-bookmark-target" | "prince-bookmark-target" | "-bfo-bookmark-target" => {
+        "-prince-bookmark-target" | "-bfo-bookmark-target" => {
             Translated::Native {
                 native_property: "bookmark-target",
                 native_value: raw_value.trim().to_string(),
             }
         },
 
-        "-prince-bookmark-label" | "prince-bookmark-label" => Translated::Native {
+        "-prince-bookmark-label" => Translated::Native {
             native_property: "bookmark-label",
             native_value: raw_value.trim().to_string(),
         },
-        "-prince-bookmark-level" | "prince-bookmark-level" => Translated::Native {
+        "-prince-bookmark-level" => Translated::Native {
             native_property: "bookmark-level",
             native_value: raw_value.trim().to_string(),
         },
-        "-prince-bookmark-state" | "prince-bookmark-state" => Translated::Native {
+        "-prince-bookmark-state" => Translated::Native {
             native_property: "bookmark-state",
             native_value: raw_value.trim().to_ascii_lowercase(),
         },
@@ -6201,7 +6203,7 @@ fn translate_property(lower_property: &str, raw_value: &str) -> Translated {
             native_value: raw_value.trim().to_ascii_lowercase(),
         },
 
-        "-ro-text-replace" | "-prince-text-replace" | "prince-text-replace" => Translated::Native {
+        "-ro-text-replace" | "-prince-text-replace" => Translated::Native {
             native_property: "-bd-text-replace",
             native_value: raw_value.trim().to_string(),
         },
@@ -6813,8 +6815,17 @@ fn is_known_foreign(lower_property: &str) -> bool {
     required_compat_for(lower_property).is_some()
 }
 
+/// Prince takes each of its properties also without the leading hyphen: `prince-x` is `-prince-x`.
+fn prince_canonical_property(lower_property: &str) -> std::borrow::Cow<'_, str> {
+    if lower_property.starts_with("prince-") {
+        std::borrow::Cow::Owned(format!("-{lower_property}"))
+    } else {
+        std::borrow::Cow::Borrowed(lower_property)
+    }
+}
+
 pub(crate) fn required_compat_for(lower_property: &str) -> Option<CompatMode> {
-    match lower_property {
+    match &*prince_canonical_property(lower_property) {
         "-ro-pdf-conformance"
         | "-ro-pdf-format"
         | "-ro-pdf-tag-type"
@@ -7014,7 +7025,6 @@ pub(crate) fn required_compat_for(lower_property: &str) -> Option<CompatMode> {
         | "-prince-background-image-resolution"
         | "background-image-resolution"
         | "-prince-rotate-body"
-        | "prince-rotate-body"
         | "text-overline"
         | "text-overline-color"
         | "text-overline-style"
@@ -7038,7 +7048,6 @@ pub(crate) fn required_compat_for(lower_property: &str) -> Option<CompatMode> {
         | "-prince-table-column-span"
         | "-prince-table-row-span"
         | "-prince-caption-page"
-        | "prince-caption-page"
         | "caption-page"
         | "-prince-flow"
         | "-prince-tab-size"
@@ -7048,13 +7057,9 @@ pub(crate) fn required_compat_for(lower_property: &str) -> Option<CompatMode> {
         | "-prince-pdf-destination"
         | "-prince-pdf-page-label"
         | "-prince-bookmark-target"
-        | "prince-bookmark-target"
         | "-prince-bookmark-label"
-        | "prince-bookmark-label"
         | "-prince-bookmark-level"
-        | "prince-bookmark-level"
         | "-prince-bookmark-state"
-        | "prince-bookmark-state"
         | "-prince-clear"
         | "-prince-hyphenate-character"
         | "-prince-text-justify"
@@ -7069,7 +7074,6 @@ pub(crate) fn required_compat_for(lower_property: &str) -> Option<CompatMode> {
         | "-prince-expansion-text"
         | "-prince-link"
         | "-prince-text-replace"
-        | "prince-text-replace"
         | "-prince-tooltip"
         | "-prince-alt-text"
         | "-prince-page-fill"
@@ -7375,6 +7379,18 @@ mod prince_bookmark_tests {
 #[cfg(test)]
 mod prince_text_replace_tests {
     use super::{CompatMode, translate_compat};
+
+    /// Prince 16.2 takes each of its properties also without the leading hyphen (`prince-image-resolution`).
+    #[test]
+    fn prince_takes_a_property_without_the_leading_hyphen() {
+        for property in ["prince-image-resolution", "-prince-image-resolution"] {
+            let css = format!("img {{ {property}: 150dpi }}");
+            assert_eq!(
+                translate_compat(&css, CompatMode::Prince).rewritten,
+                format!("img {{ {property}: 150dpi ; -bd-image-resolution: 150dpi;}}")
+            );
+        }
+    }
 
     /// Prince 16.2 takes `text-replace` pairs also without the leading hyphen (`prince-text-replace`).
     #[test]
