@@ -227,10 +227,16 @@ fn translate_compat_with_registrations<'css>(
         None => a26_working,
     };
 
-    let nth_rewritten = rewrite_pdfreactor_nth_page_pseudo_alias(corner_working.as_ref(), compat);
-    let nth_working: Cow<'_, str> = match nth_rewritten {
+    let side_rewritten = rewrite_prince_side_margin_box_aliases(corner_working.as_ref(), compat);
+    let side_working: Cow<'_, str> = match side_rewritten {
         Some(owned) => Cow::Owned(owned),
         None => corner_working,
+    };
+
+    let nth_rewritten = rewrite_pdfreactor_nth_page_pseudo_alias(side_working.as_ref(), compat);
+    let nth_working: Cow<'_, str> = match nth_rewritten {
+        Some(owned) => Cow::Owned(owned),
+        None => side_working,
     };
 
     let last_rewritten = rewrite_pdfreactor_last_page_pseudo_alias(nth_working.as_ref(), compat);
@@ -1485,6 +1491,17 @@ fn rewrite_pdfreactor_corner_margin_box_aliases(css: &str, compat: CompatMode) -
     if !has_marker {
         return None;
     }
+    rewrite_case_insensitive_aliases(css, ALIASES, |bytes, at, alias_len| {
+        is_at_keyword_boundary(bytes.get(at + alias_len).copied())
+    })
+}
+
+/// Prince 17 takes `@top` and `@bottom` as `@top-center` and `@bottom-center`.
+fn rewrite_prince_side_margin_box_aliases(css: &str, compat: CompatMode) -> Option<String> {
+    if !matches!(compat, CompatMode::Prince) {
+        return None;
+    }
+    const ALIASES: &[(&[u8], &str)] = &[(b"@top", "@top-center"), (b"@bottom", "@bottom-center")];
     rewrite_case_insensitive_aliases(css, ALIASES, |bytes, at, alias_len| {
         is_at_keyword_boundary(bytes.get(at + alias_len).copied())
     })
@@ -7373,6 +7390,22 @@ mod prince_bookmark_tests {
              prince-bookmark-target: url(#t) ; bookmark-level: 1; bookmark-label: 'L'; bookmark-state: closed; \
              bookmark-target: url(#t);}"
         );
+    }
+}
+
+#[cfg(test)]
+mod prince_side_margin_box_tests {
+    use super::{CompatMode, translate_compat};
+
+    /// Prince 17 takes `@top` and `@bottom` as the center boxes of their edges; the corner and side boxes stay.
+    #[test]
+    fn prince_takes_top_and_bottom_as_the_center_margin_boxes() {
+        let css = "@page { @top { content: a } @bottom { content: b } @top-left { content: c } @bottom-right-corner { content: d } }";
+        assert_eq!(
+            translate_compat(css, CompatMode::Prince).rewritten,
+            "@page { @top-center { content: a } @bottom-center { content: b } @top-left { content: c } @bottom-right-corner { content: d } }"
+        );
+        assert_eq!(translate_compat(css, CompatMode::None).rewritten, css);
     }
 }
 
