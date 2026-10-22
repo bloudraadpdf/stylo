@@ -2253,6 +2253,20 @@ mod prince_rewrite_tests {
     #[test]
     fn prince_line_height_quirk_is_explicit_and_mode_scoped() {
         let css = "@prince-quirks line-height-12; p { line-height: normal }";
+        let parsed = crate::authored_rules::ParsedStylesheet::parse(css).unwrap();
+        let root = stylo_cssom_model::InternalStylesheetRoot::new(
+            stylo_cssom_model::StyleOrigin::Author,
+            parsed.rule_nodes(),
+        );
+        let (projected, _) = super::project_compat_root(&root, CompatMode::Prince);
+        assert_eq!(
+            projected.rules()[0].grammar(),
+            stylo_cssom_model::RuleGrammar::Style
+        );
+        assert_eq!(
+            root.rules()[0].grammar(),
+            stylo_cssom_model::RuleGrammar::Unknown
+        );
         assert_eq!(
             translate_compat(css, CompatMode::Prince).rewritten,
             ":root { -bd-line-height-quirk: line-height-12 } p { line-height: normal }"

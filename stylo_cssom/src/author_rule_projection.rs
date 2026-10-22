@@ -5,9 +5,15 @@ pub fn project_rule_sources(
     rewrite: &mut impl FnMut(&str) -> String,
 ) -> Vec<RuleNode> {
     map_rule_sources(rules, &mut |rule| {
-        let projected = rule
-            .clone()
-            .with_projection_serialization(rewrite(&rule.projection_serialization()));
+        let source = rule.projection_serialization();
+        let rewritten = rewrite(&source);
+        if rule.grammar() == stylo_cssom_model::RuleGrammar::Unknown
+            && rewritten != source
+            && let Some(parsed) = crate::rule_parser::ParsedCssRule::parse(&rewritten)
+        {
+            return parsed.to_rule_node();
+        }
+        let projected = rule.clone().with_projection_serialization(rewritten);
         map_pending_declarations(projected, &mut *rewrite, None)
     })
 }
@@ -61,7 +67,7 @@ pub fn map_rule_sources(
         .map(|rule| {
             let projected = project(rule);
             let css = projected.projection_serialization();
-            let nested = map_rule_sources(rule.payload().nested(), project);
+            let nested = map_rule_sources(projected.payload().nested(), project);
             projected.with_projected_nested(nested, css)
         })
         .collect()
