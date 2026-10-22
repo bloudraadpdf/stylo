@@ -2254,10 +2254,7 @@ mod prince_rewrite_tests {
     fn prince_outside_margin_reaches_a_style_declaration() {
         let css = "h1 { margin-outside: -60mm }";
         let translated = translate_compat(css, CompatMode::Prince);
-        assert_eq!(
-            translated.rewritten,
-            "h1 { margin-outside: -60mm ; -bd-margin-outside: -60mm;}"
-        );
+        assert_eq!(translated.rewritten, "h1 { -bd-margin-outside: -60mm }");
         let parsed = crate::authored_rules::ParsedStylesheet::parse(&translated.rewritten).unwrap();
         assert_eq!(
             parsed.rule_nodes()[0]
@@ -2267,6 +2264,23 @@ mod prince_rewrite_tests {
                 .declarations()
                 .len(),
             1
+        );
+        for mode in [CompatMode::None, CompatMode::PdfReactor] {
+            assert_eq!(translate_compat(css, mode).rewritten, css);
+        }
+        let ordered = "h1 { margin-outside:-10pt!important; margin:0 30pt }";
+        assert_eq!(
+            translate_compat(ordered, CompatMode::Prince).rewritten,
+            "h1 { -bd-margin-outside:-10pt!important; margin:0 30pt }"
+        );
+    }
+
+    #[test]
+    fn prince_ignores_webkit_background_size() {
+        let css = "@page { background-size:50%; -webkit-background-size:100%; color:red }";
+        assert_eq!(
+            translate_compat(css, CompatMode::Prince).rewritten,
+            "@page { background-size:50%; color:red }"
         );
         for mode in [CompatMode::None, CompatMode::PdfReactor] {
             assert_eq!(translate_compat(css, mode).rewritten, css);
@@ -3468,6 +3482,7 @@ fn engine_ignores_declaration(compat: CompatMode, name: &str, value: &str) -> bo
         CompatMode::PdfReactor => name.eq_ignore_ascii_case("footnote-policy"),
         CompatMode::Prince => {
             name.eq_ignore_ascii_case("footnote-policy")
+                || name.eq_ignore_ascii_case("-webkit-background-size")
                 || ((name.eq_ignore_ascii_case("list-style-type")
                     || name.eq_ignore_ascii_case("list-style"))
                     && names_list_style_type_unsupported_by_prince(value))
@@ -3766,6 +3781,23 @@ fn scan_block<'i>(parser: &mut Parser<'i, '_>, state: &mut TranslateState, full_
                     let value_end = skip_to_decl_end_byte(parser);
                     let value = &full_css[value_start..value_end];
                     let raw_value = value.trim();
+
+                    if state.compat == CompatMode::Prince
+                        && [
+                            "margin-outside",
+                            "-prince-margin-outside",
+                            "prince-margin-outside",
+                        ]
+                        .iter()
+                        .any(|property| name.eq_ignore_ascii_case(property))
+                    {
+                        state.value_replacements.push(ValueReplacement {
+                            start_byte: decl_start_byte,
+                            end_byte: name_end_byte,
+                            replacement: "-bd-margin-outside".to_string(),
+                        });
+                        continue;
+                    }
 
                     if state.compat == CompatMode::Prince
                         && state.at_page_depth > 0
