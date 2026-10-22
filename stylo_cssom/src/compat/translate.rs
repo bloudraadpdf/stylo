@@ -2264,12 +2264,21 @@ mod prince_rewrite_tests {
             stylo_cssom_model::RuleGrammar::Style
         );
         assert_eq!(
+            projected.rules()[0]
+                .payload()
+                .declaration_block()
+                .unwrap()
+                .declarations()
+                .len(),
+            1
+        );
+        assert_eq!(
             root.rules()[0].grammar(),
             stylo_cssom_model::RuleGrammar::Unknown
         );
         assert_eq!(
             translate_compat(css, CompatMode::Prince).rewritten,
-            ":root { -bd-line-height-quirk: line-height-12 } p { line-height: normal }"
+            ":root { -bd-line-height-quirk: one-point-two } p { line-height: normal }"
         );
         for mode in [CompatMode::None, CompatMode::PdfReactor] {
             assert_eq!(translate_compat(css, mode).rewritten, css);
@@ -3317,7 +3326,7 @@ fn walk_top_level<'i>(parser: &mut Parser<'i, '_>, state: &mut TranslateState, f
                         state.value_replacements.push(ValueReplacement {
                             start_byte: snapshot.position().byte_index(),
                             end_byte: parser.position().byte_index(),
-                            replacement: ":root { -bd-line-height-quirk: line-height-12 }"
+                            replacement: ":root { -bd-line-height-quirk: one-point-two }"
                                 .to_owned(),
                         });
                     } else {

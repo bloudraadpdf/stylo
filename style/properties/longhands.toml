@@ -1748,7 +1748,7 @@ struct = "inherited_text"
 spec = "Nonstandard (Prince @prince-quirks line-height-12)"
 animation_type = "none"
 affects = "layout"
-keyword = { values = ["none", "line-height-12"] }
+keyword = { values = ["none", "one-point-two"] }
 
 [list-style-image]
 type = "Image"
