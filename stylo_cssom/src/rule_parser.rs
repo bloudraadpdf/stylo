@@ -3903,6 +3903,9 @@ mod tests {
             PropertyDeclaration::LineHeight(value) => {
                 PropertyDeclaration::LineHeight(value.clone())
             },
+            PropertyDeclaration::BdLineHeightQuirk(value) => {
+                PropertyDeclaration::BdLineHeightQuirk(*value)
+            },
             PropertyDeclaration::LineSnap(value) => PropertyDeclaration::LineSnap(value.clone()),
             PropertyDeclaration::ListStyleType(value) => {
                 PropertyDeclaration::ListStyleType(value.clone())

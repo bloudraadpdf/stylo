@@ -2251,6 +2251,23 @@ mod prince_rewrite_tests {
     use super::{CompatMode, translate_compat, translate_compat_declarations};
 
     #[test]
+    fn prince_line_height_quirk_is_explicit_and_mode_scoped() {
+        let css = "@prince-quirks line-height-12; p { line-height: normal }";
+        assert_eq!(
+            translate_compat(css, CompatMode::Prince).rewritten,
+            ":root { -bd-line-height-quirk: line-height-12 } p { line-height: normal }"
+        );
+        for mode in [CompatMode::None, CompatMode::PdfReactor] {
+            assert_eq!(translate_compat(css, mode).rewritten, css);
+        }
+        let invalid = "@prince-quirks line-height-12 extra; p { color: red }";
+        assert_eq!(
+            translate_compat(invalid, CompatMode::Prince).rewritten,
+            invalid
+        );
+    }
+
+    #[test]
     fn prince_joins_a_page_type_and_its_pseudo_class() {
         let css = "@page blank :left { @top-left { content: normal } } @page :right { margin: 0 }";
         assert_eq!(
@@ -3268,6 +3285,30 @@ fn walk_top_level<'i>(parser: &mut Parser<'i, '_>, state: &mut TranslateState, f
                         end_byte: parser.position().byte_index(),
                         replacement: String::new(),
                     });
+                },
+                Token::AtKeyword(ref name)
+                    if state.compat == CompatMode::Prince
+                        && name.eq_ignore_ascii_case("prince-quirks") =>
+                {
+                    if parser
+                        .try_parse(|input| {
+                            input.expect_ident_matching("line-height-12")?;
+                            if !input.is_exhausted() {
+                                input.expect_semicolon()?;
+                            }
+                            Ok::<_, cssparser::BasicParseError<'_>>(())
+                        })
+                        .is_ok()
+                    {
+                        state.value_replacements.push(ValueReplacement {
+                            start_byte: snapshot.position().byte_index(),
+                            end_byte: parser.position().byte_index(),
+                            replacement: ":root { -bd-line-height-quirk: line-height-12 }"
+                                .to_owned(),
+                        });
+                    } else {
+                        consume_at_rule(parser, state, full_css, name.as_ref());
+                    }
                 },
                 Token::AtKeyword(ref name) => {
                     consume_at_rule(parser, state, full_css, name.as_ref());
@@ -5975,11 +6016,9 @@ fn translate_property(lower_property: &str, raw_value: &str) -> Translated {
             native_value: raw_value.trim().to_ascii_lowercase(),
         },
 
-        "-prince-bookmark-target" | "-bfo-bookmark-target" => {
-            Translated::Native {
-                native_property: "bookmark-target",
-                native_value: raw_value.trim().to_string(),
-            }
+        "-prince-bookmark-target" | "-bfo-bookmark-target" => Translated::Native {
+            native_property: "bookmark-target",
+            native_value: raw_value.trim().to_string(),
         },
 
         "-prince-bookmark-label" => Translated::Native {

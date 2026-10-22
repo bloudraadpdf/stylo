@@ -1743,6 +1743,13 @@ rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
+[-bd-line-height-quirk]
+struct = "inherited_text"
+spec = "Nonstandard (Prince @prince-quirks line-height-12)"
+animation_type = "none"
+affects = "layout"
+keyword = { values = ["none", "line-height-12"] }
+
 [list-style-image]
 type = "Image"
 initial = "computed::Image::None"
