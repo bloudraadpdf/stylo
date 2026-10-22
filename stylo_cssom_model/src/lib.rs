@@ -626,7 +626,6 @@ pub struct InlineStyleContext {
 #[derive(Clone, Debug, PartialEq)]
 pub struct InlineDeclarationCandidate {
     declarations: Arc<[SpecifiedDeclaration]>,
-    diagnostics: Arc<[InlineDeclarationDiagnostic]>,
     presentation: Option<Arc<str>>,
     provenance: StylePresentationProvenance,
     context: InlineStyleContext,
@@ -648,7 +647,6 @@ impl InlineDeclarationCandidate {
     ) -> Self {
         Self {
             declarations: declarations.into(),
-            diagnostics: Arc::from([]),
             presentation: presentation.map(Into::into),
             provenance: StylePresentationProvenance::RawIngress,
             context,
@@ -663,7 +661,6 @@ impl InlineDeclarationCandidate {
     ) -> Self {
         Self {
             declarations: Arc::from([]),
-            diagnostics: Arc::from([]),
             presentation: presentation.map(Into::into),
             provenance: StylePresentationProvenance::RawIngress,
             context,
@@ -679,21 +676,11 @@ impl InlineDeclarationCandidate {
     ) -> Self {
         Self {
             declarations: declarations.into(),
-            diagnostics: Arc::from([]),
             presentation: Some(presentation.into()),
             provenance: StylePresentationProvenance::CanonicalMutation,
             context,
             hydrated: true,
         }
-    }
-
-    #[must_use]
-    pub fn with_diagnostics(
-        mut self,
-        diagnostics: impl Into<Arc<[InlineDeclarationDiagnostic]>>,
-    ) -> Self {
-        self.diagnostics = diagnostics.into();
-        self
     }
 
     fn validate(&self) -> Result<(), StyleTransactionError> {
@@ -704,14 +691,6 @@ impl InlineDeclarationCandidate {
         }
         Ok(())
     }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct InlineDeclarationDiagnostic {
-    pub property: Arc<str>,
-    pub declaration: Arc<str>,
-    pub line: u32,
-    pub column: u32,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -922,7 +901,6 @@ struct DeclarationRecord {
     handle: DeclarationHandle,
     revision: u64,
     declarations: Arc<[SpecifiedDeclaration]>,
-    diagnostics: Arc<[InlineDeclarationDiagnostic]>,
     presentation: Option<Arc<str>>,
     provenance: StylePresentationProvenance,
     context: InlineStyleContext,
@@ -937,7 +915,6 @@ impl DeclarationRecord {
             handle: DeclarationHandle::allocate(),
             revision: 0,
             declarations: self.declarations.clone(),
-            diagnostics: self.diagnostics.clone(),
             presentation: self.presentation.clone(),
             provenance: self.provenance,
             context: InlineStyleContext {
@@ -980,7 +957,6 @@ pub struct InlineStyleProjection {
     context: InlineStyleContext,
     presentation: Option<Arc<str>>,
     declarations: Arc<[SpecifiedDeclaration]>,
-    diagnostics: Arc<[InlineDeclarationDiagnostic]>,
     hydrated: bool,
 }
 
@@ -1036,23 +1012,13 @@ impl InlineStyleProjection {
         self.hydrated
     }
 
-    /// This projection with the `declarations` and `diagnostics` of its `style` attribute that a parse gives, which its
-    /// declaration does not store.
+    /// This projection with the `declarations` of its `style` attribute that a parse gives, which its declaration does
+    /// not store.
     #[must_use]
-    pub fn with_parsed(
-        mut self,
-        declarations: Arc<[SpecifiedDeclaration]>,
-        diagnostics: Arc<[InlineDeclarationDiagnostic]>,
-    ) -> Self {
+    pub fn with_parsed(mut self, declarations: Arc<[SpecifiedDeclaration]>) -> Self {
         self.declarations = declarations;
-        self.diagnostics = diagnostics;
         self.hydrated = true;
         self
-    }
-
-    #[must_use]
-    pub fn diagnostics(&self) -> &[InlineDeclarationDiagnostic] {
-        &self.diagnostics
     }
 
     #[must_use]
@@ -1116,7 +1082,6 @@ impl DeclarationLease {
             context: record.context.clone(),
             presentation: record.presentation.clone(),
             declarations: record.declarations.clone(),
-            diagnostics: record.diagnostics.clone(),
             hydrated: record.hydrated,
         }
     }
@@ -1276,7 +1241,6 @@ impl StyleState {
             handle,
             revision: 0,
             declarations: candidate.declarations,
-            diagnostics: candidate.diagnostics,
             presentation: candidate.presentation,
             provenance: candidate.provenance,
             context: candidate.context,
@@ -1378,7 +1342,6 @@ impl StyleState {
         let mut candidate = update.candidate;
         candidate.recontextualize_urls();
         record.declarations = candidate.declarations;
-        record.diagnostics = candidate.diagnostics;
         record.presentation = candidate.presentation;
         record.provenance = candidate.provenance;
         record.context = candidate.context;
@@ -1410,7 +1373,6 @@ impl StyleState {
         }
         let candidate = InlineDeclarationCandidate {
             declarations: record.declarations.clone(),
-            diagnostics: record.diagnostics.clone(),
             presentation: record.presentation.clone(),
             provenance: record.provenance,
             context,
@@ -1438,7 +1400,6 @@ impl StyleState {
             }
             InlineDeclarationCandidate {
                 declarations: record.declarations.clone(),
-                diagnostics: record.diagnostics.clone(),
                 presentation: record.presentation.clone(),
                 provenance: record.provenance,
                 context,
@@ -3311,7 +3272,6 @@ mod tests {
 
         let invalid = InlineDeclarationCandidate {
             declarations: Arc::<[SpecifiedDeclaration]>::from([]),
-            diagnostics: Arc::from([]),
             presentation: None,
             provenance: StylePresentationProvenance::CanonicalMutation,
             context: context(document, "https://example.test/"),

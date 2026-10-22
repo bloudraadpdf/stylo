@@ -3,7 +3,6 @@
 pub use stylo_cssom_model as model;
 pub mod parser_api;
 pub mod counter_style_cssom;
-pub mod float_diagnostics;
 pub mod media_list;
 pub mod numeric;
 pub mod intersection_observer;
