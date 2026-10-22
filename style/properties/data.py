@@ -981,7 +981,8 @@ class PropertiesData(object):
         logical_longhands = []
         other_longhands = []
         for p in self.longhands:
-            if p.name in ['direction', 'unicode-bidi']:
+            # A document compatibility quirk survives element style resets.
+            if p.name in ['direction', 'unicode-bidi', '-bd-line-height-quirk']:
                 continue;
             if not p.enabled_in_content() and not p.experimental(engine):
                 continue;
