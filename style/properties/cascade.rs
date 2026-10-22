@@ -1378,6 +1378,28 @@ impl<'b> Cascade<'b> {
             context.scope = old_scope;
         }
 
+        if longhand_id == LonghandId::BdMarginOutside
+            && !self.seen.contains(LonghandId::BdMarginOutsideApplies)
+        {
+            use crate::properties::longhands::_bd_margin_outside_applies::computed_value::T;
+            let sides = match (
+                self.seen.contains(LonghandId::MarginLeft),
+                self.seen.contains(LonghandId::MarginRight),
+            ) {
+                (false, false) => T::Both,
+                (false, true) => T::Left,
+                (true, false) => T::Right,
+                (true, true) => T::None,
+            };
+            self.apply_synthesised_companion(
+                context,
+                LonghandId::BdMarginOutsideApplies,
+                PropertyDeclaration::BdMarginOutsideApplies(sides),
+                priority,
+                origin,
+            );
+        }
+
         // moegoe F2 — `_-bd-color-function` is an internal companion of
         // `color` whose computed value carries the colorant name of an
         // authored `color: -bd-spot(...)` / `-bd-separation(...)`. The

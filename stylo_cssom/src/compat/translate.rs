@@ -2251,6 +2251,29 @@ mod prince_rewrite_tests {
     use super::{CompatMode, translate_compat, translate_compat_declarations};
 
     #[test]
+    fn prince_outside_margin_reaches_a_style_declaration() {
+        let css = "h1 { margin-outside: -60mm }";
+        let translated = translate_compat(css, CompatMode::Prince);
+        assert_eq!(
+            translated.rewritten,
+            "h1 { margin-outside: -60mm ; -bd-margin-outside: -60mm;}"
+        );
+        let parsed = crate::authored_rules::ParsedStylesheet::parse(&translated.rewritten).unwrap();
+        assert_eq!(
+            parsed.rule_nodes()[0]
+                .payload()
+                .declaration_block()
+                .unwrap()
+                .declarations()
+                .len(),
+            1
+        );
+        for mode in [CompatMode::None, CompatMode::PdfReactor] {
+            assert_eq!(translate_compat(css, mode).rewritten, css);
+        }
+    }
+
+    #[test]
     fn prince_line_height_quirk_is_explicit_and_mode_scoped() {
         let css = "@prince-quirks line-height-12; p { line-height: normal }";
         let parsed = crate::authored_rules::ParsedStylesheet::parse(css).unwrap();
@@ -6425,7 +6448,7 @@ fn translate_property(lower_property: &str, raw_value: &str) -> Translated {
             native_property: "-bd-margin-inside",
             native_value: raw_value.trim().to_string(),
         },
-        "-prince-margin-outside" => Translated::Native {
+        "margin-outside" | "-prince-margin-outside" => Translated::Native {
             native_property: "-bd-margin-outside",
             native_value: raw_value.trim().to_string(),
         },
@@ -7172,6 +7195,7 @@ pub(crate) fn required_compat_for(lower_property: &str) -> Option<CompatMode> {
         | "-prince-orphans-fragments"
         | "-prince-margin-inside"
         | "-prince-margin-outside"
+        | "margin-outside"
         | "-prince-margin-alt"
         | "-prince-page-group"
         | "-prince-hyphenate-limit-lines"

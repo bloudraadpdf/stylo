@@ -4528,8 +4528,15 @@ struct = "counters"
 initial_specified_value = "specified::BdPageMarginEdge::auto()"
 spec = "Nonstandard (moegoe -bd-* fork extension; F29 verso/recto asymmetric margin)"
 animation_type = "none"
-rule_types_allowed = ["page"]
-affects = ""
+rule_types_allowed = ["style", "page"]
+affects = "layout"
+
+[-bd-margin-outside-applies]
+struct = "counters"
+spec = "Nonstandard (physical margins overridden by Prince margin-outside)"
+animation_type = "none"
+affects = "layout"
+keyword = { values = ["none", "left", "right", "both"] }
 
 [-bd-margin-alt]
 type = "BdPageMarginEdge"

@@ -3906,6 +3906,9 @@ mod tests {
             PropertyDeclaration::BdLineHeightQuirk(value) => {
                 PropertyDeclaration::BdLineHeightQuirk(*value)
             },
+            PropertyDeclaration::BdMarginOutsideApplies(value) => {
+                PropertyDeclaration::BdMarginOutsideApplies(*value)
+            },
             PropertyDeclaration::LineSnap(value) => PropertyDeclaration::LineSnap(value.clone()),
             PropertyDeclaration::ListStyleType(value) => {
                 PropertyDeclaration::ListStyleType(value.clone())
