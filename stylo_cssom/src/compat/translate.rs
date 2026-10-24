@@ -1496,12 +1496,17 @@ fn rewrite_pdfreactor_corner_margin_box_aliases(css: &str, compat: CompatMode) -
     })
 }
 
-/// Prince 17 takes `@top` and `@bottom` as `@top-center` and `@bottom-center`.
+/// Prince side aliases select the middle margin box of each edge.
 fn rewrite_prince_side_margin_box_aliases(css: &str, compat: CompatMode) -> Option<String> {
     if !matches!(compat, CompatMode::Prince) {
         return None;
     }
-    const ALIASES: &[(&[u8], &str)] = &[(b"@top", "@top-center"), (b"@bottom", "@bottom-center")];
+    const ALIASES: &[(&[u8], &str)] = &[
+        (b"@top", "@top-center"),
+        (b"@bottom", "@bottom-center"),
+        (b"@left", "@left-middle"),
+        (b"@right", "@right-middle"),
+    ];
     rewrite_case_insensitive_aliases(css, ALIASES, |bytes, at, alias_len| {
         is_at_keyword_boundary(bytes.get(at + alias_len).copied())
     })
@@ -7514,6 +7519,18 @@ mod prince_bookmark_tests {
 #[cfg(test)]
 mod prince_side_margin_box_tests {
     use super::{CompatMode, translate_compat};
+
+    #[test]
+    fn prince_takes_left_and_right_as_the_middle_margin_boxes() {
+        let css = "@page { @left { content: a } @RIGHT { content: b } @left-top { content: c } @right-bottom { content: d } }";
+        assert_eq!(
+            translate_compat(css, CompatMode::Prince).rewritten,
+            "@page { @left-middle { content: a } @right-middle { content: b } @left-top { content: c } @right-bottom { content: d } }"
+        );
+        for mode in [CompatMode::None, CompatMode::PdfReactor] {
+            assert_eq!(translate_compat(css, mode).rewritten, css);
+        }
+    }
 
     /// Prince 17 takes `@top` and `@bottom` as the center boxes of their edges; the corner and side boxes stay.
     #[test]
