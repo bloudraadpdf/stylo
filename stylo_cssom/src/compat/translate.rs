@@ -2425,6 +2425,69 @@ mod prince_rewrite_tests {
     /// A `style` attribute takes the translation of a declaration block: Prince 16.2 and PDFreactor 12.7.2 read
     /// their extensions there too.
     #[test]
+    fn prince_opentype_preserves_declaration_order_and_priority() {
+        let css = "font-variant: prince-opentype(dlig, onum) !important; font-variant: normal";
+        assert_eq!(
+            translate_compat_declarations(css, CompatMode::Prince).rewritten,
+            "font-variant: normal !important; -bd-font-variant-features: \"liga\" 0, \"clig\" 0, \"calt\" 0, \"dlig\" 1, \"onum\" 1 !important; font-variant: normal"
+        );
+        for mode in [CompatMode::None, CompatMode::PdfReactor] {
+            assert_eq!(translate_compat_declarations(css, mode).rewritten, css);
+        }
+        let css = "p { font-variant: PRINCE-OPENTYPE(aalt(2), ss013, liga0) }";
+        assert_eq!(
+            translate_compat(css, CompatMode::Prince).rewritten,
+            "p { font-variant: normal; -bd-font-variant-features: \"liga\" 0, \"clig\" 0, \"calt\" 0, \"aalt\" 2, \"ss01\" 3, \"liga\" 0}"
+        );
+        for value in ["", "liga,", "abc", "liga(-1)", "liga(1.5)", "liga junk"] {
+            let css = format!("p {{ font-variant: prince-opentype({value}) }}");
+            assert_eq!(translate_compat(&css, CompatMode::Prince).rewritten, css);
+        }
+    }
+
+    #[test]
+    fn prince_opentype_is_reset_by_font_shorthands() {
+        use style::properties::{PropertyId, declaration_block::parse_style_attribute};
+        use style::stylesheets::{CssRuleType, UrlExtraData};
+
+        let url: UrlExtraData = url::Url::parse("https://example.test/style.css")
+            .unwrap()
+            .into();
+        let property =
+            PropertyId::parse_enabled_for_all_content("-bd-font-variant-features").unwrap();
+        for (css, expected) in [
+            (
+                "font-variant:prince-opentype(liga);font-variant:normal",
+                "normal",
+            ),
+            (
+                "font-variant:prince-opentype(liga);font:20px serif",
+                "normal",
+            ),
+            (
+                "font-variant:prince-opentype(liga)!important;font-variant:normal",
+                "\"liga\" 0, \"clig\" 0, \"calt\" 0, \"liga\"",
+            ),
+            (
+                "font-feature-settings:\"liga\";font-variant:prince-opentype(dlig)",
+                "\"liga\" 0, \"clig\" 0, \"calt\" 0, \"dlig\"",
+            ),
+        ] {
+            let translated = translate_compat_declarations(css, CompatMode::Prince);
+            let block = parse_style_attribute(
+                &translated.rewritten,
+                &url,
+                None,
+                selectors::matching::QuirksMode::NoQuirks,
+                CssRuleType::Style,
+            );
+            let mut value = String::new();
+            block.property_value_to_css(&property, &mut value).unwrap();
+            assert_eq!(value, expected, "{css}");
+        }
+    }
+
+    #[test]
     fn a_declaration_list_takes_the_translation_of_a_declaration_block() {
         for (css, translated) in [
             ("float: top", "float: top; float: -bd-prince-top;"),
@@ -3764,6 +3827,59 @@ fn walk_qualified_rule<'i>(
     }
 }
 
+fn prince_opentype_declaration(value: &str) -> Option<String> {
+    let mut source = ParserInput::new(value);
+    let mut parser = Parser::new(&mut source);
+    parser.expect_function_matching("prince-opentype").ok()?;
+    let features = parser
+        .parse_nested_block(|input| -> Result<Vec<String>, ParseError<'_, ()>> {
+            input.parse_comma_separated(|input| {
+                let (tag, value) = match input.next()?.clone() {
+                    Token::Ident(name) => {
+                        let tag = name.get(..4).ok_or_else(|| input.new_custom_error(()))?;
+                        let suffix = &name[4..];
+                        let value = if suffix.is_empty() {
+                            1
+                        } else {
+                            suffix
+                                .parse::<i32>()
+                                .map_err(|_| input.new_custom_error(()))?
+                        };
+                        (tag.to_string(), value)
+                    },
+                    Token::Function(name) => {
+                        let value =
+                            input.parse_nested_block(|input| Ok(input.expect_integer()?))?;
+                        (name.to_string(), value)
+                    },
+                    _ => return Err(input.new_custom_error(())),
+                };
+                if tag.len() != 4
+                    || !tag.bytes().all(|byte| (0x20..=0x7e).contains(&byte))
+                    || value < 0
+                {
+                    return Err(input.new_custom_error(()));
+                }
+                let mut feature = String::new();
+                cssparser::serialize_string(&tag, &mut feature)
+                    .map_err(|_| input.new_custom_error(()))?;
+                feature.push_str(&format!(" {value}"));
+                Ok(feature)
+            })
+        })
+        .ok()?;
+    let priority = if parser.try_parse(cssparser::parse_important).is_ok() {
+        " !important"
+    } else {
+        ""
+    };
+    parser.expect_exhausted().ok()?;
+    Some(format!(
+        "font-variant: normal{priority}; -bd-font-variant-features: \"liga\" 0, \"clig\" 0, \"calt\" 0, {}{priority}",
+        features.join(", ")
+    ))
+}
+
 fn scan_block<'i>(parser: &mut Parser<'i, '_>, state: &mut TranslateState, full_css: &str) {
     loop {
         parser.skip_whitespace();
@@ -3786,6 +3902,18 @@ fn scan_block<'i>(parser: &mut Parser<'i, '_>, state: &mut TranslateState, full_
                     let value_end = skip_to_decl_end_byte(parser);
                     let value = &full_css[value_start..value_end];
                     let raw_value = value.trim();
+
+                    if state.compat == CompatMode::Prince
+                        && name.eq_ignore_ascii_case("font-variant")
+                        && let Some(replacement) = prince_opentype_declaration(raw_value)
+                    {
+                        state.value_replacements.push(ValueReplacement {
+                            start_byte: decl_start_byte,
+                            end_byte: value_end,
+                            replacement,
+                        });
+                        continue;
+                    }
 
                     if state.compat == CompatMode::Prince
                         && [

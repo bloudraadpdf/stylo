@@ -1326,6 +1326,15 @@ animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-fonts/#propdef-font-feature-settings"
 affects = "layout"
 
+[-bd-font-variant-features]
+type = "FontFeatureSettings"
+initial = "computed::FontFeatureSettings::normal()"
+struct = "font"
+initial_specified_value = "specified::FontFeatureSettings::normal()"
+animation_type = "discrete"
+spec = "Nonstandard (Prince font-variant OpenType features)"
+affects = "layout"
+
 [font-language-override]
 type = "FontLanguageOverride"
 initial = "computed::FontLanguageOverride::normal()"

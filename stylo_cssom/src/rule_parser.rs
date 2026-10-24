@@ -3856,6 +3856,9 @@ mod tests {
             PropertyDeclaration::FontFeatureSettings(value) => {
                 PropertyDeclaration::FontFeatureSettings(value.clone())
             },
+            PropertyDeclaration::BdFontVariantFeatures(value) => {
+                PropertyDeclaration::BdFontVariantFeatures(value.clone())
+            },
             PropertyDeclaration::FontPalette(value) => {
                 PropertyDeclaration::FontPalette(value.clone())
             },

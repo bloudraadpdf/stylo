@@ -3811,13 +3811,13 @@ pub mod font {
     #[cfg(feature = "servo")]
     use crate::derives::Parse;
     use crate::properties::longhands::font_language_override;
-    use crate::properties::longhands::{font_family, font_size};
     use crate::properties::longhands::{
-        font_feature_settings, font_kerning, font_optical_sizing, font_size_adjust, font_style,
-        font_variant_alternates, font_variant_caps, font_variant_east_asian, font_variant_emoji,
-        font_variant_ligatures, font_variant_numeric, font_variant_position,
-        font_variation_settings, font_weight, font_width,
+        _bd_font_variant_features, font_feature_settings, font_kerning, font_optical_sizing,
+        font_size_adjust, font_style, font_variant_alternates, font_variant_caps,
+        font_variant_east_asian, font_variant_emoji, font_variant_ligatures, font_variant_numeric,
+        font_variant_position, font_variation_settings, font_weight, font_width,
     };
+    use crate::properties::longhands::{font_family, font_size};
     #[cfg(feature = "gecko")]
     use crate::values::specified::font::SystemFont;
     use crate::values::specified::font::{
@@ -3867,6 +3867,7 @@ pub mod font {
             font_variant_numeric: font_variant_numeric::get_initial_specified_value(),
             font_variant_position: font_variant_position::get_initial_specified_value(),
             font_feature_settings: font_feature_settings::get_initial_specified_value(),
+            _bd_font_variant_features: _bd_font_variant_features::get_initial_specified_value(),
             font_optical_sizing: font_optical_sizing::get_initial_specified_value(),
             font_variant_caps,
             font_variation_settings: font_variation_settings::get_initial_specified_value(),
@@ -4037,6 +4038,11 @@ pub mod font {
             if self.font_feature_settings != &font_feature_settings::get_initial_specified_value() {
                 return Ok(());
             }
+            if self._bd_font_variant_features
+                != &_bd_font_variant_features::get_initial_specified_value()
+            {
+                return Ok(());
+            }
 
             let font_width = match self.font_width {
                 FontStretch::Keyword(ref kw) => *kw,
@@ -4163,8 +4169,9 @@ pub mod font_variant {
 
     use super::*;
     use crate::properties::longhands::{
-        font_variant_alternates, font_variant_caps, font_variant_east_asian, font_variant_emoji,
-        font_variant_ligatures, font_variant_numeric, font_variant_position,
+        _bd_font_variant_features, font_variant_alternates, font_variant_caps,
+        font_variant_east_asian, font_variant_emoji, font_variant_ligatures, font_variant_numeric,
+        font_variant_position,
     };
     use crate::values::specified::FontVariantLigatures;
 
@@ -4226,6 +4233,7 @@ pub mod font_variant {
             font_variant_east_asian: unwrap_or_initial!(font_variant_east_asian, east_asian),
             font_variant_position: unwrap_or_initial!(font_variant_position, position),
             font_variant_emoji: unwrap_or_initial!(font_variant_emoji, emoji),
+            _bd_font_variant_features: _bd_font_variant_features::get_initial_specified_value(),
         })
     }
 
@@ -4237,6 +4245,11 @@ pub mod font_variant {
         {
             let has_none_ligatures = self.font_variant_ligatures == &FontVariantLigatures::NONE;
 
+            if self._bd_font_variant_features
+                != &_bd_font_variant_features::get_initial_specified_value()
+            {
+                return Ok(());
+            }
             const TOTAL_SUBPROPS: usize = 7;
             let mut nb_normals = 0;
             macro_rules! count_normal {

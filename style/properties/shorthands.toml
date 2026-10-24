@@ -842,7 +842,8 @@ sub_properties = [
   "font-variant-ligatures",
   "font-variant-numeric",
   "font-variant-position",
-  "font-feature-settings"
+  "font-feature-settings",
+  "-bd-font-variant-features"
 ]
 spec = "https://drafts.csswg.org/css-fonts-3/#propdef-font"
 derive_value_info = false
@@ -856,7 +857,7 @@ derive_value_info = false
 rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [font-variant]
-sub_properties = ["font-variant-caps", "font-variant-alternates", "font-variant-east-asian", "font-variant-emoji", "font-variant-ligatures", "font-variant-numeric", "font-variant-position"]
+sub_properties = ["font-variant-caps", "font-variant-alternates", "font-variant-east-asian", "font-variant-emoji", "font-variant-ligatures", "font-variant-numeric", "font-variant-position", "-bd-font-variant-features"]
 spec = "https://drafts.csswg.org/css-fonts-3/#propdef-font-variant"
 
 [font-synthesis]
