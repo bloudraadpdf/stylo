@@ -11,7 +11,9 @@ use crate::error_reporting::ContextualParseError;
 use crate::parser::{Parse, ParserContext};
 use crate::properties::longhands::font_language_override;
 use crate::shared_lock::{SharedRwLockReadGuard, ToCssWithGuard};
-use crate::values::computed::font::{FamilyName, FontStretch};
+use crate::values::computed::font::{
+    FamilyName, FontFamilyNameSyntax, FontStretch, SingleFontFamily,
+};
 use crate::values::generics::font::FontStyle as GenericFontStyle;
 use crate::values::specified::font::{
     AbsoluteFontWeight, FontFeatureSettings, FontStretch as SpecifiedFontStretch,
@@ -91,6 +93,10 @@ mod source_serialization_tests {
             let location = parser.current_source_location();
             let rule = parse_font_face_block(&context, &mut parser, location);
             assert_eq!(rule.sources.is_some(), origin == Origin::UserAgent);
+            assert_eq!(
+                rule.family.as_ref().map(|family| family.name.as_ref()),
+                (origin == Origin::UserAgent).then_some("sans-serif"),
+            );
             let mut serialized = String::new();
             rule.decl_to_css(&mut serialized).unwrap();
             if origin == Origin::UserAgent {
@@ -837,6 +843,21 @@ macro_rules! font_face_descriptors_common {
                input: &mut Parser<'i, 't>,
                _declaration_start: &ParserState,
             ) -> Result<(), ParseError<'i>> {
+                if self.context.in_ua_sheet() && name.eq_ignore_ascii_case("font-family") {
+                    let family = input.parse_entirely(|input| SingleFontFamily::parse(self.context, input))?;
+                    self.rule.family = Some(match family {
+                        SingleFontFamily::FamilyName(family) => family,
+                        SingleFontFamily::Generic(generic) => FamilyName {
+                            name: crate::Atom::from(generic.to_css_string()),
+                            syntax: FontFamilyNameSyntax::Identifiers,
+                        },
+                        #[cfg(feature = "servo")]
+                        SingleFontFamily::ScriptSpecificGeneric(_) => {
+                            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+                        },
+                    });
+                    return Ok(());
+                }
                 if name.eq_ignore_ascii_case("font-width") {
                     let value = input.parse_entirely(|input| FontStretchRange::parse(self.context, input))?;
                     self.rule.stretch = Some(value);
