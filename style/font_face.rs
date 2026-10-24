@@ -19,6 +19,7 @@ use crate::values::specified::font::{
 };
 use crate::values::specified::url::SpecifiedUrl;
 use crate::values::specified::{Angle, NonNegativePercentage};
+use crate::values::AtomIdent;
 use cssparser::{
     match_ignore_ascii_case, AtRuleParser, CowRcStr, DeclarationParser, Parser, ParserState,
     QualifiedRuleParser, RuleBodyItemParser, RuleBodyParser, SourceLocation, UnicodeRange,
@@ -36,6 +37,8 @@ pub enum Source {
     Url(UrlSource),
     /// A `local()` source.
     Local(FamilyName),
+    /// A family lookup in a Prince user-agent font stylesheet.
+    PrinceLookup(FamilyName),
 }
 
 impl ToCss for Source {
@@ -43,14 +46,14 @@ impl ToCss for Source {
     where
         W: fmt::Write,
     {
-        match self {
-            Self::Url(url) => url.to_css(dest),
-            Self::Local(name) => {
-                dest.write_str("local(")?;
-                cssparser::serialize_string(&name.name.to_string(), dest)?;
-                dest.write_char(')')
-            },
-        }
+        let (function, name) = match self {
+            Self::Url(url) => return url.to_css(dest),
+            Self::Local(name) => ("local(", name),
+            Self::PrinceLookup(name) => ("prince-lookup(", name),
+        };
+        dest.write_str(function)?;
+        cssparser::serialize_string(name.name.as_ref(), dest)?;
+        dest.write_char(')')
     }
 }
 
@@ -59,6 +62,45 @@ mod source_serialization_tests {
     use super::*;
     use crate::values::computed::font::FontFamilyNameSyntax;
     use crate::Atom;
+
+    #[test]
+    fn prince_font_face_descriptors_are_ua_only() {
+        use crate::{
+            context::QuirksMode,
+            stylesheets::{Origin, UrlExtraData},
+        };
+        use cssparser::ParserInput;
+        use style_traits::ParsingMode;
+
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        for origin in [Origin::UserAgent, Origin::Author] {
+            let context = ParserContext::new(
+                origin,
+                &url_data,
+                None,
+                ParsingMode::DEFAULT,
+                QuirksMode::NoQuirks,
+                Default::default(),
+                None,
+                None,
+            );
+            let mut input = ParserInput::new(
+                "font-family: sans-serif; src: prince-lookup(\"Font Face\"); prince-font-lang: zh-TW zh-Hant;",
+            );
+            let mut parser = Parser::new(&mut input);
+            let location = parser.current_source_location();
+            let rule = parse_font_face_block(&context, &mut parser, location);
+            assert_eq!(rule.sources.is_some(), origin == Origin::UserAgent);
+            let mut serialized = String::new();
+            rule.decl_to_css(&mut serialized).unwrap();
+            if origin == Origin::UserAgent {
+                assert!(serialized.contains("src: prince-lookup(\"Font Face\")"));
+                assert!(serialized.contains("prince-font-lang: zh-TW zh-Hant"));
+            } else {
+                assert!(!serialized.contains("prince-font-lang"));
+            }
+        }
+    }
 
     #[test]
     fn local_source_serializes_its_name_as_a_string() {
@@ -337,7 +379,11 @@ impl Parse for FontWeightRange {
             .try_parse(|input| input.expect_ident_matching("auto"))
             .is_ok()
         {
-            return Ok(Self(AbsoluteFontWeight::Normal, AbsoluteFontWeight::Normal, true));
+            return Ok(Self(
+                AbsoluteFontWeight::Normal,
+                AbsoluteFontWeight::Normal,
+                true,
+            ));
         }
         fn is_resolvable(value: &AbsoluteFontWeight) -> bool {
             match value {
@@ -513,10 +559,7 @@ impl Parse for FontStyle {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        if input
-            .try_parse(|i| i.expect_ident_matching("auto"))
-            .is_ok()
-        {
+        if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
             return Ok(FontStyle::Auto);
         }
         // We parse 'normal' explicitly here to distinguish it from 'oblique 0deg',
@@ -655,6 +698,15 @@ impl Parse for Source {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Source, ParseError<'i>> {
+        if context.in_ua_sheet()
+            && input
+                .try_parse(|input| input.expect_function_matching("prince-lookup"))
+                .is_ok()
+        {
+            return input
+                .parse_nested_block(|input| FamilyName::parse(context, input))
+                .map(Source::PrinceLookup);
+        }
         if input
             .try_parse(|input| input.expect_function_matching("local"))
             .is_ok()
@@ -699,6 +751,29 @@ impl Parse for Source {
             format_hint,
             tech_flags,
         }))
+    }
+}
+
+/// Content languages served by a Prince user-agent font face.
+#[derive(Clone, Debug, PartialEq, ToCss, ToShmem)]
+pub struct PrinceFontLanguages(#[css(iterable)] pub Vec<AtomIdent>);
+
+impl Parse for PrinceFontLanguages {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if !context.in_ua_sheet() {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+        let mut languages = Vec::new();
+        loop {
+            languages.push(AtomIdent::from(input.expect_ident()?.as_ref()));
+            if input.is_exhausted() {
+                break;
+            }
+        }
+        Ok(Self(languages))
     }
 }
 
@@ -846,6 +921,9 @@ font_face_descriptors! {
         "src" sources / mSrc: SourceList,
     ]
     optional descriptors = [
+        /// Content languages for a Prince user-agent fallback face.
+        "prince-font-lang" prince_languages / mPrinceLanguages: PrinceFontLanguages,
+
         /// The style of this font face.
         "font-style" style / mStyle: FontStyle,
 
