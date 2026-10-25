@@ -3861,6 +3861,7 @@ affects = "paint"
 # the moegoe fork carries an explicit longhand here because it
 # is otherwise Gecko-gated.
 [image-resolution]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 boxed = true
 type = "BdImageResolution"
 initial = "computed::BdImageResolution::one_dppx()"
@@ -3871,6 +3872,7 @@ animation_type = "none"
 affects = "paint"
 
 [-bd-image-resolution]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 boxed = true
 type = "BdImageResolution"
 initial = "computed::BdImageResolution::one_dppx()"

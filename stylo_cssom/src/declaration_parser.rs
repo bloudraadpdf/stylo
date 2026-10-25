@@ -1813,6 +1813,17 @@ pub fn inline_style_declarations_with_importance(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn page_background_image_resolutions_remain_typed() {
+        for property in ["image-resolution", "-bd-image-resolution"] {
+            let block = super::parse_cssom_declaration_block(
+                &format!("{property}: 50dpi"),
+                super::CssomDeclarationContext::Page,
+            );
+            assert!(!block.as_typed().is_empty(), "{property}");
+        }
+    }
+
     use super::*;
 
     #[test]
