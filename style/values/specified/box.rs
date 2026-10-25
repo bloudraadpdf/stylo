@@ -373,7 +373,7 @@ impl Display {
 
     /// Make a raw display value from <display-outside> and <display-inside> values.
     #[inline]
-    const fn new(outside: DisplayOutside, inside: DisplayInside) -> Self {
+    pub(crate) const fn new(outside: DisplayOutside, inside: DisplayInside) -> Self {
         Self((outside as u16) << Self::OUTSIDE_SHIFT | inside as u16)
     }
 

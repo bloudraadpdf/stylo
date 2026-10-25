@@ -145,6 +145,22 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
     where
         E: TElement,
     {
+        #[cfg(feature = "servo")]
+        if self.style.device.prince_math_display
+            && self.style.pseudo.is_none()
+            && self.style.get_box().clone_display() == Display::Block
+            && element.is_some_and(|element| {
+                element.is_mathml_element() && element.local_name().as_ref() == "math"
+            })
+        {
+            use crate::values::specified::box_::{DisplayInside, DisplayOutside};
+            self.style
+                .mutate_box()
+                .set_display(Display::new(DisplayOutside::Block, DisplayInside::Math));
+            self.style.mutate_font().set_math_style(
+                crate::properties::longhands::math_style::computed_value::T::Normal,
+            );
+        }
         let display = self.style.get_box().clone_display();
         let Some(outside) = display.math_outside() else {
             return;

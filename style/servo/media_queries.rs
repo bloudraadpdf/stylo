@@ -169,6 +169,8 @@ pub struct Device {
     default_computed_values: Arc<ComputedValues>,
     /// The lengths of the line width keywords.
     line_width_keywords: LineWidthKeywords,
+    /// Whether block MathML roots use Prince's display-math semantics.
+    pub prince_math_display: bool,
 }
 
 impl Device {
@@ -210,6 +212,7 @@ impl Device {
             font_metrics_provider,
             default_computed_values,
             line_width_keywords: LineWidthKeywords::css(),
+            prince_math_display: false,
         }
     }
 
