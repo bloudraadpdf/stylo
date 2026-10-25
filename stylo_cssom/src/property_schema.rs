@@ -74,3 +74,13 @@ fn schema_rows_follow_the_native_property_order() {
         assert_eq!(row.name, name);
     }
 }
+
+#[test]
+fn all_schema_retains_native_expansion_order() {
+    let native: Vec<_> = style::properties::ShorthandId::All.longhands()
+        .map(|id| id.name()).collect();
+    let schema = stylo_cssom_model::property_schema("all").unwrap();
+    let enabled: Vec<_> = schema.shorthand_expansion.iter().copied()
+        .filter(|name| native.contains(name)).collect();
+    assert_eq!(enabled, native);
+}
