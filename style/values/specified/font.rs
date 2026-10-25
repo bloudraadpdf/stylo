@@ -954,6 +954,8 @@ impl FontSize {
                 .compose(factor)
         };
         let mut info = KeywordInfo::none();
+        #[cfg(feature = "servo")]
+        let mut math_pre_script_size = None;
         let size = match *self {
             FontSize::Length(LengthPercentage::Length(ref l)) => {
                 if let NoCalcLength::FontRelative(ref value) = *l {
@@ -996,6 +998,19 @@ impl FontSize {
                     #[cfg(feature = "servo")]
                     let size = {
                         info = KeywordInfo::none();
+                        let parent = context.builder.get_parent_font();
+                        math_pre_script_size = Some(
+                            if parent.clone_math_depth()
+                                == context.builder.get_font().clone_math_depth()
+                            {
+                                parent
+                                    .font_size
+                                    .math_pre_script_size
+                                    .unwrap_or(parent.font_size.finite_used_size())
+                            } else {
+                                parent.font_size.finite_used_size()
+                            },
+                        );
                         let metrics = context.query_font_metrics(
                             FontBaseSize::InheritedStyle,
                             crate::font_metrics::FontMetricsOrientation::Horizontal,
@@ -1050,6 +1065,8 @@ impl FontSize {
             computed_size: NonNegativeFiniteLength::new_censored(size),
             used_size: NonNegativeFiniteLength::new_censored(size),
             keyword_info: info,
+            #[cfg(feature = "servo")]
+            math_pre_script_size,
         }
     }
 }
@@ -2297,6 +2314,9 @@ mod tests {
         let device = crate::test_support::test_device();
         let mut font = Font::initial_values();
         font.font_size = computed::FontSize::from_animated_value(Length::new(100.0));
+        font.font_size.used_size = NonNegativeFiniteLength::new_censored(Length::new(80.0));
+        font.font_size.math_pre_script_size =
+            Some(NonNegativeFiniteLength::new_censored(Length::new(120.0)));
         let parent = ComputedValues::initial_values_with_font_override(font);
         for (depth, expected) in [(0, 100.0), (1, 71.0), (2, 50.41), (-1, 100.0 / 0.71)] {
             let mut conditions = RuleCacheConditions::default();
@@ -2311,6 +2331,10 @@ mod tests {
                 .to_computed_value(&context);
             assert!((size.computed_size().px() - expected).abs() < 0.001);
             assert_eq!(size.keyword_info.kw, FontSizeKeyword::None);
+            assert_eq!(
+                size.math_pre_script_size.unwrap().px(),
+                if depth == 0 { 120.0 } else { 80.0 }
+            );
         }
     }
 

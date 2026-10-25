@@ -270,6 +270,10 @@ pub struct FontSize {
     /// constrained by other factors like minimum font-size settings and so on.
     #[css(skip)]
     pub used_size: NonNegativeFiniteLength,
+    /// Used size before the current automatic mathematical script reduction.
+    #[cfg(feature = "servo")]
+    #[css(skip)]
+    pub math_pre_script_size: Option<NonNegativeFiniteLength>,
     /// If derived from a keyword, the keyword and additional transformations applied to it
     #[css(skip)]
     pub keyword_info: KeywordInfo,
@@ -311,6 +315,10 @@ impl FontSize {
                 zoom.zoom(self.used_size.px()),
             )),
             keyword_info: self.keyword_info,
+            #[cfg(feature = "servo")]
+            math_pre_script_size: self.math_pre_script_size.map(|size| {
+                NonNegativeFiniteLength::new_censored(Length::new(zoom.zoom(size.px())))
+            }),
         }
     }
 
@@ -325,6 +333,8 @@ impl FontSize {
                 specified::FONT_MEDIUM_PX,
             )),
             keyword_info: KeywordInfo::medium(),
+            #[cfg(feature = "servo")]
+            math_pre_script_size: None,
         }
     }
 }
@@ -343,6 +353,8 @@ impl ToAnimatedValue for FontSize {
             computed_size: NonNegativeFiniteLength::new_censored(animated),
             used_size: NonNegativeFiniteLength::new_censored(animated),
             keyword_info: KeywordInfo::none(),
+            #[cfg(feature = "servo")]
+            math_pre_script_size: None,
         }
     }
 }
@@ -361,6 +373,8 @@ impl ToResolvedValue for FontSize {
         Self {
             computed_size,
             used_size: computed_size,
+            #[cfg(feature = "servo")]
+            math_pre_script_size: None,
             keyword_info: KeywordInfo::none(),
         }
     }

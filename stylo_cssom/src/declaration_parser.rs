@@ -30,6 +30,14 @@ pub fn math_script_min_size_presentation_hint(value: &str) -> Option<PropertyDec
         .map(PropertyDeclaration::XMathScriptMinSize)
 }
 
+pub fn math_size_presentation_hint(value: &str) -> Option<PropertyDeclaration> {
+    parse_fragment_with(
+        value,
+        style::values::specified::NonNegativeLengthPercentage::parse,
+    )
+    .map(|value| PropertyDeclaration::FontSize(style::values::specified::FontSize::Length(value.0)))
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct DeclarationInput<'a>(&'a str);
 
@@ -1806,6 +1814,19 @@ pub fn inline_style_declarations_with_importance(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn math_size_accepts_only_nonnegative_lengths_and_percentages() {
+        for value in ["0pt", "16pt", "1em", "50%", "calc(1em + 2pt)"] {
+            assert!(matches!(
+                math_size_presentation_hint(value),
+                Some(PropertyDeclaration::FontSize(_))
+            ));
+        }
+        for value in ["", "large", "math", "inherit", "-1pt", "16pt; color:red"] {
+            assert!(math_size_presentation_hint(value).is_none(), "{value}");
+        }
+    }
 
     #[test]
     fn math_minimum_is_a_typed_presentation_hint_not_a_css_property() {
