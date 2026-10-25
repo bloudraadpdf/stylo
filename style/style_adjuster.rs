@@ -146,7 +146,7 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
         E: TElement,
     {
         #[cfg(feature = "servo")]
-        if self.style.device.prince_math_display
+        if self.style.device.prince_math_compat
             && self.style.pseudo.is_none()
             && self.style.get_box().clone_display() == Display::Block
             && element.is_some_and(|element| {
@@ -185,6 +185,23 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
             Some(_) | None => outside.flow(),
         };
         self.style.mutate_box().set_display(adjusted);
+    }
+
+    #[cfg(feature = "servo")]
+    fn adjust_for_math_minimum<E: TElement>(&mut self, element: Option<E>) {
+        if !self.style.device.prince_math_compat
+            || self.style.pseudo.is_some()
+            || !element.is_some_and(|element| element.is_mathml_element())
+        {
+            return;
+        }
+        let font = self.style.get_font();
+        let mut size = font.clone_font_size();
+        size.used_size = crate::values::computed::NonNegativeFiniteLength::new_censored(
+            size.computed_size()
+                .max(font.clone__x_math_script_min_size()),
+        );
+        self.style.mutate_font().set_font_size(size);
     }
 
     /// <https://fullscreen.spec.whatwg.org/#new-stacking-layer>
@@ -1156,6 +1173,8 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
         }
         self.adjust_for_top_layer();
         self.adjust_for_math_display(element);
+        #[cfg(feature = "servo")]
+        self.adjust_for_math_minimum(element);
         self.blockify_if_necessary(layout_parent_style, self.skip_item_display_fixup(element));
         #[cfg(feature = "gecko")]
         self.adjust_for_webkit_line_clamp();

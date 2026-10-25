@@ -25,6 +25,11 @@ use crate::{
 pub mod compatibility;
 pub mod mutation;
 
+pub fn math_script_min_size_presentation_hint(value: &str) -> Option<PropertyDeclaration> {
+    parse_fragment_with(value, style::values::specified::MathScriptMinSize::parse)
+        .map(PropertyDeclaration::XMathScriptMinSize)
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct DeclarationInput<'a>(&'a str);
 
@@ -1801,6 +1806,21 @@ pub fn inline_style_declarations_with_importance(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn math_minimum_is_a_typed_presentation_hint_not_a_css_property() {
+        for value in ["0pt", "12pt", "1em", "50%"] {
+            assert!(matches!(
+                math_script_min_size_presentation_hint(value),
+                Some(PropertyDeclaration::XMathScriptMinSize(_))
+            ));
+        }
+        for value in ["", "invalid", "-1pt", "8pt; color:red"] {
+            assert!(math_script_min_size_presentation_hint(value).is_none());
+        }
+        let block = parse_inline_style_block("-x-math-script-min-size:0pt");
+        assert!(block.0.declarations().is_empty());
+    }
 
     #[test]
     fn revert_rule_is_preserved_as_a_css_wide_declared_value() {

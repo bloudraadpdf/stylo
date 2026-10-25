@@ -144,6 +144,17 @@ has_effect_on_gecko_scrollbars = false
 spec = "Internal (not web-exposed)"
 affects = "layout"
 
+[-x-math-script-min-size]
+type = "MathScriptMinSize"
+initial = "specified::MozScriptMinSize::get_initial_value()"
+struct = "font"
+engine = "servo"
+animation_type = "none"
+enabled_in = ""
+spec = "Internal MathML scriptminsize presentation hint"
+has_effect_on_gecko_scrollbars = false
+affects = "layout"
+
 [accent-color]
 type = "ColorOrAuto"
 initial = "generics::color::ColorOrAuto::Auto"

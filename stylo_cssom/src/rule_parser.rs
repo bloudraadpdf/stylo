@@ -4075,6 +4075,9 @@ mod tests {
                 PropertyDeclaration::WordSpacing(value.clone())
             },
             PropertyDeclaration::XLang(value) => PropertyDeclaration::XLang(value.clone()),
+            PropertyDeclaration::XMathScriptMinSize(value) => {
+                PropertyDeclaration::XMathScriptMinSize(value.clone())
+            },
             PropertyDeclaration::ZIndex(value) => PropertyDeclaration::ZIndex(value.clone()),
             PropertyDeclaration::Zoom(value) => PropertyDeclaration::Zoom(value.clone()),
             PropertyDeclaration::BorderImageSlice(value) => {

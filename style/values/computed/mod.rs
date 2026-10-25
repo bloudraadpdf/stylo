@@ -172,7 +172,9 @@ pub use self::font::{
 };
 pub use self::font::{FontVariantAlternates, FontWeight};
 pub use self::font::{FontVariantEastAsian, FontVariationSettings};
-pub use self::font::{MathDepth, MozScriptMinSize, MozScriptSizeMultiplier, XLang, XTextScale};
+pub use self::font::{
+    MathDepth, MathScriptMinSize, MozScriptMinSize, MozScriptSizeMultiplier, XLang, XTextScale,
+};
 pub use self::image::{Gradient, Image, ImageRendering, LineDirection};
 pub use self::length::{CSSPixelLength, FiniteLength, NonNegativeFiniteLength, NonNegativeLength};
 pub use self::length::{Length, LengthOrNumber, LengthPercentage, NonNegativeLengthOrNumber};

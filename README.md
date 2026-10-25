@@ -20,6 +20,9 @@ Their text-justify declarations retain the specified keyword after cascade.
 An opt-in Prince display setting retains mathematical layout for MathML roots
 with `display: block` and sets display style before their children cascade.
 The default CSS behaviour is unchanged. Moegoe uses this in Prince mode.
+The same setting applies the inherited MathML script minimum to the used
+font size, preserving the computed size for later script scaling. A typed
+`mstyle` presentation hint resolves relative minimums before inheritance.
 
 First-line reparenting recomputes font-dependent reset values when the child
 font size changes. The normal parent supplies reset and custom-property

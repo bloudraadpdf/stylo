@@ -983,8 +983,11 @@ impl FontSize {
             },
             FontSize::Keyword(i) => {
                 if i.kw.is_math() {
-                    info = compose_keyword(1.);
-                    info.kw = i.kw;
+                    #[cfg(feature = "gecko")]
+                    {
+                        info = compose_keyword(1.);
+                        info.kw = i.kw;
+                    }
                     let size = FontRelativeLength::Em(1.).to_computed_value(
                         context,
                         base_size,
@@ -2070,6 +2073,36 @@ impl Parse for MozScriptMinSize {
             "Should be set directly by presentation attributes only."
         );
         Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
+    }
+}
+
+/// An inherited MathML minimum resolved at the element declaring it.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
+pub struct MathScriptMinSize(pub NonNegativeLengthPercentage);
+
+impl Parse for MathScriptMinSize {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        Ok(Self(NonNegativeLengthPercentage::parse(context, input)?))
+    }
+}
+
+impl ToComputedValue for MathScriptMinSize {
+    type ComputedValue = Length;
+
+    fn to_computed_value(&self, context: &Context) -> Length {
+        self.0
+            .to_computed_value(context)
+            .0
+            .resolve(context.builder.get_font().clone_font_size().computed_size())
+    }
+
+    fn from_computed_value(value: &Length) -> Self {
+        Self(NonNegative(LengthPercentage::from_computed_value(
+            &crate::values::computed::LengthPercentage::new_length(*value),
+        )))
     }
 }
 
