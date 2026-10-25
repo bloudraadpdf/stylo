@@ -157,7 +157,7 @@ fn translate_compat_with_registrations<'css>(
         None => f2_at_rule_working,
     };
 
-    let cmyk_rewritten = rewrite_cmyk_function_tokens(f2_fn_working.as_ref(), compat);
+    let cmyk_rewritten = rewrite_print_function_tokens(f2_fn_working.as_ref(), compat);
     let cmyk_working: Cow<'_, str> = match cmyk_rewritten {
         Some(owned) => Cow::Owned(owned),
         None => f2_fn_working,
@@ -1925,44 +1925,60 @@ fn escape_css_ident(name: &str) -> String {
     out
 }
 
-fn rewrite_cmyk_function_tokens(css: &str, compat: CompatMode) -> Option<String> {
+fn rewrite_print_function_tokens(css: &str, compat: CompatMode) -> Option<String> {
     if !matches!(compat, CompatMode::Prince | CompatMode::PdfReactor) {
         return None;
     }
     let mut input = ParserInput::new(css);
     let mut parser = Parser::new(&mut input);
     let mut ranges = Vec::new();
-    collect_cmyk_functions(&mut parser, &mut ranges);
+    collect_print_function_aliases(&mut parser, compat, &mut ranges);
     if ranges.is_empty() {
         return None;
     }
     let mut out = String::with_capacity(css.len() + 7 * ranges.len());
     let mut cursor = 0;
-    for (start, end) in ranges {
+    for (start, end, replacement) in ranges {
         out.push_str(&css[cursor..start]);
-        out.push_str("device-cmyk(");
+        out.push_str(replacement);
         cursor = end;
     }
     out.push_str(&css[cursor..]);
     Some(out)
 }
 
-fn collect_cmyk_functions<'i>(parser: &mut Parser<'i, '_>, ranges: &mut Vec<(usize, usize)>) {
+fn collect_print_function_aliases<'i>(
+    parser: &mut Parser<'i, '_>,
+    compat: CompatMode,
+    ranges: &mut Vec<(usize, usize, &'static str)>,
+) {
     loop {
         let start = parser.position().byte_index();
         let Ok(token) = parser.next_including_whitespace_and_comments() else {
             break;
         };
         let token = token.clone();
-        if matches!(&token, Token::Function(name) if name.eq_ignore_ascii_case("cmyk")) {
-            ranges.push((start, parser.position().byte_index()));
+        if let Token::Function(name) = &token {
+            let replacement = if name.eq_ignore_ascii_case("cmyk") {
+                Some("device-cmyk(")
+            } else if compat == CompatMode::Prince && name.eq_ignore_ascii_case("prince-script") {
+                Some("-bd-script(")
+            } else {
+                None
+            };
+            if let Some(replacement) = replacement {
+                ranges.push((start, parser.position().byte_index(), replacement));
+            }
         }
         if matches!(
             token,
-            Token::Function(_) | Token::ParenthesisBlock | Token::SquareBracketBlock | Token::CurlyBracketBlock
+            Token::Function(_)
+                | Token::ParenthesisBlock
+                | Token::SquareBracketBlock
+                | Token::CurlyBracketBlock
         ) {
             let _ = parser.parse_nested_block(|inner| -> Result<(), ParseError<'i, ()>> {
-                collect_cmyk_functions(inner, ranges);
+                collect_print_function_aliases(inner, compat, ranges);
                 Ok(())
             });
         }
@@ -2246,6 +2262,18 @@ pub fn project_compat_root(
 #[cfg(test)]
 mod prince_rewrite_tests {
     use super::{CompatMode, translate_compat, translate_compat_declarations};
+
+    #[test]
+    fn script_content_functions_require_prince_compatibility() {
+        let css = r#"p::before { content: prince-script(label, counter(item)) ':'; --text: "prince-script("; /* prince-script( */ }"#;
+        assert_eq!(
+            translate_compat(css, CompatMode::Prince).rewritten,
+            css.replace("content: prince-script(", "content: -bd-script(")
+        );
+        for mode in [CompatMode::None, CompatMode::PdfReactor] {
+            assert_eq!(translate_compat(css, mode).rewritten, css);
+        }
+    }
 
     #[test]
     fn cmyk_alias_requires_print_compatibility_and_function_tokens() {
@@ -4006,7 +4034,8 @@ fn scan_block<'i>(parser: &mut Parser<'i, '_>, state: &mut TranslateState, full_
                         state.value_replacements.push(ValueReplacement {
                             start_byte: decl_start_byte,
                             end_byte: value_start + value.trim_end().len(),
-                            replacement: "display: block; float: -bd-prince-page-footnote".to_string(),
+                            replacement: "display: block; float: -bd-prince-page-footnote"
+                                .to_string(),
                         });
                     }
 

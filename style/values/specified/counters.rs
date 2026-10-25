@@ -432,6 +432,25 @@ fn parse_content_item<'i, 't>(
         )),
         Token::Function(ref name) => {
             match_ignore_ascii_case! { &name,
+                "-bd-script" if allow_counter_functions => input.parse_nested_block(|input| {
+                    let name = CustomIdent::parse(input, &[])?;
+                    let mut arguments = Vec::new();
+                    while !input.is_exhausted() {
+                        input.expect_comma()?;
+                        let argument = parse_content_item(context, input, false, true, false, false, false, false)?;
+                        arguments.push(match argument {
+                            generics::ContentItem::String(value) => generics::ScriptContentArgument::String(value),
+                            generics::ContentItem::Counter(name, style) => generics::ScriptContentArgument::Counter(name, style),
+                            generics::ContentItem::Counters(name, separator, style) => generics::ScriptContentArgument::Counters(name, separator, style),
+                            generics::ContentItem::Attr(value) => generics::ScriptContentArgument::Attr(value),
+                            _ => return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError)),
+                        });
+                    }
+                    Ok(generics::ContentItem::ScriptFunction(generics::ScriptContentFunction {
+                        name,
+                        arguments: arguments.into(),
+                    }))
+                }),
                 "counter" if allow_counter_functions => input.parse_nested_block(|input| {
                     let name = CustomIdent::parse(input, &[])?;
                     let style = Content::parse_counter_style(context, input)?;
@@ -1033,5 +1052,30 @@ mod tests {
             },
             other => panic!("expected counter() content item, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn script_content_retains_typed_text_arguments() {
+        let _guard = pref_lock().lock().unwrap();
+        let _attr_pref = BoolPrefGuard::set("layout.css.attr.enabled", true);
+        let content = parse_content_value(
+            r#"-bd-script(label, counter(item), counters(section, "."), attr(data-label), "suffix") ":""#,
+        );
+        let Content::Items(items) = content else {
+            panic!("content items")
+        };
+        let generics::ContentItem::ScriptFunction(function) = &items.items[0] else {
+            panic!("script function");
+        };
+        assert_eq!(function.name.0.as_ref(), "label");
+        assert_eq!(function.arguments.len(), 4);
+        assert_eq!(
+            function.to_css_string(),
+            r#"-bd-script(label, counter(item), counters(section, "."), attr(data-label), "suffix")"#
+        );
+        assert!(matches!(
+            function.arguments[0],
+            generics::ScriptContentArgument::Counter(..)
+        ));
     }
 }

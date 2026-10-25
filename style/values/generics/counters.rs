@@ -506,6 +506,69 @@ impl<Image> Content<Image> {
     }
 }
 
+/// Text arguments passed to a registered generated-content function.
+#[derive(
+    Clone,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    PartialEq,
+    ToComputedValue,
+    SpecifiedValueInfo,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+)]
+#[repr(u8)]
+pub enum ScriptContentArgument {
+    /// Literal text.
+    String(crate::OwnedStr),
+    /// A formatted counter value.
+    #[css(comma, function)]
+    Counter(CustomIdent, #[css(skip_if = "is_decimal")] CounterStyleType),
+    /// Formatted counter values joined by a separator.
+    #[css(comma, function)]
+    Counters(
+        CustomIdent,
+        crate::OwnedStr,
+        #[css(skip_if = "is_decimal")] CounterStyleType,
+    ),
+    /// An element attribute.
+    Attr(Attr),
+}
+
+/// A registered generated-content function and its text arguments.
+#[derive(
+    Clone,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    PartialEq,
+    ToComputedValue,
+    SpecifiedValueInfo,
+    ToResolvedValue,
+    ToShmem,
+)]
+#[repr(C)]
+pub struct ScriptContentFunction {
+    /// The registered function name.
+    pub name: CustomIdent,
+    /// Arguments resolved at the content's counter scope.
+    pub arguments: crate::OwnedSlice<ScriptContentArgument>,
+}
+
+impl ToCss for ScriptContentFunction {
+    fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        dest.write_str("-bd-script(")?;
+        self.name.to_css(dest)?;
+        for argument in self.arguments.iter() {
+            dest.write_str(", ")?;
+            argument.to_css(dest)?;
+        }
+        dest.write_str(")")
+    }
+}
+
 /// Items for the `content` property.
 #[derive(
     Clone,
@@ -523,6 +586,8 @@ impl<Image> Content<Image> {
 pub enum GenericContentItem<I> {
     /// Literal string content.
     String(crate::OwnedStr),
+    /// A registered generated-content function.
+    ScriptFunction(ScriptContentFunction),
     /// `counter(name, style)`.
     #[css(comma, function)]
     Counter(CustomIdent, #[css(skip_if = "is_decimal")] CounterStyleType),
