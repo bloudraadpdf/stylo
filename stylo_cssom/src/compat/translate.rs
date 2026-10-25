@@ -2304,6 +2304,25 @@ mod prince_rewrite_tests {
     }
 
     #[test]
+    fn prince_line_stacking_aliases_require_prince_compatibility() {
+        for property in [
+            "line-stacking-strategy",
+            "prince-line-stacking-strategy",
+            "-prince-line-stacking-strategy",
+        ] {
+            let css = format!("p {{ {property}: block-line-height }}");
+            assert!(
+                translate_compat(&css, CompatMode::Prince)
+                    .rewritten
+                    .contains("-bd-line-stacking-strategy: block-line-height;")
+            );
+            for mode in [CompatMode::None, CompatMode::PdfReactor] {
+                assert_eq!(translate_compat(&css, mode).rewritten, css);
+            }
+        }
+    }
+
+    #[test]
     fn prince_outside_margin_reaches_a_style_declaration() {
         let css = "h1 { margin-outside: -60mm }";
         let translated = translate_compat(css, CompatMode::Prince);
@@ -6224,7 +6243,7 @@ fn translate_property(lower_property: &str, raw_value: &str) -> Translated {
             native_property: "-bd-baseline-grid",
             native_value: raw_value.trim().to_string(),
         },
-        "-prince-line-stacking-strategy" => Translated::Native {
+        "line-stacking-strategy" | "-prince-line-stacking-strategy" => Translated::Native {
             native_property: "-bd-line-stacking-strategy",
             native_value: raw_value.trim().to_ascii_lowercase(),
         },
@@ -7373,6 +7392,7 @@ pub(crate) fn required_compat_for(lower_property: &str) -> Option<CompatMode> {
         | "-prince-tab-size"
         | "-prince-border-clip"
         | "-prince-baseline-grid"
+        | "line-stacking-strategy"
         | "-prince-line-stacking-strategy"
         | "-prince-pdf-destination"
         | "-prince-pdf-page-label"
