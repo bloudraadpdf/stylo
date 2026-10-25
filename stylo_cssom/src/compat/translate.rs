@@ -2256,6 +2256,18 @@ mod prince_rewrite_tests {
     use super::{CompatMode, translate_compat, translate_compat_declarations};
 
     #[test]
+    fn prince_hyphens_aliases_require_prince_compatibility() {
+        for property in ["prince-hyphens", "-prince-hyphens"] {
+            let css = format!("p {{ {property}: auto }}");
+            let translated = translate_compat(&css, CompatMode::Prince);
+            assert!(translated.rewritten.contains("hyphens: auto;"));
+            for mode in [CompatMode::None, CompatMode::PdfReactor] {
+                assert_eq!(translate_compat(&css, mode).rewritten, css);
+            }
+        }
+    }
+
+    #[test]
     fn prince_outside_margin_reaches_a_style_declaration() {
         let css = "h1 { margin-outside: -60mm }";
         let translated = translate_compat(css, CompatMode::Prince);
@@ -6245,6 +6257,10 @@ fn translate_property(lower_property: &str, raw_value: &str) -> Translated {
             native_value: raw_value.trim().to_ascii_lowercase(),
         },
 
+        "-prince-hyphens" => Translated::Native {
+            native_property: "hyphens",
+            native_value: raw_value.trim().to_string(),
+        },
         "-prince-hyphenate-character" => Translated::Native {
             native_property: "hyphenate-character",
             native_value: raw_value.trim().to_string(),
@@ -7328,6 +7344,7 @@ pub(crate) fn required_compat_for(lower_property: &str) -> Option<CompatMode> {
         | "-prince-bookmark-level"
         | "-prince-bookmark-state"
         | "-prince-clear"
+        | "-prince-hyphens"
         | "-prince-hyphenate-character"
         | "-prince-text-justify"
         | "-prince-trim"
