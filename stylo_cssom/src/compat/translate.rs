@@ -157,7 +157,7 @@ fn translate_compat_with_registrations<'css>(
         None => f2_at_rule_working,
     };
 
-    let cmyk_rewritten = rewrite_pdfreactor_cmyk_function_tokens(f2_fn_working.as_ref(), compat);
+    let cmyk_rewritten = rewrite_cmyk_function_tokens(f2_fn_working.as_ref(), compat);
     let cmyk_working: Cow<'_, str> = match cmyk_rewritten {
         Some(owned) => Cow::Owned(owned),
         None => f2_fn_working,
@@ -1925,56 +1925,48 @@ fn escape_css_ident(name: &str) -> String {
     out
 }
 
-fn rewrite_pdfreactor_cmyk_function_tokens(css: &str, compat: CompatMode) -> Option<String> {
-    if !matches!(compat, CompatMode::PdfReactor) {
+fn rewrite_cmyk_function_tokens(css: &str, compat: CompatMode) -> Option<String> {
+    if !matches!(compat, CompatMode::Prince | CompatMode::PdfReactor) {
         return None;
     }
-
-    const NEEDLE: &[u8] = b"cmyk(";
-    if !css
-        .as_bytes()
-        .windows(NEEDLE.len())
-        .any(|w| w.eq_ignore_ascii_case(NEEDLE))
-    {
+    let mut input = ParserInput::new(css);
+    let mut parser = Parser::new(&mut input);
+    let mut ranges = Vec::new();
+    collect_cmyk_functions(&mut parser, &mut ranges);
+    if ranges.is_empty() {
         return None;
     }
+    let mut out = String::with_capacity(css.len() + 7 * ranges.len());
+    let mut cursor = 0;
+    for (start, end) in ranges {
+        out.push_str(&css[cursor..start]);
+        out.push_str("device-cmyk(");
+        cursor = end;
+    }
+    out.push_str(&css[cursor..]);
+    Some(out)
+}
 
-    const DEVICE_PREFIX: &[u8] = b"device-";
-
-    let bytes = css.as_bytes();
-    let mut out = String::with_capacity(css.len() + 32);
-    let mut i = 0usize;
-    let mut changed = false;
-
-    while i < bytes.len() {
-        if bytes.len() >= i + NEEDLE.len()
-            && bytes[i..i + NEEDLE.len()].eq_ignore_ascii_case(NEEDLE)
-        {
-            let already_prefixed = i >= DEVICE_PREFIX.len()
-                && bytes[i - DEVICE_PREFIX.len()..i].eq_ignore_ascii_case(DEVICE_PREFIX);
-
-            if already_prefixed {
-                let Some(ch) = css[i..].chars().next() else {
-                    break;
-                };
-                out.push(ch);
-                i += ch.len_utf8();
-            } else {
-                out.push_str("device-cmyk(");
-                i += NEEDLE.len();
-                changed = true;
-            }
-            continue;
-        }
-
-        let Some(ch) = css[i..].chars().next() else {
+fn collect_cmyk_functions<'i>(parser: &mut Parser<'i, '_>, ranges: &mut Vec<(usize, usize)>) {
+    loop {
+        let start = parser.position().byte_index();
+        let Ok(token) = parser.next_including_whitespace_and_comments() else {
             break;
         };
-        out.push(ch);
-        i += ch.len_utf8();
+        let token = token.clone();
+        if matches!(&token, Token::Function(name) if name.eq_ignore_ascii_case("cmyk")) {
+            ranges.push((start, parser.position().byte_index()));
+        }
+        if matches!(
+            token,
+            Token::Function(_) | Token::ParenthesisBlock | Token::SquareBracketBlock | Token::CurlyBracketBlock
+        ) {
+            let _ = parser.parse_nested_block(|inner| -> Result<(), ParseError<'i, ()>> {
+                collect_cmyk_functions(inner, ranges);
+                Ok(())
+            });
+        }
     }
-
-    changed.then_some(out)
 }
 
 fn rewrite_pdfreactor_gray_function_tokens(css: &str, compat: CompatMode) -> Option<String> {
@@ -2254,6 +2246,22 @@ pub fn project_compat_root(
 #[cfg(test)]
 mod prince_rewrite_tests {
     use super::{CompatMode, translate_compat, translate_compat_declarations};
+
+    #[test]
+    fn cmyk_alias_requires_print_compatibility_and_function_tokens() {
+        let css = r#"a { color: red; color: cmyk(0.8,0.5,0,0.3); content: "cmyk("; /* cmyk( */ background: device-cmyk(0,0,0,1); --other: not-cmyk(1); --nested: outer(CMYK(0,0,0,1)) }"#;
+        let expected = css
+            .replace("color: cmyk(", "color: device-cmyk(")
+            .replace("outer(CMYK(", "outer(device-cmyk(");
+        for mode in [CompatMode::Prince, CompatMode::PdfReactor] {
+            assert_eq!(translate_compat(css, mode).rewritten, expected);
+            assert_eq!(
+                translate_compat_declarations("color:cmyk(0.8,0.5,0,0.3)", mode).rewritten,
+                "color:device-cmyk(0.8,0.5,0,0.3)"
+            );
+        }
+        assert_eq!(translate_compat(css, CompatMode::None).rewritten, css);
+    }
 
     #[test]
     fn prince_hyphens_aliases_require_prince_compatibility() {
