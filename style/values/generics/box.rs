@@ -358,6 +358,8 @@ pub enum GenericFloat<LengthPercentage> {
     BlockStart,
     BlockEnd,
     Footnote,
+    /// Prince's legacy display footnote always uses the page area.
+    BdPrincePageFootnote,
     Top,
     Bottom,
     /// Bloudraad native fixed physical page-top float. Unlike the standards
@@ -393,6 +395,7 @@ impl<LengthPercentage> GenericFloat<LengthPercentage> {
             Self::BlockStart
                 | Self::BlockEnd
                 | Self::Footnote
+                | Self::BdPrincePageFootnote
                 | Self::Top
                 | Self::Bottom
                 | Self::BdTop
@@ -424,6 +427,7 @@ impl<LengthPercentage: ToCss> ToCss for GenericFloat<LengthPercentage> {
             Self::BlockStart => dest.write_str("block-start"),
             Self::BlockEnd => dest.write_str("block-end"),
             Self::Footnote => dest.write_str("footnote"),
+            Self::BdPrincePageFootnote => dest.write_str("-bd-prince-page-footnote"),
             Self::Top => dest.write_str("top"),
             Self::Bottom => dest.write_str("bottom"),
             Self::BdTop => dest.write_str("-bd-top"),

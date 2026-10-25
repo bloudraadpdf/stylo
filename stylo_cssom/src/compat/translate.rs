@@ -2362,13 +2362,13 @@ mod prince_rewrite_tests {
         assert_eq!(translate_compat(css, CompatMode::None).rewritten, css);
     }
 
-    /// Prince 16.2 lays out `display: prince-footnote` as `float: footnote`; it replaces an earlier `display: none`.
+    /// Prince's legacy display footnote uses the page area, independent of float-reference.
     #[test]
     fn prince_takes_a_prince_footnote_display_as_a_footnote_float() {
         let css = ".fn { display: none; display: prince-footnote; margin: 0 }";
         assert_eq!(
             translate_compat(css, CompatMode::Prince).rewritten,
-            ".fn { display: none; display: block; float: footnote; margin: 0 }"
+            ".fn { display: none; display: block; float: -bd-prince-page-footnote; margin: 0 }"
         );
         assert_eq!(translate_compat(css, CompatMode::None).rewritten, css);
     }
@@ -2513,7 +2513,7 @@ mod prince_rewrite_tests {
             ("float: top", "float: top; float: -bd-prince-top;"),
             (
                 "display: prince-footnote; margin: 0",
-                "display: block; float: footnote; margin: 0",
+                "display: block; float: -bd-prince-page-footnote; margin: 0",
             ),
         ] {
             assert_eq!(
@@ -2691,7 +2691,7 @@ mod prince_rewrite_tests {
         let (projected, _) = super::project_compat_root(&root, CompatMode::Prince);
         assert_eq!(
             projected.projection_serialization(),
-            "@media print { .fn { display: block; float: footnote } }"
+            "@media print { .fn { display: block; float: -bd-prince-page-footnote } }"
         );
     }
 }
@@ -4006,7 +4006,7 @@ fn scan_block<'i>(parser: &mut Parser<'i, '_>, state: &mut TranslateState, full_
                         state.value_replacements.push(ValueReplacement {
                             start_byte: decl_start_byte,
                             end_byte: value_start + value.trim_end().len(),
-                            replacement: "display: block; float: footnote".to_string(),
+                            replacement: "display: block; float: -bd-prince-page-footnote".to_string(),
                         });
                     }
 
