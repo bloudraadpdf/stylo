@@ -1826,7 +1826,6 @@ affects = "layout"
 type = "MathDepth"
 initial = "0"
 struct = "font"
-engine = "gecko"
 spec = "https://mathml-refresh.github.io/mathml-core/#the-math-script-level-property"
 affects = ""
 
@@ -8241,7 +8240,6 @@ keyword = { values = ["auto", "none"], gecko_constant_prefix = "NS_FONT_OPTICAL_
 
 [math-style]
 struct = "font"
-engine = "gecko"
 spec = "https://mathml-refresh.github.io/mathml-core/#the-math-style-property"
 animation_type = "discrete"
 affects = "layout"
@@ -8249,10 +8247,8 @@ keyword = { values = ["normal", "compact"] }
 
 [math-shift]
 struct = "font"
-engine = "gecko"
 spec = "https://w3c.github.io/mathml-core/#the-math-shift"
 animation_type = "discrete"
-enabled_in = "ua"
 affects = "layout"
 gecko_pref = "mathml.math_shift.enabled"
 has_effect_on_gecko_scrollbars = false

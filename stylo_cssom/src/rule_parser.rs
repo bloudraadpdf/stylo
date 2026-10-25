@@ -3863,6 +3863,9 @@ mod tests {
                 PropertyDeclaration::FontPalette(value.clone())
             },
             PropertyDeclaration::FontSize(value) => PropertyDeclaration::FontSize(value.clone()),
+            PropertyDeclaration::MathDepth(value) => PropertyDeclaration::MathDepth(value.clone()),
+            PropertyDeclaration::MathStyle(value) => PropertyDeclaration::MathStyle(*value),
+            PropertyDeclaration::MathShift(value) => PropertyDeclaration::MathShift(*value),
             PropertyDeclaration::FontSizeAdjust(value) => {
                 PropertyDeclaration::FontSizeAdjust(value.clone())
             },

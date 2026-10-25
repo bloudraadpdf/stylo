@@ -533,7 +533,6 @@ pub enum FontSizeKeyword {
     XXXLarge,
     /// Indicate whether to apply font-size: math is specified so that extra
     /// scaling due to math-depth changes is applied during the cascade.
-    #[cfg(feature = "gecko")]
     Math,
     #[css(skip)]
     None,
@@ -547,15 +546,8 @@ impl FontSizeKeyword {
     }
 
     /// Returns true if the font size is the math keyword
-    #[cfg(feature = "gecko")]
     pub fn is_math(self) -> bool {
         matches!(self, Self::Math)
-    }
-
-    /// Returns true if the font size is the math keyword
-    #[cfg(feature = "servo")]
-    pub fn is_math(self) -> bool {
-        false
     }
 }
 
@@ -991,16 +983,27 @@ impl FontSize {
             },
             FontSize::Keyword(i) => {
                 if i.kw.is_math() {
-                    // Scaling is done in recompute_math_font_size_if_needed().
                     info = compose_keyword(1.);
-                    // i.kw will always be FontSizeKeyword::Math here. But writing it this
-                    // allows this code to compile for servo where the Math variant is cfg'd out.
                     info.kw = i.kw;
-                    FontRelativeLength::Em(1.).to_computed_value(
+                    let size = FontRelativeLength::Em(1.).to_computed_value(
                         context,
                         base_size,
                         line_height_base,
-                    )
+                    );
+                    #[cfg(feature = "servo")]
+                    let size = {
+                        info = KeywordInfo::none();
+                        let metrics = context.query_font_metrics(
+                            FontBaseSize::InheritedStyle,
+                            crate::font_metrics::FontMetricsOrientation::Horizontal,
+                            QueryFontMetricsFlags::NEEDS_MATH_SCALES,
+                        );
+                        size * metrics.math_depth_scale(
+                            context.builder.get_parent_font().clone_math_depth(),
+                            context.builder.get_font().clone_math_depth(),
+                        )
+                    };
+                    size
                 } else {
                     // As a specified keyword, this is keyword derived
                     info = i;
@@ -2072,8 +2075,7 @@ impl Parse for MozScriptMinSize {
 
 /// A value for the `math-depth` property.
 /// https://mathml-refresh.github.io/mathml-core/#the-math-script-level-property
-#[cfg_attr(feature = "gecko", derive(MallocSizeOf))]
-#[derive(Clone, Debug, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
 pub enum MathDepth {
     /// Increment math-depth if math-style is compact.
     AutoAdd,
@@ -2250,6 +2252,34 @@ mod tests {
     use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
     use cssparser::ParserInput;
     use url::Url;
+
+    #[test]
+    fn math_font_size_uses_the_computed_depth() {
+        use crate::properties::{style_structs::Font, ComputedValues, StyleBuilder};
+        use crate::rule_cache::RuleCacheConditions;
+        use crate::stylesheets::container_rule::ContainerSizeQuery;
+        use crate::values::animated::ToAnimatedValue;
+        use crate::values::computed::Length;
+
+        let device = crate::test_support::test_device();
+        let mut font = Font::initial_values();
+        font.font_size = computed::FontSize::from_animated_value(Length::new(100.0));
+        let parent = ComputedValues::initial_values_with_font_override(font);
+        for (depth, expected) in [(0, 100.0), (1, 71.0), (2, 50.41), (-1, 100.0 / 0.71)] {
+            let mut conditions = RuleCacheConditions::default();
+            let mut context = Context::new(
+                StyleBuilder::for_inheritance(&device, None, Some(&parent), None),
+                QuirksMode::NoQuirks,
+                &mut conditions,
+                ContainerSizeQuery::none(),
+            );
+            context.builder.mutate_font().set_math_depth(depth);
+            let size = FontSize::Keyword(KeywordInfo::new(FontSizeKeyword::Math))
+                .to_computed_value(&context);
+            assert!((size.computed_size().px() - expected).abs() < 0.001);
+            assert_eq!(size.keyword_info.kw, FontSizeKeyword::None);
+        }
+    }
 
     #[test]
     fn default_font_size_adjust_metric_is_omitted_from_serialization() {

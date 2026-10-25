@@ -1173,6 +1173,7 @@ impl<'b> Cascade<'b> {
 
         #[cfg(feature = "servo")]
         {
+            apply!(MathDepth);
             apply!(FontSize);
             if has_lang || has_font_family {
                 self.recompute_keyword_font_size_if_needed(context);
@@ -1877,57 +1878,6 @@ impl<'b> Cascade<'b> {
             return;
         }
 
-        const SCALE_FACTOR_WHEN_INCREMENTING_MATH_DEPTH_BY_ONE: f32 = 0.71;
-
-        // Helper function that calculates the scale factor applied to font-size
-        // when math-depth goes from parent_math_depth to computed_math_depth.
-        // This function is essentially a modification of the MathML3's formula
-        // 0.71^(parent_math_depth - computed_math_depth) so that a scale factor
-        // of parent_script_percent_scale_down is applied when math-depth goes
-        // from 0 to 1 and parent_script_script_percent_scale_down is applied
-        // when math-depth goes from 0 to 2. This is also a straightforward
-        // implementation of the specification's algorithm:
-        // https://w3c.github.io/mathml-core/#the-math-script-level-property
-        fn scale_factor_for_math_depth_change(
-            parent_math_depth: i32,
-            computed_math_depth: i32,
-            parent_script_percent_scale_down: Option<f32>,
-            parent_script_script_percent_scale_down: Option<f32>,
-        ) -> f32 {
-            let mut a = parent_math_depth;
-            let mut b = computed_math_depth;
-            let c = SCALE_FACTOR_WHEN_INCREMENTING_MATH_DEPTH_BY_ONE;
-            let scale_between_0_and_1 = parent_script_percent_scale_down.unwrap_or_else(|| c);
-            let scale_between_0_and_2 =
-                parent_script_script_percent_scale_down.unwrap_or_else(|| c * c);
-            let mut s = 1.0;
-            let mut invert_scale_factor = false;
-            if a == b {
-                return s;
-            }
-            if b < a {
-                std::mem::swap(&mut a, &mut b);
-                invert_scale_factor = true;
-            }
-            let mut e = b - a;
-            if a <= 0 && b >= 2 {
-                s *= scale_between_0_and_2;
-                e -= 2;
-            } else if a == 1 {
-                s *= scale_between_0_and_2 / scale_between_0_and_1;
-                e -= 1;
-            } else if b == 1 {
-                s *= scale_between_0_and_1;
-                e -= 1;
-            }
-            s *= (c as f32).powi(e);
-            if invert_scale_factor {
-                1.0 / s.max(f32::MIN_POSITIVE)
-            } else {
-                s
-            }
-        }
-
         let (new_size, new_unconstrained_size) = {
             use crate::values::specified::font::QueryFontMetricsFlags;
 
@@ -1954,12 +1904,7 @@ impl<'b> Cascade<'b> {
                     FontMetricsOrientation::Horizontal,
                     QueryFontMetricsFlags::NEEDS_MATH_SCALES,
                 );
-                scale_factor_for_math_depth_change(
-                    parent_font.mMathDepth as i32,
-                    font.mMathDepth as i32,
-                    font_metrics.script_percent_scale_down,
-                    font_metrics.script_script_percent_scale_down,
-                )
+                font_metrics.math_depth_scale(parent_font.mMathDepth, font.mMathDepth)
             };
 
             let parent_size = parent_font.mSize.0;
