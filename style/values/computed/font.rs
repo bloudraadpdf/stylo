@@ -1595,7 +1595,7 @@ impl ToResolvedValue for LineHeight {
         #[cfg(feature = "servo")]
         {
             let length = match self {
-                Self::Normal => return Self::Normal,
+                Self::Normal | Self::None => return self,
                 Self::Number(num) => {
                     let size = context.style.get_font().clone_font_size().computed_size();
                     NonNegativeLength::new(size.px() * num.0)

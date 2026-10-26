@@ -2264,6 +2264,50 @@ mod prince_rewrite_tests {
     use super::{CompatMode, translate_compat, translate_compat_declarations};
 
     #[test]
+    fn prince_line_height_none_retains_a_distinct_typed_value() {
+        use crate::declaration_parser::{
+            CssomDeclarationPriority, parse_inline_style_property_declarations,
+        };
+        let base = std::sync::Arc::from("about:blank");
+        assert!(
+            parse_inline_style_property_declarations(
+                "line-height",
+                "none",
+                CssomDeclarationPriority::Normal,
+                &base
+            )
+            .is_none()
+        );
+        assert!(
+            parse_inline_style_property_declarations(
+                "line-height",
+                "-bd-none",
+                CssomDeclarationPriority::Normal,
+                &base
+            )
+            .is_some()
+        );
+        for value in ["none", "NoNe", "/*comment*/ none", "n\\6f ne"] {
+            let css = format!("span {{ line-height: {value} !important; color: red }}");
+            assert_eq!(
+                translate_compat(&css, CompatMode::Prince).rewritten,
+                "span { line-height: -bd-none !important; color: red }"
+            );
+            for mode in [CompatMode::None, CompatMode::PdfReactor] {
+                assert_eq!(translate_compat(&css, mode).rewritten, css);
+            }
+        }
+        assert_eq!(
+            translate_compat_declarations("line-height: none", CompatMode::Prince).rewritten,
+            "line-height: -bd-none"
+        );
+        for value in ["normal", "0", "none extra", "var(--height)"] {
+            let css = format!("span {{ line-height: {value} }}");
+            assert_eq!(translate_compat(&css, CompatMode::Prince).rewritten, css);
+        }
+    }
+
+    #[test]
     fn script_content_functions_require_prince_compatibility() {
         let css = r#"p::before { content: prince-script(label, counter(item)) ':'; --text: "prince-script("; /* prince-script( */ }"#;
         assert_eq!(
@@ -4056,6 +4100,31 @@ fn scan_block<'i>(parser: &mut Parser<'i, '_>, state: &mut TranslateState, full_
                             replacement: "display: block; float: -bd-prince-page-footnote"
                                 .to_string(),
                         });
+                    }
+
+                    if state.compat == CompatMode::Prince
+                        && name.eq_ignore_ascii_case("line-height")
+                    {
+                        let mut input = ParserInput::new(raw_value);
+                        let mut parser = Parser::new(&mut input);
+                        if parser
+                            .try_parse(|input| input.expect_ident_matching("none"))
+                            .is_ok()
+                        {
+                            let important = parser.try_parse(cssparser::parse_important).is_ok();
+                            if parser.is_exhausted() {
+                                state.value_replacements.push(ValueReplacement {
+                                    start_byte: value_start,
+                                    end_byte: value_end,
+                                    replacement: if important {
+                                        " -bd-none !important"
+                                    } else {
+                                        " -bd-none"
+                                    }
+                                    .to_string(),
+                                });
+                            }
+                        }
                     }
 
                     if state.compat == CompatMode::PdfReactor

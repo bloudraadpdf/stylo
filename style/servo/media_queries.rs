@@ -351,7 +351,7 @@ impl Device {
         _element: Option<()>,
     ) -> NonNegativeLength {
         (match font.line_height {
-            LineHeight::Normal => {
+            LineHeight::Normal | LineHeight::None => {
                 // `normal` derives from the first available font's
                 // metrics (ascent + descent + line gap), per
                 // css-inline-3, with a 1.2em fallback when the font

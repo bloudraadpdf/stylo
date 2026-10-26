@@ -2220,6 +2220,8 @@ impl ToComputedValue for LineHeight {
     fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
         match self {
             GenericLineHeight::Normal => GenericLineHeight::Normal,
+            #[cfg(feature = "servo")]
+            GenericLineHeight::None => GenericLineHeight::None,
             #[cfg(feature = "gecko")]
             GenericLineHeight::MozBlockHeight => GenericLineHeight::MozBlockHeight,
             GenericLineHeight::Number(number) => {
@@ -2266,6 +2268,8 @@ impl ToComputedValue for LineHeight {
     fn from_computed_value(computed: &Self::ComputedValue) -> Self {
         match *computed {
             GenericLineHeight::Normal => GenericLineHeight::Normal,
+            #[cfg(feature = "servo")]
+            GenericLineHeight::None => GenericLineHeight::None,
             #[cfg(feature = "gecko")]
             GenericLineHeight::MozBlockHeight => GenericLineHeight::MozBlockHeight,
             GenericLineHeight::Number(ref number) => {

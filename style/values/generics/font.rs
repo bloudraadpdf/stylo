@@ -319,6 +319,10 @@ impl<Factor: ToCss> ToCss for GenericFontSizeAdjust<Factor> {
 pub enum GenericLineHeight<N, L> {
     /// `normal`
     Normal,
+    /// Prince's inline line-height exclusion, projected by the compatibility parser.
+    #[cfg(feature = "servo")]
+    #[css(keyword = "-bd-none")]
+    None,
     /// `-moz-block-height`
     #[cfg(feature = "gecko")]
     #[parse(condition = "ParserContext::in_ua_sheet")]
