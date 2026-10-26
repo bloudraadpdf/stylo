@@ -17,6 +17,9 @@ styles do not scan siblings.
 Text justification applies to first-line and first-letter pseudo-elements.
 Their text-justify declarations retain the specified keyword after cascade.
 
+Font metrics providers can supply typed font-size keyword values. The default
+uses the browser size table; clients can supply their print-engine sizes.
+
 An opt-in Prince display setting retains mathematical layout for MathML roots
 with `display: block` and sets display style before their children cascade.
 The default CSS behaviour is unchanged. Moegoe uses this in Prince mode.

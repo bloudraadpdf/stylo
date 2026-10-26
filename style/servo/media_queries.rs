@@ -23,8 +23,8 @@ use crate::values::computed::{
 };
 use crate::values::specified::color::{ColorSchemeFlags, ForcedColors};
 use crate::values::specified::font::{
-    QueryFontMetricsFlags, FONT_MEDIUM_CAP_PX, FONT_MEDIUM_CH_PX, FONT_MEDIUM_EX_PX,
-    FONT_MEDIUM_IC_PX, FONT_MEDIUM_PX,
+    FontSizeKeyword, QueryFontMetricsFlags, FONT_MEDIUM_CAP_PX, FONT_MEDIUM_CH_PX,
+    FONT_MEDIUM_EX_PX, FONT_MEDIUM_IC_PX, FONT_MEDIUM_PX,
 };
 use crate::values::specified::ViewportVariant;
 use crate::values::KeyframesName;
@@ -52,6 +52,10 @@ pub trait FontMetricsProvider: Debug + Sync {
     ) -> FontMetrics;
     /// Gets the base size given a generic font family.
     fn base_size_for_generic(&self, generic: GenericFontFamily) -> Length;
+    /// A client keyword size, or `None` to use the browser size table.
+    fn font_size_keyword(&self, _keyword: FontSizeKeyword) -> Option<NonNegativeLength> {
+        None
+    }
     /// The generic family that governs font-size keyword resolution
     /// (`medium` and the rest of the CSS 2.1 ladder) for a family
     /// list. The default matches the browser quirk: only a list that
@@ -387,6 +391,11 @@ impl Device {
     /// Gets the base size given a generic font family.
     pub fn base_size_for_generic(&self, generic: GenericFontFamily) -> Length {
         self.font_metrics_provider.base_size_for_generic(generic)
+    }
+
+    /// A client keyword size, or `None` to use the browser size table.
+    pub fn font_size_keyword(&self, keyword: FontSizeKeyword) -> Option<NonNegativeLength> {
+        self.font_metrics_provider.font_size_keyword(keyword)
     }
 
     /// The generic family that governs font-size keyword resolution for

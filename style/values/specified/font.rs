@@ -818,6 +818,10 @@ pub const FONT_MEDIUM_IC_PX: f32 = FONT_MEDIUM_PX;
 impl FontSizeKeyword {
     #[inline]
     fn to_length(&self, cx: &Context) -> NonNegativeLength {
+        #[cfg(feature = "servo")]
+        if let Some(size) = cx.device().font_size_keyword(*self) {
+            return size;
+        }
         let font = cx.style().get_font();
 
         #[cfg(feature = "servo")]
