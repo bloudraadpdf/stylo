@@ -2270,6 +2270,36 @@ mod prince_rewrite_tests {
     use super::{CompatMode, translate_compat, translate_compat_declarations};
 
     #[test]
+    fn pdfreactor_rejects_direction_selector_rules() {
+        for selector in [
+            ".a:dir(ltr)",
+            ".a:dir(rtl), .b",
+            r".a:\64 ir(ltr)",
+            ".a:/**/dir(ltr)",
+            ".a:is(:dir(ltr), .a)",
+            ".a:not(:dir(rtl))",
+        ] {
+            let css = format!("{selector} {{ width:200px }}");
+            assert!(
+                translate_compat(&css, CompatMode::PdfReactor)
+                    .rewritten
+                    .trim()
+                    .is_empty(),
+                "{selector}"
+            );
+            for mode in [CompatMode::None, CompatMode::Prince] {
+                assert_eq!(translate_compat(&css, mode).rewritten, css);
+            }
+        }
+        let css = r#"[data-value=":dir(ltr)"] { content: ":dir(ltr)"; --value: :dir(ltr) }"#;
+        assert_eq!(translate_compat(css, CompatMode::PdfReactor).rewritten, css);
+        let css = "@media print { .a:dir(ltr) { width:200px } .b { width:100px } }";
+        let translated = translate_compat(css, CompatMode::PdfReactor);
+        assert!(!translated.rewritten.contains("200px"));
+        assert!(translated.rewritten.contains("100px"));
+    }
+
+    #[test]
     fn pdfreactor_background_origin_retains_the_bleed_box() {
         use crate::declaration_parser::{
             CssomDeclarationPriority, parse_inline_style_property_declarations,
@@ -4049,16 +4079,32 @@ fn walk_qualified_rule<'i>(
     state: &mut TranslateState,
     full_css: &str,
 ) -> Result<(), ()> {
+    let rule_start = parser.position().byte_index();
     loop {
+        let token_start = parser.position().byte_index();
         match parser.next_including_whitespace_and_comments() {
             Ok(token) => match token.clone() {
                 Token::CurlyBracketBlock => {
+                    let mut input = ParserInput::new(&full_css[rule_start..token_start]);
+                    let rejected = state.compat == CompatMode::PdfReactor
+                        && selector_contains_dir(&mut Parser::new(&mut input));
                     let body_start = parser.position().byte_index();
                     let _ = parser.parse_nested_block(|inner| -> Result<(), ParseError<'i, ()>> {
-                        scan_block(inner, state, full_css);
+                        if rejected {
+                            while inner.next_including_whitespace_and_comments().is_ok() {}
+                        } else {
+                            scan_block(inner, state, full_css);
+                        }
                         Ok(())
                     });
                     let after_close = parser.position().byte_index();
+                    if rejected {
+                        state.value_replacements.push(ValueReplacement {
+                            start_byte: rule_start,
+                            end_byte: after_close,
+                            replacement: String::new(),
+                        });
+                    }
                     let _ = (body_start, after_close);
                     return Ok(());
                 },
@@ -4068,6 +4114,32 @@ fn walk_qualified_rule<'i>(
             Err(_) => return Err(()),
         }
     }
+}
+
+fn selector_contains_dir(parser: &mut Parser<'_, '_>) -> bool {
+    let mut colon = false;
+    while let Ok(token) = parser.next_including_whitespace_and_comments() {
+        match token.clone() {
+            Token::Colon => colon = true,
+            Token::Comment(_) => {},
+            Token::Function(name) => {
+                if colon && name.eq_ignore_ascii_case("dir") {
+                    return true;
+                }
+                let nested = parser.parse_nested_block(|inner| {
+                    let rejected = selector_contains_dir(inner);
+                    while inner.next_including_whitespace_and_comments().is_ok() {}
+                    Ok::<_, ParseError<'_, ()>>(rejected)
+                });
+                if matches!(nested, Ok(true)) {
+                    return true;
+                }
+                colon = false;
+            },
+            _ => colon = false,
+        }
+    }
+    false
 }
 
 fn prince_opentype_declaration(value: &str) -> Option<String> {
