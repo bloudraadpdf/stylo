@@ -2770,6 +2770,29 @@ mod prince_rewrite_tests {
     }
 
     #[test]
+    fn pdfreactor_drops_inset_shorthand_without_dropping_its_longhands() {
+        for name in ["inset", "INSET", r"in\73 et"] {
+            for value in ["0", "initial", "var(--offset)", "0 !important"] {
+                let declarations = format!("top:15px; left:30px; {name}:{value};");
+                assert_eq!(
+                    translate_compat_declarations(&declarations, CompatMode::PdfReactor).rewritten,
+                    "top:15px; left:30px; "
+                );
+                let css = format!("p {{ {declarations} }}");
+                assert_eq!(
+                    translate_compat(&css, CompatMode::PdfReactor).rewritten,
+                    "p { top:15px; left:30px; }"
+                );
+                for compat in [CompatMode::None, CompatMode::Prince] {
+                    assert_eq!(translate_compat(&css, compat).rewritten, css);
+                }
+            }
+        }
+        let css = "p { --inset:0; top:0; right:0; bottom:0; left:0; inset-block:0; inset-inline:0; inset-block-start:0; inset-inline-end:0 }";
+        assert_eq!(translate_compat(css, CompatMode::PdfReactor).rewritten, css);
+    }
+
+    #[test]
     fn pdfreactor_comparison_functions_keep_declaration_and_variable_fallbacks() {
         for value in [
             "clamp(30px,40px,50px)",
@@ -3723,6 +3746,7 @@ fn engine_ignores_declaration(compat: CompatMode, name: &str, value: &str) -> bo
         CompatMode::None => false,
         CompatMode::PdfReactor => {
             name.eq_ignore_ascii_case("footnote-policy")
+                || name.eq_ignore_ascii_case("inset")
                 || (!name.starts_with("--")
                     && style::values::specified::calc::ComparisonFunctions::in_value(value).direct)
         },
