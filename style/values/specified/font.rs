@@ -1003,27 +1003,27 @@ impl FontSize {
                     let size = {
                         info = KeywordInfo::none();
                         let parent = context.builder.get_parent_font();
-                        math_pre_script_size = Some(
-                            if parent.clone_math_depth()
-                                == context.builder.get_font().clone_math_depth()
-                            {
+                        let (inherited, computed) = (
+                            parent.clone_math_depth(),
+                            context.builder.get_font().clone_math_depth(),
+                        );
+                        if inherited == computed {
+                            math_pre_script_size = Some(
                                 parent
                                     .font_size
                                     .math_pre_script_size
-                                    .unwrap_or(parent.font_size.finite_used_size())
-                            } else {
-                                parent.font_size.finite_used_size()
-                            },
-                        );
-                        let metrics = context.query_font_metrics(
-                            FontBaseSize::InheritedStyle,
-                            crate::font_metrics::FontMetricsOrientation::Horizontal,
-                            QueryFontMetricsFlags::NEEDS_MATH_SCALES,
-                        );
-                        size * metrics.math_depth_scale(
-                            context.builder.get_parent_font().clone_math_depth(),
-                            context.builder.get_font().clone_math_depth(),
-                        )
+                                    .unwrap_or(parent.font_size.finite_used_size()),
+                            );
+                            size
+                        } else {
+                            math_pre_script_size = Some(parent.font_size.finite_used_size());
+                            let metrics = context.query_font_metrics(
+                                FontBaseSize::InheritedStyle,
+                                crate::font_metrics::FontMetricsOrientation::Horizontal,
+                                QueryFontMetricsFlags::NEEDS_MATH_SCALES,
+                            );
+                            size * metrics.math_depth_scale(inherited, computed)
+                        }
                     };
                     size
                 } else {
@@ -2344,6 +2344,29 @@ mod tests {
                 if depth == 0 { 120.0 } else { 80.0 }
             );
         }
+    }
+
+    #[test]
+    fn math_font_size_at_the_inherited_depth_reads_no_font_metrics() {
+        use crate::computed_value_flags::ComputedValueFlags;
+        use crate::properties::{style_structs::Font, ComputedValues, StyleBuilder};
+        use crate::rule_cache::RuleCacheConditions;
+        use crate::stylesheets::container_rule::ContainerSizeQuery;
+
+        let device = crate::test_support::test_device();
+        let parent = ComputedValues::initial_values_with_font_override(Font::initial_values());
+        let mut conditions = RuleCacheConditions::default();
+        let context = Context::new(
+            StyleBuilder::for_inheritance(&device, None, Some(&parent), None),
+            QuirksMode::NoQuirks,
+            &mut conditions,
+            ContainerSizeQuery::none(),
+        );
+        FontSize::Keyword(KeywordInfo::new(FontSizeKeyword::Math)).to_computed_value(&context);
+        assert!(!context
+            .builder
+            .flags()
+            .contains(ComputedValueFlags::DEPENDS_ON_INHERITED_FONT_METRICS));
     }
 
     #[test]
