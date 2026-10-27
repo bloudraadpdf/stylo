@@ -859,6 +859,7 @@ rule_types_allowed = ["style", "keyframe", "page", "scope"]
 [font-variant]
 sub_properties = ["font-variant-caps", "font-variant-alternates", "font-variant-east-asian", "font-variant-emoji", "font-variant-ligatures", "font-variant-numeric", "font-variant-position", "-bd-font-variant-features"]
 spec = "https://drafts.csswg.org/css-fonts-3/#propdef-font-variant"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [font-synthesis]
 sub_properties = ["font-synthesis-weight", "font-synthesis-style", "font-synthesis-small-caps", "font-synthesis-position"]

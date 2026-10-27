@@ -20,6 +20,9 @@ Their text-justify declarations retain the specified keyword after cascade.
 Font metrics providers can supply typed font-size keyword values. The default
 uses the browser size table; clients can supply their print-engine sizes.
 
+The `font-variant` shorthand applies in page and margin rules, as required by
+CSS Paged Media Level 3. Moegoe uses it for running headers.
+
 An opt-in Prince display setting retains mathematical layout for MathML roots
 with `display: block` and sets display style before their children cascade.
 The default CSS behaviour is unchanged. Moegoe uses this in Prince mode.

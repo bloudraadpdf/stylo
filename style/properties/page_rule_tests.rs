@@ -6,6 +6,24 @@ use super::{PropertyId, declaration_block::parse_style_attribute};
 use crate::stylesheets::{CssRuleType, UrlExtraData};
 
 #[test]
+fn font_variant_is_allowed_in_page_rules() {
+    let url: UrlExtraData = url::Url::parse("https://example.test/style.css").unwrap().into();
+    let id = PropertyId::parse_enabled_for_all_content("font-variant-caps").unwrap();
+    for value in ["normal", "small-caps"] {
+        let declarations = parse_style_attribute(
+            &format!("font-variant:{value}"),
+            &url,
+            None,
+            selectors::matching::QuirksMode::NoQuirks,
+            CssRuleType::Page,
+        );
+        let mut serialized = String::new();
+        declarations.property_value_to_css(&id, &mut serialized).unwrap();
+        assert_eq!(serialized, value);
+    }
+}
+
+#[test]
 fn writing_mode_is_allowed_in_page_rules() {
     let _lock = crate::test_support::pref_lock().lock().unwrap();
     let _pref = crate::test_support::BoolPrefGuard::set("layout.writing-mode.enabled", true);
