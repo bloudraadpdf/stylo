@@ -64,11 +64,14 @@ pub fn map_rule_sources(
 ) -> Vec<RuleNode> {
     rules
         .iter()
-        .map(|rule| {
+        .filter_map(|rule| {
             let projected = project(rule);
             let css = projected.projection_serialization();
+            if css.trim().is_empty() {
+                return None;
+            }
             let nested = map_rule_sources(projected.payload().nested(), project);
-            projected.with_projected_nested(nested, css)
+            Some(projected.with_projected_nested(nested, css))
         })
         .collect()
 }

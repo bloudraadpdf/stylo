@@ -2300,6 +2300,23 @@ mod prince_rewrite_tests {
     }
 
     #[test]
+    fn pdfreactor_removes_rejected_rule_nodes_from_projection() {
+        use stylo_cssom_model::{InternalStylesheetRoot, StyleOrigin};
+        let parsed = crate::authored_rules::ParsedStylesheet::parse(
+            ".a:dir(ltr) { width:var(--width) } @media print { .b:dir(rtl) { width:var(--width) } .c { width:10px } }",
+        ).unwrap();
+        let root = InternalStylesheetRoot::new(StyleOrigin::Author, parsed.rule_nodes().to_vec());
+        let (projected, _) = super::project_compat_root(&root, CompatMode::PdfReactor);
+        assert_eq!(projected.rules().len(), 1);
+        assert_eq!(projected.rules()[0].payload().nested().len(), 1);
+        assert!(
+            projected.rules()[0].payload().nested()[0]
+                .projection_serialization()
+                .contains(".c")
+        );
+    }
+
+    #[test]
     fn pdfreactor_background_origin_retains_the_bleed_box() {
         use crate::declaration_parser::{
             CssomDeclarationPriority, parse_inline_style_property_declarations,
