@@ -6795,16 +6795,14 @@ fn translate_property(lower_property: &str, raw_value: &str) -> Translated {
             native_value: raw_value.trim().to_ascii_lowercase(),
         },
 
-        "-ro-hyphenate-limit-lines" | "-prince-hyphenate-limit-lines" => Translated::Native {
+        "-ro-hyphenate-limit-lines"
+        | "-prince-hyphenate-limit-lines"
+        | "-prince-hyphenate-lines" => Translated::Native {
             native_property: "hyphenate-limit-lines",
             native_value: raw_value.trim().to_string(),
         },
         "-prince-hyphenate-patterns" => Translated::Native {
             native_property: "-bd-hyphenate-patterns",
-            native_value: raw_value.trim().to_string(),
-        },
-        "-prince-hyphenate-lines" => Translated::Native {
-            native_property: "-bd-hyphenate-lines",
             native_value: raw_value.trim().to_string(),
         },
         "-ro-hyphenate-word-length" => Translated::Native {
@@ -7944,6 +7942,27 @@ mod pdfreactor_footnote_fragmentation_tests {
             "a { -ro-footnote-fragmentation: auto ; -bd-footnote-fragmentation: continue;} \
              b { -ro-footnote-fragmentation: none ; -bd-footnote-fragmentation: break;}"
         );
+    }
+}
+
+#[cfg(test)]
+mod prince_hyphenation_tests {
+    use super::{CompatMode, translate_compat};
+
+    #[test]
+    fn prince_hyphenate_lines_uses_the_standard_line_limit() {
+        for property in ["prince-hyphenate-lines", "-prince-hyphenate-lines"] {
+            for value in ["0", "1", "2", "no-limit", "var(--limit)"] {
+                let source = format!("p {{ {property}: {value}; }}");
+                let translated = translate_compat(&source, CompatMode::Prince);
+                assert!(
+                    translated
+                        .rewritten
+                        .contains(&format!("hyphenate-limit-lines: {value};"))
+                );
+                assert!(!translated.rewritten.contains("-bd-hyphenate-lines"));
+            }
+        }
     }
 }
 
