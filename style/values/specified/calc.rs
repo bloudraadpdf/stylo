@@ -29,7 +29,7 @@ use crate::values::specified::resolution::ResolutionDimension;
 use crate::values::specified::time::TimeDimension;
 use crate::values::specified::{Angle, Resolution, Time};
 use crate::values::{serialize_number, serialize_percentage, CSSFloat, DashedIdent};
-use cssparser::{match_ignore_ascii_case, CowRcStr, Parser, SourceLocation, Token};
+use cssparser::{match_ignore_ascii_case, CowRcStr, Parser, ParserInput, SourceLocation, Token};
 use debug_unreachable::debug_unreachable;
 use smallvec::SmallVec;
 use std::cmp;
@@ -38,6 +38,64 @@ use style_traits::values::specified::AllowedNumericType;
 use style_traits::{
     CssWriter, ParseError, SpecifiedValueInfo, StyleParseErrorKind, ToCss, ToTyped, TypedValue,
 };
+
+/// Comparison functions in a declaration, before or after variable substitution.
+#[derive(Default)]
+pub struct ComparisonFunctions {
+    /// A comparison function outside another function.
+    pub direct: bool,
+    /// A comparison function inside another function.
+    pub nested: bool,
+    /// A substitution whose result must be checked at computed-value time.
+    pub deferred: bool,
+}
+
+impl ComparisonFunctions {
+    /// Inspect tokens without interpreting strings or unused variable fallbacks.
+    pub fn in_value(value: &str) -> Self {
+        fn scan(input: &mut Parser, nested: bool, result: &mut ComparisonFunctions) {
+            while let Ok(token) = input.next() {
+                match token {
+                    Token::Function(name) => {
+                        if ["var", "env", "attr"]
+                            .iter()
+                            .any(|f| name.eq_ignore_ascii_case(f))
+                        {
+                            result.deferred = true;
+                            continue;
+                        }
+                        if ["min", "max", "clamp"]
+                            .iter()
+                            .any(|f| name.eq_ignore_ascii_case(f))
+                        {
+                            if nested {
+                                result.nested = true;
+                            } else {
+                                result.direct = true;
+                            }
+                        }
+                    },
+                    Token::ParenthesisBlock
+                    | Token::SquareBracketBlock
+                    | Token::CurlyBracketBlock => {},
+                    _ => continue,
+                }
+                let _: Result<(), cssparser::ParseError<'_, ()>> =
+                    input.parse_nested_block(|input| {
+                        scan(input, true, result);
+                        Ok(())
+                    });
+            }
+        }
+        let mut result = Self::default();
+        scan(
+            &mut Parser::new(&mut ParserInput::new(value)),
+            false,
+            &mut result,
+        );
+        result
+    }
+}
 
 /// The name of the mathematical function that we're parsing.
 #[derive(Clone, Copy, Debug, Parse)]

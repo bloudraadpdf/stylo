@@ -1590,6 +1590,15 @@ impl UnparsedValue {
             Err(..) => return invalid_at_computed_value_time(),
         };
 
+        #[cfg(feature = "servo")]
+        if !computed_context.builder.device.comparison_functions_enabled {
+            let functions =
+                crate::values::specified::calc::ComparisonFunctions::in_value(&substituted.css);
+            if functions.direct || functions.nested {
+                return invalid_at_computed_value_time();
+            }
+        }
+
         // As of this writing, only the base URL is used for property
         // values.
         //

@@ -2770,6 +2770,43 @@ mod prince_rewrite_tests {
     }
 
     #[test]
+    fn pdfreactor_comparison_functions_keep_declaration_and_variable_fallbacks() {
+        for value in [
+            "clamp(30px,40px,50px)",
+            "min(30px,40px)",
+            "max(30px,40px)",
+            r"cl\61mp(30px,40px,50px)",
+            "clamp(30px,var(--size),50px)",
+        ] {
+            let css = format!("p {{ font-size:20px; font-size:{value}; }}");
+            assert_eq!(
+                translate_compat(&css, CompatMode::PdfReactor).rewritten,
+                "p { font-size:20px; }"
+            );
+            for compat in [CompatMode::None, CompatMode::Prince] {
+                assert_eq!(translate_compat(&css, compat).rewritten, css);
+            }
+        }
+        for css in [
+            "p { --size:clamp(30px,40px,50px); font-size:var(--size) }",
+            "p { font-size:var(--size,clamp(30px,40px,50px)) }",
+            "p { font-size:calc(10px + var(--size,min(20px,30px))) }",
+            "p { content:'clamp(30px,40px,50px)' }",
+            "p { font-size:garbage calc(10px + min(20px,30px)) }",
+        ] {
+            assert_eq!(translate_compat(css, CompatMode::PdfReactor).rewritten, css);
+        }
+        for priority in ["", " !important"] {
+            let css =
+                format!("p {{ font-size:20px; font-size:calc(10px + min(20px,30px)){priority}; }}");
+            assert_eq!(
+                translate_compat(&css, CompatMode::PdfReactor).rewritten,
+                format!("p {{ font-size:20px; font-size: unset{priority}; }}")
+            );
+        }
+    }
+
+    #[test]
     fn prince_and_pdfreactor_ignore_an_unprefixed_footnote_policy() {
         let css = "p { footnote-policy: line; margin: 0 }";
         for compat in [CompatMode::Prince, CompatMode::PdfReactor] {
@@ -3680,12 +3717,15 @@ fn skip_at_rule<'i>(parser: &mut Parser<'i, '_>) {
     }
 }
 
-/// Whether the engine of `compat` ignores the declaration `name: value`: Prince 16.2 and PDFreactor 12.7.2 the
-/// unprefixed css-gcpm-3 `footnote-policy`, Prince a list style type that it does not support.
+/// Declarations rejected by the reference engine before the cascade.
 fn engine_ignores_declaration(compat: CompatMode, name: &str, value: &str) -> bool {
     match compat {
         CompatMode::None => false,
-        CompatMode::PdfReactor => name.eq_ignore_ascii_case("footnote-policy"),
+        CompatMode::PdfReactor => {
+            name.eq_ignore_ascii_case("footnote-policy")
+                || (!name.starts_with("--")
+                    && style::values::specified::calc::ComparisonFunctions::in_value(value).direct)
+        },
         CompatMode::Prince => {
             name.eq_ignore_ascii_case("footnote-policy")
                 || name.eq_ignore_ascii_case("-webkit-background-size")
@@ -4115,6 +4155,35 @@ fn scan_block<'i>(parser: &mut Parser<'i, '_>, state: &mut TranslateState, full_
                             end_byte: full_css.len() - after_semicolon.trim_start().len(),
                             replacement: String::new(),
                         });
+                        continue;
+                    }
+
+                    if state.compat == CompatMode::PdfReactor && !name.starts_with("--") {
+                        let functions =
+                            style::values::specified::calc::ComparisonFunctions::in_value(
+                                raw_value,
+                            );
+                        if functions.nested && !functions.deferred {
+                            use crate::declaration_parser::{
+                                inline_style_property_is_important, parse_inline_style_block,
+                            };
+                            let block = parse_inline_style_block(&format!("{name}:{raw_value}"));
+                            if let Some(important) =
+                                inline_style_property_is_important(&block, &name)
+                            {
+                                state.value_replacements.push(ValueReplacement {
+                                    start_byte: value_start,
+                                    end_byte: value_end,
+                                    replacement: if important {
+                                        " unset !important"
+                                    } else {
+                                        " unset"
+                                    }
+                                    .to_string(),
+                                });
+                                continue;
+                            }
+                        }
                     }
 
                     if state.compat == CompatMode::Prince
