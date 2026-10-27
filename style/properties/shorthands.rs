@@ -3565,6 +3565,10 @@ pub mod background {
                 background_origin::single_value::SpecifiedValue::BorderBox => {
                     background_clip::single_value::SpecifiedValue::BorderBox
                 },
+                #[cfg(feature = "servo")]
+                background_origin::single_value::SpecifiedValue::BdBleedBox => {
+                    background_clip::single_value::SpecifiedValue::BorderBox
+                },
             }
         }
     }

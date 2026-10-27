@@ -8043,7 +8043,7 @@ affects = "paint"
 extra_prefixes = ["webkit"]
 servo_restyle_damage = "repaint"
 vector = {}
-keyword = { values = ["padding-box", "border-box", "content-box"], gecko_enum_prefix = "StyleGeometryBox", gecko_inexhaustive = true }
+keyword = { values = ["padding-box", "border-box", "content-box"], extra_servo_values = ["-bd-bleed-box"], gecko_enum_prefix = "StyleGeometryBox", gecko_inexhaustive = true }
 rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [background-blend-mode]

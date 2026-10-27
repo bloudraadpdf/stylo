@@ -196,7 +196,7 @@ fn translate_compat_with_registrations<'css>(
     };
 
     let page_box_origin_rewritten =
-        rewrite_pdfreactor_page_box_background_origin(cmyk_working.as_ref(), compat);
+        rewrite_pdfreactor_background_origin(cmyk_working.as_ref(), compat);
     let cmyk_working: Cow<'_, str> = match page_box_origin_rewritten {
         Some(owned) => Cow::Owned(owned),
         None => cmyk_working,
@@ -2264,6 +2264,30 @@ mod prince_rewrite_tests {
     use super::{CompatMode, translate_compat, translate_compat_declarations};
 
     #[test]
+    fn pdfreactor_background_origin_retains_the_bleed_box() {
+        use crate::declaration_parser::{
+            CssomDeclarationPriority, parse_inline_style_property_declarations,
+        };
+        let css = "@page { background-origin: -ro-bleed-box, content-box !important }";
+        assert_eq!(
+            translate_compat(css, CompatMode::PdfReactor).rewritten,
+            "@page { background-origin: -bd-bleed-box, content-box !important }"
+        );
+        for mode in [CompatMode::None, CompatMode::Prince] {
+            assert_eq!(translate_compat(css, mode).rewritten, css);
+        }
+        assert!(
+            parse_inline_style_property_declarations(
+                "background-origin",
+                "-bd-bleed-box, content-box",
+                CssomDeclarationPriority::Normal,
+                &std::sync::Arc::from("about:blank")
+            )
+            .is_some()
+        );
+    }
+
+    #[test]
     fn prince_line_height_none_retains_a_distinct_typed_value() {
         use crate::declaration_parser::{
             CssomDeclarationPriority, parse_inline_style_property_declarations,
@@ -3139,14 +3163,17 @@ fn rewrite_pdfreactor_marks_bleed_keyword(css: &str, compat: CompatMode) -> Opti
     rewrite_declaration_value_idents(css, b"marks", &[(b"-ro-bleed", "bleed")])
 }
 
-fn rewrite_pdfreactor_page_box_background_origin(css: &str, compat: CompatMode) -> Option<String> {
+fn rewrite_pdfreactor_background_origin(css: &str, compat: CompatMode) -> Option<String> {
     if !matches!(compat, CompatMode::PdfReactor) {
         return None;
     }
     const PROPERTY: &[u8] = b"background-origin";
     const VALUE: &[u8] = b"-ro-page-box";
+    let bleed =
+        rewrite_declaration_value_idents(css, PROPERTY, &[(b"-ro-bleed-box", "-bd-bleed-box")]);
+    let css = bleed.as_deref().unwrap_or(css);
     if !mentions_ident(css, "-ro-page-box") {
-        return None;
+        return bleed;
     }
     let bytes = css.as_bytes();
     let mut out = String::with_capacity(css.len());
@@ -3197,7 +3224,7 @@ fn rewrite_pdfreactor_page_box_background_origin(css: &str, compat: CompatMode) 
         i = cursor + VALUE.len();
         changed = true;
     }
-    changed.then_some(out)
+    changed.then_some(out).or(bleed)
 }
 
 fn copy_opaque_token(css: &str, at: usize, out: &mut String) -> Option<usize> {
