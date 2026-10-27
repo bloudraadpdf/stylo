@@ -974,6 +974,12 @@ fn rewrite_probes_in_supports_prelude(
         }
         let lower_name = prelude[name_start..name_end].to_ascii_lowercase();
         let raw_value = &prelude[value_start..k];
+        if engine_ignores_declaration(compat, &lower_name, raw_value) {
+            out.push_str("(not (--bd-compat-satisfied: 1))");
+            *changed = true;
+            i = k + 1;
+            continue;
+        }
         if required_compat_for(&lower_name) != Some(compat) {
             out.push_str(&prelude[i..=k]);
             i = k + 1;
@@ -2770,6 +2776,40 @@ mod prince_rewrite_tests {
     }
 
     #[test]
+    fn pdfreactor_rejects_aspect_ratio_declarations_and_supports_probes() {
+        for name in ["aspect-ratio", "ASPECT-RATIO", r"aspect\2d ratio"] {
+            for value in ["2", "21/9", "auto 2", "var(--ratio)", "2 !important"] {
+                let declarations = format!("width:210px; {name}:{value};");
+                assert_eq!(
+                    translate_compat_declarations(&declarations, CompatMode::PdfReactor).rewritten,
+                    "width:210px; "
+                );
+                let css = format!("p {{ {declarations} }}");
+                assert_eq!(
+                    translate_compat(&css, CompatMode::PdfReactor).rewritten,
+                    "p { width:210px; }"
+                );
+                for compat in [CompatMode::None, CompatMode::Prince] {
+                    assert_eq!(translate_compat(&css, compat).rewritten, css);
+                }
+            }
+        }
+        let css = "@supports (aspect-ratio: 2) { p { width:210px } }";
+        assert_eq!(
+            translate_compat(css, CompatMode::PdfReactor).rewritten,
+            "@supports (not (--bd-compat-satisfied: 1)) { p { width:210px } }"
+        );
+        for compat in [CompatMode::None, CompatMode::Prince] {
+            assert_eq!(translate_compat(css, compat).rewritten, css);
+        }
+        let custom = "p { --aspect-ratio:2; width:210px }";
+        assert_eq!(
+            translate_compat(custom, CompatMode::PdfReactor).rewritten,
+            custom
+        );
+    }
+
+    #[test]
     fn pdfreactor_drops_inset_shorthand_without_dropping_its_longhands() {
         for name in ["inset", "INSET", r"in\73 et"] {
             for value in ["0", "initial", "var(--offset)", "0 !important"] {
@@ -3747,6 +3787,7 @@ fn engine_ignores_declaration(compat: CompatMode, name: &str, value: &str) -> bo
         CompatMode::PdfReactor => {
             name.eq_ignore_ascii_case("footnote-policy")
                 || name.eq_ignore_ascii_case("inset")
+                || name.eq_ignore_ascii_case("aspect-ratio")
                 || (!name.starts_with("--")
                     && style::values::specified::calc::ComparisonFunctions::in_value(value).direct)
         },
