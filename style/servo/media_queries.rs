@@ -175,6 +175,8 @@ pub struct Device {
     line_width_keywords: LineWidthKeywords,
     /// Whether MathML uses Prince's display and minimum font-size semantics.
     pub prince_math_compat: bool,
+    /// Whether background image layers use their authored blend modes.
+    pub background_blending_enabled: bool,
 }
 
 impl Device {
@@ -217,6 +219,7 @@ impl Device {
             default_computed_values,
             line_width_keywords: LineWidthKeywords::css(),
             prince_math_compat: false,
+            background_blending_enabled: true,
         }
     }
 

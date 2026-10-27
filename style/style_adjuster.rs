@@ -141,6 +141,15 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
         StyleAdjuster { style }
     }
 
+    #[cfg(feature = "servo")]
+    fn adjust_background_blending(&mut self) {
+        if !self.style.device.background_blending_enabled {
+            self.style.mutate_background().set_background_blend_mode(
+                crate::properties::longhands::background_blend_mode::get_initial_value(),
+            );
+        }
+    }
+
     fn adjust_for_math_display<E>(&mut self, element: Option<E>)
     where
         E: TElement,
@@ -1163,6 +1172,8 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
         // );
 
         self.adjust_for_visited(element);
+        #[cfg(feature = "servo")]
+        self.adjust_background_blending();
         #[cfg(feature = "gecko")]
         {
             self.adjust_for_prohibited_display_contents(element);
@@ -1204,3 +1215,36 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
 #[cfg(all(test, feature = "servo"))]
 #[path = "style_adjuster/marker_tests.rs"]
 mod marker_tests;
+
+#[cfg(all(test, feature = "servo"))]
+mod background_tests {
+    use super::*;
+    use crate::properties::longhands::background_blend_mode;
+
+    #[test]
+    fn background_blending_can_be_disabled_without_changing_mix_blending() {
+        for enabled in [true, false] {
+            let mut device = crate::test_support::test_device();
+            device.background_blending_enabled = enabled;
+            let mut style = StyleBuilder::for_inheritance(&device, None, None, None);
+            let mut layers = background_blend_mode::get_initial_value();
+            layers.0[0] = background_blend_mode::single_value::computed_value::T::Lighten;
+            style
+                .mutate_background()
+                .set_background_blend_mode(layers.clone());
+            let mix = crate::properties::longhands::mix_blend_mode::computed_value::T::Multiply;
+            style.mutate_effects().set_mix_blend_mode(mix);
+            StyleAdjuster::new(&mut style).adjust_background_blending();
+            let expected = if enabled {
+                layers
+            } else {
+                background_blend_mode::get_initial_value()
+            };
+            assert_eq!(
+                style.get_background().clone_background_blend_mode(),
+                expected
+            );
+            assert_eq!(style.get_effects().clone_mix_blend_mode(), mix);
+        }
+    }
+}
