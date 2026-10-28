@@ -857,6 +857,19 @@ fn parse_non_custom_property_declaration_value_into<'i>(
 }
 
 impl PropertyDeclaration {
+    /// Whether a grid-template axis uses subgrid tracks.
+    pub fn uses_subgrid(&self) -> bool {
+        match self {
+            Self::GridTemplateRows(value) | Self::GridTemplateColumns(value) => {
+                matches!(
+                    *value,
+                    crate::values::generics::grid::GridTemplateComponent::Subgrid(_)
+                )
+            },
+            _ => false,
+        }
+    }
+
     fn with_variables_from_shorthand(&self, shorthand: ShorthandId) -> Option<&str> {
         match *self {
             PropertyDeclaration::WithVariables(ref declaration) => {
@@ -1633,7 +1646,13 @@ impl UnparsedValue {
             None => {
                 return match input.parse_entirely(|input| longhand_id.parse_value(&context, input))
                 {
-                    Ok(decl) => Cow::Owned(decl),
+                    Ok(decl) => {
+                        #[cfg(feature = "servo")]
+                        if !computed_context.builder.device.subgrid_enabled && decl.uses_subgrid() {
+                            return invalid_at_computed_value_time();
+                        }
+                        Cow::Owned(decl)
+                    },
                     Err(..) => invalid_at_computed_value_time(),
                 };
             },
@@ -1645,6 +1664,16 @@ impl UnparsedValue {
         if shorthand
             .parse_into(&mut decls, &context, &mut input)
             .is_err()
+        {
+            return invalid_at_computed_value_time();
+        }
+
+        #[cfg(feature = "servo")]
+        if !computed_context.builder.device.subgrid_enabled
+            && decls
+                .declarations
+                .iter()
+                .any(PropertyDeclaration::uses_subgrid)
         {
             return invalid_at_computed_value_time();
         }

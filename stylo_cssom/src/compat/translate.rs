@@ -2880,6 +2880,32 @@ mod prince_rewrite_tests {
     }
 
     #[test]
+    fn pdfreactor_rejects_subgrid_before_the_cascade() {
+        for property in [
+            "grid-template-rows",
+            "grid-template-columns",
+            "grid-template",
+            "grid",
+        ] {
+            let value = if property.ends_with("rows") || property.ends_with("columns") {
+                "subgrid [edge]"
+            } else {
+                "subgrid / 20px"
+            };
+            let css = format!("p {{ {property}:30px 80px; {property}:{value}; }}");
+            assert_eq!(
+                translate_compat(&css, CompatMode::PdfReactor).rewritten,
+                format!("p {{ {property}:30px 80px; }}")
+            );
+            for compat in [CompatMode::None, CompatMode::Prince] {
+                assert_eq!(translate_compat(&css, compat).rewritten, css);
+            }
+        }
+        let css = "p { --tracks:subgrid; grid-template-rows:var(--tracks) }";
+        assert_eq!(translate_compat(css, CompatMode::PdfReactor).rewritten, css);
+    }
+
+    #[test]
     fn pdfreactor_comparison_functions_keep_declaration_and_variable_fallbacks() {
         for value in [
             "clamp(30px,40px,50px)",
@@ -3835,6 +3861,21 @@ fn engine_ignores_declaration(compat: CompatMode, name: &str, value: &str) -> bo
             name.eq_ignore_ascii_case("footnote-policy")
                 || name.eq_ignore_ascii_case("inset")
                 || name.eq_ignore_ascii_case("aspect-ratio")
+                || ([
+                    "grid",
+                    "grid-template",
+                    "grid-template-rows",
+                    "grid-template-columns",
+                ]
+                .iter()
+                .any(|property| name.eq_ignore_ascii_case(property))
+                    && crate::declaration_parser::parse_inline_style_block(&format!(
+                        "{name}:{value}"
+                    ))
+                    .as_typed()
+                    .declarations()
+                    .iter()
+                    .any(style::properties::PropertyDeclaration::uses_subgrid))
                 || (!name.starts_with("--")
                     && style::values::specified::calc::ComparisonFunctions::in_value(value).direct)
         },

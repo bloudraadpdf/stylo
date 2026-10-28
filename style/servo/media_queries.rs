@@ -179,6 +179,8 @@ pub struct Device {
     pub background_blending_enabled: bool,
     /// Whether substituted values support CSS comparison functions.
     pub comparison_functions_enabled: bool,
+    /// Whether substituted grid-template values support subgrid tracks.
+    pub subgrid_enabled: bool,
 }
 
 impl Device {
@@ -223,6 +225,7 @@ impl Device {
             prince_math_compat: false,
             background_blending_enabled: true,
             comparison_functions_enabled: true,
+            subgrid_enabled: true,
         }
     }
 
