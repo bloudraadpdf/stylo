@@ -35,6 +35,8 @@ pub type ApplicableDeclarationList = SmallVec<[ApplicableDeclarationBlock; 16]>;
 const SOURCE_ORDER_BITS: usize = 24;
 const SOURCE_ORDER_MAX: u32 = (1 << SOURCE_ORDER_BITS) - 1;
 const SOURCE_ORDER_MASK: u32 = SOURCE_ORDER_MAX;
+#[cfg(feature = "servo")]
+const LINK_STATE_PRIORITY: u32 = 1 << SOURCE_ORDER_BITS;
 
 /// The cascade-level+layer order of this declaration.
 #[derive(Clone, Copy, Debug, Eq, Hash, MallocSizeOf, PartialEq)]
@@ -239,7 +241,13 @@ impl ApplicableDeclarationBlock {
     /// Returns the source order of the block.
     #[inline]
     pub fn source_order(&self) -> u32 {
-        self.source_order
+        self.source_order & SOURCE_ORDER_MASK
+    }
+
+    /// Prefer direct link-state rules when their specificity and scope are equal.
+    #[cfg(feature = "servo")]
+    pub(crate) fn prefer_link_state(&mut self) {
+        self.source_order |= LINK_STATE_PRIORITY;
     }
 
     /// Returns the cascade level of the block.
@@ -274,7 +282,7 @@ impl ApplicableDeclarationBlock {
             self.layer_order(),
             self.specificity,
             self.scope_proximity(),
-            self.source_order(),
+            self.source_order,
         )
     }
 }

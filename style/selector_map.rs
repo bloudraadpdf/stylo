@@ -383,11 +383,26 @@ impl SelectorMap<Rule> {
                 }
             }
 
-            matching_rules.push(rule.to_applicable_declaration_block(
-                cascade_level,
-                cascade_data,
-                scope_proximity,
-            ));
+            let declaration =
+                rule.to_applicable_declaration_block(cascade_level, cascade_data, scope_proximity);
+            #[cfg(feature = "servo")]
+            let declaration = {
+                let mut declaration = declaration;
+                if stylist.device().link_state_cascade_priority
+                    && rule.selector.iter().any(|component| {
+                        matches!(
+                            component,
+                            Component::NonTSPseudoClass(
+                                crate::selector_parser::NonTSPseudoClass::Link
+                            )
+                        )
+                    })
+                {
+                    declaration.prefer_link_state();
+                }
+                declaration
+            };
+            matching_rules.push(declaration);
         }
     }
 }
