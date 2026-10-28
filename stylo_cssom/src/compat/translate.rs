@@ -2880,6 +2880,23 @@ mod prince_rewrite_tests {
     }
 
     #[test]
+    fn pdfreactor_rejects_intrinsic_auto_repetition_before_the_cascade() {
+        for value in [
+            "repeat(auto-fill,[row] auto)",
+            "repeat(auto-fit,min-content)",
+        ] {
+            let css = format!("p {{ grid-template-rows:30px 80px; grid-template-rows:{value}; }}");
+            assert_eq!(
+                translate_compat(&css, CompatMode::PdfReactor).rewritten,
+                "p { grid-template-rows:30px 80px; }"
+            );
+            for compat in [CompatMode::None, CompatMode::Prince] {
+                assert_eq!(translate_compat(&css, compat).rewritten, css);
+            }
+        }
+    }
+
+    #[test]
     fn pdfreactor_rejects_subgrid_before_the_cascade() {
         for property in [
             "grid-template-rows",
@@ -3875,7 +3892,9 @@ fn engine_ignores_declaration(compat: CompatMode, name: &str, value: &str) -> bo
                     .as_typed()
                     .declarations()
                     .iter()
-                    .any(style::properties::PropertyDeclaration::uses_subgrid))
+                    .any(|declaration| {
+                        declaration.uses_subgrid() || declaration.uses_intrinsic_grid_repetition()
+                    }))
                 || (!name.starts_with("--")
                     && style::values::specified::calc::ComparisonFunctions::in_value(value).direct)
         },

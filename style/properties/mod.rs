@@ -857,6 +857,24 @@ fn parse_non_custom_property_declaration_value_into<'i>(
 }
 
 impl PropertyDeclaration {
+    /// Whether an automatic grid repetition contains a non-fixed track size.
+    pub fn uses_intrinsic_grid_repetition(&self) -> bool {
+        use crate::values::generics::grid::{GridTemplateComponent, TrackListValue};
+        let template = match self {
+            Self::GridTemplateRows(value) | Self::GridTemplateColumns(value) => value,
+            _ => return false,
+        };
+        let GridTemplateComponent::TrackList(list) = template else {
+            return false;
+        };
+        match list.values.get(list.auto_repeat_index) {
+            Some(TrackListValue::TrackRepeat(repeat)) => {
+                repeat.track_sizes.iter().any(|track| !track.is_fixed())
+            },
+            _ => false,
+        }
+    }
+
     /// Whether a grid-template axis uses subgrid tracks.
     pub fn uses_subgrid(&self) -> bool {
         match self {
@@ -1648,7 +1666,13 @@ impl UnparsedValue {
                 {
                     Ok(decl) => {
                         #[cfg(feature = "servo")]
-                        if !computed_context.builder.device.subgrid_enabled && decl.uses_subgrid() {
+                        if (!computed_context.builder.device.subgrid_enabled && decl.uses_subgrid())
+                            || (!computed_context
+                                .builder
+                                .device
+                                .intrinsic_grid_repetition_enabled
+                                && decl.uses_intrinsic_grid_repetition())
+                        {
                             return invalid_at_computed_value_time();
                         }
                         Cow::Owned(decl)
@@ -1669,12 +1693,14 @@ impl UnparsedValue {
         }
 
         #[cfg(feature = "servo")]
-        if !computed_context.builder.device.subgrid_enabled
-            && decls
-                .declarations
-                .iter()
-                .any(PropertyDeclaration::uses_subgrid)
-        {
+        if decls.declarations.iter().any(|declaration| {
+            (!computed_context.builder.device.subgrid_enabled && declaration.uses_subgrid())
+                || (!computed_context
+                    .builder
+                    .device
+                    .intrinsic_grid_repetition_enabled
+                    && declaration.uses_intrinsic_grid_repetition())
+        }) {
             return invalid_at_computed_value_time();
         }
 
