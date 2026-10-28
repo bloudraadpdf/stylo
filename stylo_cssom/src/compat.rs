@@ -6,6 +6,8 @@ pub enum CompatMode {
     #[default]
     None,
 
+    Chromium,
+
     PdfReactor,
 
     Prince,

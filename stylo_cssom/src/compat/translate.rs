@@ -766,7 +766,7 @@ fn rewrite_break_pseudo_aliases(css: &str, compat: CompatMode) -> Option<String>
 }
 
 fn rewrite_supports_property_probes(css: &str, compat: CompatMode) -> Option<String> {
-    if matches!(compat, CompatMode::None) {
+    if matches!(compat, CompatMode::None | CompatMode::Chromium) {
         return None;
     }
     const AT_SUPPORTS: &[u8] = b"@supports";
@@ -1739,7 +1739,7 @@ fn rewrite_spot_colour_function_tokens(
             (b"-ro-separation(", "-bd-separation("),
             (b"-ro-spot(", "-bd-spot("),
         ],
-        CompatMode::None => return None,
+        CompatMode::None | CompatMode::Chromium => return None,
     };
 
     if !aliases.iter().any(|(needle, _)| {
@@ -2197,7 +2197,7 @@ pub fn compat_builtin_counter_stylesheet_root(
         )
     };
     let rules = match compat {
-        CompatMode::None => return None,
+        CompatMode::None | CompatMode::Chromium => return None,
         CompatMode::Prince => vec![asterisks()],
         CompatMode::PdfReactor => vec![
             asterisks(),
@@ -2394,6 +2394,13 @@ mod prince_rewrite_tests {
         for mode in [CompatMode::None, CompatMode::PdfReactor] {
             assert_eq!(translate_compat(css, mode).rewritten, css);
         }
+    }
+
+    #[test]
+    fn chromium_does_not_enable_print_vendor_syntax() {
+        let css = "@supports(prince-hyphens:auto){p{prince-hyphens:auto;color:cmyk(0,0,0,1);-ro-line-height:2}}";
+        assert_eq!(translate_compat(css, CompatMode::Chromium).rewritten, css);
+        assert!(super::compat_builtin_counter_stylesheet_root(CompatMode::Chromium).is_none());
     }
 
     #[test]
@@ -3645,7 +3652,7 @@ fn rewrite_position_visibility_value(value: &str) -> Option<String> {
 
 fn rewrite_string_set_keywords(css: &str, compat: CompatMode) -> Option<String> {
     let keywords: &[(&[u8], &str)] = match compat {
-        CompatMode::None => return None,
+        CompatMode::None | CompatMode::Chromium => return None,
         CompatMode::PdfReactor => &[
             (b"self", "content(text)"),
             (b"first-letter", "content(first-letter)"),
@@ -3856,7 +3863,7 @@ fn skip_at_rule<'i>(parser: &mut Parser<'i, '_>) {
 /// Declarations rejected by the reference engine before the cascade.
 fn engine_ignores_declaration(compat: CompatMode, name: &str, value: &str) -> bool {
     match compat {
-        CompatMode::None => false,
+        CompatMode::None | CompatMode::Chromium => false,
         CompatMode::PdfReactor => {
             name.eq_ignore_ascii_case("footnote-policy")
                 || name.eq_ignore_ascii_case("inset")
