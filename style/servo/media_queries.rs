@@ -181,6 +181,8 @@ pub struct Device {
     pub comparison_functions_enabled: bool,
     /// Whether substituted grid-template values support subgrid tracks.
     pub subgrid_enabled: bool,
+    /// Whether substituted automatic grid repetitions support non-fixed tracks.
+    pub intrinsic_grid_repetition_enabled: bool,
     /// Whether direct link-state selectors win otherwise equal cascade ties.
     pub link_state_cascade_priority: bool,
 }
@@ -228,6 +230,7 @@ impl Device {
             background_blending_enabled: true,
             comparison_functions_enabled: true,
             subgrid_enabled: true,
+            intrinsic_grid_repetition_enabled: true,
             link_state_cascade_priority: false,
         }
     }

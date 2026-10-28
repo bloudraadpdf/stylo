@@ -766,7 +766,7 @@ fn rewrite_break_pseudo_aliases(css: &str, compat: CompatMode) -> Option<String>
 }
 
 fn rewrite_supports_property_probes(css: &str, compat: CompatMode) -> Option<String> {
-    if matches!(compat, CompatMode::None | CompatMode::Chromium) {
+    if compat == CompatMode::None {
         return None;
     }
     const AT_SUPPORTS: &[u8] = b"@supports";
@@ -2304,7 +2304,8 @@ mod prince_rewrite_tests {
         use stylo_cssom_model::{InternalStylesheetRoot, StyleOrigin};
         let parsed = crate::authored_rules::ParsedStylesheet::parse(
             ".a:dir(ltr) { width:var(--width) } @media print { .b:dir(rtl) { width:var(--width) } .c { width:10px } }",
-        ).unwrap();
+        )
+        .unwrap();
         let root = InternalStylesheetRoot::new(StyleOrigin::Author, parsed.rule_nodes().to_vec());
         let (projected, _) = super::project_compat_root(&root, CompatMode::PdfReactor);
         assert_eq!(projected.rules().len(), 1);
@@ -2884,6 +2885,44 @@ mod prince_rewrite_tests {
         }
         let css = "p { --inset:0; top:0; right:0; bottom:0; left:0; inset-block:0; inset-inline:0; inset-block-start:0; inset-inline-end:0 }";
         assert_eq!(translate_compat(css, CompatMode::PdfReactor).rewritten, css);
+    }
+
+    #[test]
+    fn chromium_rejects_intrinsic_auto_repetition_before_the_cascade() {
+        for property in [
+            "grid-template-rows",
+            "grid-template-columns",
+            "grid-template",
+            "grid",
+        ] {
+            for repeat in [
+                "repeat(auto-fill,[row] auto)",
+                "repeat(auto-fit,min-content)",
+            ] {
+                let value = if property.ends_with("rows") || property.ends_with("columns") {
+                    repeat.to_owned()
+                } else {
+                    format!("{repeat} / 30px")
+                };
+                let css = format!("p {{ {property}:10px 20px; {property}:{value}; }}");
+                assert_eq!(
+                    translate_compat(&css, CompatMode::Chromium).rewritten,
+                    format!("p {{ {property}:10px 20px; }}")
+                );
+                for compat in [CompatMode::None, CompatMode::Prince, CompatMode::PdfReactor] {
+                    assert_eq!(translate_compat(&css, compat).rewritten, css);
+                }
+            }
+        }
+        for value in ["repeat(auto-fill,20px)", "var(--tracks)"] {
+            let css = format!("p {{ grid-template-rows:{value}; }}");
+            assert_eq!(translate_compat(&css, CompatMode::Chromium).rewritten, css);
+        }
+        let css = "@supports (grid-template-rows:repeat(auto-fill,auto)) { p { color:red } }";
+        assert_eq!(
+            translate_compat(css, CompatMode::Chromium).rewritten,
+            "@supports (not (--bd-compat-satisfied: 1)) { p { color:red } }"
+        );
     }
 
     #[test]
@@ -3863,7 +3902,22 @@ fn skip_at_rule<'i>(parser: &mut Parser<'i, '_>) {
 /// Declarations rejected by the reference engine before the cascade.
 fn engine_ignores_declaration(compat: CompatMode, name: &str, value: &str) -> bool {
     match compat {
-        CompatMode::None | CompatMode::Chromium => false,
+        CompatMode::None => false,
+        CompatMode::Chromium => {
+            [
+                "grid",
+                "grid-template",
+                "grid-template-rows",
+                "grid-template-columns",
+            ]
+            .iter()
+            .any(|property| name.eq_ignore_ascii_case(property))
+                && crate::declaration_parser::parse_inline_style_block(&format!("{name}:{value}"))
+                    .as_typed()
+                    .declarations()
+                    .iter()
+                    .any(style::properties::PropertyDeclaration::uses_intrinsic_grid_repetition)
+        },
         CompatMode::PdfReactor => {
             name.eq_ignore_ascii_case("footnote-policy")
                 || name.eq_ignore_ascii_case("inset")
