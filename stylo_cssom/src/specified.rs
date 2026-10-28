@@ -478,6 +478,28 @@ mod inline_compatibility_projection_tests {
     }
 
     #[test]
+    fn omitted_background_colour_keeps_its_initial_keyword() {
+        use style_traits::ToCss;
+        for background in ["none", "url(image.png)", "center / cover no-repeat"] {
+            let declarations = crate::declaration_parser::parse_inline_style_declarations(
+                &format!("background: {background}"),
+                "about:blank".into(),
+            );
+            assert_eq!(
+                projected_specified_property_value(&declarations, "background-color").as_deref(),
+                Some("transparent"),
+                "{background}"
+            );
+        }
+        let specified = style::values::specified::Color::transparent();
+        assert_eq!(specified.to_css_string(), "transparent");
+        assert_eq!(
+            specified.resolve_to_absolute().unwrap().to_css_string(),
+            "rgba(0, 0, 0, 0)"
+        );
+    }
+
+    #[test]
     fn standard_declaration_projection_preserves_canonical_numbers() {
         let declarations = crate::declaration_parser::parse_inline_style_declarations(
             "font: normal normal xx-large/1.2 cursive",
