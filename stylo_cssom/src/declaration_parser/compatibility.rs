@@ -34,7 +34,7 @@ impl CanonicalProperty {
         use InlineCompatibilityProperty as Property;
 
         let native = match property {
-            Property::FlowTolerance => "masonry-slack",
+            Property::FitTolerance => "masonry-slack",
             Property::GridLanesPack => "grid-auto-flow",
             Property::LegacyTextAlign => "text-align",
             Property::WebkitBoxDisplay => "display",

@@ -118,7 +118,7 @@ fn project_inline_compatibility_declaration(
     let one = |property: &str, value: String| vec![(property.to_owned(), value, importance)];
     let value = projected_specified_style_value_text(&declaration.value);
     match &declaration.property {
-        Property::Compatibility(Compat::FlowTolerance) => {
+        Property::Compatibility(Compat::FitTolerance) => {
             if value.eq_ignore_ascii_case("auto") {
                 Vec::new()
             } else if value.eq_ignore_ascii_case("normal") {

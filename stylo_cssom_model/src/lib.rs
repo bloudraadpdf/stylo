@@ -586,7 +586,7 @@ pub enum SpecifiedPropertyName {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum InlineCompatibilityProperty {
-    FlowTolerance,
+    FitTolerance,
     GridLanesPack,
     LegacyTextAlign,
     WebkitBoxDisplay,
@@ -596,7 +596,7 @@ impl InlineCompatibilityProperty {
     #[must_use]
     pub const fn css_name(self) -> &'static str {
         match self {
-            Self::FlowTolerance => "flow-tolerance",
+            Self::FitTolerance => "fit-tolerance",
             Self::GridLanesPack => "grid-lanes-pack",
             Self::LegacyTextAlign => "text-align",
             Self::WebkitBoxDisplay => "display",

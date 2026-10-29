@@ -1001,8 +1001,8 @@ impl PropertyDeclaration {
                     &start,
                     |declarations, input| {
                         let decl = input.parse_entirely(|input| {
-                            if non_custom_id.as_alias() == Some(AliasId::FlowTolerance) {
-                                return crate::values::specified::MasonrySlack::parse_flow_tolerance(context, input)
+                            if non_custom_id.as_alias() == Some(AliasId::FitTolerance) {
+                                return crate::values::specified::MasonrySlack::parse_fit_tolerance(context, input)
                                     .map(PropertyDeclaration::MasonrySlack);
                             }
                             longhand_id.parse_value(context, input)

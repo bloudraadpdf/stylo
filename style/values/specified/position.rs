@@ -2040,7 +2040,7 @@ impl Parse for MasonrySlack {
 
 impl MasonrySlack {
     /// Parse the standard name, whose keywords differ from the legacy longhand.
-    pub fn parse_flow_tolerance<'i, 't>(
+    pub fn parse_fit_tolerance<'i, 't>(
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {

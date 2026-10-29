@@ -389,12 +389,12 @@ mod masonry_slack_tests {
     }
 
     #[test]
-    fn masonry_slack_animation_property_recognises_flow_tolerance() {
+    fn masonry_slack_animation_property_recognises_fit_tolerance() {
         use crate::properties::PropertyId;
         use crate::test_support::{pref_lock, BoolPrefGuard};
         let _lock = pref_lock().lock().unwrap();
         let _pref = BoolPrefGuard::set("layout.css.grid-template-masonry-value.enabled", true);
-        let alias = PropertyId::parse_enabled_for_all_content("flow-tolerance").unwrap();
+        let alias = PropertyId::parse_enabled_for_all_content("fit-tolerance").unwrap();
         let backing = PropertyId::parse_enabled_for_all_content("masonry-slack").unwrap();
         assert_eq!(alias.as_shorthand(), backing.as_shorthand());
         assert!(alias.is_animatable());

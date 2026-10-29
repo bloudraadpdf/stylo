@@ -136,7 +136,21 @@ fn anchor_center_applies_to_self_alignment_only() {
 }
 
 #[test]
-fn masonry_slack_alias_preserves_flow_tolerance_keyword_semantics() {
+fn fit_tolerance_uses_the_current_grid_lanes_property_name() {
+    let _lock = crate::test_support::pref_lock().lock().unwrap();
+    let _pref = crate::test_support::BoolPrefGuard::set(
+        "layout.css.grid-template-masonry-value.enabled",
+        true,
+    );
+    assert_serialization("fit-tolerance", "0", Some("0px"));
+    assert_serialization("fit-tolerance", "25%", Some("25%"));
+    assert!(block("flow-tolerance:0").is_empty());
+    assert!(block("fit-tolerance:-1px").is_empty());
+    assert!(block("fit-tolerance:auto").is_empty());
+}
+
+#[test]
+fn masonry_slack_alias_preserves_fit_tolerance_keyword_semantics() {
     let _lock = crate::test_support::pref_lock().lock().unwrap();
     let _pref = crate::test_support::BoolPrefGuard::set(
         "layout.css.grid-template-masonry-value.enabled",
@@ -147,10 +161,10 @@ fn masonry_slack_alias_preserves_flow_tolerance_keyword_semantics() {
         ("infinite", "auto"),
         ("10px", "10px"),
     ] {
-        let declarations = block(&format!("flow-tolerance:{input}"));
+        let declarations = block(&format!("fit-tolerance:{input}"));
         assert_eq!(serialized_value(&declarations, "masonry-slack"), backing);
     }
-    assert!(block("flow-tolerance:auto").is_empty());
+    assert!(block("fit-tolerance:auto").is_empty());
     assert_eq!(
         serialized_value(&block("masonry-slack:infinite"), "masonry-slack"),
         "infinite"

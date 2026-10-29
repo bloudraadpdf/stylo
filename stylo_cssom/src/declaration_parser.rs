@@ -736,12 +736,12 @@ fn parse_compatibility_declaration(
 ) -> Option<stylo_cssom_model::SpecifiedDeclaration> {
     let trimmed = value.trim();
     match property {
-        stylo_cssom_model::InlineCompatibilityProperty::FlowTolerance
+        stylo_cssom_model::InlineCompatibilityProperty::FitTolerance
             if trimmed.eq_ignore_ascii_case("auto") =>
         {
             return None;
         },
-        stylo_cssom_model::InlineCompatibilityProperty::FlowTolerance
+        stylo_cssom_model::InlineCompatibilityProperty::FitTolerance
             if !matches!(trimmed.to_ascii_lowercase().as_str(), "normal" | "infinite") =>
         {
             let block = parse_inline_style_block(&format!("masonry-slack:{trimmed}"));
@@ -879,7 +879,7 @@ pub fn inline_compatibility_properties()
 -> impl Iterator<Item = stylo_cssom_model::InlineCompatibilityProperty> {
     use stylo_cssom_model::InlineCompatibilityProperty as Property;
 
-    [Property::FlowTolerance, Property::GridLanesPack].into_iter()
+    [Property::FitTolerance, Property::GridLanesPack].into_iter()
 }
 
 pub fn inline_compatibility_property(
@@ -1066,7 +1066,7 @@ pub fn specified_declarations_from_property_declaration(
 #[must_use]
 pub fn inline_style_cssom_backing_property(property: &str) -> &str {
     match property.to_ascii_lowercase().as_str() {
-        "flow-tolerance" => "masonry-slack",
+        "fit-tolerance" => "masonry-slack",
         "grid-gap" => "gap",
         "word-wrap" => "overflow-wrap",
         _ => property,
@@ -1089,7 +1089,7 @@ pub fn inline_style_cssom_backing_value<'a>(property: &str, value: &'a str) -> O
     if !crate::css_scan::named_function_is_closed(value, b"progress") {
         return None;
     }
-    if !property.eq_ignore_ascii_case("flow-tolerance") {
+    if !property.eq_ignore_ascii_case("fit-tolerance") {
         return Some(value);
     }
     let keyword = value.trim();
@@ -1125,8 +1125,8 @@ pub fn inline_style_cssom_authored_value(property: &str, value: Option<String>) 
             }
         }
         let keyword = match (property.to_ascii_lowercase().as_str(), value.as_str()) {
-            ("flow-tolerance", "infinite") => Some("normal"),
-            ("flow-tolerance", "auto") => Some("infinite"),
+            ("fit-tolerance", "infinite") => Some("normal"),
+            ("fit-tolerance", "auto") => Some("infinite"),
             _ => None,
         };
         match keyword {
@@ -2250,7 +2250,7 @@ mod tests {
 
         let declarations = parse_inline_style_declarations(
             concat!(
-                "flow-tolerance:normal!important;",
+                "fit-tolerance:normal!important;",
                 "grid-lanes-pack:dense;grid-lanes-direction:column track-reverse;",
                 "display:-webkit-box;-webkit-box-orient:vertical;",
                 "view-transition-scope:all;view-transition-group:contain",
@@ -2268,7 +2268,7 @@ mod tests {
             compatibility,
             vec![
                 (
-                    Compat::FlowTolerance,
+                    Compat::FitTolerance,
                     stylo_cssom_model::Importance::Important
                 ),
                 (Compat::GridLanesPack, stylo_cssom_model::Importance::Normal),
@@ -2367,25 +2367,25 @@ mod tests {
 
         for (css, name, value, importance) in [
             (
-                "flow-tolerance:0;masonry-slack:20px",
+                "fit-tolerance:0;masonry-slack:20px",
                 "masonry-slack",
                 "20px",
                 stylo_cssom_model::Importance::Normal,
             ),
             (
-                "masonry-slack:20px;flow-tolerance:0",
-                "flow-tolerance",
+                "masonry-slack:20px;fit-tolerance:0",
+                "fit-tolerance",
                 "0",
                 stylo_cssom_model::Importance::Normal,
             ),
             (
-                "flow-tolerance:0!important;masonry-slack:20px",
-                "flow-tolerance",
+                "fit-tolerance:0!important;masonry-slack:20px",
+                "fit-tolerance",
                 "0",
                 stylo_cssom_model::Importance::Important,
             ),
             (
-                "masonry-slack:20px!important;flow-tolerance:0",
+                "masonry-slack:20px!important;fit-tolerance:0",
                 "masonry-slack",
                 "20px",
                 stylo_cssom_model::Importance::Important,
@@ -2400,7 +2400,7 @@ mod tests {
                         {
                             Some("masonry-slack")
                         },
-                        Property::Compatibility(Compat::FlowTolerance) => Some("flow-tolerance"),
+                        Property::Compatibility(Compat::FitTolerance) => Some("fit-tolerance"),
                         Property::Standard(_)
                         | Property::Custom(_)
                         | Property::Compatibility(_)

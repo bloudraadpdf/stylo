@@ -319,13 +319,13 @@ fn translate_compat_with_registrations<'css>(
 }
 
 fn rewrite_grid_lanes_properties(css: &str) -> Option<String> {
-    const FLOW_TOLERANCE: &[u8] = b"flow-tolerance";
+    const FIT_TOLERANCE: &[u8] = b"fit-tolerance";
     const GRID_LANES_PACK: &[u8] = b"grid-lanes-pack";
 
     if !css
         .as_bytes()
-        .windows(FLOW_TOLERANCE.len())
-        .any(|candidate| candidate.eq_ignore_ascii_case(FLOW_TOLERANCE))
+        .windows(FIT_TOLERANCE.len())
+        .any(|candidate| candidate.eq_ignore_ascii_case(FIT_TOLERANCE))
         && !css
             .as_bytes()
             .windows(GRID_LANES_PACK.len())
@@ -355,13 +355,13 @@ fn rewrite_grid_lanes_properties(css: &str) -> Option<String> {
         }
 
         let projected_property = if bytes[index..]
-            .get(..FLOW_TOLERANCE.len())
-            .is_some_and(|candidate| candidate.eq_ignore_ascii_case(FLOW_TOLERANCE))
+            .get(..FIT_TOLERANCE.len())
+            .is_some_and(|candidate| candidate.eq_ignore_ascii_case(FIT_TOLERANCE))
         {
             Some((
-                FLOW_TOLERANCE.len(),
+                FIT_TOLERANCE.len(),
                 "masonry-slack",
-                GridLanesProjection::FlowTolerance,
+                GridLanesProjection::FitTolerance,
             ))
         } else if bytes[index..]
             .get(..GRID_LANES_PACK.len())
@@ -389,7 +389,7 @@ fn rewrite_grid_lanes_properties(css: &str) -> Option<String> {
             if bytes.get(colon) == Some(&b':') {
                 let (_, internal_property, projection_kind) =
                     projected_property.expect("a matched property projects");
-                if matches!(projection_kind, GridLanesProjection::FlowTolerance) {
+                if matches!(projection_kind, GridLanesProjection::FitTolerance) {
                     let value_start = skip_css_trivia(bytes, colon + 1);
                     let projection = [
                         (b"normal".as_slice(), "infinite"),
@@ -486,7 +486,7 @@ fn rewrite_grid_lanes_properties(css: &str) -> Option<String> {
 
 #[derive(Clone, Copy)]
 enum GridLanesProjection {
-    FlowTolerance,
+    FitTolerance,
     Packing,
 }
 
@@ -8321,8 +8321,8 @@ mod grid_lanes_property_projection_tests {
     use super::{CompatMode, translate_compat};
 
     #[test]
-    fn flow_tolerance_projects_to_the_typed_internal_property() {
-        let stylesheet = "@supports (flow-tolerance: 5px) { .lanes { FLOW-TOLERANCE : 20%; } .normal { flow-tolerance: normal } .unbounded { flow-tolerance: infinite } }";
+    fn fit_tolerance_projects_to_the_typed_internal_property() {
+        let stylesheet = "@supports (fit-tolerance: 5px) { .lanes { FIT-TOLERANCE : 20%; } .normal { fit-tolerance: normal } .unbounded { fit-tolerance: infinite } }";
         assert_eq!(
             translate_compat(stylesheet, CompatMode::None).rewritten,
             "@supports (masonry-slack: 5px) { .lanes { masonry-slack : 20%; } .normal { masonry-slack: infinite } .unbounded { masonry-slack: auto } }"
@@ -8330,8 +8330,8 @@ mod grid_lanes_property_projection_tests {
     }
 
     #[test]
-    fn flow_tolerance_text_outside_property_positions_is_unchanged() {
-        let stylesheet = r#"/* flow-tolerance: 1px */ .x { --flow-tolerance: 2px; content: "flow-tolerance: 3px"; }"#;
+    fn fit_tolerance_text_outside_property_positions_is_unchanged() {
+        let stylesheet = r#"/* fit-tolerance: 1px */ .x { --fit-tolerance: 2px; content: "fit-tolerance: 3px"; }"#;
         assert!(translate_compat(stylesheet, CompatMode::None).is_borrowed());
     }
 
