@@ -766,7 +766,7 @@ fn rewrite_break_pseudo_aliases(css: &str, compat: CompatMode) -> Option<String>
 }
 
 fn rewrite_supports_property_probes(css: &str, compat: CompatMode) -> Option<String> {
-    if compat == CompatMode::None {
+    if matches!(compat, CompatMode::None | CompatMode::WeasyPrint) {
         return None;
     }
     const AT_SUPPORTS: &[u8] = b"@supports";
@@ -1739,7 +1739,7 @@ fn rewrite_spot_colour_function_tokens(
             (b"-ro-separation(", "-bd-separation("),
             (b"-ro-spot(", "-bd-spot("),
         ],
-        CompatMode::None | CompatMode::Chromium => return None,
+        CompatMode::None | CompatMode::Chromium | CompatMode::WeasyPrint => return None,
     };
 
     if !aliases.iter().any(|(needle, _)| {
@@ -2197,7 +2197,7 @@ pub fn compat_builtin_counter_stylesheet_root(
         )
     };
     let rules = match compat {
-        CompatMode::None | CompatMode::Chromium => return None,
+        CompatMode::None | CompatMode::Chromium | CompatMode::WeasyPrint => return None,
         CompatMode::Prince => vec![asterisks()],
         CompatMode::PdfReactor => vec![
             asterisks(),
@@ -2417,7 +2417,9 @@ mod prince_rewrite_tests {
                 "color:device-cmyk(0.8,0.5,0,0.3)"
             );
         }
-        assert_eq!(translate_compat(css, CompatMode::None).rewritten, css);
+        for mode in [CompatMode::None, CompatMode::WeasyPrint] {
+            assert_eq!(translate_compat(css, mode).rewritten, css);
+        }
     }
 
     #[test]
@@ -3691,7 +3693,7 @@ fn rewrite_position_visibility_value(value: &str) -> Option<String> {
 
 fn rewrite_string_set_keywords(css: &str, compat: CompatMode) -> Option<String> {
     let keywords: &[(&[u8], &str)] = match compat {
-        CompatMode::None | CompatMode::Chromium => return None,
+        CompatMode::None | CompatMode::Chromium | CompatMode::WeasyPrint => return None,
         CompatMode::PdfReactor => &[
             (b"self", "content(text)"),
             (b"first-letter", "content(first-letter)"),
@@ -3902,7 +3904,7 @@ fn skip_at_rule<'i>(parser: &mut Parser<'i, '_>) {
 /// Declarations rejected by the reference engine before the cascade.
 fn engine_ignores_declaration(compat: CompatMode, name: &str, value: &str) -> bool {
     match compat {
-        CompatMode::None => false,
+        CompatMode::None | CompatMode::WeasyPrint => false,
         CompatMode::Chromium => {
             [
                 "grid",

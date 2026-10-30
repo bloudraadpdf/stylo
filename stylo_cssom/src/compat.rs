@@ -8,6 +8,8 @@ pub enum CompatMode {
 
     Chromium,
 
+    WeasyPrint,
+
     PdfReactor,
 
     Prince,
