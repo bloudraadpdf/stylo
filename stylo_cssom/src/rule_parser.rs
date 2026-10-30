@@ -4050,6 +4050,15 @@ mod tests {
                 PropertyDeclaration::TransitionTimingFunction(value.clone())
             },
             PropertyDeclaration::Translate(value) => PropertyDeclaration::Translate(value.clone()),
+            PropertyDeclaration::ViewTimelineAxis(value) => {
+                PropertyDeclaration::ViewTimelineAxis(value.clone())
+            },
+            PropertyDeclaration::ViewTimelineInset(value) => {
+                PropertyDeclaration::ViewTimelineInset(value.clone())
+            },
+            PropertyDeclaration::ViewTimelineName(value) => {
+                PropertyDeclaration::ViewTimelineName(value.clone())
+            },
             PropertyDeclaration::ViewTransitionClass(value) => {
                 PropertyDeclaration::ViewTransitionClass(value.clone())
             },
