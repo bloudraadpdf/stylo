@@ -733,3 +733,11 @@ fn view_timeline_properties_retain_typed_names_axes_and_insets() {
         assert!(block(&format!("{name}:{input}")).is_empty());
     }
 }
+
+#[test]
+fn view_timeline_insets_participate_in_zoom_inheritance() {
+    let properties = super::LonghandIdSet::zoom_dependent();
+    assert!(properties.contains(super::LonghandId::ViewTimelineInset));
+    assert!(!properties.contains(super::LonghandId::ViewTimelineAxis));
+    assert!(!properties.contains(super::LonghandId::ViewTimelineName));
+}

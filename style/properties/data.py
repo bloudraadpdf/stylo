@@ -557,6 +557,7 @@ class Longhand(Property):
             "TextIndent",
             "Transform",
             "Translate",
+            "ViewTimelineInset",
             "WordSpacing",
             "basic_shape::ShapeOutside",
         }
