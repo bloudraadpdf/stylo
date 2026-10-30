@@ -714,3 +714,22 @@ fn mask_does_not_serialize_when_a_reset_longhand_is_missing() {
 
     assert_eq!(serialized_value(&block, "mask"), "");
 }
+
+#[test]
+fn view_timeline_properties_retain_typed_names_axes_and_insets() {
+    for (name, input, expected) in [
+        ("view-timeline-name", "--visible, none", "--visible, none"),
+        ("view-timeline-axis", "inline, y", "inline, y"),
+        ("view-timeline-inset", "10px 20%, auto", "10px 20%, auto"),
+        ("view-timeline-inset", "inherit", "inherit"),
+    ] {
+        assert_serialization(name, input, Some(expected));
+    }
+    for (name, input) in [
+        ("view-timeline-name", "visible"),
+        ("view-timeline-axis", "diagonal"),
+        ("view-timeline-inset", "1px 2px 3px"),
+    ] {
+        assert!(block(&format!("{name}:{input}")).is_empty());
+    }
+}
