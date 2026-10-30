@@ -485,20 +485,6 @@ impl Animation {
         ComputedKeyframe::composite(keyframe.composition, &underlying, value)
     }
 
-    /// Whether or not this animation is cancelled by changes from a new style.
-    fn is_cancelled_in_new_style(&self, new_style: &Arc<ComputedValues>) -> bool {
-        let new_ui = new_style.get_ui();
-        let index = new_ui
-            .animation_name_iter()
-            .position(|animation_name| Some(&self.name) == animation_name.as_atom());
-        let index = match index {
-            Some(index) => index,
-            None => return true,
-        };
-
-        new_ui.animation_duration_mod(index).seconds() == 0.
-    }
-
     /// Given the current time, advances this animation to the next iteration,
     /// updates times, and then toggles the direction if appropriate. Otherwise
     /// does nothing. Returns true if this animation has iterated.
@@ -1029,6 +1015,26 @@ pub struct ElementAnimationSet {
 }
 
 impl ElementAnimationSet {
+    fn update_animation_list(&mut self, new_animations: Vec<Animation>, now: f64) {
+        self.dirty |= !self.animations.is_empty() || !new_animations.is_empty();
+        let mut unmatched = std::mem::take(&mut self.animations);
+        for mut new_animation in new_animations.into_iter().rev() {
+            if let Some(index) = unmatched.iter().rposition(|existing| {
+                existing.state != AnimationState::Canceled && existing.name == new_animation.name
+            }) {
+                let mut existing = unmatched.remove(index);
+                existing.update_from_other(&new_animation, now);
+                new_animation = existing;
+            }
+            self.animations.push(new_animation);
+        }
+        self.animations.reverse();
+        for mut animation in unmatched {
+            animation.state = AnimationState::Canceled;
+            self.animations.push(animation);
+        }
+    }
+
     /// Cancel all animations in this `ElementAnimationSet`. This is typically called
     /// when the element has been removed from the DOM.
     pub fn cancel_all_animations(&mut self) {
@@ -1134,12 +1140,6 @@ impl ElementAnimationSet {
     ) where
         E: TElement,
     {
-        for animation in self.animations.iter_mut() {
-            if animation.is_cancelled_in_new_style(new_style) {
-                animation.state = AnimationState::Canceled;
-            }
-        }
-
         maybe_start_animations(
             element,
             &context,
@@ -1707,6 +1707,7 @@ pub fn maybe_start_animations<E>(
     E: TElement,
 {
     let style = new_style.get_ui();
+    let mut new_animations = Vec::new();
     for (i, name) in style.animation_name_iter().enumerate() {
         let name = match name.as_atom() {
             Some(atom) => atom,
@@ -1796,30 +1797,16 @@ pub fn maybe_start_animations<E>(
         // the delay moves us past the first iteration.
         new_animation.advance_to_starting_progress(starting_progress);
 
-        animation_state.dirty = true;
-
-        // If the animation was already present in the list for the node, just update its state.
-        for existing_animation in animation_state.animations.iter_mut() {
-            if existing_animation.state == AnimationState::Canceled {
-                continue;
-            }
-
-            if new_animation.name == existing_animation.name {
-                existing_animation
-                    .update_from_other(&new_animation, context.current_time_for_animations);
-                return;
-            }
-        }
-
-        animation_state.animations.push(new_animation);
+        new_animations.push(new_animation);
     }
+    animation_state.update_animation_list(new_animations, context.current_time_for_animations);
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
         Animation, AnimationComposition, AnimationDirection, AnimationFillMode, AnimationState,
-        ComputedKeyframe, KeyframesIterationState,
+        ComputedKeyframe, ElementAnimationSet, KeyframesIterationState,
     };
     use crate::properties::animated_properties::AnimationValue;
     use crate::properties::style_structs::Font;
@@ -1843,6 +1830,81 @@ mod tests {
             cascade_style: ComputedValues::initial_values_with_font_override(Font::initial_values()),
             is_new: false,
         }
+    }
+
+    fn named_animation(name: &str, started_at: f64, duration: f64) -> Animation {
+        Animation {
+            name: Atom::from(name),
+            started_at,
+            duration,
+            ..pending_animation()
+        }
+    }
+
+    #[test]
+    fn animation_name_repetition_creates_distinct_effects() {
+        let mut set = ElementAnimationSet::default();
+        set.update_animation_list(
+            vec![
+                named_animation("repeat", 10., 0.),
+                named_animation("repeat", 10., 2.),
+            ],
+            10.,
+        );
+        assert_eq!(set.animations.len(), 2);
+        assert_eq!(set.animations[0].duration, 0.);
+        assert_eq!(set.animations[1].duration, 2.);
+    }
+
+    #[test]
+    fn animation_name_repetition_matches_old_effects_from_the_end() {
+        let mut set = ElementAnimationSet {
+            animations: vec![named_animation("repeat", 1., 4.)],
+            ..Default::default()
+        };
+        set.update_animation_list(
+            vec![
+                named_animation("repeat", 10., 3.),
+                named_animation("repeat", 10., 2.),
+            ],
+            10.,
+        );
+        assert_eq!(set.animations.len(), 2);
+        assert_eq!(set.animations[0].started_at, 10.);
+        assert_eq!(set.animations[1].started_at, 1.);
+        assert_eq!(set.animations[0].duration, 3.);
+        assert_eq!(set.animations[1].duration, 2.);
+    }
+
+    #[test]
+    fn animation_name_matching_keeps_order_and_cancels_unmatched_effects() {
+        let mut set = ElementAnimationSet {
+            animations: vec![
+                named_animation("repeat", 1., 4.),
+                named_animation("other", 2., 4.),
+                named_animation("repeat", 3., 4.),
+            ],
+            ..Default::default()
+        };
+        set.update_animation_list(
+            vec![
+                named_animation("other", 10., 2.),
+                named_animation("repeat", 10., 0.),
+            ],
+            10.,
+        );
+        assert_eq!(set.animations.len(), 3);
+        assert_eq!(set.animations[0].name, Atom::from("other"));
+        assert_eq!(set.animations[0].started_at, 2.);
+        assert_eq!(set.animations[1].started_at, 3.);
+        assert_eq!(set.animations[1].duration, 0.);
+        assert_eq!(set.animations[2].started_at, 1.);
+        assert_eq!(set.animations[2].state, AnimationState::Canceled);
+        set.update_animation_list(Vec::new(), 11.);
+        assert!(set
+            .animations
+            .iter()
+            .all(|animation| animation.state == AnimationState::Canceled));
     }
 
     #[test]
