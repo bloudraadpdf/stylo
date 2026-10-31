@@ -2968,6 +2968,14 @@ mod calc_size_tests {
     }
 
     #[test]
+    fn calc_size_keeps_a_sum_of_size_terms() {
+        assert_eq!(
+            parse_size("calc-size(auto, size + size)").to_css_string(),
+            "calc-size(auto, size + size)"
+        );
+    }
+
+    #[test]
     fn calc_size_rejects_invalid_bases_and_calculations() {
         for css in ["calc-size(any, size)", "calc-size(0, 0px)", "calc-size(0px, 0)", "calc-size(content, size)"] {
             let mut input = ParserInput::new(css);

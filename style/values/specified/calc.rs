@@ -821,7 +821,10 @@ impl generic::CalcNodeLeaf for Leaf {
                 // Can not get the sum of color components, because they haven't been resolved yet.
                 return Err(());
             },
-            (&mut SiblingIndex, &SiblingIndex) | (&mut SiblingCount, &SiblingCount) => {
+            // `size` is resolved at used-value time.
+            (&mut SiblingIndex, &SiblingIndex)
+            | (&mut SiblingCount, &SiblingCount)
+            | (&mut Size, &Size) => {
                 return Err(());
             },
             _ => {
