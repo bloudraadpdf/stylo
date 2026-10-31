@@ -208,6 +208,35 @@ impl AnimationValue {
         self.animate(other, Procedure::Interpolate { progress: 0.5 }).is_ok()
     }
 
+    /// Animates this value under `interpolate-size`. With `allow-keywords`, a
+    /// size keyword also interpolates with a `<length-percentage>`.
+    ///
+    /// <https://drafts.csswg.org/css-values-5/#interpolate-size>
+    pub fn animate_with_interpolate_size(
+        &self,
+        other: &Self,
+        procedure: Procedure,
+        interpolate_size: longhands::interpolate_size::computed_value::T,
+    ) -> Result<Self, ()> {
+        use self::AnimationValue::*;
+        use crate::values::generics::flex::GenericFlexBasis;
+        if interpolate_size != longhands::interpolate_size::computed_value::T::AllowKeywords {
+            return self.animate(other, procedure);
+        }
+        Ok(match (self, other) {
+            (Width(a), Width(b)) => Width(a.animate_size(b, procedure, true)?),
+            (Height(a), Height(b)) => Height(a.animate_size(b, procedure, true)?),
+            (MinWidth(a), MinWidth(b)) => MinWidth(a.animate_size(b, procedure, true)?),
+            (MinHeight(a), MinHeight(b)) => MinHeight(a.animate_size(b, procedure, true)?),
+            (MaxWidth(a), MaxWidth(b)) => MaxWidth(a.animate_size(b, procedure, true)?),
+            (MaxHeight(a), MaxHeight(b)) => MaxHeight(a.animate_size(b, procedure, true)?),
+            (FlexBasis(GenericFlexBasis::Size(a)), FlexBasis(GenericFlexBasis::Size(b))) => {
+                FlexBasis(GenericFlexBasis::Size(a.animate_size(b, procedure, true)?))
+            },
+            _ => return self.animate(other, procedure),
+        })
+    }
+
     /// "Uncompute" this animation value in order to be used inside the CSS
     /// cascade.
     pub fn uncompute(&self) -> PropertyDeclaration {

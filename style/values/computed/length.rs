@@ -761,10 +761,10 @@ pub type RuleInset = GenericRuleInset<LengthPercentage>;
 pub type NonNegativeLengthOrNumber = GenericLengthOrNumber<NonNegativeLength, NonNegativeNumber>;
 
 /// A computed value for `min-width`, `min-height`, `width` or `height` property.
-pub type Size = GenericSize<NonNegativeLengthPercentage, Length>;
+pub type Size = GenericSize<NonNegativeLengthPercentage, specified::calc::CalcSizeCalculation>;
 
 /// A computed value for `max-width` or `max-height` property.
-pub type MaxSize = GenericMaxSize<NonNegativeLengthPercentage, Length>;
+pub type MaxSize = GenericMaxSize<NonNegativeLengthPercentage, specified::calc::CalcSizeCalculation>;
 
 #[cfg(feature = "gecko")]
 use crate::{

@@ -305,6 +305,7 @@ pub mod angle;
 pub mod animation;
 pub mod background;
 pub mod basic_shape;
+pub mod calc_size;
 pub mod bd_a11y;
 pub mod bd_barcode;
 pub mod bd_bfo;

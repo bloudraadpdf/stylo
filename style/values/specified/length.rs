@@ -16,12 +16,14 @@ use crate::parser::{Parse, ParserContext};
 use crate::values::computed::{self, CSSPixelLength, Context, FontSize};
 use crate::values::generics::length as generics;
 use crate::values::generics::length::{
-    GenericAnchorSizeFunction, GenericCalcSize, GenericCalcSizeBasis, GenericCalcSizeExpression,
+    GenericAnchorSizeFunction, GenericCalcSize, GenericCalcSizeBasis,
     GenericLengthOrNumber, GenericLengthPercentageOrNormal, GenericMargin, GenericMaxSize,
     GenericRuleInset, GenericSize,
 };
 use crate::values::generics::NonNegative;
-use crate::values::specified::calc::{self, AllowAnchorPositioningFunctions, CalcNode};
+use crate::values::specified::calc::{
+    self, AllowAnchorPositioningFunctions, CalcNode, CalcSizeCalculation,
+};
 use crate::values::specified::font::QueryFontMetricsFlags;
 use crate::values::specified::NonNegativeNumber;
 use crate::values::CSSFloat;
@@ -2450,8 +2452,11 @@ pub type NonNegativeLengthOrAuto = generics::LengthPercentageOrAuto<NonNegativeL
 /// Either a `<length>` or a `<number>`.
 pub type LengthOrNumber = GenericLengthOrNumber<Length, Number>;
 
+/// A specified `calc-size()` value.
+pub type CalcSize = GenericCalcSize<CalcSizeCalculation>;
+
 /// A specified value for `min-width`, `min-height`, `width` or `height` property.
-pub type Size = GenericSize<NonNegativeLengthPercentage, NoCalcLength>;
+pub type Size = GenericSize<NonNegativeLengthPercentage, CalcSizeCalculation>;
 
 impl Parse for Size {
     fn parse<'i, 't>(
@@ -2518,127 +2523,45 @@ macro_rules! parse_fit_content_function {
     };
 }
 
-fn calc_size_expression(node: CalcNode) -> Result<GenericCalcSizeExpression<NoCalcLength>, ()> {
-    use crate::values::generics::calc::{GenericCalcNode, MinMaxOp};
-    use crate::values::specified::calc::Leaf;
-
-    fn children(
-        values: crate::OwnedSlice<CalcNode>,
-    ) -> Result<crate::OwnedSlice<GenericCalcSizeExpression<NoCalcLength>>, ()> {
-        values
-            .into_vec()
-            .into_iter()
-            .map(calc_size_expression)
-            .collect::<Result<Vec<_>, _>>()
-            .map(|values| values.into_boxed_slice().into())
-    }
-
-    Ok(match node {
-        GenericCalcNode::Leaf(Leaf::Size) => GenericCalcSizeExpression::Size,
-        GenericCalcNode::Leaf(Leaf::Length(value)) => GenericCalcSizeExpression::Length(value),
-        GenericCalcNode::Leaf(Leaf::Percentage(value)) => {
-            GenericCalcSizeExpression::Percentage(value)
-        },
-        GenericCalcNode::Leaf(Leaf::Number(value)) => GenericCalcSizeExpression::Number(value),
-        GenericCalcNode::Leaf(
-            Leaf::Angle(_)
-            | Leaf::Time(_)
-            | Leaf::Resolution(_)
-            | Leaf::ColorComponent(_)
-            | Leaf::SiblingIndex
-            | Leaf::SiblingCount,
-        )
-        | GenericCalcNode::Anchor(_)
-        | GenericCalcNode::AnchorSize(_)
-        | GenericCalcNode::Trigonometric(_, _)
-        | GenericCalcNode::Pow(_, _) => return Err(()),
-        GenericCalcNode::Negate(value) => {
-            GenericCalcSizeExpression::Negate(Box::new(calc_size_expression(*value)?))
-        },
-        GenericCalcNode::Invert(value) => {
-            GenericCalcSizeExpression::Invert(Box::new(calc_size_expression(*value)?))
-        },
-        GenericCalcNode::Sum(values) => GenericCalcSizeExpression::Sum(children(values)?),
-        GenericCalcNode::Product(values) => GenericCalcSizeExpression::Product(children(values)?),
-        GenericCalcNode::MinMax(values, MinMaxOp::Min) => {
-            GenericCalcSizeExpression::Min(children(values)?)
-        },
-        GenericCalcNode::MinMax(values, MinMaxOp::Max) => {
-            GenericCalcSizeExpression::Max(children(values)?)
-        },
-        GenericCalcNode::Clamp { min, center, max } => GenericCalcSizeExpression::Clamp {
-            min: Box::new(calc_size_expression(*min)?),
-            center: Box::new(calc_size_expression(*center)?),
-            max: Box::new(calc_size_expression(*max)?),
-        },
-        GenericCalcNode::Round {
-            strategy,
-            value,
-            step,
-        } => GenericCalcSizeExpression::Round {
-            strategy,
-            value: Box::new(calc_size_expression(*value)?),
-            step: Box::new(calc_size_expression(*step)?),
-        },
-        GenericCalcNode::ModRem {
-            dividend,
-            divisor,
-            op,
-        } => GenericCalcSizeExpression::ModRem {
-            dividend: Box::new(calc_size_expression(*dividend)?),
-            divisor: Box::new(calc_size_expression(*divisor)?),
-            op,
-        },
-        GenericCalcNode::Hypot(values) => GenericCalcSizeExpression::Hypot(children(values)?),
-        GenericCalcNode::Abs(value) => {
-            GenericCalcSizeExpression::Abs(Box::new(calc_size_expression(*value)?))
-        },
-        GenericCalcNode::Sign(value) => {
-            GenericCalcSizeExpression::Sign(Box::new(calc_size_expression(*value)?))
-        },
-        GenericCalcNode::Progress {
-            value,
-            start,
-            end,
-            clamping,
-        } => GenericCalcSizeExpression::Progress {
-            value: Box::new(calc_size_expression(*value)?),
-            start: Box::new(calc_size_expression(*start)?),
-            end: Box::new(calc_size_expression(*end)?),
-            clamping,
-        },
-    })
+/// The size keywords that a `calc-size()` basis accepts in a property.
+#[derive(Clone, Copy)]
+struct CalcSizeKeywords {
+    auto: bool,
+    content: bool,
 }
 
+/// <https://drafts.csswg.org/css-values-5/#calc-size>
 fn parse_calc_size<'i, 't>(
     context: &ParserContext,
     input: &mut Parser<'i, 't>,
-) -> Result<GenericCalcSize<NonNegativeLengthPercentage, NoCalcLength>, ParseError<'i>> {
+    keywords: CalcSizeKeywords,
+) -> Result<CalcSize, ParseError<'i>> {
     input.expect_function_matching("calc-size")?;
     input.parse_nested_block(|input| {
-        let basis = input
-            .try_parse(|input| {
-                Ok::<GenericCalcSizeBasis<NonNegativeLengthPercentage>, ParseError<'i>>(
-                    try_match_ident_ignore_ascii_case! { input,
-                    "auto" => GenericCalcSizeBasis::Auto,
-                    "min-content" => GenericCalcSizeBasis::MinContent,
-                    "max-content" => GenericCalcSizeBasis::MaxContent,
-                    "fit-content" => GenericCalcSizeBasis::FitContent,
-                    "stretch" => GenericCalcSizeBasis::Stretch,
-                    },
-                )
-            })
-            .or_else(|_| {
-                NonNegativeLengthPercentage::parse(context, input)
-                    .map(GenericCalcSizeBasis::LengthPercentage)
-            })?;
+        let location = input.current_source_location();
+        let basis = if let Ok(ident) = input.try_parse(|i| i.expect_ident_cloned()) {
+            match_ignore_ascii_case! { &ident,
+                "any" => GenericCalcSizeBasis::Any,
+                "auto" if keywords.auto => GenericCalcSizeBasis::Auto,
+                "min-content" => GenericCalcSizeBasis::MinContent,
+                "max-content" => GenericCalcSizeBasis::MaxContent,
+                "fit-content" => GenericCalcSizeBasis::FitContent,
+                "stretch" => GenericCalcSizeBasis::Stretch,
+                "content" if keywords.content => GenericCalcSizeBasis::Content,
+                _ => return Err(location.new_unexpected_token_error(Token::Ident(ident))),
+            }
+        } else if let Ok(inner) = input.try_parse(|i| parse_calc_size(context, i, keywords)) {
+            GenericCalcSizeBasis::CalcSize(Box::new(inner))
+        } else {
+            GenericCalcSizeBasis::Calc(CalcSizeCalculation::new(CalcNode::parse_calc_size(
+                context, input, false,
+            )?))
+        };
         input.expect_comma()?;
-        let calculation = CalcNode::parse_calc_size(context, input)?;
-        Ok(GenericCalcSize {
-            basis,
-            calculation: calc_size_expression(calculation)
-                .map_err(|()| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))?,
-        })
+        let allow_size = !matches!(basis, GenericCalcSizeBasis::Any);
+        let calculation =
+            CalcSizeCalculation::new(CalcNode::parse_calc_size(context, input, allow_size)?);
+        Ok(GenericCalcSize { basis, calculation })
     })
 }
 
@@ -2693,7 +2616,11 @@ impl Size {
         parse_size_non_length!(Size, input, allow_webkit_fill_available,
                                "auto" => Auto);
         parse_fit_content_function!(Size, input, context, allow_quirks);
-        if let Ok(value) = input.try_parse(|input| parse_calc_size(context, input)) {
+        let keywords = CalcSizeKeywords {
+            auto: true,
+            content: allow_anchor_functions == ParseAnchorFunctions::No,
+        };
+        if let Ok(value) = input.try_parse(|input| parse_calc_size(context, input, keywords)) {
             return Ok(GenericSize::CalcSize(Box::new(value)));
         }
 
@@ -2767,7 +2694,7 @@ impl Size {
 }
 
 /// A specified value for `max-width` or `max-height` property.
-pub type MaxSize = GenericMaxSize<NonNegativeLengthPercentage, NoCalcLength>;
+pub type MaxSize = GenericMaxSize<NonNegativeLengthPercentage, CalcSizeCalculation>;
 
 impl Parse for MaxSize {
     fn parse<'i, 't>(
@@ -2789,7 +2716,11 @@ impl MaxSize {
         parse_size_non_length!(MaxSize, input, allow_webkit_fill_available,
                                "none" => None);
         parse_fit_content_function!(MaxSize, input, context, allow_quirks);
-        if let Ok(value) = input.try_parse(|input| parse_calc_size(context, input)) {
+        let keywords = CalcSizeKeywords {
+            auto: false,
+            content: false,
+        };
+        if let Ok(value) = input.try_parse(|input| parse_calc_size(context, input, keywords)) {
             return Ok(GenericMaxSize::CalcSize(Box::new(value)));
         }
 
@@ -2965,15 +2896,67 @@ mod calc_size_tests {
     }
 
     #[test]
-    fn calc_size_retains_the_basis_and_size_math_leaf() {
-        let GenericSize::CalcSize(value) = parse_size("calc-size(auto, min(size, 100px))") else {
-            panic!("calc-size() must have a distinct specified representation");
+    fn calc_size_serializes_its_simplified_calculation() {
+        for (css, expected) in [
+            ("calc-size(min-content, size * 2)", "calc-size(min-content, 2 * size)"),
+            ("calc-size(fit-content, 30px + size / 2)", "calc-size(fit-content, 30px + (0.5 * size))"),
+            ("calc-size(any, 50px + 30%)", "calc-size(any, 30% + 50px)"),
+            ("calc-size(calc-size(2in, 30px), 25em)", "calc-size(calc-size(192px, 30px), 25em)"),
+            ("calc-size(10px, sign(size) * size)", "calc-size(10px, sign(size) * size)"),
+            ("calc-size(auto, min(size, 100px))", "calc-size(auto, min(size, 100px))"),
+        ] {
+            assert_eq!(parse_size(css).to_css_string(), expected);
+        }
+    }
+
+    #[test]
+    fn calc_size_interpolates_prepared_calculations() {
+        use crate::values::animated::{Animate, Procedure};
+        let calc_size = |css: &str| match parse_size(css) {
+            GenericSize::CalcSize(value) => *value,
+            _ => panic!("{css}"),
         };
-        assert!(matches!(value.basis, GenericCalcSizeBasis::Auto));
-        let GenericCalcSizeExpression::Min(values) = value.calculation else {
-            panic!("the math tree must retain min()");
-        };
-        assert!(matches!(values[0], GenericCalcSizeExpression::Size));
+        for (from, to, expected) in [
+            (
+                "calc-size(min-content, size * 4)",
+                "calc-size(calc-size(min-content, size + 20px), 2 * size)",
+                "calc-size(min-content, size + (1.5 * (20px + size)))",
+            ),
+            (
+                "calc-size(fit-content, 20px)",
+                "calc-size(calc-size(fit-content, 40px), size)",
+                "calc-size(fit-content, 35px)",
+            ),
+            (
+                "calc-size(50%, size)",
+                "calc-size(calc-size(45%, (2 * size)), size + 20px)",
+                "calc-size(100%, (0.125 * size) + (0.75 * (20px + (0.9 * size))))",
+            ),
+            (
+                "calc-size(40%, size)",
+                "calc-size(calc-size(10px, (2 * size)), size + 20px)",
+                "calc-size(100%, 30px + (0.1 * size))",
+            ),
+            (
+                "calc-size(80px, size)",
+                "calc-size(calc-size(10px, (2 * size)), size + 20px)",
+                "calc-size(any, 50px)",
+            ),
+        ] {
+            let value = calc_size(from)
+                .animate(&calc_size(to), Procedure::Interpolate { progress: 0.75 })
+                .unwrap();
+            assert_eq!(value.to_css_string(), expected, "{from} -> {to}");
+        }
+    }
+
+    #[test]
+    fn calc_size_rejects_invalid_bases_and_calculations() {
+        for css in ["calc-size(any, size)", "calc-size(0, 0px)", "calc-size(0px, 0)", "calc-size(content, size)"] {
+            let mut input = ParserInput::new(css);
+            let mut parser = Parser::new(&mut input);
+            assert!(parser.parse_entirely(|input| Size::parse(&context(), input)).is_err(), "{css}");
+        }
     }
 
     #[test]

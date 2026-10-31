@@ -2094,6 +2094,11 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
         self.visit_depth_first(|node| node.simplify_and_sort_direct_children())
     }
 
+    /// Serializes the tree as a function argument, without a `calc()` wrapper.
+    pub fn to_css_as_argument<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        self.to_css_impl(dest, ArgumentLevel::ArgumentRoot)
+    }
+
     fn to_css_impl<W>(&self, dest: &mut CssWriter<W>, level: ArgumentLevel) -> fmt::Result
     where
         W: Write,

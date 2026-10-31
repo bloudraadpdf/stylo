@@ -438,6 +438,147 @@ impl AllowParse {
     }
 }
 
+/// A simplified `<calc-sum>` inside `calc-size()`: either its basis or its
+/// calculation. Its computed value has only `px` lengths.
+///
+/// <https://drafts.csswg.org/css-values-5/#calc-size>
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
+pub struct CalcSizeCalculation(pub CalcNode);
+
+impl CalcSizeCalculation {
+    /// Simplifies a calculation tree.
+    pub fn new(mut node: CalcNode) -> Self {
+        node.simplify_and_sort();
+        // A product with a factor of one is the other factor.
+        node.visit_depth_first(|node| {
+            if let CalcNode::Product(children) = node {
+                if children.len() > 1 {
+                    let kept = children
+                        .iter()
+                        .filter(|child| !matches!(child, CalcNode::Leaf(Leaf::Number(n)) if *n == 1.0))
+                        .cloned()
+                        .collect::<Vec<_>>();
+                    if !kept.is_empty() && kept.len() != children.len() {
+                        *children = kept.into_boxed_slice().into();
+                    }
+                }
+            }
+        });
+        node.simplify_and_sort();
+        Self(node)
+    }
+
+    /// Replaces each `size` with `value`.
+    pub fn substitute_size(&self, value: &CalcNode) -> Self {
+        let mut node = self.0.clone();
+        node.visit_depth_first(|node| {
+            if matches!(node, CalcNode::Leaf(Leaf::Size)) {
+                *node = value.clone();
+            }
+        });
+        Self::new(node)
+    }
+
+    /// Replaces each percentage `N%` with `(size * N / 100)`.
+    pub fn depercentify(&self) -> Self {
+        let mut node = self.0.clone();
+        node.visit_depth_first(|node| {
+            if let CalcNode::Leaf(Leaf::Percentage(n)) = *node {
+                *node = CalcNode::Product(
+                    vec![CalcNode::Leaf(Leaf::Number(n)), CalcNode::Leaf(Leaf::Size)].into(),
+                );
+            }
+        });
+        Self::new(node)
+    }
+
+    /// Whether the calculation has a percentage.
+    pub fn has_percentage(&self) -> bool {
+        let mut found = false;
+        self.0.clone().visit_depth_first(|node| {
+            found |= matches!(node, CalcNode::Leaf(Leaf::Percentage(_)));
+        });
+        found
+    }
+
+    /// The weighted sum of two calculations.
+    pub fn weighted_sum(&self, self_weight: f64, other: &Self, other_weight: f64) -> Self {
+        let term = |weight: f64, value: &Self| {
+            CalcNode::Product(
+                vec![CalcNode::Leaf(Leaf::Number(weight as f32)), value.0.clone()].into(),
+            )
+        };
+        Self::new(CalcNode::Sum(
+            vec![term(self_weight, self), term(other_weight, other)].into(),
+        ))
+    }
+}
+
+impl ToCss for CalcSizeCalculation {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        self.0.to_css_as_argument(dest)
+    }
+}
+
+impl ToComputedValue for CalcSizeCalculation {
+    type ComputedValue = Self;
+
+    fn to_computed_value(&self, context: &Context) -> Self {
+        Self::new(self.0.map_leaves(|leaf| match leaf {
+            Leaf::Length(length) => Leaf::Length(NoCalcLength::Absolute(AbsoluteLength::Px(
+                length.to_computed_value(context).px(),
+            ))),
+            leaf => leaf.clone(),
+        }))
+    }
+
+    fn from_computed_value(computed: &Self) -> Self {
+        computed.clone()
+    }
+}
+
+impl crate::values::animated::ToAnimatedValue for CalcSizeCalculation {
+    type AnimatedValue = Self;
+
+    fn to_animated_value(self, _: &crate::values::animated::Context) -> Self {
+        self
+    }
+
+    fn from_animated_value(animated: Self) -> Self {
+        animated
+    }
+}
+
+impl crate::values::animated::ToAnimatedZero for CalcSizeCalculation {
+    fn to_animated_zero(&self) -> Result<Self, ()> {
+        Err(())
+    }
+}
+
+impl crate::values::distance::ComputeSquaredDistance for CalcSizeCalculation {
+    fn compute_squared_distance(
+        &self,
+        _: &Self,
+    ) -> Result<crate::values::distance::SquaredDistance, ()> {
+        Err(())
+    }
+}
+
+impl crate::values::resolved::ToResolvedValue for CalcSizeCalculation {
+    type ResolvedValue = Self;
+
+    fn to_resolved_value(self, _: &crate::values::resolved::Context) -> Self {
+        self
+    }
+
+    fn from_resolved_value(resolved: Self) -> Self {
+        resolved
+    }
+}
+
 impl generic::CalcNodeLeaf for Leaf {
     fn is_function(&self) -> bool {
         matches!(self, Self::SiblingIndex | Self::SiblingCount)
@@ -544,7 +685,7 @@ impl generic::CalcNodeLeaf for Leaf {
 
     fn sort_key(&self) -> SortKey {
         match *self {
-            Self::Size => SortKey::Px,
+            Self::Size => SortKey::Other,
             Self::Number(..) => SortKey::Number,
             Self::Percentage(..) => SortKey::Percentage,
             Self::Time(..) => SortKey::S,
@@ -1564,9 +1705,10 @@ impl CalcNode {
     pub fn parse_calc_size<'i, 't>(
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
+        allow_size_keyword: bool,
     ) -> Result<Self, ParseError<'i>> {
         let mut allowed = AllowParse::new(CalcUnits::LENGTH_PERCENTAGE);
-        allowed.allow_size_keyword = true;
+        allowed.allow_size_keyword = allow_size_keyword;
         Self::parse_argument(context, input, allowed)?
             .require_unit(input, CalcUnits::LENGTH_PERCENTAGE)
     }

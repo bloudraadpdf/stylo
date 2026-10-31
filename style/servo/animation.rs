@@ -15,6 +15,7 @@ use crate::properties::longhands::animation_composition::computed_value::single_
 use crate::properties::longhands::animation_direction::computed_value::single_value::T as AnimationDirection;
 use crate::properties::longhands::animation_fill_mode::computed_value::single_value::T as AnimationFillMode;
 use crate::properties::longhands::animation_play_state::computed_value::single_value::T as AnimationPlayState;
+use crate::properties::longhands::interpolate_size::computed_value::T as InterpolateSize;
 use crate::properties::AnimationDeclarations;
 use crate::properties::{
     ComputedValues, Importance, LonghandId, PropertyDeclarationBlock, PropertyDeclarationId,
@@ -78,6 +79,9 @@ pub struct PropertyAnimation {
 
     /// The duration of this `PropertyAnimation` in seconds.
     pub duration: f64,
+
+    /// The `interpolate-size` that applies to this animation.
+    interpolate_size: InterpolateSize,
 }
 
 impl PropertyAnimation {
@@ -85,6 +89,15 @@ impl PropertyAnimation {
     pub fn property_id(&self) -> PropertyDeclarationId<'_> {
         debug_assert_eq!(self.from.id(), self.to.id());
         self.from.id()
+    }
+
+    fn animate(
+        &self,
+        from: &AnimationValue,
+        to: &AnimationValue,
+        procedure: Procedure,
+    ) -> Result<AnimationValue, ()> {
+        from.animate_with_interpolate_size(to, procedure, self.interpolate_size)
     }
 
     /// The output of the timing function given the progress ration of this animation.
@@ -103,7 +116,7 @@ impl PropertyAnimation {
     fn calculate_value(&self, progress: f64) -> AnimationValue {
         let progress = self.timing_function_output(progress);
         let procedure = Procedure::Interpolate { progress };
-        self.from.animate(&self.to, procedure).unwrap_or_else(|()| {
+        self.animate(&self.from, &self.to, procedure).unwrap_or_else(|()| {
             // Fall back to discrete interpolation
             if progress < 0.5 {
                 self.from.clone()
@@ -836,6 +849,7 @@ impl Animation {
                 to,
                 timing_function: prev_keyframe.timing_function.clone(),
                 duration: duration_between_keyframes as f64,
+                interpolate_size: InterpolateSize::NumericOnly,
             };
 
             let value = animation.calculate_value(progress_between_keyframes);
@@ -897,12 +911,14 @@ impl Transition {
         from: AnimationValue,
         to: AnimationValue,
         timing_function: &TimingFunction,
+        interpolate_size: InterpolateSize,
     ) -> Self {
         let property_animation = PropertyAnimation {
             from: from.clone(),
             to,
             timing_function: timing_function.clone(),
             duration,
+            interpolate_size,
         };
         Self {
             start_time,
@@ -976,10 +992,7 @@ impl Transition {
         let procedure = Procedure::Interpolate {
             progress: timing_function_output,
         };
-        match replaced_animation
-            .from
-            .animate(&replaced_animation.to, procedure)
-        {
+        match replaced_animation.animate(&replaced_animation.from, &replaced_animation.to, procedure) {
             Ok(new_start) => self.property_animation.from = new_start,
             Err(..) => {},
         }
@@ -1225,6 +1238,15 @@ impl ElementAnimationSet {
         new_style: &Arc<ComputedValues>,
     ) {
         let style = new_style.get_ui();
+        let interpolate_size = new_style.get_inherited_box().clone_interpolate_size();
+        let interpolable = |from: &AnimationValue, to: &AnimationValue| {
+            from.animate_with_interpolate_size(
+                to,
+                Procedure::Interpolate { progress: 0.5 },
+                interpolate_size,
+            )
+            .is_ok()
+        };
         let allow_discrete =
             style.transition_behavior_mod(index) == TransitionBehavior::AllowDiscrete;
 
@@ -1244,7 +1266,7 @@ impl ElementAnimationSet {
         let now = context.current_time_for_animations;
         let transitionable = property_declaration_id.is_animatable()
             && (allow_discrete || !property_declaration_id.is_discrete_animatable())
-            && (allow_discrete || from.interpolable_with(&to));
+            && (allow_discrete || interpolable(&from, &to));
 
         let mut existing_transition = self.transitions.iter_mut().find(|transition| {
             transition.property_animation.property_id() == *property_declaration_id
@@ -1296,6 +1318,7 @@ impl ElementAnimationSet {
                 from,
                 to,
                 &timing_function,
+                interpolate_size,
             ));
             self.dirty = true;
             return;
@@ -1338,7 +1361,7 @@ impl ElementAnimationSet {
             // > must cancel the running transition.
             let current_value = existing_transition.calculate_value(now);
             let transitionable_from_current_value =
-                transitionable && (allow_discrete || current_value.interpolable_with(&to));
+                transitionable && (allow_discrete || interpolable(&current_value, &to));
             if current_value == to || !transitionable_from_current_value {
                 existing_transition.state = AnimationState::Canceled;
                 self.dirty = true;
@@ -1371,6 +1394,7 @@ impl ElementAnimationSet {
                     from,
                     to,
                     &timing_function,
+                    interpolate_size,
                 );
 
                 // This function takes care of applying all of the modifications to the transition
@@ -1402,6 +1426,7 @@ impl ElementAnimationSet {
                 current_value,
                 to,
                 &timing_function,
+                interpolate_size,
             ));
             self.dirty = true;
         }
