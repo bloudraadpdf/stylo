@@ -341,6 +341,7 @@ impl ComputedKeyframe {
         composition: AnimationComposition,
         underlying: &AnimationValue,
         value: &AnimationValue,
+        interpolate_size: InterpolateSize,
     ) -> AnimationValue {
         let procedure = match composition {
             AnimationComposition::Replace => return value.clone(),
@@ -348,7 +349,7 @@ impl ComputedKeyframe {
             AnimationComposition::Accumulate => Procedure::Accumulate { count: 1 },
         };
         underlying
-            .animate(value, procedure)
+            .animate_with_interpolate_size(value, procedure, interpolate_size)
             .unwrap_or_else(|()| value.clone())
     }
 
@@ -495,7 +496,12 @@ impl Animation {
             .cloned()
             .or_else(|| AnimationValue::from_computed_values(property, &self.cascade_style))
             .expect("an animated property must have an underlying value");
-        ComputedKeyframe::composite(keyframe.composition, &underlying, value)
+        ComputedKeyframe::composite(keyframe.composition, &underlying, value, self.interpolate_size())
+    }
+
+    /// CSS Values 5 §11.3: an animation uses the `interpolate-size` of its non-animated style.
+    fn interpolate_size(&self) -> InterpolateSize {
+        self.cascade_style.get_inherited_box().clone_interpolate_size()
     }
 
     /// Given the current time, advances this animation to the next iteration,
@@ -849,7 +855,7 @@ impl Animation {
                 to,
                 timing_function: prev_keyframe.timing_function.clone(),
                 duration: duration_between_keyframes as f64,
-                interpolate_size: InterpolateSize::NumericOnly,
+                interpolate_size: self.interpolate_size(),
             };
 
             let value = animation.calculate_value(progress_between_keyframes);
@@ -1268,8 +1274,10 @@ impl ElementAnimationSet {
             && (allow_discrete || !property_declaration_id.is_discrete_animatable())
             && (allow_discrete || interpolable(&from, &to));
 
+        // CSS Transitions §3: only a running or completed transition matches.
         let mut existing_transition = self.transitions.iter_mut().find(|transition| {
-            transition.property_animation.property_id() == *property_declaration_id
+            transition.state != AnimationState::Canceled
+                && transition.property_animation.property_id() == *property_declaration_id
         });
 
         // Step 1:
@@ -1958,15 +1966,30 @@ mod tests {
         let value = AnimationValue::Opacity(0.3);
 
         assert_eq!(
-            ComputedKeyframe::composite(AnimationComposition::Replace, &underlying, &value),
+            ComputedKeyframe::composite(
+                AnimationComposition::Replace,
+                &underlying,
+                &value,
+                InterpolateSize::NumericOnly,
+            ),
             value,
         );
         assert_eq!(
-            ComputedKeyframe::composite(AnimationComposition::Add, &underlying, &value),
+            ComputedKeyframe::composite(
+                AnimationComposition::Add,
+                &underlying,
+                &value,
+                InterpolateSize::NumericOnly,
+            ),
             AnimationValue::Opacity(0.5),
         );
         assert_eq!(
-            ComputedKeyframe::composite(AnimationComposition::Accumulate, &underlying, &value),
+            ComputedKeyframe::composite(
+                AnimationComposition::Accumulate,
+                &underlying,
+                &value,
+                InterpolateSize::NumericOnly,
+            ),
             AnimationValue::Opacity(0.5),
         );
     }
