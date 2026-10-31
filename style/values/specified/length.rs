@@ -1429,6 +1429,9 @@ impl NoCalcLength {
         value: CSSFloat,
         unit: &str,
     ) -> Result<Self, ()> {
+        // CSS Values 4 §5: a value outside the supported range clamps to the closest supported value, so a token
+        // that overflows `f32` stays an ordinary dimension.
+        let value = value.clamp(f32::MIN, f32::MAX);
         Ok(match_ignore_ascii_case! { unit,
             "px" => Self::Absolute(AbsoluteLength::Px(value)),
             "in" => Self::Absolute(AbsoluteLength::In(value)),
