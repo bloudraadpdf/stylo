@@ -12,7 +12,7 @@ use crate::parser::{Parse, ParserContext};
 use crate::stylesheets::CssRuleType;
 use crate::values::computed::{Context, ToComputedValue};
 use crate::values::generics::calc::{
-    self as generic, CalcNodeLeaf, CalcUnits, MinMaxOp, ModRemOp, PositivePercentageBasis,
+    self as generic, CalcNodeLeaf, CalcUnits, ExponentialFunction, MinMaxOp, ModRemOp, PositivePercentageBasis,
     ProgressClamping, RoundingStrategy, SortKey, TrigonometricFunction,
 };
 use crate::values::generics::length::GenericAnchorSizeFunction;
@@ -783,6 +783,28 @@ impl generic::CalcNodeLeaf for Leaf {
         }
     }
 
+    fn canonical(&self) -> Option<(f32, CalcUnits)> {
+        Some(match *self {
+            Self::Number(value) => (value, CalcUnits::empty()),
+            Self::Length(NoCalcLength::Absolute(ref length)) => (length.to_px(), CalcUnits::LENGTH),
+            Self::Angle(ref angle) => (angle.degrees(), CalcUnits::ANGLE),
+            Self::Time(ref time) => (time.seconds(), CalcUnits::TIME),
+            Self::Resolution(ref resolution) => (resolution.dppx(), CalcUnits::RESOLUTION),
+            _ => return None,
+        })
+    }
+
+    fn from_canonical(value: f32, unit: CalcUnits) -> Option<Self> {
+        Some(match unit {
+            CalcUnits::LENGTH => Self::Length(NoCalcLength::Absolute(AbsoluteLength::Px(value))),
+            CalcUnits::ANGLE => Self::Angle(AngleDimension::Deg(value)),
+            CalcUnits::TIME => Self::Time(TimeDimension::from_seconds(value)),
+            CalcUnits::RESOLUTION => Self::Resolution(ResolutionDimension::from_dppx(value)),
+            unit if unit.is_empty() => Self::Number(value),
+            _ => return None,
+        })
+    }
+
     fn simplify(&mut self) {
         if let Self::Length(NoCalcLength::Absolute(ref mut abs)) = *self {
             *abs = AbsoluteLength::Px(abs.to_px());
@@ -1307,26 +1329,14 @@ impl CalcNode {
                     Ok(Self::Leaf(Leaf::Angle(AngleDimension::Rad(radians))))
                 },
                 MathFunction::Pow => {
-                    let units = if allowed.includes(CalcUnits::COLOR_COMPONENT) {
-                        CalcUnits::COLOR_COMPONENT
-                    } else {
-                        CalcUnits::empty()
-                    };
-                    let a = Self::parse_argument(context, input, AllowParse::new(units))?;
+                    let a = Self::parse_numeric_argument(context, input, allowed)?;
                     input.expect_comma()?;
-                    let b = Self::parse_argument(context, input, AllowParse::new(units))?;
-                    let node = Self::Pow(Box::new(a), Box::new(b));
-                    node.unit().map_err(|()| {
-                        input.new_custom_error(StyleParseErrorKind::UnspecifiedError)
-                    })?;
-                    Ok(node.resolve().map(Self::Leaf).unwrap_or(node))
+                    let b = Self::parse_numeric_argument(context, input, allowed)?;
+                    Ok(Self::Pow(Box::new(a), Box::new(b)).resolved_or_self())
                 },
                 MathFunction::Sqrt => {
-                    let a = Self::parse_number_argument(context, input)?;
-
-                    let number = a.sqrt();
-
-                    Ok(Self::Leaf(Leaf::Number(number)))
+                    let value = Self::parse_numeric_argument(context, input, allowed)?;
+                    Ok(Self::exponential(ExponentialFunction::Sqrt, value, None))
                 },
                 MathFunction::Hypot => {
                     let arguments = input.parse_comma_separated(|input| {
@@ -1337,25 +1347,18 @@ impl CalcNode {
                     Ok(Self::Hypot(arguments.into()))
                 },
                 MathFunction::Log => {
-                    let a = Self::parse_number_argument(context, input)?;
-                    let b = input
+                    let value = Self::parse_numeric_argument(context, input, allowed)?;
+                    let base = input
                         .try_parse(|input| {
                             input.expect_comma()?;
-                            Self::parse_number_argument(context, input)
+                            Self::parse_numeric_argument(context, input, allowed)
                         })
                         .ok();
-
-                    let number = match b {
-                        Some(b) => a.log(b),
-                        None => a.ln(),
-                    };
-
-                    Ok(Self::Leaf(Leaf::Number(number)))
+                    Ok(Self::exponential(ExponentialFunction::Log, value, base))
                 },
                 MathFunction::Exp => {
-                    let a = Self::parse_number_argument(context, input)?;
-                    let number = a.exp();
-                    Ok(Self::Leaf(Leaf::Number(number)))
+                    let value = Self::parse_numeric_argument(context, input, allowed)?;
+                    Ok(Self::exponential(ExponentialFunction::Exp, value, None))
                 },
                 MathFunction::Abs => {
                     let node = Self::parse_argument(context, input, allowed)?;
@@ -1398,13 +1401,32 @@ impl CalcNode {
         })
     }
 
-    fn parse_number_argument<'i, 't>(
+    /// Parses an argument that must be a number, though it may contain dimensions that cancel
+    /// out, such as `100% / 100px`.
+    fn parse_numeric_argument<'i, 't>(
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
-    ) -> Result<CSSFloat, ParseError<'i>> {
-        Self::parse_argument(context, input, AllowParse::new(CalcUnits::empty()))?
-            .to_number()
-            .map_err(|()| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
+        allowed: AllowParse,
+    ) -> Result<Self, ParseError<'i>> {
+        let argument = Self::parse_argument(context, input, allowed)?;
+        match argument.unit() {
+            Ok(unit) if (unit - CalcUnits::COLOR_COMPONENT).is_empty() => Ok(argument),
+            _ => Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError)),
+        }
+    }
+
+    fn exponential(function: ExponentialFunction, value: Self, base: Option<Self>) -> Self {
+        Self::Exponential {
+            function,
+            value: Box::new(value),
+            base: base.map(Box::new),
+        }
+        .resolved_or_self()
+    }
+
+    /// This node as a leaf when it resolves, for a function whose arguments may not.
+    fn resolved_or_self(self) -> Self {
+        self.resolve().map(Self::Leaf).unwrap_or(self)
     }
 
     fn parse_argument<'i, 't>(
@@ -1495,8 +1517,7 @@ impl CalcNode {
                         /// The right is not a number or could not be resolved, so the left is
                         /// unchanged.
                         Unchanged,
-                        /// The right was resolved, but was not a number, so the calculation is
-                        /// invalid.
+                        /// The division by a number failed, so the calculation is invalid.
                         Invalid,
                     }
 
@@ -1512,28 +1533,14 @@ impl CalcNode {
                                     }
                                     return InPlaceDivisionResult::Merged;
                                 }
-                            } else if let (Ok(left_angle), Ok(right_angle)) =
-                                (left.to_angle(), right.to_angle())
-                            {
-                                *left = CalcNode::Leaf(Leaf::Number(
-                                    left_angle.radians() / right_angle.radians(),
-                                ));
-                                return InPlaceDivisionResult::Merged;
-                            } else {
-                                // Color components are valid denominators, but they can't resolve
-                                // at parse time.
-                                return if resolved.unit().contains(CalcUnits::COLOR_COMPONENT) {
-                                    InPlaceDivisionResult::Unchanged
-                                } else {
-                                    InPlaceDivisionResult::Invalid
-                                };
                             }
                         }
                         InPlaceDivisionResult::Unchanged
                     }
 
-                    // The right hand side of a division *must* be a number, so if we can
-                    // already resolve it, then merge it with the last node on the product list.
+                    // If the right hand side of a division resolves to a number, then merge it
+                    // with the last node on the product list. Its type is checked with the type of
+                    // the whole calculation.
                     // We can unwrap here, becuase we start the function by adding a node to
                     // the list.
                     match try_division_in_place(&mut product.last_mut().unwrap(), &rhs) {
@@ -2340,6 +2347,85 @@ mod tree_counting_tests {
                     input
                 ))
                 .is_err());
+        }
+    }
+}
+
+#[cfg(test)]
+mod typed_arithmetic_tests {
+    use crate::parser::{Parse, ParserContext};
+    use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
+    use crate::test_support::with_computed_context;
+    use crate::values::computed::{Length, ToComputedValue};
+    use crate::values::specified;
+    use cssparser::{Parser, ParserInput};
+    use style_traits::{ParsingMode, ToCss};
+
+    fn parse_length_percentage(css: &str) -> Option<specified::LengthPercentage> {
+        let url_data = Box::leak(Box::new(UrlExtraData::from(
+            url::Url::parse("https://example.invalid/").unwrap(),
+        )));
+        let context = ParserContext::new(
+            Origin::Author,
+            url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            crate::context::QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input = ParserInput::new(css);
+        Parser::new(&mut input)
+            .parse_entirely(|input| specified::LengthPercentage::parse(&context, input))
+            .ok()
+    }
+
+    fn used_px(css: &str, basis: f32) -> f32 {
+        let specified = parse_length_percentage(css).unwrap_or_else(|| panic!("{css} must parse"));
+        with_computed_context(|context| {
+            specified
+                .to_computed_value(context)
+                .resolve(Length::new(basis))
+                .px()
+        })
+    }
+
+    #[test]
+    fn products_of_dimensions_simplify_to_their_type() {
+        for (css, expected) in [
+            ("calc(5px * 10px / 1px)", "calc(50px)"),
+            ("calc(100px * 1px / 1px / 1)", "calc(100px)"),
+            ("calc(1in / 1px * 1px)", "calc(96px)"),
+            ("calc(1px * 1em / 1px)", "calc(1em * 1px / 1px)"),
+        ] {
+            let value = parse_length_percentage(css).unwrap_or_else(|| panic!("{css} must parse"));
+            assert_eq!(value.to_css_string(), expected, "{css}");
+        }
+    }
+
+    #[test]
+    fn products_must_resolve_to_a_single_dimension() {
+        for css in ["calc(1px * 1px)", "calc(1px / 1px)", "calc(10% * 10%)", "calc(1px / 1s)"] {
+            assert!(parse_length_percentage(css).is_none(), "{css}");
+        }
+    }
+
+    #[test]
+    fn percentages_divided_by_lengths_are_numbers_resolved_at_used_time() {
+        for (css, expected) in [
+            ("calc(100% / round(100% / 100px))", 100.0),
+            ("calc(100% / round(up, 100% / 90px))", 80.0),
+            ("calc(100% * mod(100% / 160px, 1))", 200.0),
+            ("calc(100% / pow(100% / 200px, 2))", 100.0),
+            ("calc(100% / sqrt(100% / 25px))", 100.0),
+            ("calc(100% / log(100% / 100px, 2))", 200.0),
+            ("calc(100% * exp(100% / 400px - 1))", 400.0),
+            ("calc(1px * round(100% / 100px))", 4.0),
+            ("calc(100% / round(100% / 30%))", 400.0 / 3.0),
+            ("calc(20% * 0.5em / 1px)", 640.0),
+        ] {
+            assert!((used_px(css, 400.0) - expected).abs() < 1e-3, "{css}: {}", used_px(css, 400.0));
         }
     }
 }

@@ -902,6 +902,22 @@ impl calc::CalcNodeLeaf for CalcLengthPercentageLeaf {
 
     fn simplify(&mut self) {}
 
+    fn canonical(&self) -> Option<(f32, CalcUnits)> {
+        match *self {
+            Self::Length(length) => Some((length.px(), CalcUnits::LENGTH)),
+            Self::Percentage(..) => None,
+            Self::Number(value) => Some((value, CalcUnits::empty())),
+        }
+    }
+
+    fn from_canonical(value: f32, unit: CalcUnits) -> Option<Self> {
+        match unit {
+            CalcUnits::LENGTH => Some(Self::Length(Length::new(value))),
+            unit if unit.is_empty() => Some(Self::Number(value)),
+            _ => None,
+        }
+    }
+
     fn sort_key(&self) -> calc::SortKey {
         match *self {
             Self::Length(..) => calc::SortKey::Px,
@@ -1016,7 +1032,7 @@ fn fold_float_offset_calc_node<F: crate::values::computed::box_::FloatOffsetCalc
         GenericCalcNode::Trigonometric(_, _) => {
             Err(crate::values::computed::box_::UnsupportedFloatOffsetCalculation::Trigonometric)
         },
-        GenericCalcNode::Pow(_, _) => {
+        GenericCalcNode::Pow(_, _) | GenericCalcNode::Exponential { .. } => {
             Err(crate::values::computed::box_::UnsupportedFloatOffsetCalculation::Pow)
         },
         GenericCalcNode::Progress {

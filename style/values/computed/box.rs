@@ -154,7 +154,7 @@ pub enum UnsupportedFloatOffsetCalculation {
     AnchorSize,
     /// Deferred color-channel trigonometry is not a float offset.
     Trigonometric,
-    /// Deferred color-channel exponentiation is not a float offset.
+    /// Deferred exponentiation or logarithm is not a float offset.
     Pow,
 }
 

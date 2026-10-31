@@ -180,6 +180,48 @@ pub enum TrigonometricFunction {
     Atan,
 }
 
+/// A `sqrt()`, `exp()` or `log()` calculation with an unresolved argument.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    MallocSizeOf,
+    PartialEq,
+    Serialize,
+    ToAnimatedZero,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+)]
+pub enum ExponentialFunction {
+    /// `sqrt()`.
+    Sqrt,
+    /// `exp()`.
+    Exp,
+    /// `log()`.
+    Log,
+}
+
+impl ExponentialFunction {
+    fn apply(self, value: f32, base: Option<f32>) -> f32 {
+        match (self, base) {
+            (Self::Sqrt, _) => value.sqrt(),
+            (Self::Exp, _) => value.exp(),
+            (Self::Log, Some(base)) => value.log(base),
+            (Self::Log, None) => value.ln(),
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::Sqrt => "sqrt(",
+            Self::Exp => "exp(",
+            Self::Log => "log(",
+        }
+    }
+}
+
 /// This determines the order in which we serialize members of a calc() sum.
 ///
 /// See https://drafts.csswg.org/css-values-4/#sort-a-calculations-children
@@ -361,6 +403,15 @@ pub enum GenericCalcNode<L> {
     Trigonometric(Box<GenericCalcNode<L>>, TrigonometricFunction),
     /// A power function with unresolved numeric arguments.
     Pow(Box<GenericCalcNode<L>>, Box<GenericCalcNode<L>>),
+    /// A `sqrt()`, `exp()` or `log()` function with an unresolved numeric argument.
+    Exponential {
+        /// The function.
+        function: ExponentialFunction,
+        /// The argument.
+        value: Box<GenericCalcNode<L>>,
+        /// The base of `log()`, when given.
+        base: Option<Box<GenericCalcNode<L>>>,
+    },
     /// A `progress()` function.
     Progress {
         /// The current value.
@@ -444,6 +495,104 @@ impl CalcUnits {
         }
         self.is_single_unit() && other == *self
     }
+}
+
+/// The base types of a product, in the order of `CalcType::exponents`.
+const BASE_UNITS: [CalcUnits; 5] = [
+    CalcUnits::LENGTH,
+    CalcUnits::PERCENTAGE,
+    CalcUnits::ANGLE,
+    CalcUnits::TIME,
+    CalcUnits::RESOLUTION,
+];
+
+/// The type of a product: the power of each base type.
+///
+/// https://drafts.csswg.org/css-values-4/#calc-type-checking
+#[derive(Default)]
+struct CalcType {
+    exponents: [i8; BASE_UNITS.len()],
+    /// Whether a percentage resolves against the other dimension of the product.
+    percent_hint: bool,
+}
+
+impl CalcType {
+    /// Multiplies this type by `unit` raised to `exponent`.
+    fn multiply(&mut self, unit: CalcUnits, exponent: i8) -> Result<(), ()> {
+        let mut unit = unit - CalcUnits::COLOR_COMPONENT;
+        if unit.contains(CalcUnits::PERCENTAGE) && unit != CalcUnits::PERCENTAGE {
+            self.percent_hint = true;
+            unit -= CalcUnits::PERCENTAGE;
+        }
+        if unit.is_empty() {
+            return Ok(());
+        }
+        let index = BASE_UNITS.iter().position(|base| *base == unit).ok_or(())?;
+        self.exponents[index] += exponent;
+        Ok(())
+    }
+
+    /// The unit of a value of this type, failing unless it is a number or a single dimension.
+    fn unit(mut self) -> Result<CalcUnits, ()> {
+        const PERCENTAGE: usize = 1;
+        if self.exponents[PERCENTAGE] != 0 {
+            // A percentage in a product with a length or angle resolves against that dimension.
+            if let Some(index) = [0, 2].into_iter().find(|index| self.exponents[*index] != 0) {
+                self.exponents[index] += mem::take(&mut self.exponents[PERCENTAGE]);
+                self.percent_hint = true;
+            }
+        }
+        let mut dimensions = BASE_UNITS
+            .iter()
+            .zip(self.exponents)
+            .filter(|(_, exponent)| *exponent != 0);
+        Ok(match (dimensions.next(), dimensions.next()) {
+            (None, _) => CalcUnits::empty(),
+            (Some((unit, 1)), None) if self.percent_hint && *unit != CalcUnits::PERCENTAGE => {
+                *unit | CalcUnits::PERCENTAGE
+            },
+            (Some((unit, 1)), None) => *unit,
+            _ => return Err(()),
+        })
+    }
+}
+
+/// The product of resolved leaves, each a factor or a divisor.
+fn resolve_product<L: CalcNodeLeaf>(factors: &[(L, bool)]) -> Result<L, ()> {
+    // Scale the one dimension of the product by its numbers, when it has at most one, as a
+    // dividend.
+    let mut scale = 1.0;
+    let mut dimension = None;
+    for (leaf, inverted) in factors {
+        match (leaf.as_number(), inverted) {
+            (Some(number), false) => scale *= number,
+            (Some(number), true) => scale /= number,
+            (None, false) if dimension.is_none() => dimension = Some(leaf),
+            (None, _) => return canonical_product(factors.iter().map(|(leaf, inverted)| (leaf, *inverted))),
+        }
+    }
+    let Some(dimension) = dimension else {
+        return Ok(L::new_number(scale));
+    };
+    let mut result = dimension.clone();
+    result.map(|value| value * scale)?;
+    Ok(result)
+}
+
+/// The product of leaves, each a factor or a divisor, in the canonical unit of its type.
+///
+/// https://drafts.csswg.org/css-values-4/#calc-simplification
+fn canonical_product<'a, L: CalcNodeLeaf + 'a>(
+    factors: impl IntoIterator<Item = (&'a L, bool)>,
+) -> Result<L, ()> {
+    let mut value = 1.0;
+    let mut product_type = CalcType::default();
+    for (leaf, inverted) in factors {
+        let (factor, unit) = leaf.canonical().ok_or(())?;
+        value = if inverted { value / factor } else { value * factor };
+        product_type.multiply(unit, if inverted { -1 } else { 1 })?;
+    }
+    L::from_canonical(value, product_type.unit()?).ok_or(())
 }
 
 /// For percentage resolution, sometimes we can't assume that the percentage basis is positive (so
@@ -575,6 +724,16 @@ pub trait CalcNodeLeaf: Clone + Sized + PartialEq + ToCss + ToTyped {
     /// Returns the sort key for simplification.
     fn sort_key(&self) -> SortKey;
 
+    /// The value of this leaf in the canonical unit of its type, and that type, when it has one.
+    fn canonical(&self) -> Option<(f32, CalcUnits)> {
+        self.as_number().map(|value| (value, CalcUnits::empty()))
+    }
+
+    /// A leaf of `value` in the canonical unit of the type `unit`.
+    fn from_canonical(value: f32, unit: CalcUnits) -> Option<Self> {
+        unit.is_empty().then(|| Self::new_number(value))
+    }
+
     /// Create a new leaf containing the sign() result of the given leaf.
     fn sign_from(leaf: &impl CalcNodeLeaf) -> Result<Self, ()> {
         let Some(value) = leaf.unitless_value() else {
@@ -633,8 +792,13 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
     pub fn unit(&self) -> Result<CalcUnits, ()> {
         Ok(match self {
             CalcNode::Leaf(l) => l.unit(),
-            CalcNode::Negate(child) | CalcNode::Invert(child) | CalcNode::Abs(child) => {
-                child.unit()?
+            CalcNode::Negate(child) | CalcNode::Abs(child) => child.unit()?,
+            CalcNode::Invert(child) => {
+                let unit = child.unit()?;
+                if !(unit - CalcUnits::COLOR_COMPONENT).is_empty() {
+                    return Err(());
+                }
+                unit
             },
             CalcNode::Sum(children) => {
                 let mut unit = children.first().unwrap().unit()?;
@@ -648,26 +812,20 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 unit
             },
             CalcNode::Product(children) => {
-                // Only one node is allowed to have a unit, the rest must be numbers.
-                let mut unit = None;
+                let mut product_type = CalcType::default();
+                let mut color_component = false;
                 for child in children.iter() {
-                    let child_unit = child.unit()?;
-                    if child_unit.is_empty() || child_unit == CalcUnits::COLOR_COMPONENT {
-                        // Numbers are always allowed in a product, so continue with the next.
-                        continue;
-                    }
-
-                    if unit.is_some() {
-                        // We already have a unit for the node, so another unit node is invalid.
-                        return Err(());
-                    }
-
-                    // We have the unit for the node.
-                    unit = Some(child_unit);
+                    let (unit, exponent) = match child {
+                        CalcNode::Invert(divisor) => (divisor.unit()?, -1),
+                        _ => (child.unit()?, 1),
+                    };
+                    color_component |= unit.contains(CalcUnits::COLOR_COMPONENT);
+                    product_type.multiply(unit, exponent)?;
                 }
-                // We only keep track of specified units, so if we end up with a None and no failure
-                // so far, then we have a number.
-                unit.unwrap_or(CalcUnits::empty())
+                match product_type.unit()? {
+                    unit if unit.is_empty() && color_component => CalcUnits::COLOR_COMPONENT,
+                    unit => unit,
+                }
             },
             CalcNode::MinMax(children, _) | CalcNode::Hypot(children) => {
                 let mut unit = children.first().unwrap().unit()?;
@@ -746,6 +904,16 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 let numeric =
                     |unit: CalcUnits| unit.is_empty() || unit == CalcUnits::COLOR_COMPONENT;
                 if !numeric(base.unit()?) || !numeric(exponent.unit()?) {
+                    return Err(());
+                }
+                CalcUnits::empty()
+            },
+            CalcNode::Exponential {
+                ref value,
+                ref base,
+                ..
+            } => {
+                if !value.unit()?.is_empty() || !base.as_ref().map_or(Ok(CalcUnits::empty()), |b| b.unit())?.is_empty() {
                     return Err(());
                 }
                 CalcUnits::empty()
@@ -865,7 +1033,7 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 child.negate();
             },
             CalcNode::Trigonometric(..) => wrap_self_in_negate(self),
-            CalcNode::Pow(..) => wrap_self_in_negate(self),
+            CalcNode::Pow(..) | CalcNode::Exponential { .. } => wrap_self_in_negate(self),
             CalcNode::Progress { .. } => {
                 wrap_self_in_negate(self);
             },
@@ -991,6 +1159,10 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                     map_internal(base, op)?;
                     map_internal(exponent, op)
                 },
+                CalcNode::Exponential { value, base, .. } => {
+                    map_internal(value, op)?;
+                    base.as_mut().map_or(Ok(()), |base| map_internal(base, op))
+                },
                 CalcNode::Progress {
                     value, start, end, ..
                 } => {
@@ -1089,6 +1261,15 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 Box::new(base.map_leaves_internal(map)),
                 Box::new(exponent.map_leaves_internal(map)),
             ),
+            Self::Exponential {
+                function,
+                ref value,
+                ref base,
+            } => CalcNode::Exponential {
+                function,
+                value: Box::new(value.map_leaves_internal(map)),
+                base: base.as_ref().map(|base| Box::new(base.map_leaves_internal(map))),
+            },
             Self::Progress {
                 ref value,
                 ref start,
@@ -1167,33 +1348,14 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 Ok(result)
             },
             Self::Product(children) => {
-                let mut result = children[0].resolve_internal(leaf_to_output_fn)?;
-
-                for child in children.iter().skip(1) {
-                    let right = child.resolve_internal(leaf_to_output_fn)?;
-                    // Mutliply only allowed when either side is a number.
-                    match result.as_number() {
-                        Some(left) => {
-                            // Left side is a number, so we use the right node as the result.
-                            result = right;
-                            result.map(|v| v * left)?;
-                        },
-                        None => {
-                            // Left side is not a number, so check if the right side is.
-                            match right.as_number() {
-                                Some(right) => {
-                                    result.map(|v| v * right)?;
-                                },
-                                None => {
-                                    // Multiplying with both sides having units.
-                                    return Err(());
-                                },
-                            }
-                        },
-                    }
-                }
-
-                Ok(result)
+                let factors = children
+                    .iter()
+                    .map(|child| match child {
+                        Self::Invert(divisor) => Ok((divisor.resolve_internal(leaf_to_output_fn)?, true)),
+                        _ => Ok((child.resolve_internal(leaf_to_output_fn)?, false)),
+                    })
+                    .collect::<Result<SmallVec<[(L, bool); 4]>, ()>>()?;
+                resolve_product(&factors)
             },
             Self::MinMax(children, op) => {
                 let mut result = children[0].resolve_internal(leaf_to_output_fn)?;
@@ -1434,6 +1596,18 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                     .ok_or(())?;
                 Ok(L::new_number(base.powf(exponent)))
             },
+            Self::Exponential {
+                function,
+                ref value,
+                ref base,
+            } => {
+                let mut number = |node: &Self| {
+                    node.resolve_internal(leaf_to_output_fn)?.as_number().ok_or(())
+                };
+                let value = number(value)?;
+                let base = base.as_deref().map(&mut number).transpose()?;
+                Ok(L::new_number(function.apply(value, base)))
+            },
             Self::Progress {
                 value,
                 start,
@@ -1487,6 +1661,12 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
             Self::Pow(base, exponent) => {
                 base.map_node_internal(mapping_fn)?;
                 exponent.map_node_internal(mapping_fn)?;
+            },
+            Self::Exponential { value, base, .. } => {
+                value.map_node_internal(mapping_fn)?;
+                if let Some(base) = base {
+                    base.map_node_internal(mapping_fn)?;
+                }
             },
             Self::Sum(children)
             | Self::Product(children)
@@ -1615,6 +1795,16 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
             Self::Pow(ref mut base, ref mut exponent) => {
                 base.visit_depth_first_internal(f);
                 exponent.visit_depth_first_internal(f);
+            },
+            Self::Exponential {
+                ref mut value,
+                ref mut base,
+                ..
+            } => {
+                value.visit_depth_first_internal(f);
+                if let Some(base) = base {
+                    base.visit_depth_first_internal(f);
+                }
             },
             Self::Leaf(..) | Self::Anchor(..) | Self::AnchorSize(..) => {},
         }
@@ -1974,6 +2164,20 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 // a is removed.
                 children.dedup_by(|right, left| left.try_product_in_place(right));
 
+                // Multiply the values of the children that are all numeric values or inverted
+                // numeric values, when their types multiply to a single unit.
+                let factors = children
+                    .iter()
+                    .map(|child| match child {
+                        Self::Invert(divisor) => divisor.as_leaf().map(|leaf| (leaf, true)),
+                        _ => child.as_leaf().map(|leaf| (leaf, false)),
+                    })
+                    .collect::<Option<SmallVec<[_; 4]>>>();
+                if let Some(product) = factors.and_then(|factors| canonical_product(factors).ok()) {
+                    *self = Self::Leaf(product);
+                    return;
+                }
+
                 if children.len() == 1 {
                     // If only one children remains, lift it up, and carry on.
                     replace_self_with!(&mut children[0]);
@@ -2072,7 +2276,12 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 l.simplify();
             },
             Self::Trigonometric(..) => {},
-            Self::Pow(..) => {},
+            Self::Pow(..) | Self::Exponential { .. } => {
+                // The arguments are numbers, so the function resolves once they do.
+                if let Ok(leaf) = self.resolve() {
+                    *self = Self::Leaf(leaf);
+                }
+            },
             Self::Anchor(ref mut f) => {
                 if let GenericAnchorSide::Percentage(ref mut n) = f.side {
                     n.simplify_and_sort();
@@ -2158,6 +2367,10 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
             },
             Self::Pow(..) => {
                 dest.write_str("pow(")?;
+                true
+            },
+            Self::Exponential { function, .. } => {
+                dest.write_str(function.name())?;
                 true
             },
             Self::Progress { clamping, .. } => {
@@ -2321,6 +2534,17 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 base.to_css_impl(dest, ArgumentLevel::ArgumentRoot)?;
                 dest.write_str(", ")?;
                 exponent.to_css_impl(dest, ArgumentLevel::ArgumentRoot)?;
+            },
+            Self::Exponential {
+                ref value,
+                ref base,
+                ..
+            } => {
+                value.to_css_impl(dest, ArgumentLevel::ArgumentRoot)?;
+                if let Some(base) = base {
+                    dest.write_str(", ")?;
+                    base.to_css_impl(dest, ArgumentLevel::ArgumentRoot)?;
+                }
             },
             Self::Leaf(ref l) => l.to_css(dest)?,
             Self::Anchor(ref f) => f.to_css(dest)?,
