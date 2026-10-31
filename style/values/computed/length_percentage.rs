@@ -338,6 +338,10 @@ impl LengthPercentage {
     #[inline]
     pub fn new_calc(mut node: CalcNode, clamping_mode: AllowedNumericType) -> Self {
         node.simplify_and_sort();
+        // A computed `calc-mix()` is its weighted average.
+        if node.expand_mixes() {
+            node.simplify_and_sort();
+        }
 
         match node {
             CalcNode::Leaf(l) => {
@@ -910,6 +914,10 @@ impl calc::CalcNodeLeaf for CalcLengthPercentageLeaf {
         }
     }
 
+    fn new_percentage(fraction: f32) -> Self {
+        Self::Percentage(Percentage(fraction))
+    }
+
     fn from_canonical(value: f32, unit: CalcUnits) -> Option<Self> {
         match unit {
             CalcUnits::LENGTH => Some(Self::Length(Length::new(value))),
@@ -1032,7 +1040,9 @@ fn fold_float_offset_calc_node<F: crate::values::computed::box_::FloatOffsetCalc
         GenericCalcNode::Trigonometric(_, _) => {
             Err(crate::values::computed::box_::UnsupportedFloatOffsetCalculation::Trigonometric)
         },
-        GenericCalcNode::Pow(_, _) | GenericCalcNode::Exponential { .. } => {
+        GenericCalcNode::Pow(_, _)
+        | GenericCalcNode::Exponential { .. }
+        | GenericCalcNode::Mix(_) => {
             Err(crate::values::computed::box_::UnsupportedFloatOffsetCalculation::Pow)
         },
         GenericCalcNode::Progress {
@@ -1288,23 +1298,29 @@ impl specified::CalcLengthPercentage {
     fn to_computed_float_offset_value(&self, context: &Context) -> LengthPercentage {
         use crate::values::specified::calc::Leaf;
 
-        let node = self.node.resolve_tree_counting(context).map_leaves(|leaf| match *leaf {
-            Leaf::Size => unreachable!("size is only valid inside calc-size()"),
-            Leaf::Percentage(value) => CalcLengthPercentageLeaf::Percentage(Percentage(value)),
-            Leaf::Length(value) => {
-                CalcLengthPercentageLeaf::Length(value.to_computed_value_in_calc(
-                    context,
-                    FontBaseSize::CurrentStyle,
-                    LineHeightBase::CurrentStyle,
-                ))
-            },
-            Leaf::Number(value) => CalcLengthPercentageLeaf::Number(value),
-            Leaf::SiblingIndex => CalcLengthPercentageLeaf::Number(context.sibling_index()),
-            Leaf::SiblingCount => CalcLengthPercentageLeaf::Number(context.sibling_count()),
-            Leaf::Angle(..) | Leaf::Time(..) | Leaf::Resolution(..) | Leaf::ColorComponent(..) => {
-                unreachable!("float-offset grammar accepts only length-percentage calculations")
-            },
-        });
+        let node = self
+            .node
+            .resolve_tree_counting(context)
+            .map_leaves(|leaf| match *leaf {
+                Leaf::Size => unreachable!("size is only valid inside calc-size()"),
+                Leaf::Percentage(value) => CalcLengthPercentageLeaf::Percentage(Percentage(value)),
+                Leaf::Length(value) => {
+                    CalcLengthPercentageLeaf::Length(value.to_computed_value_in_calc(
+                        context,
+                        FontBaseSize::CurrentStyle,
+                        LineHeightBase::CurrentStyle,
+                    ))
+                },
+                Leaf::Number(value) => CalcLengthPercentageLeaf::Number(value),
+                Leaf::SiblingIndex => CalcLengthPercentageLeaf::Number(context.sibling_index()),
+                Leaf::SiblingCount => CalcLengthPercentageLeaf::Number(context.sibling_count()),
+                Leaf::Angle(..)
+                | Leaf::Time(..)
+                | Leaf::Resolution(..)
+                | Leaf::ColorComponent(..) => {
+                    unreachable!("float-offset grammar accepts only length-percentage calculations")
+                },
+            });
 
         LengthPercentage::new_calc_unchecked(Box::new(CalcLengthPercentage {
             clamping_mode: self.clamping_mode,
@@ -1325,24 +1341,30 @@ impl specified::CalcLengthPercentage {
     {
         use crate::values::specified::calc::Leaf;
 
-        let node = self.node.resolve_tree_counting(context).map_leaves(|leaf| match *leaf {
-            Leaf::Size => unreachable!("size is only valid inside calc-size()"),
-            Leaf::Percentage(p) => CalcLengthPercentageLeaf::Percentage(Percentage(p)),
-            Leaf::Length(l) => CalcLengthPercentageLeaf::Length({
-                let result = l.to_computed_value_in_calc(context, base_size, line_height_base);
-                if l.should_zoom_text() {
-                    zoom_fn(result)
-                } else {
-                    result
-                }
-            }),
-            Leaf::Number(n) => CalcLengthPercentageLeaf::Number(n),
-            Leaf::SiblingIndex => CalcLengthPercentageLeaf::Number(context.sibling_index()),
-            Leaf::SiblingCount => CalcLengthPercentageLeaf::Number(context.sibling_count()),
-            Leaf::Angle(..) | Leaf::Time(..) | Leaf::Resolution(..) | Leaf::ColorComponent(..) => {
-                unreachable!("Shouldn't have parsed")
-            },
-        });
+        let node = self
+            .node
+            .resolve_tree_counting(context)
+            .map_leaves(|leaf| match *leaf {
+                Leaf::Size => unreachable!("size is only valid inside calc-size()"),
+                Leaf::Percentage(p) => CalcLengthPercentageLeaf::Percentage(Percentage(p)),
+                Leaf::Length(l) => CalcLengthPercentageLeaf::Length({
+                    let result = l.to_computed_value_in_calc(context, base_size, line_height_base);
+                    if l.should_zoom_text() {
+                        zoom_fn(result)
+                    } else {
+                        result
+                    }
+                }),
+                Leaf::Number(n) => CalcLengthPercentageLeaf::Number(n),
+                Leaf::SiblingIndex => CalcLengthPercentageLeaf::Number(context.sibling_index()),
+                Leaf::SiblingCount => CalcLengthPercentageLeaf::Number(context.sibling_count()),
+                Leaf::Angle(..)
+                | Leaf::Time(..)
+                | Leaf::Resolution(..)
+                | Leaf::ColorComponent(..) => {
+                    unreachable!("Shouldn't have parsed")
+                },
+            });
 
         LengthPercentage::new_calc(node, self.clamping_mode)
     }

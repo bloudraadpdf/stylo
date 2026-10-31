@@ -12,8 +12,8 @@ use crate::parser::{Parse, ParserContext};
 use crate::stylesheets::CssRuleType;
 use crate::values::computed::{Context, ToComputedValue};
 use crate::values::generics::calc::{
-    self as generic, CalcNodeLeaf, CalcUnits, ExponentialFunction, MinMaxOp, ModRemOp, PositivePercentageBasis,
-    ProgressClamping, RoundingStrategy, SortKey, TrigonometricFunction,
+    self as generic, CalcNodeLeaf, CalcUnits, ExponentialFunction, MinMaxOp, ModRemOp,
+    PositivePercentageBasis, ProgressClamping, RoundingStrategy, SortKey, TrigonometricFunction,
 };
 use crate::values::generics::length::GenericAnchorSizeFunction;
 use crate::values::generics::position::{
@@ -144,6 +144,8 @@ pub enum MathFunction {
     Sign,
     /// `progress()`: https://drafts.csswg.org/css-values-5/#funcdef-progress
     Progress,
+    /// `calc-mix()`: https://drafts.csswg.org/css-values-5/#funcdef-calc-mix
+    CalcMix,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -455,7 +457,9 @@ impl CalcSizeCalculation {
                 if children.len() > 1 {
                     let kept = children
                         .iter()
-                        .filter(|child| !matches!(child, CalcNode::Leaf(Leaf::Number(n)) if *n == 1.0))
+                        .filter(
+                            |child| !matches!(child, CalcNode::Leaf(Leaf::Number(n)) if *n == 1.0),
+                        )
                         .cloned()
                         .collect::<Vec<_>>();
                     if !kept.is_empty() && kept.len() != children.len() {
@@ -792,6 +796,10 @@ impl generic::CalcNodeLeaf for Leaf {
             Self::Resolution(ref resolution) => (resolution.dppx(), CalcUnits::RESOLUTION),
             _ => return None,
         })
+    }
+
+    fn new_percentage(fraction: f32) -> Self {
+        Self::Percentage(fraction)
     }
 
     fn from_canonical(value: f32, unit: CalcUnits) -> Option<Self> {
@@ -1165,6 +1173,24 @@ impl CalcNode {
         input.parse_nested_block(|input| {
             match function {
                 MathFunction::Calc => Self::parse_argument(context, input, allowed),
+                MathFunction::CalcMix => {
+                    let items = input.parse_comma_separated(|input| {
+                        let value = Self::parse_argument(context, input, allowed)?;
+                        let (percentage, percentage_is_function) = input
+                            .try_parse(|input| Self::parse_mix_percentage(context, input))
+                            .map_or((None, false), |(p, function)| (Some(p), function));
+                        Ok(generic::GenericCalcMixItem {
+                            value,
+                            percentage,
+                            percentage_is_function,
+                        })
+                    })?;
+                    let node = Self::Mix(items.into());
+                    node.unit().map_err(|()| {
+                        input.new_custom_error(StyleParseErrorKind::UnspecifiedError)
+                    })?;
+                    Ok(node)
+                },
                 MathFunction::Clamp => {
                     let min = Self::parse_argument(context, input, allowed)?;
                     input.expect_comma()?;
@@ -1399,6 +1425,25 @@ impl CalcNode {
                 },
             }
         })
+    }
+
+    /// Parses a `<percentage [0,100]>` mix percentage, or a math function that resolves to a
+    /// `<percentage>`, and whether it is a math function.
+    fn parse_mix_percentage<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<(Self, bool), ParseError<'i>> {
+        let location = input.current_source_location();
+        match *input.next()? {
+            Token::Percentage { unit_value, .. } if (0.0..=1.0).contains(&unit_value) => {
+                Ok((Self::Leaf(Leaf::Percentage(unit_value)), false))
+            },
+            Token::Function(ref name) => {
+                let function = Self::math_function(context, name, location)?;
+                Ok((Self::parse_percentage_node(context, input, function)?, true))
+            },
+            ref token => Err(location.new_unexpected_token_error(token.clone())),
+        }
     }
 
     /// Parses an argument that must be a number, though it may contain dimensions that cancel
@@ -1785,6 +1830,7 @@ impl CalcNode {
             Leaf::SiblingCount => Leaf::Number(context.sibling_count()),
             _ => leaf.clone(),
         });
+        node.compute_mix_percentages();
         node.simplify_and_sort();
         node
     }
@@ -1803,7 +1849,7 @@ impl CalcNode {
         base_size: FontBaseSize,
         line_height_base: LineHeightBase,
     ) -> Self {
-        self.map_leaves(|leaf| match *leaf {
+        let mut node = self.map_leaves(|leaf| match *leaf {
             Leaf::Length(length) => Leaf::Length(NoCalcLength::from_px(
                 length
                     .to_computed_value_in_calc(context, base_size, line_height_base)
@@ -1812,7 +1858,9 @@ impl CalcNode {
             Leaf::SiblingIndex => Leaf::Number(context.sibling_index()),
             Leaf::SiblingCount => Leaf::Number(context.sibling_count()),
             _ => leaf.clone(),
-        })
+        });
+        node.compute_mix_percentages();
+        node
     }
 
     /// Resolves an angle calculation in its element context.
@@ -2364,7 +2412,7 @@ mod tree_counting_tests {
 }
 
 #[cfg(test)]
-mod typed_arithmetic_tests {
+mod math_function_tests {
     use crate::parser::{Parse, ParserContext};
     use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
     use crate::test_support::with_computed_context;
@@ -2424,7 +2472,12 @@ mod typed_arithmetic_tests {
 
     #[test]
     fn products_must_resolve_to_a_single_dimension() {
-        for css in ["calc(1px * 1px)", "calc(1px / 1px)", "calc(10% * 10%)", "calc(1px / 1s)"] {
+        for css in [
+            "calc(1px * 1px)",
+            "calc(1px / 1px)",
+            "calc(10% * 10%)",
+            "calc(1px / 1s)",
+        ] {
             assert!(parse_length_percentage(css).is_none(), "{css}");
         }
     }
@@ -2443,7 +2496,112 @@ mod typed_arithmetic_tests {
             ("calc(100% / round(100% / 30%))", 400.0 / 3.0),
             ("calc(20% * 0.5em / 1px)", 640.0),
         ] {
-            assert!((used_px(css, 400.0) - expected).abs() < 1e-3, "{css}: {}", used_px(css, 400.0));
+            assert!(
+                (used_px(css, 400.0) - expected).abs() < 1e-3,
+                "{css}: {}",
+                used_px(css, 400.0)
+            );
+        }
+    }
+
+    fn number(css: &str) -> (String, f32) {
+        let url_data = Box::leak(Box::new(UrlExtraData::from(
+            url::Url::parse("https://example.invalid/").unwrap(),
+        )));
+        let context = ParserContext::new(
+            Origin::Author,
+            url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            crate::context::QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let mut input = ParserInput::new(css);
+        let number = Parser::new(&mut input)
+            .parse_entirely(|input| specified::Number::parse(&context, input))
+            .unwrap_or_else(|_| panic!("{css} must parse"));
+        let computed = with_computed_context(|context| number.to_computed_value(context));
+        (number.to_css_string(), computed)
+    }
+
+    #[test]
+    fn number_mixes_resolve_to_their_weighted_average() {
+        for (css, specified, computed) in [
+            ("calc-mix(1 50%, 3 50%)", "calc(2)", 2.0),
+            ("calc-mix(1, 3, 5 50%)", "calc(3.5)", 3.5),
+            ("calc-mix(1 75%, 3 75%, 5, 7)", "calc(2)", 2.0),
+            ("calc-mix(1 25%, 3 25%, 5, 7)", "calc(4)", 4.0),
+            ("calc-mix(1 0%, 3 0%)", "calc(0)", 0.0),
+            ("calc-mix(1 * sibling-index() 0%, 3 100%)", "calc(3)", 3.0),
+            (
+                "calc-mix(1 * sibling-index() 50%, 3 50%, 5, 7)",
+                "calc-mix(1 * sibling-index() 50%, 3 50%)",
+                1.5,
+            ),
+            (
+                "calc-mix(1 calc(150%), 3 100%)",
+                "calc-mix(1 calc(150%), 3 100%)",
+                2.0,
+            ),
+            (
+                "calc-mix(1 calc(-50%), 3 100%)",
+                "calc-mix(1 calc(-50%), 3 100%)",
+                3.0,
+            ),
+            ("calc(max(calc-mix(1 50%, 3 50%), 1))", "calc(2)", 2.0),
+        ] {
+            assert_eq!(number(css), (specified.to_owned(), computed), "{css}");
+        }
+    }
+
+    #[test]
+    fn length_mixes_keep_unresolved_values_with_normalized_percentages() {
+        for (css, specified) in [
+            ("calc-mix(10px 75%, 3em 75%)", "calc-mix(10px 50%, 3em 50%)"),
+            (
+                "calc-mix(10px 75%, 3em 75%, 5em, 7em)",
+                "calc-mix(10px 50%, 3em 50%)",
+            ),
+            (
+                "calc-mix(10px 25%, 3em 25%, 5em, 7em)",
+                "calc-mix(10px 25%, 3em 25%, 5em 25%, 7em 25%)",
+            ),
+            ("calc-mix(1% 0%, 3px 0%)", "calc(0%)"),
+            ("calc-mix(1px * sibling-index() 0%, 3% 0%)", "calc(0px)"),
+            ("calc(10px + calc-mix(1% 0%, 3px 0%))", "calc(0% + 10px)"),
+            (
+                "calc(10px + calc-mix(10% 50%, 30% 50%))",
+                "calc(20% + 10px)",
+            ),
+            (
+                "calc(10px + calc-mix(10% * sibling-index() 50%, 30% 50%))",
+                "calc(10px + calc-mix(10% * sibling-index() 50%, 30% 50%))",
+            ),
+        ] {
+            let value = parse_length_percentage(css).unwrap_or_else(|| panic!("{css} must parse"));
+            assert_eq!(value.to_css_string(), specified, "{css}");
+        }
+        assert_eq!(used_px("calc-mix(10em 50%, 30px 50%)", 0.0), 95.0);
+        assert_eq!(used_px("calc-mix(10px 50%, 30% 50%)", 100.0), 20.0);
+        assert_eq!(
+            used_px(
+                "calc-mix(10px calc(50% * (sibling-index() + 1)), 30% 50%)",
+                100.0
+            ),
+            20.0
+        );
+    }
+
+    #[test]
+    fn mixes_of_inconsistent_types_are_invalid() {
+        for css in [
+            "calc-mix(1px 50%, 2 50%)",
+            "calc-mix(1px 150%)",
+            "calc-mix(1px 1px)",
+        ] {
+            assert!(parse_length_percentage(css).is_none(), "{css}");
         }
     }
 }

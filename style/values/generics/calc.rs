@@ -412,6 +412,8 @@ pub enum GenericCalcNode<L> {
         /// The base of `log()`, when given.
         base: Option<Box<GenericCalcNode<L>>>,
     },
+    /// A `calc-mix()` function.
+    Mix(crate::OwnedSlice<GenericCalcMixItem<L>>),
     /// A `progress()` function.
     Progress {
         /// The current value.
@@ -430,6 +432,63 @@ pub enum GenericCalcNode<L> {
 }
 
 pub use self::GenericCalcNode as CalcNode;
+
+/// An item of a `calc-mix()` function.
+#[derive(
+    Clone,
+    Debug,
+    Deserialize,
+    MallocSizeOf,
+    PartialEq,
+    Serialize,
+    ToAnimatedZero,
+    ToResolvedValue,
+    ToShmem,
+)]
+pub struct GenericCalcMixItem<L> {
+    /// The value.
+    pub value: GenericCalcNode<L>,
+    /// The mix percentage, when given.
+    pub percentage: Option<GenericCalcNode<L>>,
+    /// Whether the mix percentage is a math function, which normalizes only once computed.
+    #[animation(constant)]
+    pub percentage_is_function: bool,
+}
+
+/// Normalizes mix percentages, as fractions, filling in the omitted ones.
+///
+/// https://drafts.csswg.org/css-values-5/#normalize-mix-percentages
+fn normalize_mix_percentages(percentages: &[Option<f32>]) -> SmallVec<[f32; 4]> {
+    let clamped = || percentages.iter().map(|p| p.map(|p| p.clamp(0.0, 1.0)));
+    let specified_sum = clamped().flatten().sum::<f32>().min(1.0);
+    let omitted = clamped().filter(Option::is_none).count() as f32;
+    let mut normalized: SmallVec<[f32; 4]> = clamped()
+        .map(|p| p.unwrap_or((1.0 - specified_sum) / omitted))
+        .collect();
+    let total: f32 = normalized.iter().sum();
+    if total > 1.0 {
+        normalized.iter_mut().for_each(|p| *p /= total);
+    }
+    normalized
+}
+
+/// The weighted average of the values of a mix, or `zero` when no weight is positive.
+///
+/// https://drafts.csswg.org/css-values-5/#calc-mix
+fn mix_leaves<L: CalcNodeLeaf>(
+    values: impl IntoIterator<Item = (L, f32)>,
+    zero: impl FnOnce() -> Result<L, ()>,
+) -> Result<L, ()> {
+    let mut average: Option<L> = None;
+    for (mut value, weight) in values.into_iter().filter(|(_, weight)| *weight > 0.0) {
+        value.map(|v| v * weight)?;
+        match average {
+            Some(ref mut average) => average.try_sum_in_place(&value)?,
+            None => average = Some(value),
+        }
+    }
+    average.map_or_else(zero, Ok)
+}
 
 bitflags! {
     /// Expected units we allow parsing within a `calc()` expression.
@@ -568,7 +627,9 @@ fn resolve_product<L: CalcNodeLeaf>(factors: &[(L, bool)]) -> Result<L, ()> {
             (Some(number), false) => scale *= number,
             (Some(number), true) => scale /= number,
             (None, false) if dimension.is_none() => dimension = Some(leaf),
-            (None, _) => return canonical_product(factors.iter().map(|(leaf, inverted)| (leaf, *inverted))),
+            (None, _) => {
+                return canonical_product(factors.iter().map(|(leaf, inverted)| (leaf, *inverted)))
+            },
         }
     }
     let Some(dimension) = dimension else {
@@ -589,7 +650,11 @@ fn canonical_product<'a, L: CalcNodeLeaf + 'a>(
     let mut product_type = CalcType::default();
     for (leaf, inverted) in factors {
         let (factor, unit) = leaf.canonical().ok_or(())?;
-        value = if inverted { value / factor } else { value * factor };
+        value = if inverted {
+            value / factor
+        } else {
+            value * factor
+        };
         product_type.multiply(unit, if inverted { -1 } else { 1 })?;
     }
     L::from_canonical(value, product_type.unit()?).ok_or(())
@@ -728,6 +793,9 @@ pub trait CalcNodeLeaf: Clone + Sized + PartialEq + ToCss + ToTyped {
     fn canonical(&self) -> Option<(f32, CalcUnits)> {
         self.as_number().map(|value| (value, CalcUnits::empty()))
     }
+
+    /// A `<percentage>` leaf of `fraction`.
+    fn new_percentage(fraction: f32) -> Self;
 
     /// A leaf of `value` in the canonical unit of the type `unit`.
     fn from_canonical(value: f32, unit: CalcUnits) -> Option<Self> {
@@ -913,10 +981,32 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 ref base,
                 ..
             } => {
-                if !value.unit()?.is_empty() || !base.as_ref().map_or(Ok(CalcUnits::empty()), |b| b.unit())?.is_empty() {
+                if !value.unit()?.is_empty()
+                    || !base
+                        .as_ref()
+                        .map_or(Ok(CalcUnits::empty()), |b| b.unit())?
+                        .is_empty()
+                {
                     return Err(());
                 }
                 CalcUnits::empty()
+            },
+            CalcNode::Mix(items) => {
+                let mut unit = items[0].value.unit()?;
+                for item in items.iter() {
+                    let value_unit = item.value.unit()?;
+                    if !value_unit.can_sum_with(unit)
+                        || item
+                            .percentage
+                            .as_ref()
+                            .map_or(Ok(CalcUnits::PERCENTAGE), Self::unit)?
+                            != CalcUnits::PERCENTAGE
+                    {
+                        return Err(());
+                    }
+                    unit |= value_unit;
+                }
+                unit
             },
             CalcNode::Progress {
                 value, start, end, ..
@@ -1033,7 +1123,9 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 child.negate();
             },
             CalcNode::Trigonometric(..) => wrap_self_in_negate(self),
-            CalcNode::Pow(..) | CalcNode::Exponential { .. } => wrap_self_in_negate(self),
+            CalcNode::Pow(..) | CalcNode::Exponential { .. } | CalcNode::Mix(..) => {
+                wrap_self_in_negate(self)
+            },
             CalcNode::Progress { .. } => {
                 wrap_self_in_negate(self);
             },
@@ -1163,6 +1255,13 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                     map_internal(value, op)?;
                     base.as_mut().map_or(Ok(()), |base| map_internal(base, op))
                 },
+                // A mix is linear in its values.
+                CalcNode::Mix(items) => {
+                    for item in items.iter_mut() {
+                        map_internal(&mut item.value, op)?;
+                    }
+                    Ok(())
+                },
                 CalcNode::Progress {
                     value, start, end, ..
                 } => {
@@ -1268,8 +1367,20 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
             } => CalcNode::Exponential {
                 function,
                 value: Box::new(value.map_leaves_internal(map)),
-                base: base.as_ref().map(|base| Box::new(base.map_leaves_internal(map))),
+                base: base
+                    .as_ref()
+                    .map(|base| Box::new(base.map_leaves_internal(map))),
             },
+            Self::Mix(ref items) => CalcNode::Mix(
+                items
+                    .iter()
+                    .map(|item| GenericCalcMixItem {
+                        value: item.value.map_leaves_internal(map),
+                        percentage: item.percentage.as_ref().map(|p| p.map_leaves_internal(map)),
+                        percentage_is_function: item.percentage_is_function,
+                    })
+                    .collect(),
+            ),
             Self::Progress {
                 ref value,
                 ref start,
@@ -1351,7 +1462,9 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 let factors = children
                     .iter()
                     .map(|child| match child {
-                        Self::Invert(divisor) => Ok((divisor.resolve_internal(leaf_to_output_fn)?, true)),
+                        Self::Invert(divisor) => {
+                            Ok((divisor.resolve_internal(leaf_to_output_fn)?, true))
+                        },
                         _ => Ok((child.resolve_internal(leaf_to_output_fn)?, false)),
                     })
                     .collect::<Result<SmallVec<[(L, bool); 4]>, ()>>()?;
@@ -1602,11 +1715,44 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 ref base,
             } => {
                 let mut number = |node: &Self| {
-                    node.resolve_internal(leaf_to_output_fn)?.as_number().ok_or(())
+                    node.resolve_internal(leaf_to_output_fn)?
+                        .as_number()
+                        .ok_or(())
                 };
                 let value = number(value)?;
                 let base = base.as_deref().map(&mut number).transpose()?;
                 Ok(L::new_number(function.apply(value, base)))
+            },
+            Self::Mix(items) => {
+                // A math function mix percentage resolves only once computed.
+                if items.iter().any(|item| item.percentage_is_function) {
+                    return Err(());
+                }
+                let mut values = SmallVec::<[L; 4]>::new();
+                let mut percentages = SmallVec::<[Option<f32>; 4]>::new();
+                for item in items.iter() {
+                    values.push(item.value.resolve_internal(leaf_to_output_fn)?);
+                    percentages.push(match item.percentage {
+                        Some(ref p) => Some(
+                            p.resolve_internal(leaf_to_output_fn)?
+                                .unitless_value()
+                                .ok_or(())?,
+                        ),
+                        None => None,
+                    });
+                }
+                let zero = || {
+                    let mut zero = values[0].clone();
+                    zero.map(|_| 0.0)?;
+                    Ok(zero)
+                };
+                mix_leaves(
+                    values
+                        .iter()
+                        .cloned()
+                        .zip(normalize_mix_percentages(&percentages)),
+                    zero,
+                )
             },
             Self::Progress {
                 value,
@@ -1666,6 +1812,14 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 value.map_node_internal(mapping_fn)?;
                 if let Some(base) = base {
                     base.map_node_internal(mapping_fn)?;
+                }
+            },
+            Self::Mix(items) => {
+                for item in items.iter_mut() {
+                    item.value.map_node_internal(mapping_fn)?;
+                    if let Some(ref mut percentage) = item.percentage {
+                        percentage.map_node_internal(mapping_fn)?;
+                    }
                 }
             },
             Self::Sum(children)
@@ -1804,6 +1958,14 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 value.visit_depth_first_internal(f);
                 if let Some(base) = base {
                     base.visit_depth_first_internal(f);
+                }
+            },
+            Self::Mix(ref mut items) => {
+                for item in &mut **items {
+                    item.value.visit_depth_first_internal(f);
+                    if let Some(ref mut percentage) = item.percentage {
+                        percentage.visit_depth_first_internal(f);
+                    }
                 }
             },
             Self::Leaf(..) | Self::Anchor(..) | Self::AnchorSize(..) => {},
@@ -2282,6 +2444,11 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                     *self = Self::Leaf(leaf);
                 }
             },
+            Self::Mix(ref mut items) => {
+                if let Some(mut simplified) = Self::simplify_mix(items) {
+                    replace_self_with!(&mut simplified);
+                }
+            },
             Self::Anchor(ref mut f) => {
                 if let GenericAnchorSide::Percentage(ref mut n) = f.side {
                     n.simplify_and_sort();
@@ -2296,6 +2463,125 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 }
             },
         }
+    }
+
+    /// Normalizes the mix percentages of a `calc-mix()` and drops the items they weigh zero,
+    /// when every percentage resolves and none is a math function. Returns the node that replaces
+    /// the mix: its weighted average when its values resolve, or a zero when no item remains.
+    fn simplify_mix(items: &mut crate::OwnedSlice<GenericCalcMixItem<L>>) -> Option<Self> {
+        if items.iter().any(|item| item.percentage_is_function) {
+            return None;
+        }
+        let percentages = items
+            .iter()
+            .map(|item| match item.percentage {
+                Some(ref p) => p.as_leaf().and_then(L::unitless_value).map(Some),
+                None => Some(None),
+            })
+            .collect::<Option<SmallVec<[_; 4]>>>()?;
+        let weighted = mem::take(items)
+            .into_vec()
+            .into_iter()
+            .zip(normalize_mix_percentages(&percentages))
+            .collect::<SmallVec<[_; 4]>>();
+        let zero = weighted[0].0.value.zero();
+        let kept = weighted
+            .into_iter()
+            .filter(|(_, weight)| *weight > 0.0)
+            .map(|(item, weight)| GenericCalcMixItem {
+                percentage: Some(Self::Leaf(L::new_percentage(weight))),
+                ..item
+            })
+            .collect::<Vec<_>>();
+        let values = kept
+            .iter()
+            .map(|item| Some((item.value.as_leaf()?.clone(), Self::mix_weight(item))))
+            .collect::<Option<SmallVec<[_; 4]>>>();
+        if let Some(average) = values.and_then(|values| mix_leaves(values, || Err(())).ok()) {
+            return Some(Self::Leaf(average));
+        }
+        if kept.is_empty() {
+            return Some(Self::Leaf(zero));
+        }
+        *items = kept.into();
+        None
+    }
+
+    /// The normalized weight of a mix item.
+    fn mix_weight(item: &GenericCalcMixItem<L>) -> f32 {
+        item.percentage
+            .as_ref()
+            .and_then(Self::as_leaf)
+            .and_then(L::unitless_value)
+            .unwrap_or(0.0)
+    }
+
+    /// A zero of the type of this calculation: that of its first dimensional leaf, if any.
+    fn zero(&self) -> L {
+        let mut first = None::<L>;
+        let mut node = self.clone();
+        node.visit_depth_first(|node| {
+            if let Self::Leaf(ref leaf) = *node {
+                if first.as_ref().map_or(true, |first| {
+                    first.unit().is_empty() && !leaf.unit().is_empty()
+                }) {
+                    first = Some(leaf.clone());
+                }
+            }
+        });
+        first
+            .and_then(|mut zero| zero.map(|_| 0.0).ok().map(|()| zero))
+            .unwrap_or_else(|| L::new_number(0.0))
+    }
+
+    /// Computes the mix percentages of each `calc-mix()`, after which they normalize like
+    /// `<percentage>` tokens.
+    pub fn compute_mix_percentages(&mut self) {
+        self.visit_depth_first(|node| {
+            if let Self::Mix(ref mut items) = *node {
+                for item in items.iter_mut() {
+                    item.percentage_is_function = false;
+                }
+            }
+        });
+    }
+
+    /// Replaces each `calc-mix()` with the sum of its weighted values, once its mix percentages
+    /// resolve, as when computed. Returns whether it replaced any.
+    pub fn expand_mixes(&mut self) -> bool {
+        let mut expanded = false;
+        self.visit_depth_first(|node| {
+            let Self::Mix(ref items) = *node else {
+                return;
+            };
+            let Some(percentages) = items
+                .iter()
+                .map(|item| match item.percentage {
+                    Some(ref p) => p.as_leaf().and_then(L::unitless_value).map(Some),
+                    None => Some(None),
+                })
+                .collect::<Option<SmallVec<[_; 4]>>>()
+            else {
+                return;
+            };
+            let terms = items
+                .iter()
+                .zip(normalize_mix_percentages(&percentages))
+                .filter(|(_, weight)| *weight > 0.0)
+                .map(|(item, weight)| {
+                    Self::Product(
+                        vec![item.value.clone(), Self::Leaf(L::new_number(weight))].into(),
+                    )
+                })
+                .collect::<Vec<_>>();
+            *node = if terms.is_empty() {
+                Self::Leaf(items[0].value.zero())
+            } else {
+                Self::Sum(terms.into())
+            };
+            expanded = true;
+        });
+        expanded
     }
 
     /// Simplifies and sorts the kids in the whole calculation subtree.
@@ -2371,6 +2657,10 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
             },
             Self::Exponential { function, .. } => {
                 dest.write_str(function.name())?;
+                true
+            },
+            Self::Mix(..) => {
+                dest.write_str("calc-mix(")?;
                 true
             },
             Self::Progress { clamping, .. } => {
@@ -2544,6 +2834,23 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 if let Some(base) = base {
                     dest.write_str(", ")?;
                     base.to_css_impl(dest, ArgumentLevel::ArgumentRoot)?;
+                }
+            },
+            Self::Mix(ref items) => {
+                for (index, item) in items.iter().enumerate() {
+                    if index > 0 {
+                        dest.write_str(", ")?;
+                    }
+                    item.value.to_css_impl(dest, ArgumentLevel::ArgumentRoot)?;
+                    if let Some(ref percentage) = item.percentage {
+                        dest.write_char(' ')?;
+                        let level = if item.percentage_is_function {
+                            ArgumentLevel::CalculationRoot
+                        } else {
+                            ArgumentLevel::ArgumentRoot
+                        };
+                        percentage.to_css_impl(dest, level)?;
+                    }
                 }
             },
             Self::Leaf(ref l) => l.to_css(dest)?,
