@@ -2722,6 +2722,9 @@ mod tests {
                 PropertyDeclaration::AlignmentBaseline(*value)
             },
             PropertyDeclaration::Appearance(value) => PropertyDeclaration::Appearance(*value),
+            PropertyDeclaration::InterpolateSize(value) => {
+                PropertyDeclaration::InterpolateSize(*value)
+            },
             PropertyDeclaration::BackfaceVisibility(value) => {
                 PropertyDeclaration::BackfaceVisibility(*value)
             },
