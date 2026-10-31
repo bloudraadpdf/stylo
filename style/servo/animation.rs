@@ -27,7 +27,7 @@ use crate::shared_lock::{Locked, SharedRwLock};
 use crate::style_resolver::{PrimaryStyle, StyleResolverForElement};
 use crate::stylesheets::keyframes_rule::{KeyframesAnimation, KeyframesStep, KeyframesStepValue};
 use crate::stylesheets::layer_rule::LayerOrder;
-use crate::values::animated::{Animate, Procedure};
+use crate::values::animated::Procedure;
 use crate::values::computed::TimingFunction;
 use crate::values::generics::easing::BeforeFlag;
 use crate::values::specified::TransitionBehavior;
@@ -1839,7 +1839,7 @@ pub fn maybe_start_animations<E>(
 mod tests {
     use super::{
         Animation, AnimationComposition, AnimationDirection, AnimationFillMode, AnimationState,
-        ComputedKeyframe, ElementAnimationSet, KeyframesIterationState,
+        ComputedKeyframe, ElementAnimationSet, InterpolateSize, KeyframesIterationState,
     };
     use crate::properties::animated_properties::AnimationValue;
     use crate::properties::style_structs::Font;

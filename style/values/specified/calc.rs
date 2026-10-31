@@ -468,15 +468,32 @@ impl CalcSizeCalculation {
         Self(node)
     }
 
-    /// Replaces each `size` with `value`.
-    pub fn substitute_size(&self, value: &CalcNode) -> Self {
+    /// Replaces each `size` with `value`, unless the result would have more
+    /// than `MAX_NODES` nodes. Nested `size` terms grow exponentially.
+    ///
+    /// <https://github.com/w3c/csswg-drafts/issues/10369>
+    pub fn substitute_size(&self, value: &CalcNode) -> Option<Self> {
+        const MAX_NODES: usize = 1000;
+        let count = |node: &CalcNode, leaf: Option<&Leaf>| {
+            let mut count = 0usize;
+            node.clone().visit_depth_first(|node| match (node, leaf) {
+                (CalcNode::Leaf(found), Some(leaf)) if found == leaf => count += 1,
+                (_, None) => count += 1,
+                _ => {},
+            });
+            count
+        };
+        let sizes = count(&self.0, Some(&Leaf::Size));
+        if count(&self.0, None) + sizes * count(value, None).saturating_sub(1) > MAX_NODES {
+            return None;
+        }
         let mut node = self.0.clone();
         node.visit_depth_first(|node| {
             if matches!(node, CalcNode::Leaf(Leaf::Size)) {
                 *node = value.clone();
             }
         });
-        Self::new(node)
+        Some(Self::new(node))
     }
 
     /// Replaces each percentage `N%` with `(size * N / 100)`.

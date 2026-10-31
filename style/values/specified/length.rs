@@ -2951,6 +2951,23 @@ mod calc_size_tests {
     }
 
     #[test]
+    fn calc_size_does_not_interpolate_an_exponential_flattening() {
+        use crate::values::animated::{Animate, Procedure};
+        let calc_size = |css: &str| match parse_size(css) {
+            GenericSize::CalcSize(value) => *value,
+            _ => panic!("{css}"),
+        };
+        let nested = (0..20).fold("auto".to_owned(), |basis, _| {
+            format!("calc-size({basis}, size / 2 + size / 2)")
+        });
+        let interpolated = calc_size(&nested).animate(
+            &calc_size("calc-size(auto, size * 3)"),
+            Procedure::Interpolate { progress: 0.5 },
+        );
+        assert!(interpolated.is_err());
+    }
+
+    #[test]
     fn calc_size_rejects_invalid_bases_and_calculations() {
         for css in ["calc-size(any, size)", "calc-size(0, 0px)", "calc-size(0px, 0)", "calc-size(content, size)"] {
             let mut input = ParserInput::new(css);

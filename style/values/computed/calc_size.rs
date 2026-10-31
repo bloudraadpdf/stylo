@@ -51,11 +51,13 @@ impl CalcSize {
 
     /// Flattens nested and `<calc-sum>` bases into a keyword, `any` or `100%`.
     ///
+    /// Fails when the flattened calculation would be too large.
+    ///
     /// <https://drafts.csswg.org/css-values-5/#prepare-calc-size>
-    pub fn prepared(&self) -> Self {
+    pub fn prepared(&self) -> Option<Self> {
         let (basis, size) = match &self.basis {
             CalcSizeBasis::CalcSize(inner) => {
-                let inner = inner.prepared();
+                let inner = inner.prepared()?;
                 (inner.basis, inner.calculation)
             },
             CalcSizeBasis::Calc(basis) if basis.has_percentage() => (
@@ -63,12 +65,12 @@ impl CalcSize {
                 basis.depercentify(),
             ),
             CalcSizeBasis::Calc(basis) => (CalcSizeBasis::Any, basis.clone()),
-            _ => return self.clone(),
+            _ => return Some(self.clone()),
         };
-        Self {
+        Some(Self {
             basis,
-            calculation: self.calculation.substitute_size(&size.0),
-        }
+            calculation: self.calculation.substitute_size(&size.0)?,
+        })
     }
 }
 
@@ -77,7 +79,7 @@ impl Animate for CalcSize {
         if self.basis == other.basis {
             return Ok(mix(&self.basis, &self.calculation, &other.calculation, procedure));
         }
-        let (from, to) = (self.prepared(), other.prepared());
+        let (from, to) = (self.prepared().ok_or(())?, other.prepared().ok_or(())?);
         let basis = match (&from.basis, &to.basis) {
             (a, b) if a == b => a,
             (CalcSizeBasis::Any, basis) | (basis, CalcSizeBasis::Any) => basis,
