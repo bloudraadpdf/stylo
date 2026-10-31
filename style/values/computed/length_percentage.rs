@@ -1288,7 +1288,7 @@ impl specified::CalcLengthPercentage {
     fn to_computed_float_offset_value(&self, context: &Context) -> LengthPercentage {
         use crate::values::specified::calc::Leaf;
 
-        let node = self.node.map_leaves(|leaf| match *leaf {
+        let node = self.node.resolve_tree_counting(context).map_leaves(|leaf| match *leaf {
             Leaf::Size => unreachable!("size is only valid inside calc-size()"),
             Leaf::Percentage(value) => CalcLengthPercentageLeaf::Percentage(Percentage(value)),
             Leaf::Length(value) => {
@@ -1325,7 +1325,7 @@ impl specified::CalcLengthPercentage {
     {
         use crate::values::specified::calc::Leaf;
 
-        let node = self.node.map_leaves(|leaf| match *leaf {
+        let node = self.node.resolve_tree_counting(context).map_leaves(|leaf| match *leaf {
             Leaf::Size => unreachable!("size is only valid inside calc-size()"),
             Leaf::Percentage(p) => CalcLengthPercentageLeaf::Percentage(Percentage(p)),
             Leaf::Length(l) => CalcLengthPercentageLeaf::Length({

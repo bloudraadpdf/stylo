@@ -1777,6 +1777,18 @@ impl CalcNode {
         Self::parse_number_node(context, input, function)
     }
 
+    /// Resolves the tree-counting functions, and the calculations they leave resolvable, such as
+    /// a trigonometric function of an angle in a length.
+    pub(crate) fn resolve_tree_counting(&self, context: &Context) -> Self {
+        let mut node = self.map_leaves(|leaf| match *leaf {
+            Leaf::SiblingIndex => Leaf::Number(context.sibling_index()),
+            Leaf::SiblingCount => Leaf::Number(context.sibling_count()),
+            _ => leaf.clone(),
+        });
+        node.simplify_and_sort();
+        node
+    }
+
     fn resolve_contextual_leaves(&self, context: &Context) -> Self {
         self.resolve_contextual_leaves_with_base_size(
             context,
@@ -2402,6 +2414,12 @@ mod typed_arithmetic_tests {
             let value = parse_length_percentage(css).unwrap_or_else(|| panic!("{css} must parse"));
             assert_eq!(value.to_css_string(), expected, "{css}");
         }
+    }
+
+    #[test]
+    fn tree_counting_angles_resolve_inside_length_calculations() {
+        let css = "calc(50% + 100px * cos(1turn * sibling-index()))";
+        assert_eq!(used_px(css, 400.0), 300.0);
     }
 
     #[test]
