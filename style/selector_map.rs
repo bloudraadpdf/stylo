@@ -341,6 +341,26 @@ impl SelectorMap<Rule> {
             IncludeStartingStyle::Yes
         );
         for rule in rules {
+            #[cfg(feature = "servo")]
+            if !stylist.device().link_after_rules_enabled
+                && rule.selector.pseudo_element()
+                    == Some(&crate::selector_parser::PseudoElement::After)
+            {
+                let mut subject = rule.selector.iter();
+                for _ in &mut subject {}
+                if subject.next_sequence() == Some(Combinator::PseudoElement)
+                    && subject.any(|component| {
+                        matches!(
+                            component,
+                            Component::NonTSPseudoClass(
+                                crate::selector_parser::NonTSPseudoClass::Link
+                            )
+                        )
+                    })
+                {
+                    continue;
+                }
+            }
             let scope_proximity = if rule.scope_condition_id == ScopeConditionId::none() {
                 if !matches_selector(
                     &rule.selector,

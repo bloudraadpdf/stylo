@@ -185,6 +185,8 @@ pub struct Device {
     pub intrinsic_grid_repetition_enabled: bool,
     /// Whether direct link-state selectors win otherwise equal cascade ties.
     pub link_state_cascade_priority: bool,
+    /// Whether a link-state selector can target its link's ::after pseudo-element.
+    pub link_after_rules_enabled: bool,
 }
 
 impl Device {
@@ -232,6 +234,7 @@ impl Device {
             subgrid_enabled: true,
             intrinsic_grid_repetition_enabled: true,
             link_state_cascade_priority: false,
+            link_after_rules_enabled: true,
         }
     }
 
