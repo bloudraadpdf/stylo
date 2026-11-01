@@ -1,8 +1,27 @@
 use cssparser::{
     AtRuleParser, CowRcStr, DeclarationParser, ParseError, Parser, ParserInput, ParserState,
-    QualifiedRuleParser, RuleBodyItemParser, RuleBodyParser, StyleSheetParser,
+    QualifiedRuleParser, RuleBodyItemParser, RuleBodyParser, StyleSheetParser, Token,
 };
 use stylo_cssom_model::Importance;
+
+/// Recovers the rules after PDFreactor's invalid CDATA-prefixed first block in an HTML style element.
+pub fn pdfreactor_html_style_text(source: &str) -> Option<&str> {
+    let source = source.trim().strip_prefix("<![CDATA[")?.strip_suffix("]]>")?;
+    let mut input = ParserInput::new(source);
+    let mut parser = Parser::new(&mut input);
+    while let Ok(token) = parser.next_including_whitespace_and_comments() {
+        if matches!(token, Token::CurlyBracketBlock) {
+            parser
+                .parse_nested_block(|nested| {
+                    DeclarationScanner::consume_component_values(nested);
+                    Ok::<_, ParseError<'_, ()>>(())
+                })
+                .ok()?;
+            return Some(&source[parser.position().byte_index()..]);
+        }
+    }
+    Some("")
+}
 
 #[derive(Debug)]
 pub struct SourceDeclaration<'a> {
@@ -253,6 +272,34 @@ impl<'i> RuleBodyItemParser<'i, (), ()> for DeclarationScanner<'i> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pdfreactor_cdata_recovery_discards_one_block_with_its_prelude() {
+        for prefix in [
+            "p{font-size:30pt}",
+            "@namespace x 'urn:test'; p{font-size:30pt}",
+            "@page{size:300pt 300pt}",
+            "@media all{p{color:red}}",
+            "?{color:red}",
+            "/* { */ span::before{content:'}'}",
+            "[title='}']{content:url('}')} ",
+        ] {
+            let source = format!(" <![CDATA[{prefix}p{{font-size:20pt}}]]> ");
+            assert_eq!(
+                pdfreactor_html_style_text(&source).map(str::trim),
+                Some("p{font-size:20pt}"),
+                "{prefix}"
+            );
+        }
+        assert_eq!(
+            pdfreactor_html_style_text("<![CDATA[@namespace x 'urn:test';]]>"),
+            Some("")
+        );
+        assert_eq!(pdfreactor_html_style_text("p{color:red}"), None);
+        assert_eq!(pdfreactor_html_style_text("<!--p{color:red}-->"), None);
+        assert_eq!(pdfreactor_html_style_text("<![CDATA[p{color:red}"), None);
+    }
+
 
     #[test]
     fn source_declarations_preserve_nested_values_and_custom_property_case() {
