@@ -175,7 +175,10 @@ impl ToComputedValue for LineWidth {
             Self::Thin => context.device().line_width_keywords().thin,
             Self::Medium => context.device().line_width_keywords().medium,
             Self::Thick => context.device().line_width_keywords().thick,
-            Self::Length(ref length) => Au::from_f32_px(length.to_computed_value(context).px()),
+            // Truncated, so that a width a hair short of a device pixel snaps down to the pixel below it: to
+            // snap as a line width (CSS Values 4) rounds a width above 1 device pixel down, and rounding to the
+            // nearest app unit first would carry 2.999px up to 3px.
+            Self::Length(ref length) => Au::from_f32_px_trunc(length.to_computed_value(context).px()),
         }
     }
 
