@@ -2270,7 +2270,7 @@ mod prince_rewrite_tests {
     use super::{CompatMode, translate_compat, translate_compat_declarations};
 
     #[test]
-    fn pdfreactor_rejects_direction_selector_rules() {
+    fn pdfreactor_rejects_unsupported_selector_rules() {
         for selector in [
             ".a:dir(ltr)",
             ".a:dir(rtl), .b",
@@ -2278,6 +2278,12 @@ mod prince_rewrite_tests {
             ".a:/**/dir(ltr)",
             ".a:is(:dir(ltr), .a)",
             ".a:not(:dir(rtl))",
+            ".a:has(h2)",
+            ".a:has(> h2), .b",
+            r".a:\68 as(h2)",
+            ".a:/**/has(h2)",
+            ".a:is(:has(h2), .a)",
+            ".a:not(:has(h2))",
         ] {
             let css = format!("{selector} {{ width:200px }}");
             assert!(
@@ -2291,7 +2297,7 @@ mod prince_rewrite_tests {
                 assert_eq!(translate_compat(&css, mode).rewritten, css);
             }
         }
-        let css = r#"[data-value=":dir(ltr)"] { content: ":dir(ltr)"; --value: :dir(ltr) }"#;
+        let css = r#"[data-value=":dir(ltr):has(h2)"] { content: ":dir(ltr):has(h2)"; --value: :has(h2) }"#;
         assert_eq!(translate_compat(css, CompatMode::PdfReactor).rewritten, css);
         let css = "@media print { .a:dir(ltr) { width:200px } .b { width:100px } }";
         let translated = translate_compat(css, CompatMode::PdfReactor);
@@ -2303,7 +2309,7 @@ mod prince_rewrite_tests {
     fn pdfreactor_removes_rejected_rule_nodes_from_projection() {
         use stylo_cssom_model::{InternalStylesheetRoot, StyleOrigin};
         let parsed = crate::authored_rules::ParsedStylesheet::parse(
-            ".a:dir(ltr) { width:var(--width) } @media print { .b:dir(rtl) { width:var(--width) } .c { width:10px } }",
+            ".a:has(h2) { width:var(--width) } @media print { .b:dir(rtl) { width:var(--width) } .c { width:10px } }",
         )
         .unwrap();
         let root = InternalStylesheetRoot::new(StyleOrigin::Author, parsed.rule_nodes().to_vec());
@@ -4246,7 +4252,7 @@ fn walk_qualified_rule<'i>(
                 Token::CurlyBracketBlock => {
                     let mut input = ParserInput::new(&full_css[rule_start..token_start]);
                     let rejected = state.compat == CompatMode::PdfReactor
-                        && selector_contains_dir(&mut Parser::new(&mut input));
+                        && pdfreactor_rejects_selector(&mut Parser::new(&mut input));
                     let body_start = parser.position().byte_index();
                     let _ = parser.parse_nested_block(|inner| -> Result<(), ParseError<'i, ()>> {
                         if rejected {
@@ -4275,18 +4281,20 @@ fn walk_qualified_rule<'i>(
     }
 }
 
-fn selector_contains_dir(parser: &mut Parser<'_, '_>) -> bool {
+fn pdfreactor_rejects_selector(parser: &mut Parser<'_, '_>) -> bool {
     let mut colon = false;
     while let Ok(token) = parser.next_including_whitespace_and_comments() {
         match token.clone() {
             Token::Colon => colon = true,
             Token::Comment(_) => {},
             Token::Function(name) => {
-                if colon && name.eq_ignore_ascii_case("dir") {
+                if colon
+                    && (name.eq_ignore_ascii_case("dir") || name.eq_ignore_ascii_case("has"))
+                {
                     return true;
                 }
                 let nested = parser.parse_nested_block(|inner| {
-                    let rejected = selector_contains_dir(inner);
+                    let rejected = pdfreactor_rejects_selector(inner);
                     while inner.next_including_whitespace_and_comments().is_ok() {}
                     Ok::<_, ParseError<'_, ()>>(rejected)
                 });
