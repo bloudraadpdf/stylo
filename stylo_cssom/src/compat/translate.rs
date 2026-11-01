@@ -2928,6 +2928,43 @@ mod prince_rewrite_tests {
     }
 
     #[test]
+    fn pdfreactor_rejects_hanging_punctuation_before_the_cascade() {
+        for value in [
+            "none",
+            "first",
+            "last",
+            "first last",
+            "allow-end",
+            "force-end",
+            "var(--hang)",
+        ] {
+            let declarations = format!("color:red; HaNgInG-PuNcTuAtIoN:{value};");
+            assert_eq!(
+                translate_compat_declarations(&declarations, CompatMode::PdfReactor).rewritten,
+                "color:red; "
+            );
+            let css = format!("p {{ {declarations} }}");
+            assert_eq!(
+                translate_compat(&css, CompatMode::PdfReactor).rewritten,
+                "p { color:red; }"
+            );
+            for compat in [
+                CompatMode::None,
+                CompatMode::Prince,
+                CompatMode::WeasyPrint,
+                CompatMode::Chromium,
+            ] {
+                assert_eq!(translate_compat(&css, compat).rewritten, css);
+            }
+        }
+        let css = "@supports (hanging-punctuation:first) { p { color:red } }";
+        assert_eq!(
+            translate_compat(css, CompatMode::PdfReactor).rewritten,
+            "@supports (not (--bd-compat-satisfied: 1)) { p { color:red } }"
+        );
+    }
+
+    #[test]
     fn pdfreactor_rejects_subgrid_before_the_cascade() {
         for property in [
             "grid-template-rows",
@@ -3922,6 +3959,7 @@ fn engine_ignores_declaration(compat: CompatMode, name: &str, value: &str) -> bo
         },
         CompatMode::PdfReactor => {
             name.eq_ignore_ascii_case("footnote-policy")
+                || name.eq_ignore_ascii_case("hanging-punctuation")
                 || name.eq_ignore_ascii_case("inset")
                 || name.eq_ignore_ascii_case("aspect-ratio")
                 || ([
