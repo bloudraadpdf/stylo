@@ -4281,16 +4281,14 @@ fn walk_qualified_rule<'i>(
     }
 }
 
-fn pdfreactor_rejects_selector(parser: &mut Parser<'_, '_>) -> bool {
+pub(crate) fn pdfreactor_rejects_selector(parser: &mut Parser<'_, '_>) -> bool {
     let mut colon = false;
     while let Ok(token) = parser.next_including_whitespace_and_comments() {
         match token.clone() {
             Token::Colon => colon = true,
             Token::Comment(_) => {},
             Token::Function(name) => {
-                if colon
-                    && (name.eq_ignore_ascii_case("dir") || name.eq_ignore_ascii_case("has"))
-                {
+                if colon && (name.eq_ignore_ascii_case("dir") || name.eq_ignore_ascii_case("has")) {
                     return true;
                 }
                 let nested = parser.parse_nested_block(|inner| {

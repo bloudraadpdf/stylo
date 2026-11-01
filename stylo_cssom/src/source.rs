@@ -2,11 +2,15 @@ use cssparser::{
     AtRuleParser, CowRcStr, DeclarationParser, ParseError, Parser, ParserInput, ParserState,
     QualifiedRuleParser, RuleBodyItemParser, RuleBodyParser, StyleSheetParser, Token,
 };
+use std::{borrow::Cow, ops::Range};
 use stylo_cssom_model::Importance;
 
 /// Recovers the rules after PDFreactor's invalid CDATA-prefixed first block in an HTML style element.
-pub fn pdfreactor_html_style_text(source: &str) -> Option<&str> {
-    let source = source.trim().strip_prefix("<![CDATA[")?.strip_suffix("]]>")?;
+pub fn pdfreactor_html_style_text(source: &str) -> Option<Cow<'_, str>> {
+    let source = source
+        .trim()
+        .strip_prefix("<![CDATA[")?
+        .strip_suffix("]]>")?;
     let mut input = ParserInput::new(source);
     let mut parser = Parser::new(&mut input);
     while let Ok(token) = parser.next_including_whitespace_and_comments() {
@@ -17,10 +21,141 @@ pub fn pdfreactor_html_style_text(source: &str) -> Option<&str> {
                     Ok::<_, ParseError<'_, ()>>(())
                 })
                 .ok()?;
-            return Some(&source[parser.position().byte_index()..]);
+            return Some(recover_pdfreactor_selectors(
+                &source[parser.position().byte_index()..],
+            ));
         }
     }
-    Some("")
+    Some(Cow::Borrowed(""))
+}
+
+fn recover_pdfreactor_selectors(source: &str) -> Cow<'_, str> {
+    if !source.contains('|') {
+        return Cow::Borrowed(source);
+    }
+    let (sheet, lock) =
+        crate::context::parse_stylesheet_fragment(source, style::stylesheets::Origin::Author);
+    let guard = lock.read();
+    let contents = sheet.contents.read_with(&guard);
+    let url = style::stylesheets::UrlExtraData::from(crate::context::ABOUT_BLANK.clone());
+    let mut recovery = PdfReactorSelectors {
+        parser: style::selector_parser::SelectorParser {
+            stylesheet_origin: style::stylesheets::Origin::Author,
+            namespaces: &contents.namespaces,
+            url_data: &url,
+            for_supports_rule: false,
+        },
+        replacements: Vec::new(),
+    };
+    let mut input = ParserInput::new(source);
+    for _ in StyleSheetParser::new(&mut Parser::new(&mut input), &mut recovery) {}
+    if recovery.replacements.is_empty() {
+        return Cow::Borrowed(source);
+    }
+    let mut result = source.to_owned();
+    for (range, selector) in recovery.replacements.into_iter().rev() {
+        result.replace_range(range, &selector);
+    }
+    Cow::Owned(result)
+}
+
+struct PdfReactorSelectors<'a> {
+    parser: style::selector_parser::SelectorParser<'a>,
+    replacements: Vec<(Range<usize>, String)>,
+}
+
+impl<'i> QualifiedRuleParser<'i> for PdfReactorSelectors<'_> {
+    type Prelude = ();
+    type QualifiedRule = ();
+    type Error = style_traits::StyleParseErrorKind<'i>;
+
+    fn parse_prelude<'t>(
+        &mut self,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<(), ParseError<'i, Self::Error>> {
+        use cssparser::{ParseErrorKind, ToCss};
+        use selectors::parser::{ParseRelative, SelectorList, SelectorParseErrorKind};
+        use style_traits::StyleParseErrorKind;
+
+        let start = input.position();
+        let mut recovered = false;
+        let selectors = input.parse_comma_separated(|input| {
+            match SelectorList::parse(&self.parser, input, ParseRelative::No) {
+                Ok(selectors) => Ok(Some(selectors.to_css_string())),
+                Err(error)
+                    if matches!(
+                        error.kind,
+                        ParseErrorKind::Custom(StyleParseErrorKind::SelectorError(
+                            SelectorParseErrorKind::ExpectedNamespace(_)
+                        ))
+                    ) =>
+                {
+                    recovered = true;
+                    DeclarationScanner::consume_component_values(input);
+                    Ok(None)
+                },
+                Err(error) => Err(error),
+            }
+        });
+        if let Ok(selectors) = selectors {
+            let selectors = selectors.into_iter().flatten().collect::<Vec<_>>();
+            let mut header = ParserInput::new(input.slice_from(start));
+            if recovered
+                && !selectors.is_empty()
+                && !crate::compat::translate::pdfreactor_rejects_selector(&mut Parser::new(
+                    &mut header,
+                ))
+            {
+                self.replacements.push((
+                    start.byte_index()..input.position().byte_index(),
+                    selectors.join(", "),
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn parse_block<'t>(
+        &mut self,
+        (): (),
+        _: &ParserState,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<(), ParseError<'i, Self::Error>> {
+        DeclarationScanner::consume_component_values(input);
+        Ok(())
+    }
+}
+
+impl<'i> AtRuleParser<'i> for PdfReactorSelectors<'_> {
+    type Prelude = bool;
+    type AtRule = ();
+    type Error = style_traits::StyleParseErrorKind<'i>;
+
+    fn parse_prelude<'t>(
+        &mut self,
+        name: CowRcStr<'i>,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<bool, ParseError<'i, Self::Error>> {
+        DeclarationScanner::consume_component_values(input);
+        Ok(matches!(
+            name.to_ascii_lowercase().as_str(),
+            "media" | "supports" | "layer" | "container" | "scope" | "starting-style"
+        ))
+    }
+
+    fn parse_block<'t>(
+        &mut self,
+        group: bool,
+        _: &ParserState,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<(), ParseError<'i, Self::Error>> {
+        if group {
+            for _ in StyleSheetParser::new(input, self) {}
+        } else {
+            DeclarationScanner::consume_component_values(input);
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -286,13 +421,15 @@ mod tests {
         ] {
             let source = format!(" <![CDATA[{prefix}p{{font-size:20pt}}]]> ");
             assert_eq!(
-                pdfreactor_html_style_text(&source).map(str::trim),
+                pdfreactor_html_style_text(&source)
+                    .as_deref()
+                    .map(str::trim),
                 Some("p{font-size:20pt}"),
                 "{prefix}"
             );
         }
         assert_eq!(
-            pdfreactor_html_style_text("<![CDATA[@namespace x 'urn:test';]]>"),
+            pdfreactor_html_style_text("<![CDATA[@namespace x 'urn:test';]]>").as_deref(),
             Some("")
         );
         assert_eq!(pdfreactor_html_style_text("p{color:red}"), None);
@@ -300,6 +437,48 @@ mod tests {
         assert_eq!(pdfreactor_html_style_text("<![CDATA[p{color:red}"), None);
     }
 
+    #[test]
+    fn pdfreactor_cdata_recovery_keeps_valid_namespace_list_selectors() {
+        use stylo_cssom_model::RuleCssomData;
+        for (prefix, selector, expected) in [
+            ("", "[epub|type='poem'], section > h2", vec!["section > h2"]),
+            ("", "unknown|p,h2", vec!["h2"]),
+            ("", "h2:unknown-selector,h2", vec![]),
+            ("", "h2:not(:unknown-selector),h3", vec![]),
+            ("", "unknown|h2", vec![]),
+            ("", "h2:unknown-selector(x),h2", vec![]),
+            ("", "unknown|p,h2,", vec![]),
+            ("", "unknown|p:has(h2),h2", vec![]),
+            ("", "unknown|p:dir(ltr),h2", vec![]),
+            (
+                "@namespace known 'urn:known';",
+                "known|p,unknown|p,h2",
+                vec!["known|p, h2"],
+            ),
+            (
+                "",
+                "unknown|p,[data-text=', |'] > h2",
+                vec!["[data-text=\", |\"] > h2"],
+            ),
+        ] {
+            let css = format!(
+                "<![CDATA[@namespace epub 'urn:epub'; .discarded{{}} {prefix}{selector}{{break-after:page}}]]>"
+            );
+            let recovered = pdfreactor_html_style_text(&css).unwrap();
+            let selectors = crate::rule_parser::ParsedCssRule::parse_stylesheet(&recovered)
+                .iter()
+                .filter_map(|rule| match rule.to_rule_node().cssom_data()? {
+                    RuleCssomData::Style { selector } => Some(selector.to_string()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(selectors, expected, "{css}");
+        }
+        let css = "<![CDATA[.discarded{}@media print{unknown|p,h2{break-after:page}}]]>";
+        let recovered = pdfreactor_html_style_text(css).unwrap();
+        let rules = crate::rule_parser::ParsedCssRule::parse_stylesheet(&recovered);
+        assert_eq!(rules[0].nested_rules().unwrap().len(), 1);
+    }
 
     #[test]
     fn source_declarations_preserve_nested_values_and_custom_property_case() {
