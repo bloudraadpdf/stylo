@@ -218,6 +218,87 @@ pub mod border_radius {
     }
 }
 
+macro_rules! border_radius_side_shorthand {
+    ($module:ident, $first:ident, $second:ident) => {
+        pub mod $module {
+            use super::*;
+            use crate::values::generics::size::Size2D;
+            use crate::values::specified::{BorderCornerRadius, NonNegativeLengthPercentage};
+            pub use crate::properties::shorthands_generated::$module::*;
+
+            pub fn parse_value<'i, 't>(
+                context: &ParserContext,
+                input: &mut Parser<'i, 't>,
+            ) -> Result<Longhands, ParseError<'i>> {
+                let widths = Size2D::parse_with(context, input, NonNegativeLengthPercentage::parse)?;
+                let heights = if input.try_parse(|input| input.expect_delim('/')).is_ok() {
+                    Size2D::parse_with(context, input, NonNegativeLengthPercentage::parse)?
+                } else {
+                    widths.clone()
+                };
+                Ok(expanded! {
+                    $first: BorderCornerRadius::new(widths.width().clone(), heights.width().clone()),
+                    $second: BorderCornerRadius::new(widths.height().clone(), heights.height().clone()),
+                })
+            }
+
+            impl ToCss for LonghandsToSerialize<'_> {
+                fn to_css<W: fmt::Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+                    let widths = Size2D::new(self.$first.0.width(), self.$second.0.width());
+                    let heights = Size2D::new(self.$first.0.height(), self.$second.0.height());
+                    widths.to_css(dest)?;
+                    if widths != heights {
+                        dest.write_str(" / ")?;
+                        heights.to_css(dest)?;
+                    }
+                    Ok(())
+                }
+            }
+        }
+    };
+}
+
+border_radius_side_shorthand!(
+    border_top_radius,
+    border_top_left_radius,
+    border_top_right_radius
+);
+border_radius_side_shorthand!(
+    border_right_radius,
+    border_top_right_radius,
+    border_bottom_right_radius
+);
+border_radius_side_shorthand!(
+    border_bottom_radius,
+    border_bottom_left_radius,
+    border_bottom_right_radius
+);
+border_radius_side_shorthand!(
+    border_left_radius,
+    border_top_left_radius,
+    border_bottom_left_radius
+);
+border_radius_side_shorthand!(
+    border_block_start_radius,
+    border_start_start_radius,
+    border_start_end_radius
+);
+border_radius_side_shorthand!(
+    border_block_end_radius,
+    border_end_start_radius,
+    border_end_end_radius
+);
+border_radius_side_shorthand!(
+    border_inline_start_radius,
+    border_start_start_radius,
+    border_end_start_radius
+);
+border_radius_side_shorthand!(
+    border_inline_end_radius,
+    border_start_end_radius,
+    border_end_end_radius
+);
+
 pub mod corner_shape {
     pub use crate::properties::shorthands_generated::corner_shape::*;
 

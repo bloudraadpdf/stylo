@@ -904,3 +904,43 @@ engine = "servo"
 sub_properties = ["max-width", "max-height"]
 kind = "two_properties"
 spec = "https://drafts.csswg.org/css-sizing-4/#propdef-max-size"
+
+[border-top-radius]
+sub_properties = ["border-top-left-radius", "border-top-right-radius"]
+spec = "https://drafts.csswg.org/css-borders-4/#border-radius-side-shorthands"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
+
+[border-right-radius]
+sub_properties = ["border-top-right-radius", "border-bottom-right-radius"]
+spec = "https://drafts.csswg.org/css-borders-4/#border-radius-side-shorthands"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
+
+[border-bottom-radius]
+sub_properties = ["border-bottom-left-radius", "border-bottom-right-radius"]
+spec = "https://drafts.csswg.org/css-borders-4/#border-radius-side-shorthands"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
+
+[border-left-radius]
+sub_properties = ["border-top-left-radius", "border-bottom-left-radius"]
+spec = "https://drafts.csswg.org/css-borders-4/#border-radius-side-shorthands"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
+
+[border-block-start-radius]
+sub_properties = ["border-start-start-radius", "border-start-end-radius"]
+spec = "https://drafts.csswg.org/css-borders-4/#border-radius-side-shorthands"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
+
+[border-block-end-radius]
+sub_properties = ["border-end-start-radius", "border-end-end-radius"]
+spec = "https://drafts.csswg.org/css-borders-4/#border-radius-side-shorthands"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
+
+[border-inline-start-radius]
+sub_properties = ["border-start-start-radius", "border-end-start-radius"]
+spec = "https://drafts.csswg.org/css-borders-4/#border-radius-side-shorthands"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
+
+[border-inline-end-radius]
+sub_properties = ["border-start-end-radius", "border-end-end-radius"]
+spec = "https://drafts.csswg.org/css-borders-4/#border-radius-side-shorthands"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]

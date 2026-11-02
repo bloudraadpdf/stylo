@@ -521,6 +521,62 @@ fn corner_shorthands_preserve_complete_radius_shape_pairs() {
 }
 
 #[test]
+fn side_radius_shorthands_preserve_both_corner_axes() {
+    for (side, first, second) in [
+        ("top", "top-left", "top-right"),
+        ("right", "top-right", "bottom-right"),
+        ("bottom", "bottom-left", "bottom-right"),
+        ("left", "top-left", "bottom-left"),
+        ("block-start", "start-start", "start-end"),
+        ("block-end", "end-start", "end-end"),
+        ("inline-start", "start-start", "end-start"),
+        ("inline-end", "start-end", "end-end"),
+    ] {
+        let name = format!("border-{side}-radius");
+        let first = format!("border-{first}-radius");
+        let second = format!("border-{second}-radius");
+        for (input, expected, first_value, second_value) in [
+            ("10px 10px", "10px", "10px", "10px"),
+            ("10px 20%", "10px 20%", "10px", "20%"),
+            ("10px / 20px", "10px / 20px", "10px 20px", "10px 20px"),
+            (
+                "10px 20px / 30% 40%",
+                "10px 20px / 30% 40%",
+                "10px 30%",
+                "20px 40%",
+            ),
+            ("inherit", "inherit", "inherit", "inherit"),
+        ] {
+            let declarations = block(&format!("{name}:{input}"));
+            assert_eq!(
+                serialized_value(&declarations, &name),
+                expected,
+                "{name}: {input}"
+            );
+            assert_eq!(
+                serialized_value(&declarations, &first),
+                first_value,
+                "{name}: {first}"
+            );
+            assert_eq!(
+                serialized_value(&declarations, &second),
+                second_value,
+                "{name}: {second}"
+            );
+        }
+        for invalid in [
+            "-1px",
+            "1px -2%",
+            "1px / -2px",
+            "1px 2px 3px",
+            "1px / 2px / 3px",
+        ] {
+            assert_serialization(&name, invalid, None);
+        }
+    }
+}
+
+#[test]
 fn logical_position_keywords_preserve_their_axis_and_offsets() {
     for (name, input, expected) in [
         ("background-position-x", "x-start", Some("x-start")),
