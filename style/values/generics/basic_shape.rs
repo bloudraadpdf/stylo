@@ -221,6 +221,20 @@ impl<BasicShape: ToCss> ToCss for GenericBorderShapePath<BasicShape> {
     }
 }
 
+impl<BasicShape: ToCss> GenericBorderShapePath<BasicShape> {
+    fn to_css_with_default<W: Write>(
+        &self,
+        dest: &mut CssWriter<W>,
+        default: BorderShapeReferenceBox,
+    ) -> fmt::Result {
+        if self.reference_box == default {
+            self.shape.to_css(dest)
+        } else {
+            self.to_css(dest)
+        }
+    }
+}
+
 /// The closed semantic modes of `border-shape`.
 ///
 /// Representing stroke and fill separately prevents an invalid zero-, three-,
@@ -260,11 +274,13 @@ impl<BasicShape: ToCss> ToCss for GenericBorderShape<BasicShape> {
     {
         match self {
             Self::None => dest.write_str("none"),
-            Self::Stroke(path) => path.to_css(dest),
+            Self::Stroke(path) => {
+                path.to_css_with_default(dest, BorderShapeReferenceBox::HalfBorderBox)
+            },
             Self::Fill(outer, inner) => {
-                outer.to_css(dest)?;
+                outer.to_css_with_default(dest, BorderShapeReferenceBox::BorderBox)?;
                 dest.write_char(' ')?;
-                inner.to_css(dest)
+                inner.to_css_with_default(dest, BorderShapeReferenceBox::PaddingBox)
             },
         }
     }

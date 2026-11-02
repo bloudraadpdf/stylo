@@ -577,6 +577,30 @@ fn side_radius_shorthands_preserve_both_corner_axes() {
 }
 
 #[test]
+fn border_shape_serialization_omits_only_implicit_reference_boxes() {
+    for (input, expected) in [
+        ("circle()", "circle()"),
+        ("circle() half-border-box", "circle()"),
+        ("circle() border-box", "circle() border-box"),
+        ("circle() circle()", "circle() circle()"),
+        (
+            "circle() border-box circle() padding-box",
+            "circle() circle()",
+        ),
+        (
+            "circle() content-box circle() border-box",
+            "circle() content-box circle() border-box",
+        ),
+        (
+            "circle() half-border-box circle() half-border-box",
+            "circle() half-border-box circle() half-border-box",
+        ),
+    ] {
+        assert_serialization("border-shape", input, Some(expected));
+    }
+}
+
+#[test]
 fn logical_position_keywords_preserve_their_axis_and_offsets() {
     for (name, input, expected) in [
         ("background-position-x", "x-start", Some("x-start")),
