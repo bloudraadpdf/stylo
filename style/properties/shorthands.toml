@@ -944,3 +944,9 @@ rule_types_allowed = ["style", "keyframe", "page", "scope"]
 sub_properties = ["border-start-end-radius", "border-end-end-radius"]
 spec = "https://drafts.csswg.org/css-borders-4/#border-radius-side-shorthands"
 rule_types_allowed = ["style", "keyframe", "page", "scope"]
+
+[box-shadow]
+engine = "servo"
+sub_properties = ["box-shadow-color", "box-shadow-offset", "box-shadow-blur", "box-shadow-spread", "box-shadow-position"]
+extra_prefixes = ["webkit"]
+spec = "https://drafts.csswg.org/css-borders-4/#propdef-box-shadow"
