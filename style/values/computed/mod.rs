@@ -108,7 +108,7 @@ pub use self::bd_page_rotation::{BdPdfPageRotation, BdRotateBody};
 pub use self::bd_pagination::{
     BdBlankPageContent, BdChangeLineBreaksForPagination, BdForcedBreaks, BdKeepWithPrevious,
     BdLineBreakChoices, BdNLines, BdOrphansFragments, BdPageFill, BdPdfSignature, BdResizeAdjust,
-    BdResizeOptions, BdSpreadLengthOptions, BdTextWrap, BdWrapInside,
+    BdResizeOptions, BdSpreadLengthOptions, BdTextWrap, WrapInside,
 };
 pub use self::bd_pdf::BdPdfMetaValue;
 pub use self::bd_pdf_colour::{BdPdfOverprint, BdPdfOverprintContent, BdPdfPageColourSpace};

@@ -7109,7 +7109,7 @@ fn translate_property(lower_property: &str, raw_value: &str) -> Translated {
             native_value: raw_value.trim().to_ascii_lowercase(),
         },
         "-prince-wrap-inside" => Translated::Native {
-            native_property: "-bd-wrap-inside",
+            native_property: "wrap-inside",
             native_value: raw_value.trim().to_ascii_lowercase(),
         },
 

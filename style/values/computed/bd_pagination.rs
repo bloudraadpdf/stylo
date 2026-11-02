@@ -10,7 +10,7 @@ use crate::values::specified::bd_pagination as specified;
 
 pub use specified::{
     BdChangeLineBreaksForPagination, BdForcedBreaks, BdKeepWithPrevious, BdLineBreakChoices,
-    BdPageFill, BdResizeAdjust, BdResizeOptions, BdSpreadLengthOptions, BdTextWrap, BdWrapInside,
+    BdPageFill, BdResizeAdjust, BdResizeOptions, BdSpreadLengthOptions, BdTextWrap, WrapInside,
 };
 
 /// Computed value of `-bd-n-lines`.

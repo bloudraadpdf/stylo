@@ -3793,8 +3793,8 @@ mod tests {
             PropertyDeclaration::BdTruncateMarginAfterBreak(value) => {
                 PropertyDeclaration::BdTruncateMarginAfterBreak(value.clone())
             },
-            PropertyDeclaration::BdWrapInside(value) => {
-                PropertyDeclaration::BdWrapInside(value.clone())
+            PropertyDeclaration::WrapInside(value) => {
+                PropertyDeclaration::WrapInside(value.clone())
             },
             PropertyDeclaration::Bleed(value) => PropertyDeclaration::Bleed(value.clone()),
             PropertyDeclaration::BlockEllipsis(value) => {

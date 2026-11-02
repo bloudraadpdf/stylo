@@ -9,7 +9,7 @@
 //! - `-bd-line-break-choices`, `-bd-forced-breaks`, `-bd-n-lines`
 //! - `-bd-resize-adjust`, `-bd-resize-options`
 //! - `-bd-spread-length-options`
-//! - `-bd-text-wrap`, `-bd-wrap-inside`
+//! - `-bd-text-wrap`, `wrap-inside`
 //!
 //! Tier 4 §A.4.5 — Prince-for-Books pagination tuning additions:
 //! - `-bd-pdf-signature` (document-level integer; pad blank pages
@@ -278,7 +278,7 @@ pub enum BdTextWrap {
     Stable,
 }
 
-/// Specified value of `-bd-wrap-inside`.
+/// Specified value of `wrap-inside`.
 #[repr(u8)]
 #[derive(
     Clone,
@@ -297,7 +297,7 @@ pub enum BdTextWrap {
     ToTyped,
 )]
 #[allow(missing_docs)]
-pub enum BdWrapInside {
+pub enum WrapInside {
     #[default]
     Auto,
     Avoid,
