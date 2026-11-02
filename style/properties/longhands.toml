@@ -4477,7 +4477,7 @@ affects = ""
 [wrap-inside]
 type = "WrapInside"
 initial = "computed::WrapInside::Auto"
-struct = "inherited_text"
+struct = "text"
 initial_specified_value = "specified::WrapInside::Auto"
 spec = "https://drafts.csswg.org/css-text-4/#wrap-inside"
 animation_type = "none"

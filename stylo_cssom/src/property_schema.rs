@@ -25,9 +25,9 @@ fn webkit_text_fill_color_has_computed_color_reification() {
 }
 
 #[test]
-fn wrap_inside_is_an_inherited_standard_longhand() {
+fn wrap_inside_is_a_reset_standard_longhand() {
     let row = property_schema("wrap-inside").expect("wrap-inside is a supported longhand");
-    assert_eq!(row.inheritedness, stylo_cssom_model::Inheritedness::Inherited);
+    assert_eq!(row.inheritedness, stylo_cssom_model::Inheritedness::Reset);
     assert_eq!(row.initial.serialized, "auto");
     assert!(property_schema("-bd-wrap-inside").is_none());
 }
