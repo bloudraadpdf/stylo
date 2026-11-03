@@ -665,9 +665,10 @@ pub enum OverflowClipMarginBox {
 pub struct GenericOverflowClipMargin<L> {
     /// The offset of the clip.
     pub offset: L,
-    /// The box that we're clipping to.
+    /// The box that we're clipping to; `None` where omitted, which is the padding box of a non-replaced element and the
+    /// content box of a replaced element.
     #[animation(constant)]
-    pub visual_box: OverflowClipMarginBox,
+    pub visual_box: Option<OverflowClipMarginBox>,
 }
 
 pub use self::GenericOverflowClipMargin as OverflowClipMargin;
@@ -677,7 +678,7 @@ impl<L: Zero> GenericOverflowClipMargin<L> {
     pub fn zero() -> Self {
         Self {
             offset: Zero::zero(),
-            visual_box: OverflowClipMarginBox::PaddingBox,
+            visual_box: None,
         }
     }
 }
@@ -687,10 +688,11 @@ impl<L: Zero + ToCss> ToCss for OverflowClipMargin<L> {
     where
         W: Write,
     {
-        if self.visual_box == OverflowClipMarginBox::PaddingBox {
-            return self.offset.to_css(dest);
-        }
-        self.visual_box.to_css(dest)?;
+        let visual_box = match self.visual_box {
+            None | Some(OverflowClipMarginBox::PaddingBox) => return self.offset.to_css(dest),
+            Some(visual_box) => visual_box,
+        };
+        visual_box.to_css(dest)?;
         if !self.offset.is_zero() {
             dest.write_char(' ')?;
             self.offset.to_css(dest)?;

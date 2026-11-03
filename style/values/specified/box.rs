@@ -143,7 +143,7 @@ impl Parse for OverflowClipMargin {
         }
         Ok(Self {
             offset: offset.unwrap_or_else(Length::zero),
-            visual_box: visual_box.unwrap_or(OverflowClipMarginBox::PaddingBox),
+            visual_box,
         })
     }
 }
