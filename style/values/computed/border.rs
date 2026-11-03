@@ -33,6 +33,13 @@ pub type LineWidth = Au;
 #[typed_value(derive_fields)]
 pub struct BorderSideWidth(pub Au);
 
+/// Truncate a line width to app units. The px value carries f32 rounding error, so a width of exactly
+/// N app units (25pt is 2000) can arrive just below N and must not lose an app unit.
+pub(crate) fn line_width_app_units(px: f32) -> Au {
+    let au = f64::from(px) * f64::from(app_units::AU_PER_PX);
+    Au::from_f64_au((au + au * f64::from(f32::EPSILON)).trunc())
+}
+
 /// Snap a non-negative length to the device-pixel grid used by line widths.
 pub(crate) fn snap_as_border_width(len: Au, app_units_per_device_pixel: i32) -> Au {
     debug_assert!(len >= Au(0));
@@ -221,5 +228,13 @@ mod tests {
             .expect("border-radius components must interpolate");
 
         assert_eq!(sampled.to_css_string(), "calc(0% + 10px)");
+    }
+
+    #[test]
+    fn line_widths_truncate_to_app_units_within_f32_precision() {
+        assert_eq!(line_width_app_units(25.0 * 4.0 / 3.0), Au(2000));
+        assert_eq!(line_width_app_units(2.999), Au(179));
+        assert_eq!(line_width_app_units(3.0), Au(180));
+        assert_eq!(line_width_app_units(0.0), Au(0));
     }
 }
