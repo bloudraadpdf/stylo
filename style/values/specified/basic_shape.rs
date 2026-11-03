@@ -9,7 +9,10 @@
 
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
-use crate::values::computed::basic_shape::InsetRect as ComputedInsetRect;
+use crate::values::computed::basic_shape::{
+    BorderShape as ComputedBorderShape, BorderShapePath as ComputedBorderShapePath,
+    InsetRect as ComputedInsetRect,
+};
 use crate::values::computed::{
     Context, LengthPercentage as ComputedLengthPercentage, ToComputedValue,
 };
@@ -39,10 +42,10 @@ pub use crate::values::generics::basic_shape::FillRule;
 pub type ClipPath = generic::GenericClipPath<BasicShape, SpecifiedUrl>;
 
 /// A specified `border-shape` value.
-pub type BorderShape = generic::BorderShape<BasicShape>;
+pub type BorderShape = generic::BorderShape<BasicShape, Option<generic::BorderShapeReferenceBox>>;
 
 /// A specified path in `border-shape`.
-pub type BorderShapePath = generic::BorderShapePath<BasicShape>;
+pub type BorderShapePath = generic::BorderShapePath<BasicShape, Option<generic::BorderShapeReferenceBox>>;
 
 /// A specified `shape-outside` value.
 pub type ShapeOutside = generic::GenericShapeOutside<BasicShape, Image>;
@@ -301,12 +304,15 @@ impl Parse for ObjectViewBox {
 fn parse_border_shape_path<'i, 't>(
     context: &ParserContext,
     input: &mut Parser<'i, 't>,
-) -> Result<(Box<BasicShape>, Option<generic::BorderShapeReferenceBox>), ParseError<'i>> {
+) -> Result<BorderShapePath, ParseError<'i>> {
     let shape = BasicShape::parse(context, input, AllowedBasicShapes::ALL, ShapeType::Outline)?;
     let reference_box = input
         .try_parse(generic::BorderShapeReferenceBox::parse)
         .ok();
-    Ok((Box::new(shape), reference_box))
+    Ok(BorderShapePath {
+        shape: Box::new(shape),
+        reference_box,
+    })
 }
 
 impl Parse for BorderShape {
@@ -322,31 +328,42 @@ impl Parse for BorderShape {
         }
 
         let first = parse_border_shape_path(context, input)?;
-        let second = input
-            .try_parse(|input| parse_border_shape_path(context, input))
-            .ok();
-
-        match second {
-            Some((inner_shape, inner_box)) => {
-                let outer = BorderShapePath {
-                    shape: first.0,
-                    reference_box: first
-                        .1
-                        .unwrap_or(generic::BorderShapeReferenceBox::BorderBox),
-                };
-                let inner = BorderShapePath {
-                    shape: inner_shape,
-                    reference_box: inner_box
-                        .unwrap_or(generic::BorderShapeReferenceBox::PaddingBox),
-                };
-                Ok(Self::Fill(outer, inner))
+        Ok(
+            match input.try_parse(|input| parse_border_shape_path(context, input)) {
+                Ok(inner) => Self::Fill(first, inner),
+                Err(_) => Self::Stroke(first),
             },
-            None => Ok(Self::Stroke(BorderShapePath {
-                shape: first.0,
-                reference_box: first
-                    .1
-                    .unwrap_or(generic::BorderShapeReferenceBox::HalfBorderBox),
-            })),
+        )
+    }
+}
+
+impl ToComputedValue for BorderShape {
+    type ComputedValue = ComputedBorderShape;
+
+    fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
+        use generic::BorderShapeReferenceBox::{BorderBox, HalfBorderBox, PaddingBox};
+        let path = |path: &BorderShapePath, implied| ComputedBorderShapePath {
+            shape: path.shape.to_computed_value(context),
+            reference_box: path.reference_box.unwrap_or(implied),
+        };
+        match self {
+            Self::None => generic::BorderShape::None,
+            Self::Stroke(stroke) => generic::BorderShape::Stroke(path(stroke, HalfBorderBox)),
+            Self::Fill(outer, inner) => {
+                generic::BorderShape::Fill(path(outer, BorderBox), path(inner, PaddingBox))
+            },
+        }
+    }
+
+    fn from_computed_value(computed: &Self::ComputedValue) -> Self {
+        let path = |path: &ComputedBorderShapePath| BorderShapePath {
+            shape: ToComputedValue::from_computed_value(&path.shape),
+            reference_box: Some(path.reference_box),
+        };
+        match computed {
+            generic::BorderShape::None => Self::None,
+            generic::BorderShape::Stroke(stroke) => Self::Stroke(path(stroke)),
+            generic::BorderShape::Fill(outer, inner) => Self::Fill(path(outer), path(inner)),
         }
     }
 }

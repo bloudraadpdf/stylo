@@ -184,7 +184,7 @@ pub enum BorderShapeReferenceBox {
     HalfBorderBox,
 }
 
-/// One completely specified path in a `border-shape` computed value.
+/// One path in a `border-shape` value.
 #[derive(
     Animate,
     Clone,
@@ -194,44 +194,52 @@ pub enum BorderShapeReferenceBox {
     PartialEq,
     SpecifiedValueInfo,
     ToAnimatedValue,
-    ToComputedValue,
     ToResolvedValue,
     ToShmem,
     ToTyped,
 )]
 #[repr(C)]
-pub struct GenericBorderShapePath<BasicShape> {
+pub struct GenericBorderShapePath<BasicShape, ReferenceBox> {
     /// The authored path.
     #[animation(field_bound)]
-    #[compute(field_bound)]
     #[shmem(field_bound)]
     pub shape: Box<BasicShape>,
-    /// The reference box, with the mode-dependent default already resolved.
-    pub reference_box: BorderShapeReferenceBox,
+    /// The authored reference box when specified, the resolved one when computed.
+    pub reference_box: ReferenceBox,
 }
 
-impl<BasicShape: ToCss> ToCss for GenericBorderShapePath<BasicShape> {
-    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
-    where
-        W: Write,
-    {
-        self.shape.to_css(dest)?;
-        dest.write_char(' ')?;
-        self.reference_box.to_css(dest)
+/// A `border-shape` reference box, authored or resolved.
+pub trait BorderShapePathBox {
+    /// The box to serialise, given the box the path's mode implies.
+    fn explicit(&self, implied: BorderShapeReferenceBox) -> Option<BorderShapeReferenceBox>;
+}
+
+impl BorderShapePathBox for BorderShapeReferenceBox {
+    fn explicit(&self, implied: BorderShapeReferenceBox) -> Option<BorderShapeReferenceBox> {
+        (*self != implied).then_some(*self)
     }
 }
 
-impl<BasicShape: ToCss> GenericBorderShapePath<BasicShape> {
-    fn to_css_with_default<W: Write>(
+impl BorderShapePathBox for Option<BorderShapeReferenceBox> {
+    fn explicit(&self, _: BorderShapeReferenceBox) -> Option<BorderShapeReferenceBox> {
+        *self
+    }
+}
+
+impl<BasicShape: ToCss, ReferenceBox: BorderShapePathBox>
+    GenericBorderShapePath<BasicShape, ReferenceBox>
+{
+    fn to_css_with_implied<W: Write>(
         &self,
         dest: &mut CssWriter<W>,
-        default: BorderShapeReferenceBox,
+        implied: BorderShapeReferenceBox,
     ) -> fmt::Result {
-        if self.reference_box == default {
-            self.shape.to_css(dest)
-        } else {
-            self.to_css(dest)
+        self.shape.to_css(dest)?;
+        if let Some(reference_box) = self.reference_box.explicit(implied) {
+            dest.write_char(' ')?;
+            reference_box.to_css(dest)?;
         }
+        Ok(())
     }
 }
 
@@ -248,26 +256,27 @@ impl<BasicShape: ToCss> GenericBorderShapePath<BasicShape> {
     PartialEq,
     SpecifiedValueInfo,
     ToAnimatedValue,
-    ToComputedValue,
     ToResolvedValue,
     ToShmem,
     ToTyped,
 )]
 #[repr(C, u8)]
-pub enum GenericBorderShape<BasicShape> {
+pub enum GenericBorderShape<BasicShape, ReferenceBox> {
     /// Preserve the ordinary box-derived border shape.
     #[animation(error)]
     None,
     /// Stroke one path with the relevant border side.
-    Stroke(GenericBorderShapePath<BasicShape>),
+    Stroke(GenericBorderShapePath<BasicShape, ReferenceBox>),
     /// Fill the area between an outer and inner path.
     Fill(
-        GenericBorderShapePath<BasicShape>,
-        GenericBorderShapePath<BasicShape>,
+        GenericBorderShapePath<BasicShape, ReferenceBox>,
+        GenericBorderShapePath<BasicShape, ReferenceBox>,
     ),
 }
 
-impl<BasicShape: ToCss> ToCss for GenericBorderShape<BasicShape> {
+impl<BasicShape: ToCss, ReferenceBox: BorderShapePathBox> ToCss
+    for GenericBorderShape<BasicShape, ReferenceBox>
+{
     fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
     where
         W: Write,
@@ -275,12 +284,12 @@ impl<BasicShape: ToCss> ToCss for GenericBorderShape<BasicShape> {
         match self {
             Self::None => dest.write_str("none"),
             Self::Stroke(path) => {
-                path.to_css_with_default(dest, BorderShapeReferenceBox::HalfBorderBox)
+                path.to_css_with_implied(dest, BorderShapeReferenceBox::HalfBorderBox)
             },
             Self::Fill(outer, inner) => {
-                outer.to_css_with_default(dest, BorderShapeReferenceBox::BorderBox)?;
+                outer.to_css_with_implied(dest, BorderShapeReferenceBox::BorderBox)?;
                 dest.write_char(' ')?;
-                inner.to_css_with_default(dest, BorderShapeReferenceBox::PaddingBox)
+                inner.to_css_with_implied(dest, BorderShapeReferenceBox::PaddingBox)
             },
         }
     }
@@ -289,7 +298,7 @@ impl<BasicShape: ToCss> ToCss for GenericBorderShape<BasicShape> {
 pub use self::GenericBorderShape as BorderShape;
 pub use self::GenericBorderShapePath as BorderShapePath;
 
-impl<BasicShape> ToAnimatedZero for BorderShape<BasicShape> {
+impl<BasicShape, ReferenceBox> ToAnimatedZero for BorderShape<BasicShape, ReferenceBox> {
     fn to_animated_zero(&self) -> Result<Self, ()> {
         Err(())
     }

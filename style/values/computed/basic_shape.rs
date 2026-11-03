@@ -26,10 +26,10 @@ pub use crate::values::generics::basic_shape::FillRule;
 pub type ClipPath = generic::GenericClipPath<BasicShape, ComputedUrl>;
 
 /// A computed `border-shape` value.
-pub type BorderShape = generic::BorderShape<BasicShape>;
+pub type BorderShape = generic::BorderShape<BasicShape, generic::BorderShapeReferenceBox>;
 
 /// A computed path in `border-shape`.
-pub type BorderShapePath = generic::BorderShapePath<BasicShape>;
+pub type BorderShapePath = generic::BorderShapePath<BasicShape, generic::BorderShapeReferenceBox>;
 
 /// A computed `shape-outside` value.
 pub type ShapeOutside = generic::GenericShapeOutside<BasicShape, Image>;
