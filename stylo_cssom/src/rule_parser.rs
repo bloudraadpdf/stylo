@@ -3815,21 +3815,7 @@ mod tests {
             PropertyDeclaration::BorderSpacing(value) => {
                 PropertyDeclaration::BorderSpacing(value.clone())
             },
-            PropertyDeclaration::BoxShadowColor(value) => {
-                PropertyDeclaration::BoxShadowColor(value.clone())
-            },
-            PropertyDeclaration::BoxShadowOffset(value) => {
-                PropertyDeclaration::BoxShadowOffset(value.clone())
-            },
-            PropertyDeclaration::BoxShadowBlur(value) => {
-                PropertyDeclaration::BoxShadowBlur(value.clone())
-            },
-            PropertyDeclaration::BoxShadowSpread(value) => {
-                PropertyDeclaration::BoxShadowSpread(value.clone())
-            },
-            PropertyDeclaration::BoxShadowPosition(value) => {
-                PropertyDeclaration::BoxShadowPosition(value.clone())
-            },
+            PropertyDeclaration::BoxShadow(value) => PropertyDeclaration::BoxShadow(value.clone()),
             PropertyDeclaration::CaretColor(value) => {
                 PropertyDeclaration::CaretColor(value.clone())
             },

@@ -5,72 +5,7 @@
 //! Generic types for CSS values related to effects.
 use crate::derives::*;
 
-use crate::values::animated::{Animate, Procedure, ToAnimatedZero};
-use crate::values::distance::{ComputeSquaredDistance, SquaredDistance};
-use crate::values::generics::size::Size2D;
 use crate::values::generics::{NonNegative, ZeroToOne};
-use crate::Zero;
-
-/// One entry in the `box-shadow-offset` list.
-#[derive(
-    Clone,
-    Debug,
-    MallocSizeOf,
-    PartialEq,
-    SpecifiedValueInfo,
-    ToAnimatedValue,
-    ToComputedValue,
-    ToCss,
-    ToResolvedValue,
-    ToShmem,
-)]
-#[repr(C, u8)]
-pub enum GenericBoxShadowOffset<L> {
-    /// No shadow for this entry.
-    None,
-    /// Horizontal and vertical offsets.
-    Offset(#[css(field_bound)] Size2D<L>),
-}
-
-impl<L: Zero + Clone> GenericBoxShadowOffset<L> {
-    fn offsets_or_zero(&self) -> Size2D<L> {
-        match self {
-            Self::None => Size2D::zero(),
-            Self::Offset(value) => value.clone(),
-        }
-    }
-}
-
-impl<L: Animate + Zero + Clone> Animate for GenericBoxShadowOffset<L> {
-    fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
-        if matches!((self, other), (Self::None, Self::None)) {
-            return Ok(Self::None);
-        }
-        self.offsets_or_zero()
-            .animate(&other.offsets_or_zero(), procedure)
-            .map(Self::Offset)
-    }
-}
-
-impl<L: ComputeSquaredDistance + Zero + Clone> ComputeSquaredDistance
-    for GenericBoxShadowOffset<L>
-{
-    fn compute_squared_distance(&self, other: &Self) -> Result<SquaredDistance, ()> {
-        self.offsets_or_zero()
-            .compute_squared_distance(&other.offsets_or_zero())
-    }
-}
-
-impl<L: ToAnimatedZero> ToAnimatedZero for GenericBoxShadowOffset<L> {
-    fn to_animated_zero(&self) -> Result<Self, ()> {
-        match self {
-            Self::None => Ok(Self::None),
-            Self::Offset(value) => value.to_animated_zero().map(Self::Offset),
-        }
-    }
-}
-
-pub use self::GenericBoxShadowOffset as BoxShadowOffset;
 
 /// A generic value for a single `box-shadow`.
 #[derive(

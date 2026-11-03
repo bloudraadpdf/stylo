@@ -601,60 +601,6 @@ fn border_shape_serialization_omits_only_implicit_reference_boxes() {
 }
 
 #[test]
-fn box_shadow_components_expand_and_reset_together() {
-    for (name, value) in [
-        ("box-shadow-color", "currentcolor, transparent"),
-        ("box-shadow-offset", "none, 10px 20px"),
-        ("box-shadow-blur", "1px, 2px"),
-        ("box-shadow-spread", "1px, -2px"),
-        ("box-shadow-position", "inset, outset"),
-    ] {
-        assert_serialization(name, value, Some(value));
-        assert_serialization(name, "inherit", Some("inherit"));
-        assert_serialization(name, "invalid", None);
-    }
-    for (name, value) in [
-        ("box-shadow-offset", "10%"),
-        ("box-shadow-offset", "none 10px"),
-        ("box-shadow-blur", "-1px"),
-        ("box-shadow-spread", "10%"),
-    ] {
-        assert_serialization(name, value, None);
-    }
-    for value in [
-        "none",
-        "none, 1px 2px",
-        "1px 2px outset",
-        "red none 2px 3px inset",
-    ] {
-        assert_serialization(
-            "box-shadow",
-            value,
-            Some(if value == "1px 2px outset" {
-                "1px 2px"
-            } else {
-                value
-            }),
-        );
-    }
-    for value in ["1px", "1px 2px -3px", "1px 2px inset outset"] {
-        assert_serialization("box-shadow", value, None);
-    }
-    let shadow = block("box-shadow:1px 2px 3px 4px currentcolor inset");
-    for (name, expected) in [
-        ("box-shadow-color", "currentcolor"),
-        ("box-shadow-offset", "1px 2px"),
-        ("box-shadow-blur", "3px"),
-        ("box-shadow-spread", "4px"),
-        ("box-shadow-position", "inset"),
-    ] {
-        assert_eq!(serialized_value(&shadow, name), expected, "{name}");
-    }
-    let reset = block("box-shadow-blur:50px;box-shadow:1px 2px");
-    assert_eq!(serialized_value(&reset, "box-shadow-blur"), "0px");
-}
-
-#[test]
 fn logical_position_keywords_preserve_their_axis_and_offsets() {
     for (name, input, expected) in [
         ("background-position-x", "x-start", Some("x-start")),

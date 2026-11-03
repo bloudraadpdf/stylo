@@ -573,7 +573,6 @@ logical_group = "inset"
 affects = "layout"
 
 [box-shadow]
-engine = "gecko"
 type = "BoxShadow"
 struct = "effects"
 vector = { simple_bindings = true, animation_type = "with_zero" }
@@ -8725,48 +8724,3 @@ spec = "https://drafts.csswg.org/css-text-4/#propdef-white-space-trim"
 animation_type = "discrete"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
-
-[box-shadow-color]
-engine = "servo"
-type = "Color"
-initial = "computed::Color::CurrentColor"
-struct = "effects"
-vector = { simple_bindings = true, animation_type = "by_computed_value" }
-spec = "https://drafts.csswg.org/css-borders-4/#propdef-box-shadow-color"
-affects = "paint"
-
-[box-shadow-offset]
-engine = "servo"
-type = "effects::BoxShadowOffset"
-initial = "computed::effects::BoxShadowOffset::None"
-struct = "effects"
-vector = { simple_bindings = true, animation_type = "by_computed_value" }
-spec = "https://drafts.csswg.org/css-borders-4/#propdef-box-shadow-offset"
-affects = "overflow"
-
-[box-shadow-blur]
-engine = "servo"
-type = "NonNegativeLength"
-initial = "computed::NonNegativeLength::zero()"
-struct = "effects"
-vector = { simple_bindings = true, animation_type = "by_computed_value" }
-spec = "https://drafts.csswg.org/css-borders-4/#propdef-box-shadow-blur"
-affects = "overflow"
-
-[box-shadow-spread]
-engine = "servo"
-type = "Length"
-initial = "computed::Length::zero()"
-struct = "effects"
-vector = { simple_bindings = true, animation_type = "by_computed_value" }
-spec = "https://drafts.csswg.org/css-borders-4/#propdef-box-shadow-spread"
-affects = "overflow"
-
-[box-shadow-position]
-engine = "servo"
-keyword = { values = ["outset", "inset"] }
-struct = "effects"
-vector = { simple_bindings = true }
-animation_type = "discrete"
-spec = "https://drafts.csswg.org/css-borders-4/#propdef-box-shadow-position"
-affects = "overflow"

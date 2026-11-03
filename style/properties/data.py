@@ -1232,7 +1232,6 @@ class PropertyRestrictions:
             + PropertyRestrictions.shorthand(data, "margin")
             + PropertyRestrictions.spec(data, "css-fonts")
             + PropertyRestrictions.spec(data, "css-backgrounds")
-            + PropertyRestrictions.shorthand(data, "box-shadow")
             + PropertyRestrictions.spec(data, "css-text")
             + PropertyRestrictions.spec(data, "css-shapes")
             + PropertyRestrictions.spec(data, "css-text-decor")
@@ -1275,7 +1274,7 @@ class PropertyRestrictions:
             props.remove(prop)
         for prop in PropertyRestrictions.shorthand(data, "border-radius"):
             props.remove(prop)
-        props.discard("box-shadow")
+        props.remove("box-shadow")
 
         _remove_common_first_line_and_first_letter_properties(props, data.engine)
         return props

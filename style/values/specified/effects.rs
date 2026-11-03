@@ -113,66 +113,29 @@ impl Parse for ZeroToOneFactor {
 /// A specified value for the `drop-shadow()` filter.
 pub type SimpleShadow = GenericSimpleShadow<Option<Color>, Length, Option<NonNegativeLength>>;
 
-/// A specified entry of `box-shadow-offset`.
-pub type BoxShadowOffset = crate::values::generics::effects::BoxShadowOffset<Length>;
-
-impl Parse for BoxShadowOffset {
-    fn parse<'i, 't>(
-        context: &ParserContext,
-        input: &mut Parser<'i, 't>,
-    ) -> Result<Self, ParseError<'i>> {
-        if input
-            .try_parse(|input| input.expect_ident_matching("none"))
-            .is_ok()
-        {
-            return Ok(Self::None);
-        }
-        crate::values::generics::size::Size2D::parse_with(context, input, Length::parse)
-            .map(Self::Offset)
-    }
-}
-
-pub(crate) struct SpreadShadow {
-    pub color: Option<Color>,
-    pub offset: BoxShadowOffset,
-    pub blur: Option<NonNegativeLength>,
-    pub spread: Option<Length>,
-    pub inset: bool,
-}
-
-impl Parse for SpreadShadow {
+impl Parse for BoxShadow {
     fn parse<'i, 't>(
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
         let mut lengths = None;
         let mut color = None;
-        let mut position = None;
+        let mut inset = false;
 
         loop {
-            if position.is_none() {
-                if let Ok(value) = input.try_parse::<_, _, ParseError>(|input| {
-                    let ident = input.expect_ident()?;
-                    match_ignore_ascii_case! { ident,
-                        "inset" => Ok(true),
-                        "outset" if cfg!(feature = "servo") => Ok(false),
-                        _ => Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError)),
-                    }
-                }) {
-                    position = Some(value);
+            if !inset {
+                if input
+                    .try_parse(|input| input.expect_ident_matching("inset"))
+                    .is_ok()
+                {
+                    inset = true;
                     continue;
                 }
             }
             if lengths.is_none() {
                 let value = input.try_parse::<_, _, ParseError>(|i| {
-                    let offset = if i.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
-                        BoxShadowOffset::None
-                    } else {
-                        BoxShadowOffset::Offset(crate::values::generics::size::Size2D::new(
-                            Length::parse(context, i)?,
-                            Length::parse(context, i)?,
-                        ))
-                    };
+                    let horizontal = Length::parse(context, i)?;
+                    let vertical = Length::parse(context, i)?;
                     let (blur, spread) =
                         match i.try_parse(|i| Length::parse_non_negative(context, i)) {
                             Ok(blur) => {
@@ -181,7 +144,7 @@ impl Parse for SpreadShadow {
                             },
                             Err(_) => (None, None),
                         };
-                    Ok((offset, blur, spread))
+                    Ok((horizontal, vertical, blur, spread))
                 });
                 if let Ok(value) = value {
                     lengths = Some(value);
@@ -199,34 +162,15 @@ impl Parse for SpreadShadow {
 
         let lengths =
             lengths.ok_or(input.new_custom_error(StyleParseErrorKind::UnspecifiedError))?;
-        Ok(Self {
-            color,
-            offset: lengths.0,
-            blur: lengths.1,
-            spread: lengths.2,
-            inset: position.unwrap_or(false),
-        })
-    }
-}
-
-impl Parse for BoxShadow {
-    fn parse<'i, 't>(
-        context: &ParserContext,
-        input: &mut Parser<'i, 't>,
-    ) -> Result<Self, ParseError<'i>> {
-        let shadow = SpreadShadow::parse(context, input)?;
-        let BoxShadowOffset::Offset(offset) = shadow.offset else {
-            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
-        };
-        Ok(Self {
+        Ok(BoxShadow {
             base: SimpleShadow {
-                color: shadow.color,
-                horizontal: offset.width,
-                vertical: offset.height,
-                blur: shadow.blur,
+                color: color,
+                horizontal: lengths.0,
+                vertical: lengths.1,
+                blur: lengths.2,
             },
-            spread: shadow.spread,
-            inset: shadow.inset,
+            spread: lengths.3,
+            inset: inset,
         })
     }
 }
