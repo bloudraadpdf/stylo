@@ -103,3 +103,69 @@ pub fn rewrite_view_transition_names<'a>(
     });
     Cow::Owned(rewritten)
 }
+
+/// The declarations of a `style` attribute with each `view-transition-name` mirrored, as
+/// `rewrite_view_transition_names` mirrors the declarations of a style sheet.
+pub fn mirror_inline_view_transition_names(
+    declarations: Vec<stylo_cssom_model::RuleDeclaration>,
+    scope: &ViewTransitionNameTreeScope,
+) -> Vec<stylo_cssom_model::RuleDeclaration> {
+    declarations
+        .into_iter()
+        .flat_map(|declaration| {
+            let mirrored = declaration.matches_name(AUTHORED_PROPERTY).then(|| {
+                let important = declaration.important();
+                [
+                    stylo_cssom_model::RuleDeclaration::new(
+                        INTERNAL_NAME_PROPERTY,
+                        declaration.value(),
+                    )
+                    .with_importance(important),
+                    stylo_cssom_model::RuleDeclaration::new(
+                        INTERNAL_SCOPE_PROPERTY,
+                        scope.as_css(),
+                    )
+                    .with_importance(important),
+                ]
+            });
+            std::iter::once(declaration).chain(mirrored.into_iter().flatten())
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn inline_names_mirror_into_the_internal_properties() {
+        let declarations = vec![
+            stylo_cssom_model::RuleDeclaration::new("color", "red"),
+            stylo_cssom_model::RuleDeclaration::new(AUTHORED_PROPERTY, "card")
+                .with_importance(true),
+        ];
+        let mirrored = mirror_inline_view_transition_names(
+            declarations,
+            &ViewTransitionNameTreeScope::document(),
+        )
+        .iter()
+        .map(|declaration| {
+            format!(
+                "{}:{}:{}",
+                declaration.name(),
+                declaration.value(),
+                declaration.important()
+            )
+        })
+        .collect::<Vec<_>>();
+        assert_eq!(
+            mirrored,
+            [
+                "color:red:false",
+                "view-transition-name:card:true",
+                "--moegoe-view-transition-name:card:true",
+                "--moegoe-view-transition-name-scope:document:true",
+            ]
+        );
+    }
+}
