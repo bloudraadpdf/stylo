@@ -3058,30 +3058,37 @@ mod prince_rewrite_tests {
     }
 
     #[test]
-    fn pdfreactor_rejects_font_variant_caps_before_the_cascade() {
-        let declarations = "font-variant:small-caps; font-variant-caps:normal; color:red";
-        assert_eq!(
-            translate_compat_declarations(declarations, CompatMode::PdfReactor).rewritten,
-            "font-variant:small-caps; color:red"
-        );
-        let css = format!("p {{ {declarations} }}");
-        assert_eq!(
-            translate_compat(&css, CompatMode::PdfReactor).rewritten,
-            "p { font-variant:small-caps; color:red }"
-        );
-        for compat in [
-            CompatMode::None,
-            CompatMode::Prince,
-            CompatMode::WeasyPrint,
-            CompatMode::Chromium,
-        ] {
-            assert_eq!(translate_compat(&css, compat).rewritten, css);
+    fn pdfreactor_rejects_unsupported_caps_before_the_cascade() {
+        for declaration in ["font-variant-caps:normal", "font-variant:all-small-caps"] {
+            let declarations = format!("font-variant:small-caps; {declaration}; color:red");
+            assert_eq!(
+                translate_compat_declarations(&declarations, CompatMode::PdfReactor).rewritten,
+                "font-variant:small-caps; color:red"
+            );
+            let css = format!("p {{ {declarations} }}");
+            assert_eq!(
+                translate_compat(&css, CompatMode::PdfReactor).rewritten,
+                "p { font-variant:small-caps; color:red }"
+            );
+            for compat in [
+                CompatMode::None,
+                CompatMode::Prince,
+                CompatMode::WeasyPrint,
+                CompatMode::Chromium,
+            ] {
+                assert_eq!(translate_compat(&css, compat).rewritten, css);
+            }
         }
-        let css = "@supports (font-variant-caps:small-caps) { p { color:red } }";
-        assert_eq!(
-            translate_compat(css, CompatMode::PdfReactor).rewritten,
-            "@supports (not (--bd-compat-satisfied: 1)) { p { color:red } }"
-        );
+        for condition in [
+            "font-variant-caps:small-caps",
+            "font-variant:all-small-caps",
+        ] {
+            let css = format!("@supports ({condition}) {{ p {{ color:red }} }}");
+            assert_eq!(
+                translate_compat(&css, CompatMode::PdfReactor).rewritten,
+                "@supports (not (--bd-compat-satisfied: 1)) { p { color:red } }"
+            );
+        }
     }
 
     #[test]
@@ -4088,9 +4095,14 @@ fn engine_ignores_declaration(compat: CompatMode, name: &str, value: &str) -> bo
                 || name.eq_ignore_ascii_case("font-variant-caps")
                 || name.eq_ignore_ascii_case("inset")
                 || name.eq_ignore_ascii_case("aspect-ratio")
-                || (["display", "text-decoration", "text-decoration-style"]
-                    .iter()
-                    .any(|property| name.eq_ignore_ascii_case(property))
+                || ([
+                    "display",
+                    "text-decoration",
+                    "text-decoration-style",
+                    "font-variant",
+                ]
+                .iter()
+                .any(|property| name.eq_ignore_ascii_case(property))
                     && declarations()
                         .as_typed()
                         .declarations()
@@ -4098,6 +4110,9 @@ fn engine_ignores_declaration(compat: CompatMode, name: &str, value: &str) -> bo
                         .any(|declaration| match declaration {
                             PropertyDeclaration::Display(display) => display.is_ruby_type(),
                             PropertyDeclaration::TextDecorationStyle(DecorationStyle::Wavy) => true,
+                            PropertyDeclaration::FontVariantCaps(
+                                style::computed_values::font_variant_caps::T::AllSmallCaps,
+                            ) => true,
                             _ => false,
                         }))
                 || ([
