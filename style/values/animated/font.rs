@@ -93,10 +93,7 @@ mod palette_tests {
                 Procedure::Interpolate { progress: 0.3 },
             )
             .expect("font palettes interpolate");
-        assert_eq!(
-            mixed.to_css_string(),
-            "palette-mix(in oklab, light 70%, dark 30%)"
-        );
+        assert_eq!(mixed.to_css_string(), "palette-mix(light 70%, dark 30%)");
     }
 
     #[test]
@@ -112,9 +109,6 @@ mod palette_tests {
         let additive = light.animate(&dark, Procedure::Add).unwrap();
         assert_eq!(before, light);
         assert_eq!(after, dark);
-        assert_eq!(
-            additive.to_css_string(),
-            "palette-mix(in oklab, light, dark)"
-        );
+        assert_eq!(additive.to_css_string(), "palette-mix(light, dark)");
     }
 }
