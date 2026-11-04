@@ -3012,6 +3012,52 @@ mod prince_rewrite_tests {
     }
 
     #[test]
+    fn pdfreactor_rejects_ruby_display_types_before_the_cascade() {
+        for display in [
+            "ruby",
+            "ruby-base",
+            "ruby-text",
+            "ruby-base-container",
+            "ruby-text-container",
+            "block ruby",
+            "RUBY",
+            r"r\75 by",
+        ] {
+            let declarations = format!("display:inline;display:{display}");
+            let css = format!("@supports (display:{display}) {{ p {{ color:red }} }}");
+            assert_eq!(
+                translate_compat_declarations(&declarations, CompatMode::PdfReactor)
+                    .rewritten
+                    .matches("display:")
+                    .count(),
+                1,
+                "{display}",
+            );
+            assert_eq!(
+                translate_compat(&css, CompatMode::PdfReactor).rewritten,
+                "@supports (not (--bd-compat-satisfied: 1)) { p { color:red } }",
+            );
+            for compat in [
+                CompatMode::None,
+                CompatMode::Prince,
+                CompatMode::WeasyPrint,
+                CompatMode::Chromium,
+            ] {
+                assert_eq!(
+                    translate_compat_declarations(&declarations, compat).rewritten,
+                    declarations
+                );
+                assert_eq!(translate_compat(&css, compat).rewritten, css);
+            }
+        }
+        let declarations = "display:inline;display:inline-flex";
+        assert_eq!(
+            translate_compat_declarations(declarations, CompatMode::PdfReactor).rewritten,
+            declarations
+        );
+    }
+
+    #[test]
     fn pdfreactor_rejects_font_variant_caps_before_the_cascade() {
         let declarations = "font-variant:small-caps; font-variant-caps:normal; color:red";
         assert_eq!(
@@ -4042,18 +4088,17 @@ fn engine_ignores_declaration(compat: CompatMode, name: &str, value: &str) -> bo
                 || name.eq_ignore_ascii_case("font-variant-caps")
                 || name.eq_ignore_ascii_case("inset")
                 || name.eq_ignore_ascii_case("aspect-ratio")
-                || (["text-decoration", "text-decoration-style"]
+                || (["display", "text-decoration", "text-decoration-style"]
                     .iter()
                     .any(|property| name.eq_ignore_ascii_case(property))
                     && declarations()
                         .as_typed()
                         .declarations()
                         .iter()
-                        .any(|declaration| {
-                            matches!(
-                                declaration,
-                                PropertyDeclaration::TextDecorationStyle(DecorationStyle::Wavy)
-                            )
+                        .any(|declaration| match declaration {
+                            PropertyDeclaration::Display(display) => display.is_ruby_type(),
+                            PropertyDeclaration::TextDecorationStyle(DecorationStyle::Wavy) => true,
+                            _ => false,
                         }))
                 || ([
                     "grid",
