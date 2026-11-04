@@ -203,6 +203,11 @@ pub fn expand_style_rule(prelude: &str, body: &str) -> StyleRuleExpansion {
             project_animation_carrier_declarations(body),
         );
     }
+    append_projected_rule(
+        &mut rule,
+        project_transition_style_selectors(prelude),
+        project_animation_carrier_declarations(body),
+    );
     append_projected_style_tree_rules(&mut rule, prelude, body);
     append_projected_rule(
         &mut rule,
@@ -1257,6 +1262,16 @@ mod tests {
         assert!(rewritten.contains(&format!("{TRANSITION_STYLE_ELEMENT}{{background:red;}}")));
         assert!(rewritten.contains(&format!(
             "html.ready>{TRANSITION_STYLE_ELEMENT}{{background:green;}}"
+        )));
+    }
+
+    #[test]
+    fn projects_transition_animations_to_the_transition_carrier() {
+        let rewritten =
+            rewrite_view_transition_root(":root::view-transition{animation:fade 1s;color:red}");
+
+        assert!(rewritten.contains(&format!(
+            ":root>{TRANSITION_STYLE_ELEMENT}{{animation:fade 1s;}}"
         )));
     }
 
