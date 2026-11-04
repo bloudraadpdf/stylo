@@ -2934,29 +2934,31 @@ mod prince_rewrite_tests {
     }
 
     #[test]
-    fn pdfreactor_rejects_hanging_punctuation_before_the_cascade() {
-        for value in [
-            "none",
-            "first",
-            "last",
-            "first last",
-            "allow-end",
-            "force-end",
-            "var(--hang)",
-        ] {
+    fn unsupported_hanging_punctuation_is_rejected_before_the_cascade() {
+        for (compat, value) in [CompatMode::PdfReactor, CompatMode::Prince]
+            .into_iter()
+            .flat_map(|compat| {
+                [
+                    "none",
+                    "first",
+                    "last",
+                    "first last",
+                    "allow-end",
+                    "force-end",
+                    "var(--hang)",
+                ]
+                .map(|value| (compat, value))
+            })
+        {
             let declarations = format!("color:red; HaNgInG-PuNcTuAtIoN:{value};");
             assert_eq!(
-                translate_compat_declarations(&declarations, CompatMode::PdfReactor).rewritten,
+                translate_compat_declarations(&declarations, compat).rewritten,
                 "color:red; "
             );
             let css = format!("p {{ {declarations} }}");
-            assert_eq!(
-                translate_compat(&css, CompatMode::PdfReactor).rewritten,
-                "p { color:red; }"
-            );
+            assert_eq!(translate_compat(&css, compat).rewritten, "p { color:red; }");
             for compat in [
                 CompatMode::None,
-                CompatMode::Prince,
                 CompatMode::WeasyPrint,
                 CompatMode::Chromium,
             ] {
@@ -2964,10 +2966,12 @@ mod prince_rewrite_tests {
             }
         }
         let css = "@supports (hanging-punctuation:first) { p { color:red } }";
-        assert_eq!(
-            translate_compat(css, CompatMode::PdfReactor).rewritten,
-            "@supports (not (--bd-compat-satisfied: 1)) { p { color:red } }"
-        );
+        for compat in [CompatMode::PdfReactor, CompatMode::Prince] {
+            assert_eq!(
+                translate_compat(css, compat).rewritten,
+                "@supports (not (--bd-compat-satisfied: 1)) { p { color:red } }"
+            );
+        }
     }
 
     #[test]
@@ -4133,6 +4137,7 @@ fn engine_ignores_declaration(compat: CompatMode, name: &str, value: &str) -> bo
         },
         CompatMode::Prince => {
             name.eq_ignore_ascii_case("footnote-policy")
+                || name.eq_ignore_ascii_case("hanging-punctuation")
                 || name.eq_ignore_ascii_case("-webkit-background-size")
                 || ((name.eq_ignore_ascii_case("list-style-type")
                     || name.eq_ignore_ascii_case("list-style"))
