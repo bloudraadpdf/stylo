@@ -95,7 +95,7 @@ mod palette_tests {
             .expect("font palettes interpolate");
         assert_eq!(
             mixed.to_css_string(),
-            "palette-mix(in oklab, light 70%, dark 30%)"
+            "palette-mix(light 70%, dark 30%)"
         );
     }
 
@@ -114,7 +114,7 @@ mod palette_tests {
         assert_eq!(after, dark);
         assert_eq!(
             additive.to_css_string(),
-            "palette-mix(in oklab, light, dark)"
+            "palette-mix(light, dark)"
         );
     }
 }
