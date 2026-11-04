@@ -36,6 +36,7 @@ use parking_lot::RwLock;
 use rustc_hash::FxHashMap;
 use servo_arc::Arc;
 use std::fmt;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// The inheritance target used while resolving CSS animation keyframes.
 ///
@@ -880,9 +881,15 @@ impl fmt::Debug for Animation {
     }
 }
 
+/// The identity of a CSS transition, retained across clones and timeline seeks.
+#[derive(Clone, Copy, Debug, Eq, Hash, MallocSizeOf, PartialEq)]
+pub struct TransitionId(u64);
+
 /// A CSS Transition
 #[derive(Clone, Debug, MallocSizeOf)]
 pub struct Transition {
+    id: TransitionId,
+
     /// The start time of this transition, which is the current value of the animation
     /// timeline when this transition was created plus any animation delay.
     pub start_time: f64,
@@ -910,6 +917,11 @@ pub struct Transition {
 }
 
 impl Transition {
+    /// Returns the identity of this transition object.
+    pub fn id(&self) -> TransitionId {
+        self.id
+    }
+
     fn new(
         start_time: f64,
         delay: f64,
@@ -926,7 +938,12 @@ impl Transition {
             duration,
             interpolate_size,
         };
+        static NEXT_TRANSITION_ID: AtomicU64 = AtomicU64::new(0);
+        let id = NEXT_TRANSITION_ID
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |id| id.checked_add(1))
+            .expect("transition identifiers exhausted");
         Self {
+            id: TransitionId(id),
             start_time,
             delay,
             property_animation,
@@ -1846,6 +1863,28 @@ mod tests {
     use crate::properties::ComputedValues;
     use crate::values::animated::{Animate, Procedure};
     use crate::Atom;
+
+    #[test]
+    fn transition_identity_survives_cloning_and_seeking_but_not_replacement() {
+        let create = || {
+            super::Transition::new(
+                0.,
+                0.,
+                1.,
+                AnimationValue::Opacity(0.),
+                AnimationValue::Opacity(1.),
+                &super::TimingFunction::Keyword(
+                    crate::values::generics::easing::TimingKeyword::Linear,
+                ),
+                InterpolateSize::NumericOnly,
+            )
+        };
+        let original = create();
+        let mut sampled = original.clone();
+        sampled.start_time = 2.;
+        assert_eq!(sampled.id(), original.id());
+        assert_ne!(create().id(), original.id());
+    }
 
     fn pending_animation() -> Animation {
         Animation {
