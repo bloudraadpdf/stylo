@@ -853,6 +853,7 @@ fn project_animation_carrier_declarations(body: &str) -> Option<String> {
             "animation-range-start",
             "animation-timeline",
             "animation-timing-function",
+            "display",
             "height",
             "width",
         ],
@@ -1272,6 +1273,18 @@ mod tests {
 
         assert!(rewritten.contains(&format!(
             ":root>{TRANSITION_STYLE_ELEMENT}{{animation:fade 1s;}}"
+        )));
+    }
+
+    #[test]
+    fn projects_display_to_the_animation_carriers() {
+        let rewritten = rewrite_view_transition_root(
+            ":root::view-transition-image-pair(card){display:none;color:red}",
+        );
+
+        assert!(rewritten.ends_with(&format!(
+            ":root {}:where([data-moegoe-view-transition-name=\"63617264\"]):not(moegoe-internal-view-transition-root){{display:none;}}",
+            super::IMAGE_PAIR_ANIMATION_CARRIER_ELEMENT
         )));
     }
 
