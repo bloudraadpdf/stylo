@@ -38,6 +38,9 @@ impl ToAnimatedZero for FontVariationSettings {
 
 impl Animate for FontPalette {
     fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
+        if !matches!(procedure, Procedure::Interpolate { .. }) {
+            return Ok(other.clone());
+        }
         if self == other {
             return Ok(self.clone());
         }
@@ -97,7 +100,7 @@ mod palette_tests {
     }
 
     #[test]
-    fn font_palette_preserves_endpoints_and_additive_mix() {
+    fn font_palette_preserves_endpoints_and_replaces_non_additive_values() {
         let light = FontPalette::light();
         let dark = FontPalette::dark();
         let before = light
@@ -109,6 +112,14 @@ mod palette_tests {
         let additive = light.animate(&dark, Procedure::Add).unwrap();
         assert_eq!(before, light);
         assert_eq!(after, dark);
-        assert_eq!(additive.to_css_string(), "palette-mix(light, dark)");
+        assert_eq!(additive, dark);
+        for count in [0, 1, 3] {
+            assert_eq!(
+                light
+                    .animate(&dark, Procedure::Accumulate { count })
+                    .unwrap(),
+                dark,
+            );
+        }
     }
 }
