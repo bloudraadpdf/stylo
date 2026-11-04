@@ -57,6 +57,32 @@ pub enum ScrollButtonDirection {
     Next,
 }
 
+/// The kind of a named view transition pseudo-element (CSS View Transitions 1 section 3.1).
+#[derive(
+    Clone, Copy, Debug, Deserialize, Eq, Hash, MallocSizeOf, PartialEq, Serialize, ToCss, ToShmem,
+)]
+#[allow(missing_docs)]
+pub enum ViewTransitionPseudoKind {
+    Group,
+    ImagePair,
+    Old,
+    New,
+}
+
+impl ViewTransitionPseudoKind {
+    fn of(pseudo: &PseudoElement) -> Option<Self> {
+        use PseudoElement::*;
+
+        Some(match pseudo {
+            ViewTransitionGroup(_) => Self::Group,
+            ViewTransitionImagePair(_) => Self::ImagePair,
+            ViewTransitionOld(_) | ViewTransitionOldRoot => Self::Old,
+            ViewTransitionNew(_) | ViewTransitionNewRoot => Self::New,
+            _ => return None,
+        })
+    }
+}
+
 /// A pseudo-element, both public and private.
 ///
 /// NB: If you add to this list, be sure to update `each_simple_pseudo_element` too.
@@ -89,6 +115,8 @@ pub enum PseudoElement {
     ViewTransitionNew(Atom),
     ViewTransitionOldRoot,
     ViewTransitionNewRoot,
+    /// A named view transition pseudo-element selector with the universal name `*`.
+    UniversalViewTransition(ViewTransitionPseudoKind),
     DetailsSummary,
     DetailsContent,
     Marker,
@@ -167,15 +195,16 @@ impl ToCss for PseudoElement {
                     ViewTransitionNew(_) => "::view-transition-new(",
                     _ => unreachable!(),
                 })?;
-                if self.has_universal_view_transition_name() {
-                    dest.write_str("*")?;
-                } else {
-                    cssparser::serialize_identifier(&name.to_string(), dest)?;
-                }
+                cssparser::serialize_identifier(&name.to_string(), dest)?;
                 return dest.write_str(")");
             },
             ViewTransitionOldRoot => "::view-transition-old(root)",
             ViewTransitionNewRoot => "::view-transition-new(root)",
+            UniversalViewTransition(kind) => {
+                dest.write_str("::view-transition-")?;
+                style_traits::ToCss::to_css(&kind, &mut CssWriter::new(dest))?;
+                return dest.write_str("(*)");
+            },
             DetailsSummary => "::-servo-details-summary",
             DetailsContent => "::details-content",
             Marker => "::marker",
@@ -273,10 +302,16 @@ impl PseudoElement {
             Self::SpellingError => 8,
             Self::Highlight(_) => 9,
             Self::ViewTransition => 10,
-            Self::ViewTransitionGroup(_) => 11,
-            Self::ViewTransitionImagePair(_) => 12,
-            Self::ViewTransitionOld(_) | Self::ViewTransitionOldRoot => 13,
-            Self::ViewTransitionNew(_) | Self::ViewTransitionNewRoot => 14,
+            Self::ViewTransitionGroup(_)
+            | Self::UniversalViewTransition(ViewTransitionPseudoKind::Group) => 11,
+            Self::ViewTransitionImagePair(_)
+            | Self::UniversalViewTransition(ViewTransitionPseudoKind::ImagePair) => 12,
+            Self::ViewTransitionOld(_)
+            | Self::ViewTransitionOldRoot
+            | Self::UniversalViewTransition(ViewTransitionPseudoKind::Old) => 13,
+            Self::ViewTransitionNew(_)
+            | Self::ViewTransitionNewRoot
+            | Self::UniversalViewTransition(ViewTransitionPseudoKind::New) => 14,
             Self::DetailsSummary => 15,
             Self::DetailsContent => 16,
             Self::Marker => 17,
@@ -436,6 +471,7 @@ impl PseudoElement {
             | PseudoElement::ViewTransitionNew(_)
             | PseudoElement::ViewTransitionOldRoot
             | PseudoElement::ViewTransitionNewRoot
+            | PseudoElement::UniversalViewTransition(_)
             | PseudoElement::ColorSwatch
             | PseudoElement::DetailsSummary
             | PseudoElement::Marker
@@ -465,37 +501,13 @@ impl PseudoElement {
         }
     }
 
-    /// Whether this is a named view transition pseudo-element selector with the universal name `*`.
-    /// <https://drafts.csswg.org/css-view-transitions-1/#named-view-transition-pseudo>
-    pub fn has_universal_view_transition_name(&self) -> bool {
-        matches!(
-            self,
-            Self::ViewTransitionGroup(name)
-                | Self::ViewTransitionImagePair(name)
-                | Self::ViewTransitionOld(name)
-                | Self::ViewTransitionNew(name) if *name == Atom::from("*")
-        )
-    }
-
     /// Whether the pseudo-element selector `selector` matches this pseudo-element.
     pub fn matches_selector(&self, selector: &Self) -> bool {
-        use PseudoElement::*;
-
-        let same_view_transition_kind = matches!(
-            (selector, self),
-            (ViewTransitionGroup(_), ViewTransitionGroup(_))
-                | (ViewTransitionImagePair(_), ViewTransitionImagePair(_))
-                | (
-                    ViewTransitionOld(_),
-                    ViewTransitionOld(_) | ViewTransitionOldRoot
-                )
-                | (
-                    ViewTransitionNew(_),
-                    ViewTransitionNew(_) | ViewTransitionNewRoot
-                )
-        );
         selector == self
-            || (same_view_transition_kind && selector.has_universal_view_transition_name())
+            || matches!(
+                selector,
+                Self::UniversalViewTransition(kind) if ViewTransitionPseudoKind::of(self) == Some(*kind)
+            )
     }
 
     /// Covert non-canonical pseudo-element to canonical one, and keep a
@@ -1112,13 +1124,18 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
         } else {
             &["none", "match-element"][..]
         };
-        let universal = !name.eq_ignore_ascii_case("highlight")
-            && parser.try_parse(|parser| parser.expect_delim('*')).is_ok();
-        let argument = if universal {
-            Atom::from("*")
-        } else {
-            crate::values::CustomIdent::parse(parser, excluded)?.0
-        };
+        if parser.try_parse(|parser| parser.expect_delim('*')).is_ok() {
+            return Ok(PseudoElement::UniversalViewTransition(
+                match_ignore_ascii_case! { &name,
+                    "view-transition-group" => ViewTransitionPseudoKind::Group,
+                    "view-transition-image-pair" => ViewTransitionPseudoKind::ImagePair,
+                    "view-transition-old" => ViewTransitionPseudoKind::Old,
+                    "view-transition-new" => ViewTransitionPseudoKind::New,
+                    _ => return Err(parser.new_custom_error(SelectorParseErrorKind::UnsupportedPseudoClassOrElement(name)))
+                },
+            ));
+        }
+        let argument = crate::values::CustomIdent::parse(parser, excluded)?.0;
         match_ignore_ascii_case! { &name,
             "highlight" => Ok(PseudoElement::Highlight(argument)),
             "view-transition-group" => Ok(PseudoElement::ViewTransitionGroup(argument)),

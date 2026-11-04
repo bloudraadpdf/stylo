@@ -107,7 +107,7 @@ pub fn parse_cssom_pseudo_element(selector: &str) -> Result<PseudoElement, Strin
     }
     selector
         .pseudo_element()
-        .filter(|pseudo| !pseudo.has_universal_view_transition_name())
+        .filter(|pseudo| !matches!(pseudo, PseudoElement::UniversalViewTransition(_)))
         .cloned()
         .ok_or_else(|| "expected a pseudo-element selector".to_owned())
 }
@@ -218,6 +218,18 @@ mod tests {
             );
         }
         assert!(super::selector_serializations("::highlight(*)").is_empty());
+        let escaped = super::parse_selector("::view-transition-old(\\*)")
+            .unwrap()
+            .slice()[0]
+            .pseudo_element()
+            .cloned()
+            .unwrap();
+        let named = super::parse_cssom_pseudo_element("::view-transition-old(target)").unwrap();
+        assert!(!named.matches_selector(&escaped));
+        assert_eq!(
+            super::selector_serializations("::view-transition-old(\\*)"),
+            ["::view-transition-old(\\*)"]
+        );
     }
 
     #[test]
