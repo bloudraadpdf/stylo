@@ -2485,6 +2485,35 @@ mod prince_rewrite_tests {
     }
 
     #[test]
+    fn prince_ignores_margin_break_before_the_cascade() {
+        for value in ["auto", "keep", "discard", "var(--margin)"] {
+            let declarations = format!("color:red; MaRgIn-BrEaK:{value};");
+            assert_eq!(
+                translate_compat_declarations(&declarations, CompatMode::Prince).rewritten,
+                "color:red; "
+            );
+            let css = format!("p {{ {declarations} }}");
+            assert_eq!(
+                translate_compat(&css, CompatMode::Prince).rewritten,
+                "p { color:red; }"
+            );
+            for compat in [
+                CompatMode::None,
+                CompatMode::PdfReactor,
+                CompatMode::WeasyPrint,
+                CompatMode::Chromium,
+            ] {
+                assert_eq!(translate_compat(&css, compat).rewritten, css);
+            }
+        }
+        let css = "@supports (margin-break:discard) { p { color:red } }";
+        assert_eq!(
+            translate_compat(css, CompatMode::Prince).rewritten,
+            "@supports (not (--bd-compat-satisfied: 1)) { p { color:red } }"
+        );
+    }
+
+    #[test]
     fn prince_ignores_webkit_background_size() {
         let css = "@page { background-size:50%; -webkit-background-size:100%; color:red }";
         assert_eq!(
@@ -4138,6 +4167,7 @@ fn engine_ignores_declaration(compat: CompatMode, name: &str, value: &str) -> bo
         CompatMode::Prince => {
             name.eq_ignore_ascii_case("footnote-policy")
                 || name.eq_ignore_ascii_case("hanging-punctuation")
+                || name.eq_ignore_ascii_case("margin-break")
                 || name.eq_ignore_ascii_case("-webkit-background-size")
                 || ((name.eq_ignore_ascii_case("list-style-type")
                     || name.eq_ignore_ascii_case("list-style"))
