@@ -96,6 +96,7 @@ trivial_to_resolved_value!(crate::OwnedStr);
 trivial_to_resolved_value!(crate::color::AbsoluteColor);
 trivial_to_resolved_value!(crate::values::generics::color::ColorMixFlags);
 trivial_to_resolved_value!(crate::Atom);
+trivial_to_resolved_value!(crate::values::specified::font::FontPalette);
 trivial_to_resolved_value!(crate::values::AtomIdent);
 trivial_to_resolved_value!(crate::custom_properties::VariableValue);
 trivial_to_resolved_value!(crate::stylesheets::UrlExtraData);

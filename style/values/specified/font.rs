@@ -29,6 +29,8 @@ use crate::Atom;
 use cssparser::{match_ignore_ascii_case, Parser, Token};
 #[cfg(feature = "gecko")]
 use malloc_size_of::{MallocSizeOf, MallocSizeOfOps, MallocUnconditionalSizeOf};
+#[cfg(feature = "servo")]
+use servo_arc::Arc;
 use std::fmt::{self, Write};
 use style_traits::{CssWriter, KeywordsCollectFn, ParseError};
 use style_traits::{SpecifiedValueInfo, StyleParseErrorKind, ToCss};
@@ -1661,53 +1663,100 @@ pub enum FontSynthesisStyle {
     ObliqueOnly,
 }
 
-#[derive(
-    Clone,
-    Debug,
-    Eq,
-    MallocSizeOf,
-    PartialEq,
-    SpecifiedValueInfo,
-    ToResolvedValue,
-    ToShmem,
-    ToTyped,
-)]
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToShmem, ToTyped)]
 #[cfg_attr(feature = "servo", derive(Deserialize, Serialize))]
 #[repr(C)]
 /// Allows authors to choose a palette from those supported by a color font
 /// (and potentially @font-palette-values overrides).
-pub struct FontPalette(Atom, #[cfg(feature = "servo")] Option<Atom>);
+pub struct FontPalette(
+    Atom,
+    #[cfg(feature = "servo")]
+    #[cfg_attr(feature = "servo", serde(skip))]
+    #[css(skip)]
+    #[ignore_malloc_size_of = "Arc"]
+    Option<Arc<FontPaletteMix>>,
+);
+
+/// A `palette-mix()` with the percentage of each item resolved.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
+pub struct FontPaletteMix {
+    /// The color interpolation method.
+    pub interpolation: ColorInterpolationMethod,
+    /// The mixed palettes, in order.
+    pub items: Box<[FontPaletteMixItem]>,
+}
+
+/// A palette and its percentage in a `palette-mix()`.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
+pub struct FontPaletteMixItem {
+    /// The palette.
+    pub palette: FontPalette,
+    /// The percentage, from 0 to 1. Omitted percentages are resolved.
+    pub percentage: f32,
+}
+
+impl ToCss for FontPaletteMix {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        let equal = 1.0 / self.items.len() as f32;
+        let omits_percentages = self.items.iter().all(|item| item.percentage == equal);
+        dest.write_str("palette-mix(")?;
+        if !self.interpolation.is_default() {
+            self.interpolation.to_css(dest)?;
+            dest.write_str(", ")?;
+        }
+        for (index, item) in self.items.iter().enumerate() {
+            if index > 0 {
+                dest.write_str(", ")?;
+            }
+            dest.write_str(&item.palette.computed_css())?;
+            if !omits_percentages {
+                dest.write_char(' ')?;
+                Percentage::new(item.percentage).to_css(dest)?;
+            }
+        }
+        dest.write_char(')')
+    }
+}
 
 #[allow(missing_docs)]
 impl FontPalette {
     fn computed_css(&self) -> String {
         #[cfg(feature = "servo")]
-        if let Some(css) = &self.1 {
-            return css.as_ref().to_owned();
+        if let Some(mix) = &self.1 {
+            return mix.to_css_string();
         }
         self.to_css_string()
     }
 
-    fn with_computed_css(css: Atom, computed_css: Option<Atom>) -> Self {
+    fn with_mix(css: Atom, mix: Option<FontPaletteMix>) -> Self {
         #[cfg(feature = "servo")]
         {
-            Self(css, computed_css)
+            Self(css, mix.map(Arc::new))
         }
         #[cfg(feature = "gecko")]
         {
-            let _ = computed_css;
+            let _ = mix;
             Self(css)
         }
     }
 
+    /// The `palette-mix()` of this palette, if it is one.
+    #[cfg(feature = "servo")]
+    pub fn mix(&self) -> Option<&FontPaletteMix> {
+        self.1.as_deref()
+    }
+
     pub fn normal() -> Self {
-        Self::with_computed_css(atom!("normal"), None)
+        Self::with_mix(atom!("normal"), None)
     }
     pub fn light() -> Self {
-        Self::with_computed_css(atom!("light"), None)
+        Self::with_mix(atom!("light"), None)
     }
     pub fn dark() -> Self {
-        Self::with_computed_css(atom!("dark"), None)
+        Self::with_mix(atom!("dark"), None)
     }
 
     pub(crate) fn mixed_with(&self, other: &Self, other_weight: f64) -> Self {
@@ -1723,7 +1772,21 @@ impl FontPalette {
                 percentage
             )
         };
-        Self::with_computed_css(Atom::from(css.as_str()), None)
+        let other_percentage = other_weight as f32;
+        let mix = FontPaletteMix {
+            interpolation: ColorInterpolationMethod::default(),
+            items: Box::new([
+                FontPaletteMixItem {
+                    palette: self.clone(),
+                    percentage: 1.0 - other_percentage,
+                },
+                FontPaletteMixItem {
+                    palette: other.clone(),
+                    percentage: other_percentage,
+                },
+            ]),
+        };
+        Self::with_mix(Atom::from(css.as_str()), Some(mix))
     }
 }
 
@@ -1733,7 +1796,7 @@ impl ToComputedValue for FontPalette {
     fn to_computed_value(&self, _context: &Context) -> Self::ComputedValue {
         #[cfg(feature = "servo")]
         {
-            Self::with_computed_css(self.1.clone().unwrap_or_else(|| self.0.clone()), None)
+            Self(Atom::from(self.computed_css().as_str()), self.1.clone())
         }
         #[cfg(feature = "gecko")]
         {
@@ -1839,40 +1902,22 @@ impl Parse for FontPalette {
                     }
                 }
                 serialized.push(')');
-                let computed_equal_weights = computed_items.len() == 2
-                    && computed_items.iter().all(|(_, percentage)| {
-                        percentage
-                            .as_ref()
-                            .is_none_or(|value| value.resolve() == Some(0.5))
-                    });
-                let computed_single_hundred = computed_items.len() == 1
-                    && computed_items[0]
-                        .1
-                        .as_ref()
-                        .is_none_or(|value| value.resolve() == Some(1.0));
-                let mut computed_serialized = String::from("palette-mix(");
-                if !interpolation.is_default() {
-                    computed_serialized.push_str(&interpolation.to_css_string());
-                    computed_serialized.push_str(", ");
-                }
-                for (index, (palette, percentage)) in computed_items.into_iter().enumerate() {
-                    if index > 0 {
-                        computed_serialized.push_str(", ");
-                    }
-                    computed_serialized.push_str(&palette.computed_css());
-                    if !all_missing && !computed_equal_weights && !computed_single_hundred {
-                        let value = percentage
+                let items = computed_items
+                    .into_iter()
+                    .map(|(palette, percentage)| FontPaletteMixItem {
+                        palette,
+                        percentage: percentage
                             .as_ref()
                             .and_then(Percentage::resolve)
-                            .unwrap_or(implied);
-                        computed_serialized.push(' ');
-                        computed_serialized.push_str(&Percentage::new(value).to_css_string());
-                    }
-                }
-                computed_serialized.push(')');
-                Ok(Self::with_computed_css(
+                            .unwrap_or(implied),
+                    })
+                    .collect();
+                Ok(Self::with_mix(
                     Atom::from(serialized.as_str()),
-                    Some(Atom::from(computed_serialized.as_str())),
+                    Some(FontPaletteMix {
+                        interpolation,
+                        items,
+                    }),
                 ))
             });
         }
@@ -1883,7 +1928,7 @@ impl Parse for FontPalette {
             "light" => Ok(Self::light()),
             "dark" => Ok(Self::dark()),
             _ => if ident.starts_with("--") {
-                Ok(Self::with_computed_css(Atom::from(ident.as_ref()), None))
+                Ok(Self::with_mix(Atom::from(ident.as_ref()), None))
             } else {
                 Err(location.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(ident.clone())))
             },
@@ -2431,6 +2476,29 @@ mod tests {
         parser
             .parse_entirely(|input| FontPalette::parse(&context, input))
             .map_err(|_| ())
+    }
+
+    #[test]
+    #[cfg(feature = "servo")]
+    fn palette_mix_keeps_resolved_items() {
+        let palette =
+            parse_font_palette("palette-mix(in srgb, --a 20%, palette-mix(light, dark))").unwrap();
+        let mix = palette.mix().expect("typed palette-mix");
+        assert_eq!(mix.interpolation, ColorInterpolationMethod::srgb());
+        let items: Vec<_> = mix
+            .items
+            .iter()
+            .map(|item| (item.palette.to_css_string(), item.percentage))
+            .collect();
+        assert_eq!(
+            items,
+            [
+                ("--a".to_owned(), 0.2),
+                ("palette-mix(light, dark)".to_owned(), 0.8)
+            ]
+        );
+        let nested = mix.items[1].palette.mix().expect("nested palette-mix");
+        assert_eq!(nested.items[0].percentage, 0.5);
     }
 
     #[test]
