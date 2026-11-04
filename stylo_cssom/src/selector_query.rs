@@ -107,6 +107,7 @@ pub fn parse_cssom_pseudo_element(selector: &str) -> Result<PseudoElement, Strin
     }
     selector
         .pseudo_element()
+        .filter(|pseudo| !pseudo.has_universal_view_transition_name())
         .cloned()
         .ok_or_else(|| "expected a pseudo-element selector".to_owned())
 }
@@ -188,6 +189,35 @@ mod tests {
                 "{source}"
             );
         }
+    }
+
+    #[test]
+    fn named_view_transition_selectors_accept_the_universal_name_outside_cssom() {
+        for kind in ["group", "image-pair", "old", "new"] {
+            let source = format!("::view-transition-{kind}( * )");
+            assert_eq!(
+                super::selector_serializations(&source),
+                [format!("::view-transition-{kind}(*)")],
+                "{source}"
+            );
+            let source = format!("::view-transition-{kind}(*)");
+            let pseudo = super::parse_selector(&source).unwrap().slice()[0]
+                .pseudo_element()
+                .cloned()
+                .unwrap();
+            for name in ["root", "target"] {
+                let target =
+                    super::parse_cssom_pseudo_element(&format!("::view-transition-{kind}({name})"))
+                        .unwrap();
+                assert!(target.matches_selector(&pseudo), "{source} {name}");
+                assert!(!pseudo.matches_selector(&target), "{source} {name}");
+            }
+            assert!(
+                super::parse_cssom_pseudo_element(&source).is_err(),
+                "{source}"
+            );
+        }
+        assert!(super::selector_serializations("::highlight(*)").is_empty());
     }
 
     #[test]
