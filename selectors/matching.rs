@@ -469,7 +469,7 @@ where
             },
         }
 
-        if !iter.matches_for_stateless_pseudo_element() {
+        if !iter.matches_for_stateless_pseudo_element(context.pseudo_element_is_only_child) {
             return KleeneValue::False;
         }
 
