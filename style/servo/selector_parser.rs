@@ -249,6 +249,12 @@ impl ::selectors::parser::PseudoElement for PseudoElement {
 
     fn accepts_state_pseudo_classes(&self) -> bool {
         matches!(self, Self::ScrollMarker | Self::ScrollButton(_))
+            || self.is_in_pseudo_element_tree()
+    }
+
+    fn is_in_pseudo_element_tree(&self) -> bool {
+        ViewTransitionPseudoKind::of(self).is_some()
+            || matches!(self, Self::UniversalViewTransition(_))
     }
 
     fn accepts_enabled_disabled_pseudo_classes(&self) -> bool {

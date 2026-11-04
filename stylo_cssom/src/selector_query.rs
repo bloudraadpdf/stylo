@@ -218,6 +218,22 @@ mod tests {
             );
         }
         assert!(super::selector_serializations("::highlight(*)").is_empty());
+        for source in [
+            "::view-transition-group(*):only-child",
+            "::view-transition-new(root):only-child",
+        ] {
+            assert_eq!(super::selector_serializations(source), [source]);
+        }
+        for source in [
+            "::view-transition:only-child",
+            "::view-transition-old(*):hover",
+            "::view-transition-old(*):first-child",
+        ] {
+            assert!(
+                super::selector_serializations(source).is_empty(),
+                "{source}"
+            );
+        }
         let escaped = super::parse_selector("::view-transition-old(\\*)")
             .unwrap()
             .slice()[0]
