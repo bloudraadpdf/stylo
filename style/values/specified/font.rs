@@ -1703,10 +1703,9 @@ impl ToCss for FontPaletteMix {
         let equal = 1.0 / self.items.len() as f32;
         let omits_percentages = self.items.iter().all(|item| item.percentage == equal);
         dest.write_str("palette-mix(")?;
-        if !self.interpolation.is_default() {
-            self.interpolation.to_css(dest)?;
-            dest.write_str(", ")?;
-        }
+        // CSSOM preserves components needed by the earlier palette-mix grammar.
+        self.interpolation.to_css(dest)?;
+        dest.write_str(", ")?;
         for (index, item) in self.items.iter().enumerate() {
             if index > 0 {
                 dest.write_str(", ")?;
@@ -1871,10 +1870,8 @@ impl Parse for FontPalette {
                         .is_none_or(|value| value.resolve() == Some(1.0));
                 let computed_items = items.clone();
                 let mut serialized = String::from("palette-mix(");
-                if !interpolation.is_default() {
-                    serialized.push_str(&interpolation.to_css_string());
-                    serialized.push_str(", ");
-                }
+                serialized.push_str(&interpolation.to_css_string());
+                serialized.push_str(", ");
                 for (index, (palette, percentage)) in items.into_iter().enumerate() {
                     if index > 0 {
                         serialized.push_str(", ");
@@ -2423,7 +2420,9 @@ mod tests {
         ] {
             let mut input = ParserInput::new(source);
             let mut parser = Parser::new(&mut input);
-            let value = parser.parse_entirely(|parser| FontSizeAdjust::parse(&context, parser)).unwrap();
+            let value = parser
+                .parse_entirely(|parser| FontSizeAdjust::parse(&context, parser))
+                .unwrap();
             assert_eq!(value.to_css_string(), expected, "{source}");
         }
     }
@@ -2482,7 +2481,7 @@ mod tests {
             items,
             [
                 ("--a".to_owned(), 0.2),
-                ("palette-mix(light, dark)".to_owned(), 0.8)
+                ("palette-mix(in oklab, light, dark)".to_owned(), 0.8)
             ]
         );
         let nested = mix.items[1].palette.mix().expect("nested palette-mix");
@@ -2493,8 +2492,16 @@ mod tests {
     fn palette_mix_parses_and_normalizes_weights() {
         for (css, serialized) in [
             (
+                "palette-mix(in oklab, normal, light)",
+                "palette-mix(in oklab, normal, light)",
+            ),
+            (
+                "palette-mix(normal, light)",
+                "palette-mix(in oklab, normal, light)",
+            ),
+            (
                 "palette-mix(light 30%, dark)",
-                "palette-mix(light 30%, dark 70%)",
+                "palette-mix(in oklab, light 30%, dark 70%)",
             ),
             (
                 "palette-mix(in srgb, light 50%, dark 50%)",
@@ -2502,7 +2509,7 @@ mod tests {
             ),
             (
                 "palette-mix(palette-mix(in srgb, light 30%, normal) 20%, dark)",
-                "palette-mix(palette-mix(in srgb, light 30%, normal 70%) 20%, dark 80%)",
+                "palette-mix(in oklab, palette-mix(in srgb, light 30%, normal 70%) 20%, dark 80%)",
             ),
             ("palette-mix(in srgb, dark)", "palette-mix(in srgb, dark)"),
             (
