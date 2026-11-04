@@ -2971,6 +2971,47 @@ mod prince_rewrite_tests {
     }
 
     #[test]
+    fn pdfreactor_rejects_wavy_decoration_before_the_cascade() {
+        for decoration in [
+            "solid", "double", "dotted", "dashed", "wavy", "WAVY", "w\\61vy",
+        ] {
+            let unsupported = matches!(decoration, "wavy" | "WAVY" | "w\\61vy");
+            for (property, value) in [
+                ("text-decoration-style", decoration.to_owned()),
+                ("text-decoration", format!("red {decoration} underline")),
+            ] {
+                let css = format!("@supports ({property}:{value}) {{ p {{ color:red }} }}");
+                let expected = if unsupported {
+                    "@supports (not (--bd-compat-satisfied: 1)) { p { color:red } }"
+                } else {
+                    &css
+                };
+                assert_eq!(
+                    translate_compat(&css, CompatMode::PdfReactor).rewritten,
+                    expected
+                );
+                let declarations = format!("color:red; {property}:{value}");
+                let translated =
+                    translate_compat_declarations(&declarations, CompatMode::PdfReactor);
+                assert!(translated.rewritten.contains("color:red"));
+                assert_eq!(translated.rewritten.contains(property), !unsupported);
+                for compat in [
+                    CompatMode::None,
+                    CompatMode::Prince,
+                    CompatMode::WeasyPrint,
+                    CompatMode::Chromium,
+                ] {
+                    assert_eq!(translate_compat(&css, compat).rewritten, css);
+                    assert_eq!(
+                        translate_compat_declarations(&declarations, compat).rewritten,
+                        declarations
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
     fn pdfreactor_rejects_font_variant_caps_before_the_cascade() {
         let declarations = "font-variant:small-caps; font-variant-caps:normal; color:red";
         assert_eq!(
@@ -3973,6 +4014,11 @@ fn skip_at_rule<'i>(parser: &mut Parser<'i, '_>) {
 
 /// Declarations rejected by the reference engine before the cascade.
 fn engine_ignores_declaration(compat: CompatMode, name: &str, value: &str) -> bool {
+    use style::properties::PropertyDeclaration;
+    use style::properties::longhands::text_decoration_style::SpecifiedValue as DecorationStyle;
+
+    let declarations =
+        || crate::declaration_parser::parse_inline_style_block(&format!("{name}:{value}"));
     match compat {
         CompatMode::None | CompatMode::WeasyPrint => false,
         CompatMode::Chromium => {
@@ -3984,7 +4030,7 @@ fn engine_ignores_declaration(compat: CompatMode, name: &str, value: &str) -> bo
             ]
             .iter()
             .any(|property| name.eq_ignore_ascii_case(property))
-                && crate::declaration_parser::parse_inline_style_block(&format!("{name}:{value}"))
+                && declarations()
                     .as_typed()
                     .declarations()
                     .iter()
@@ -3996,6 +4042,19 @@ fn engine_ignores_declaration(compat: CompatMode, name: &str, value: &str) -> bo
                 || name.eq_ignore_ascii_case("font-variant-caps")
                 || name.eq_ignore_ascii_case("inset")
                 || name.eq_ignore_ascii_case("aspect-ratio")
+                || (["text-decoration", "text-decoration-style"]
+                    .iter()
+                    .any(|property| name.eq_ignore_ascii_case(property))
+                    && declarations()
+                        .as_typed()
+                        .declarations()
+                        .iter()
+                        .any(|declaration| {
+                            matches!(
+                                declaration,
+                                PropertyDeclaration::TextDecorationStyle(DecorationStyle::Wavy)
+                            )
+                        }))
                 || ([
                     "grid",
                     "grid-template",
@@ -4004,13 +4063,11 @@ fn engine_ignores_declaration(compat: CompatMode, name: &str, value: &str) -> bo
                 ]
                 .iter()
                 .any(|property| name.eq_ignore_ascii_case(property))
-                    && crate::declaration_parser::parse_inline_style_block(&format!(
-                        "{name}:{value}"
-                    ))
-                    .as_typed()
-                    .declarations()
-                    .iter()
-                    .any(style::properties::PropertyDeclaration::uses_subgrid))
+                    && declarations()
+                        .as_typed()
+                        .declarations()
+                        .iter()
+                        .any(style::properties::PropertyDeclaration::uses_subgrid))
                 || (!name.starts_with("--")
                     && style::values::specified::calc::ComparisonFunctions::in_value(value).direct)
         },
