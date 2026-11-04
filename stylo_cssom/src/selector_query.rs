@@ -107,7 +107,7 @@ pub fn parse_cssom_pseudo_element(selector: &str) -> Result<PseudoElement, Strin
     }
     selector
         .pseudo_element()
-        .filter(|pseudo| !matches!(pseudo, PseudoElement::UniversalViewTransition(_)))
+        .filter(|pseudo| !matches!(pseudo, PseudoElement::ViewTransitionSelector(_)))
         .cloned()
         .ok_or_else(|| "expected a pseudo-element selector".to_owned())
 }
@@ -209,8 +209,8 @@ mod tests {
                 let target =
                     super::parse_cssom_pseudo_element(&format!("::view-transition-{kind}({name})"))
                         .unwrap();
-                assert!(target.matches_selector(&pseudo), "{source} {name}");
-                assert!(!pseudo.matches_selector(&target), "{source} {name}");
+                assert!(target.matches_selector(&pseudo, &[]), "{source} {name}");
+                assert!(!pseudo.matches_selector(&target, &[]), "{source} {name}");
             }
             assert!(
                 super::parse_cssom_pseudo_element(&source).is_err(),
@@ -241,11 +241,50 @@ mod tests {
             .cloned()
             .unwrap();
         let named = super::parse_cssom_pseudo_element("::view-transition-old(target)").unwrap();
-        assert!(!named.matches_selector(&escaped));
+        assert!(!named.matches_selector(&escaped, &[]));
         assert_eq!(
             super::selector_serializations("::view-transition-old(\\*)"),
             ["::view-transition-old(\\*)"]
         );
+    }
+
+    #[test]
+    fn named_view_transition_selectors_accept_view_transition_classes() {
+        for source in [
+            "::view-transition-group(*.class)",
+            "::view-transition-image-pair(\\*.class.class)",
+            "::view-transition-old(dashed-ident.someclass)",
+            "::view-transition-new(foo.bar.baz):only-child",
+        ] {
+            assert_eq!(super::selector_serializations(source), [source]);
+        }
+        for source in [
+            "::view-transition-group(* .class)",
+            "::view-transition-group(*. class)",
+            "::view-transition-group(.class)",
+            "::view-transition-group(*.none)",
+            "::highlight(name.class)",
+        ] {
+            assert!(
+                super::selector_serializations(source).is_empty(),
+                "{source}"
+            );
+        }
+        let selector = super::parse_selector("::view-transition-new(*.a.b)")
+            .unwrap()
+            .slice()[0]
+            .pseudo_element()
+            .cloned()
+            .unwrap();
+        let target = super::parse_cssom_pseudo_element("::view-transition-new(card)").unwrap();
+        let classes = [
+            style::Atom::from("a"),
+            style::Atom::from("b"),
+            style::Atom::from("c"),
+        ];
+        assert!(target.matches_selector(&selector, &classes));
+        assert!(!target.matches_selector(&selector, &classes[..1]));
+        assert!(super::parse_cssom_pseudo_element("::view-transition-new(card.a)").is_err());
     }
 
     #[test]

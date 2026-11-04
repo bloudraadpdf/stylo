@@ -18,7 +18,9 @@ use crate::selector_parser::AttrValue as SelectorAttrValue;
 use crate::selector_parser::{Direction, PseudoElementCascadeType, SelectorParser};
 use crate::values::{AtomIdent, AtomString, CSSInteger};
 use crate::{Atom, CaseSensitivityExt, LocalName, Namespace, Prefix};
-use cssparser::{match_ignore_ascii_case, CowRcStr, Parser as CssParser, SourceLocation, ToCss};
+use cssparser::{
+    match_ignore_ascii_case, CowRcStr, Parser as CssParser, SourceLocation, ToCss, Token,
+};
 use dom::{DocumentState, ElementState};
 use rustc_hash::FxHashMap;
 use selectors::attr::{AttrSelectorOperation, CaseSensitivity, NamespaceConstraint};
@@ -83,6 +85,39 @@ impl ViewTransitionPseudoKind {
     }
 }
 
+/// A named view transition pseudo-element selector with the universal name `*`, view transition classes, or both
+/// (CSS View Transitions 1 section 3.1, CSS View Transitions 2 section 3.2).
+#[derive(Clone, Debug, Deserialize, Eq, Hash, MallocSizeOf, PartialEq, Serialize, ToShmem)]
+pub struct ViewTransitionSelector {
+    /// The pseudo-element kind.
+    pub kind: ViewTransitionPseudoKind,
+    /// The name, or `None` for `*`.
+    pub name: Option<Atom>,
+    /// The view transition classes that the pseudo-element must have.
+    pub classes: Box<[Atom]>,
+}
+
+impl ViewTransitionSelector {
+    fn matches(&self, pseudo: &PseudoElement, classes: &[Atom]) -> bool {
+        let name = match pseudo {
+            PseudoElement::ViewTransitionGroup(name)
+            | PseudoElement::ViewTransitionImagePair(name)
+            | PseudoElement::ViewTransitionOld(name)
+            | PseudoElement::ViewTransitionNew(name) => Some(name.clone()),
+            PseudoElement::ViewTransitionOldRoot | PseudoElement::ViewTransitionNewRoot => {
+                Some(Atom::from("root"))
+            },
+            _ => None,
+        };
+        ViewTransitionPseudoKind::of(pseudo) == Some(self.kind)
+            && self
+                .name
+                .as_ref()
+                .is_none_or(|selected| name.as_ref() == Some(selected))
+            && self.classes.iter().all(|class| classes.contains(class))
+    }
+}
+
 /// A pseudo-element, both public and private.
 ///
 /// NB: If you add to this list, be sure to update `each_simple_pseudo_element` too.
@@ -115,8 +150,8 @@ pub enum PseudoElement {
     ViewTransitionNew(Atom),
     ViewTransitionOldRoot,
     ViewTransitionNewRoot,
-    /// A named view transition pseudo-element selector with the universal name `*`.
-    UniversalViewTransition(ViewTransitionPseudoKind),
+    /// A named view transition pseudo-element selector with `*` or view transition classes.
+    ViewTransitionSelector(Box<ViewTransitionSelector>),
     DetailsSummary,
     DetailsContent,
     Marker,
@@ -200,10 +235,19 @@ impl ToCss for PseudoElement {
             },
             ViewTransitionOldRoot => "::view-transition-old(root)",
             ViewTransitionNewRoot => "::view-transition-new(root)",
-            UniversalViewTransition(kind) => {
+            ViewTransitionSelector(ref selector) => {
                 dest.write_str("::view-transition-")?;
-                style_traits::ToCss::to_css(&kind, &mut CssWriter::new(dest))?;
-                return dest.write_str("(*)");
+                style_traits::ToCss::to_css(&selector.kind, &mut CssWriter::new(dest))?;
+                dest.write_char('(')?;
+                match selector.name {
+                    Some(ref name) => cssparser::serialize_identifier(&name.to_string(), dest)?,
+                    None => dest.write_char('*')?,
+                }
+                for class in selector.classes.iter() {
+                    dest.write_char('.')?;
+                    cssparser::serialize_identifier(&class.to_string(), dest)?;
+                }
+                return dest.write_char(')');
             },
             DetailsSummary => "::-servo-details-summary",
             DetailsContent => "::details-content",
@@ -254,7 +298,7 @@ impl ::selectors::parser::PseudoElement for PseudoElement {
 
     fn is_in_pseudo_element_tree(&self) -> bool {
         ViewTransitionPseudoKind::of(self).is_some()
-            || matches!(self, Self::UniversalViewTransition(_))
+            || matches!(self, Self::ViewTransitionSelector(_))
     }
 
     fn accepts_enabled_disabled_pseudo_classes(&self) -> bool {
@@ -308,16 +352,16 @@ impl PseudoElement {
             Self::SpellingError => 8,
             Self::Highlight(_) => 9,
             Self::ViewTransition => 10,
-            Self::ViewTransitionGroup(_)
-            | Self::UniversalViewTransition(ViewTransitionPseudoKind::Group) => 11,
-            Self::ViewTransitionImagePair(_)
-            | Self::UniversalViewTransition(ViewTransitionPseudoKind::ImagePair) => 12,
-            Self::ViewTransitionOld(_)
-            | Self::ViewTransitionOldRoot
-            | Self::UniversalViewTransition(ViewTransitionPseudoKind::Old) => 13,
-            Self::ViewTransitionNew(_)
-            | Self::ViewTransitionNewRoot
-            | Self::UniversalViewTransition(ViewTransitionPseudoKind::New) => 14,
+            Self::ViewTransitionSelector(selector) => match selector.kind {
+                ViewTransitionPseudoKind::Group => 11,
+                ViewTransitionPseudoKind::ImagePair => 12,
+                ViewTransitionPseudoKind::Old => 13,
+                ViewTransitionPseudoKind::New => 14,
+            },
+            Self::ViewTransitionGroup(_) => 11,
+            Self::ViewTransitionImagePair(_) => 12,
+            Self::ViewTransitionOld(_) | Self::ViewTransitionOldRoot => 13,
+            Self::ViewTransitionNew(_) | Self::ViewTransitionNewRoot => 14,
             Self::DetailsSummary => 15,
             Self::DetailsContent => 16,
             Self::Marker => 17,
@@ -477,7 +521,7 @@ impl PseudoElement {
             | PseudoElement::ViewTransitionNew(_)
             | PseudoElement::ViewTransitionOldRoot
             | PseudoElement::ViewTransitionNewRoot
-            | PseudoElement::UniversalViewTransition(_)
+            | PseudoElement::ViewTransitionSelector(_)
             | PseudoElement::ColorSwatch
             | PseudoElement::DetailsSummary
             | PseudoElement::Marker
@@ -507,13 +551,13 @@ impl PseudoElement {
         }
     }
 
-    /// Whether the pseudo-element selector `selector` matches this pseudo-element.
-    pub fn matches_selector(&self, selector: &Self) -> bool {
-        selector == self
-            || matches!(
-                selector,
-                Self::UniversalViewTransition(kind) if ViewTransitionPseudoKind::of(self) == Some(*kind)
-            )
+    /// Whether the pseudo-element selector `selector` matches this pseudo-element, which has the view transition
+    /// classes `classes`.
+    pub fn matches_selector(&self, selector: &Self, classes: &[Atom]) -> bool {
+        match selector {
+            Self::ViewTransitionSelector(selector) => selector.matches(self, classes),
+            _ => selector == self,
+        }
     }
 
     /// Covert non-canonical pseudo-element to canonical one, and keep a
@@ -1130,26 +1174,66 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
         } else {
             &["none", "match-element"][..]
         };
-        if parser.try_parse(|parser| parser.expect_delim('*')).is_ok() {
-            return Ok(PseudoElement::UniversalViewTransition(
-                match_ignore_ascii_case! { &name,
-                    "view-transition-group" => ViewTransitionPseudoKind::Group,
-                    "view-transition-image-pair" => ViewTransitionPseudoKind::ImagePair,
-                    "view-transition-old" => ViewTransitionPseudoKind::Old,
-                    "view-transition-new" => ViewTransitionPseudoKind::New,
-                    _ => return Err(parser.new_custom_error(SelectorParseErrorKind::UnsupportedPseudoClassOrElement(name)))
+        let name_argument = if parser.try_parse(|parser| parser.expect_delim('*')).is_ok() {
+            None
+        } else {
+            Some(crate::values::CustomIdent::parse(parser, excluded)?.0)
+        };
+        let mut classes = Vec::new();
+        while parser
+            .try_parse(|parser| -> Result<(), ParseError<'i>> {
+                match *parser.next_including_whitespace()? {
+                    Token::Delim('.') => Ok(()),
+                    ref token => {
+                        let token = token.clone();
+                        Err(parser.new_unexpected_token_error(token))
+                    },
+                }
+            })
+            .is_ok()
+        {
+            let location = parser.current_source_location();
+            let class = match *parser.next_including_whitespace()? {
+                Token::Ident(ref ident) => ident.clone(),
+                ref token => {
+                    let token = token.clone();
+                    return Err(parser.new_unexpected_token_error(token));
                 },
-            ));
+            };
+            classes.push(crate::values::CustomIdent::from_ident(location, &class, &["none"])?.0);
         }
-        let argument = crate::values::CustomIdent::parse(parser, excluded)?.0;
-        match_ignore_ascii_case! { &name,
-            "highlight" => Ok(PseudoElement::Highlight(argument)),
-            "view-transition-group" => Ok(PseudoElement::ViewTransitionGroup(argument)),
-            "view-transition-image-pair" => Ok(PseudoElement::ViewTransitionImagePair(argument)),
-            "view-transition-old" => Ok(if argument == Atom::from("root") { PseudoElement::ViewTransitionOldRoot } else { PseudoElement::ViewTransitionOld(argument) }),
-            "view-transition-new" => Ok(if argument == Atom::from("root") { PseudoElement::ViewTransitionNewRoot } else { PseudoElement::ViewTransitionNew(argument) }),
-            _ => Err(parser.new_custom_error(SelectorParseErrorKind::UnsupportedPseudoClassOrElement(name)))
-        }
+        let kind = match_ignore_ascii_case! { &name,
+            "view-transition-group" => ViewTransitionPseudoKind::Group,
+            "view-transition-image-pair" => ViewTransitionPseudoKind::ImagePair,
+            "view-transition-old" => ViewTransitionPseudoKind::Old,
+            "view-transition-new" => ViewTransitionPseudoKind::New,
+            "highlight" => match (name_argument, classes.is_empty()) {
+                (Some(argument), true) => return Ok(PseudoElement::Highlight(argument)),
+                _ => return Err(parser.new_custom_error(SelectorParseErrorKind::UnsupportedPseudoClassOrElement(name))),
+            },
+            _ => return Err(parser.new_custom_error(SelectorParseErrorKind::UnsupportedPseudoClassOrElement(name)))
+        };
+        let argument = match name_argument {
+            Some(argument) if classes.is_empty() => argument,
+            name_argument => {
+                return Ok(PseudoElement::ViewTransitionSelector(Box::new(
+                    ViewTransitionSelector {
+                        kind,
+                        name: name_argument,
+                        classes: classes.into_boxed_slice(),
+                    },
+                )));
+            },
+        };
+        let root = argument == Atom::from("root");
+        Ok(match kind {
+            ViewTransitionPseudoKind::Group => PseudoElement::ViewTransitionGroup(argument),
+            ViewTransitionPseudoKind::ImagePair => PseudoElement::ViewTransitionImagePair(argument),
+            ViewTransitionPseudoKind::Old if root => PseudoElement::ViewTransitionOldRoot,
+            ViewTransitionPseudoKind::Old => PseudoElement::ViewTransitionOld(argument),
+            ViewTransitionPseudoKind::New if root => PseudoElement::ViewTransitionNewRoot,
+            ViewTransitionPseudoKind::New => PseudoElement::ViewTransitionNew(argument),
+        })
     }
 
     fn default_namespace(&self) -> Option<Namespace> {
