@@ -36,6 +36,7 @@ mod starting_style_rule;
 mod style_rule;
 mod stylesheet;
 pub mod supports_rule;
+mod view_transition_rule;
 pub mod when_rule;
 
 use crate::derives::*;
@@ -102,6 +103,9 @@ pub use self::stylesheet::{AllowImportRules, SanitizationData, SanitizationKind}
 pub use self::stylesheet::{DocumentStyleSheet, Namespaces, Stylesheet};
 pub use self::stylesheet::{StylesheetContents, StylesheetInDocument, UserAgentStylesheets};
 pub use self::supports_rule::SupportsRule;
+pub use self::view_transition_rule::{
+    parse_view_transition_body, ViewTransitionNavigation, ViewTransitionRule, ViewTransitionTypes,
+};
 pub use self::when_rule::{ChainConditions, ElseRule, WhenCondition, WhenRule};
 
 /// The CORS mode used for a CSS load.
@@ -373,6 +377,8 @@ pub enum CssRule {
     /// downstream `color(<dashed-ident> ...)` references and the
     /// `output-color-model: <dashed-ident>` value resolve against it.
     ColorProfile(Arc<ColorProfileRule>),
+    /// CSS View Transitions 2 §3 — `@view-transition { … }`.
+    ViewTransition(Arc<ViewTransitionRule>),
     /// moegoe Family 17 — `@region <selector> { … }` top-level rule
     /// (CSS Regions L1 §6.4). Declarations scope to elements matching
     /// the selector when they appear inside a region-chain descendant.
@@ -446,6 +452,9 @@ impl CssRule {
                 arc.unconditional_shallow_size_of(ops) + arc.size_of(guard, ops)
             },
             CssRule::ColorProfile(ref arc) => {
+                arc.unconditional_shallow_size_of(ops) + arc.size_of(guard, ops)
+            },
+            CssRule::ViewTransition(ref arc) => {
                 arc.unconditional_shallow_size_of(ops) + arc.size_of(guard, ops)
             },
             CssRule::Region(ref arc) => {
@@ -543,6 +552,8 @@ pub enum CssRuleRef<'a> {
     BdColour(&'a BdColourRule),
     /// CSS Color 5 §7 — `@color-profile --name { … }` reference.
     ColorProfile(&'a ColorProfileRule),
+    /// CSS View Transitions 2 §3 — `@view-transition { … }` reference.
+    ViewTransition(&'a ViewTransitionRule),
     /// moegoe Family 17 — `@region <selector> { … }` reference.
     Region(&'a RegionRule),
     Supports(&'a SupportsRule),
@@ -582,6 +593,7 @@ impl<'a> From<&'a CssRule> for CssRuleRef<'a> {
             CssRule::Sidenote(r) => CssRuleRef::Sidenote(r.as_ref()),
             CssRule::BdColour(r) => CssRuleRef::BdColour(r.as_ref()),
             CssRule::ColorProfile(r) => CssRuleRef::ColorProfile(r.as_ref()),
+            CssRule::ViewTransition(r) => CssRuleRef::ViewTransition(r.as_ref()),
             CssRule::Region(r) => CssRuleRef::Region(r.as_ref()),
             CssRule::Supports(r) => CssRuleRef::Supports(r.as_ref()),
             CssRule::When(r) => CssRuleRef::When(r.as_ref()),
@@ -672,6 +684,8 @@ pub enum CssRuleType {
     Function = 31,
     // https://drafts.csswg.org/css-mixins-1/#cssfunctiondeclarations
     FunctionDeclarations = 32,
+    // https://drafts.csswg.org/css-view-transitions-2/#cssviewtransitionrule
+    ViewTransition = 33,
 }
 
 impl CssRuleType {
@@ -761,6 +775,7 @@ impl CssRule {
             CssRule::Sidenote(_) => CssRuleType::Sidenote,
             CssRule::BdColour(_) => CssRuleType::BdColour,
             CssRule::ColorProfile(_) => CssRuleType::ColorProfile,
+            CssRule::ViewTransition(_) => CssRuleType::ViewTransition,
             CssRule::Region(_) => CssRuleType::Region,
             CssRule::Namespace(_) => CssRuleType::Namespace,
             CssRule::Supports(_) => CssRuleType::Supports,
@@ -914,6 +929,9 @@ impl DeepCloneWithLock for CssRule {
             CssRule::ColorProfile(ref arc) => {
                 CssRule::ColorProfile(Arc::new(arc.deep_clone_with_lock(lock, guard)))
             },
+            CssRule::ViewTransition(ref arc) => {
+                CssRule::ViewTransition(Arc::new(arc.deep_clone_with_lock(lock, guard)))
+            },
             CssRule::Region(ref arc) => {
                 CssRule::Region(Arc::new(arc.deep_clone_with_lock(lock, guard)))
             },
@@ -983,6 +1001,7 @@ impl ToCssWithGuard for CssRule {
             CssRule::Sidenote(ref rule) => rule.to_css(guard, dest),
             CssRule::BdColour(ref rule) => rule.to_css(guard, dest),
             CssRule::ColorProfile(ref rule) => rule.to_css(guard, dest),
+            CssRule::ViewTransition(ref rule) => rule.to_css(guard, dest),
             CssRule::Region(ref rule) => rule.to_css(guard, dest),
             CssRule::Media(ref rule) => rule.to_css(guard, dest),
             CssRule::CustomMedia(ref rule) => rule.to_css(guard, dest),

@@ -74,6 +74,7 @@ pub(super) fn location(rule: &CssRule, guard: &SharedRwLockReadGuard<'_>) -> Sou
         CssRule::Sidenote(rule) => rule.source_location,
         CssRule::BdColour(rule) => rule.source_location,
         CssRule::ColorProfile(rule) => rule.source_location,
+        CssRule::ViewTransition(rule) => rule.source_location,
         CssRule::Region(rule) => rule.source_location,
         CssRule::Supports(rule) => rule.source_location,
         CssRule::When(rule) => rule.source_location,

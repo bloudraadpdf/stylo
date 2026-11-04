@@ -309,6 +309,8 @@ pub enum AtRulePrelude {
     /// (CSS Color 5 §7). Carries the profile name; the body parser
     /// rejects rules without a mandatory `src:` descriptor.
     ColorProfile(crate::values::AtomIdent),
+    /// A `@view-transition` rule prelude.
+    ViewTransition,
     /// A top-level `@region <selector>` rule prelude (moegoe Family 17,
     /// CSS Regions L1 §6.4). Carries the parsed selector list so the
     /// declaration block can be associated with it in `parse_block`.
@@ -354,6 +356,7 @@ impl AtRulePrelude {
             Self::Sidenote(..) => "-bd-sidenote",
             Self::BdColour(..) => "-bd-colour",
             Self::ColorProfile(..) => "color-profile",
+            Self::ViewTransition => "view-transition",
             Self::Region(..) => "region",
             Self::Namespace(..) => "namespace",
             Self::Layer(..) => "layer",
@@ -611,6 +614,7 @@ impl<'a, 'i> NestedRuleParser<'a, 'i> {
             | AtRulePrelude::PositionTry(..)
             | AtRulePrelude::BdColour(..)
             | AtRulePrelude::ColorProfile(..)
+            | AtRulePrelude::ViewTransition
             | AtRulePrelude::Region(..) => !self.in_style_or_page_rule(),
             AtRulePrelude::Margin(..) | AtRulePrelude::Footnote | AtRulePrelude::Sidenote(..) => {
                 self.in_page_rule()
@@ -851,6 +855,11 @@ impl<'a, 'i> AtRuleParser<'i> for NestedRuleParser<'a, 'i> {
             "color-profile" => {
                 let name = crate::stylesheets::parse_color_profile_name(input)?;
                 AtRulePrelude::ColorProfile(name)
+            },
+            // CSS View Transitions 2 §3 — the prelude is empty.
+            "view-transition" => {
+                input.expect_exhausted()?;
+                AtRulePrelude::ViewTransition
             },
             // moegoe Family 17 — `@region <selector> { … }` (CSS
             // Regions L1 §6.4). The prelude is a standard CSS selector
@@ -1136,6 +1145,13 @@ impl<'a, 'i> AtRuleParser<'i> for NestedRuleParser<'a, 'i> {
                     Ok::<CssRule, ParseError<'i>>(CssRule::ColorProfile(Arc::new(rule)))
                 })?
             },
+            AtRulePrelude::ViewTransition => self.nest_for_rule(CssRuleType::ViewTransition, |p| {
+                CssRule::ViewTransition(Arc::new(crate::stylesheets::parse_view_transition_body(
+                    &p.context,
+                    input,
+                    source_location,
+                )))
+            }),
             AtRulePrelude::Region(selectors) => {
                 // moegoe Family 17 — `@region` body is a flat property
                 // declaration list (CSS Regions L1 §6.4). Parse the

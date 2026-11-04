@@ -142,6 +142,7 @@ cssom_rule_interface_names! {
     Function => "CSSFunctionRule",
     FunctionDeclarations => "CSSFunctionDeclarations",
     ColorProfile => "CSSColorProfileRule",
+    ViewTransition => "CSSViewTransitionRule",
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -191,6 +192,7 @@ impl CssomRuleInterfaceName {
             "starting-style" => Self::StartingStyle,
             "position-try" => Self::PositionTry,
             "color-profile" => Self::ColorProfile,
+            "view-transition" => Self::ViewTransition,
             "function" => Self::Function,
             _ => Self::CssRule,
         }
@@ -223,7 +225,8 @@ impl CssomRuleInterfaceName {
             | Self::PositionTry
             | Self::NestedDeclarations
             | Self::FunctionDeclarations
-            | Self::ColorProfile => CssomRuleInterfaceParent::CssRule,
+            | Self::ColorProfile
+            | Self::ViewTransition => CssomRuleInterfaceParent::CssRule,
         }
     }
 
@@ -254,7 +257,8 @@ impl CssomRuleInterfaceName {
             | Self::NestedDeclarations
             | Self::Function
             | Self::FunctionDeclarations
-            | Self::ColorProfile => None,
+            | Self::ColorProfile
+            | Self::ViewTransition => None,
         }
     }
 }
@@ -301,6 +305,7 @@ pub const fn cssom_rule_interface_name_for_grammar(
         RuleGrammar::Function => CssomRuleInterfaceName::Function,
         RuleGrammar::FunctionDeclarations => CssomRuleInterfaceName::FunctionDeclarations,
         RuleGrammar::ColorProfile => CssomRuleInterfaceName::ColorProfile,
+        RuleGrammar::ViewTransition => CssomRuleInterfaceName::ViewTransition,
         RuleGrammar::When
         | RuleGrammar::Else
         | RuleGrammar::Document
@@ -366,6 +371,10 @@ enum ParsedCssRuleKind {
     CustomMedia {
         name: String,
         query: stylo_cssom_model::RuleCustomMediaQuery,
+    },
+    ViewTransition {
+        navigation: String,
+        types: Vec<String>,
     },
     Style(CanonicalStyleRule),
     Keyframes(CanonicalKeyframesRule),
@@ -1173,6 +1182,18 @@ impl ParsedCssRule {
             CssRule::FunctionDeclarations(rule) => ParsedCssRuleKind::FunctionDeclarations(
                 canonical_function_declarations(&rule.descriptors),
             ),
+            CssRule::ViewTransition(rule) => ParsedCssRuleKind::ViewTransition {
+                navigation: rule
+                    .navigation
+                    .map(|value| value.to_css_string())
+                    .unwrap_or_default(),
+                types: rule
+                    .types
+                    .iter()
+                    .flat_map(style::stylesheets::ViewTransitionTypes::names)
+                    .map(|name| name.0.to_string())
+                    .collect(),
+            },
             _ => ParsedCssRuleKind::Other,
         };
         if let ParsedCssRuleKind::Page(page) = kind {
@@ -1252,6 +1273,16 @@ impl ParsedCssRule {
             ParsedCssRuleKind::CustomMedia { name, query } => RuleCssomData::CustomMedia {
                 name: name.as_str().into(),
                 query: query.clone(),
+            },
+            ParsedCssRuleKind::ViewTransition { navigation, types } => {
+                RuleCssomData::ViewTransition {
+                    navigation: navigation.as_str().into(),
+                    types: types
+                        .iter()
+                        .map(|name| name.as_str().into())
+                        .collect::<Vec<_>>()
+                        .into(),
+                }
             },
             ParsedCssRuleKind::FontFeatureValues(values) => RuleCssomData::FontFeatureValues {
                 values: values.clone(),
@@ -1389,6 +1420,7 @@ impl ParsedCssRule {
             | ParsedCssRuleKind::CounterStyle(_)
             | ParsedCssRuleKind::Property(_)
             | ParsedCssRuleKind::CustomMedia { .. }
+            | ParsedCssRuleKind::ViewTransition { .. }
             | ParsedCssRuleKind::Other => return None,
         };
         Some(self.declarations()?.rule_block(domain, &self.namespaces))
@@ -1444,6 +1476,7 @@ impl ParsedCssRule {
             | ParsedCssRuleKind::Scope(_)
             | ParsedCssRuleKind::Function(_)
             | ParsedCssRuleKind::CustomMedia { .. }
+            | ParsedCssRuleKind::ViewTransition { .. }
             | ParsedCssRuleKind::Other => None,
         }
     }
@@ -1777,6 +1810,7 @@ pub const fn stylo_rule_grammar(rule: &CssRule) -> stylo_cssom_model::RuleGramma
         CssRule::Sidenote(_) => RuleGrammar::Sidenote,
         CssRule::BdColour(_) => RuleGrammar::BdColour,
         CssRule::ColorProfile(_) => RuleGrammar::ColorProfile,
+        CssRule::ViewTransition(_) => RuleGrammar::ViewTransition,
         CssRule::Region(_) => RuleGrammar::Region,
         CssRule::Supports(_) => RuleGrammar::Supports,
         CssRule::When(_) => RuleGrammar::When,
@@ -2238,6 +2272,7 @@ pub fn replace_rule_selector_in_context(
         | RuleCssomData::CounterStyle { .. }
         | RuleCssomData::Property { .. }
         | RuleCssomData::PositionTry { .. }
+        | RuleCssomData::ViewTransition { .. }
         | RuleCssomData::Function { .. }
         | RuleCssomData::Margin { .. }
         | RuleCssomData::LayerBlock { .. }
@@ -2451,6 +2486,7 @@ fn interface_name_for_rule(rule: &CssRule) -> CssomRuleInterfaceName {
         CssRule::Function(_) => CssomRuleInterfaceName::Function,
         CssRule::FunctionDeclarations(_) => CssomRuleInterfaceName::FunctionDeclarations,
         CssRule::ColorProfile(_) => CssomRuleInterfaceName::ColorProfile,
+        CssRule::ViewTransition(_) => CssomRuleInterfaceName::ViewTransition,
         _ => CssomRuleInterfaceName::CssRule,
     }
 }
@@ -4828,6 +4864,7 @@ mod tests {
             CssRule::Sidenote(_) => "Sidenote",
             CssRule::BdColour(_) => "BdColour",
             CssRule::ColorProfile(_) => "ColorProfile",
+            CssRule::ViewTransition(_) => "ViewTransition",
             CssRule::Region(_) => "Region",
             CssRule::Supports(_) => "Supports",
             CssRule::When(_) => "When",
@@ -4862,6 +4899,72 @@ mod tests {
             std::mem::size_of_val(&probe),
             std::mem::size_of::<fn(&PropertyDeclaration) -> PropertyDeclaration>()
         );
+    }
+
+    #[test]
+    fn view_transition_rules_keep_only_valid_descriptors() {
+        use stylo_cssom_model::RuleCssomData;
+
+        for (css, navigation, types, serialization) in [
+            ("@view-transition {}", "", &[][..], "@view-transition { }"),
+            (
+                "@view-transition { navigation: AUTO }",
+                "auto",
+                &[],
+                "@view-transition { navigation: auto; }",
+            ),
+            (
+                "@view-transition { navigation: none !important }",
+                "",
+                &[],
+                "@view-transition { }",
+            ),
+            (
+                "@view-transition { types: nOnE }",
+                "",
+                &[],
+                "@view-transition { types: none; }",
+            ),
+            (
+                "@view-transition { types: abc -uA-x abc }",
+                "",
+                &["abc", "-uA-x", "abc"],
+                "@view-transition { types: abc -uA-x abc; }",
+            ),
+            (
+                "@view-transition { types: abc -ua-x }",
+                "",
+                &[],
+                "@view-transition { }",
+            ),
+            (
+                "@view-transition { types: dEfAuLt }",
+                "",
+                &[],
+                "@view-transition { }",
+            ),
+        ] {
+            let rule = ParsedCssRule::parse(css).expect(css);
+            assert_eq!(
+                rule.interface_name(),
+                CssomRuleInterfaceName::ViewTransition
+            );
+            let Some(RuleCssomData::ViewTransition {
+                navigation: parsed_navigation,
+                types: parsed_types,
+            }) = rule.rule_cssom_data()
+            else {
+                panic!("{css}");
+            };
+            assert_eq!(&*parsed_navigation, navigation, "{css}");
+            assert_eq!(
+                parsed_types.iter().map(|name| &**name).collect::<Vec<_>>(),
+                types,
+                "{css}"
+            );
+            assert_eq!(rule.serialization, serialization, "{css}");
+        }
+        assert!(ParsedCssRule::parse("@view-transition foo {}").is_none());
     }
 
     #[test]
@@ -4920,6 +5023,11 @@ mod tests {
                 Parent::CssRule,
             ),
             (Name::ColorProfile, "CSSColorProfileRule", Parent::CssRule),
+            (
+                Name::ViewTransition,
+                "CSSViewTransitionRule",
+                Parent::CssRule,
+            ),
         ];
 
         assert_eq!(CssomRuleInterfaceName::ALL.len(), expected.len());

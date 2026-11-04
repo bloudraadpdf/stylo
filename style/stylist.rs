@@ -4575,6 +4575,7 @@ impl CascadeData {
                 | CssRule::Sidenote(..)
                 | CssRule::BdColour(..)
                 | CssRule::ColorProfile(..)
+                | CssRule::ViewTransition(..)
                 | CssRule::Region(..)
                 | CssRule::Page(..)
                 | CssRule::Property(..)

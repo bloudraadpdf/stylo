@@ -246,6 +246,7 @@ pub enum RuleGrammar {
     Function,
     FunctionDeclarations,
     ColorProfile,
+    ViewTransition,
     When,
     Else,
     Document,
@@ -551,6 +552,10 @@ pub enum RuleCssomData {
     PositionTry {
         name: Arc<str>,
     },
+    ViewTransition {
+        navigation: Arc<str>,
+        types: Arc<[Arc<str>]>,
+    },
     Function {
         name: Arc<str>,
         parameters: Arc<[RuleFunctionParameter]>,
@@ -597,6 +602,7 @@ impl RuleCssomData {
             Self::CounterStyle { .. } => RuleGrammar::CounterStyle,
             Self::Property { .. } => RuleGrammar::Property,
             Self::PositionTry { .. } => RuleGrammar::PositionTry,
+            Self::ViewTransition { .. } => RuleGrammar::ViewTransition,
             Self::Function { .. } => RuleGrammar::Function,
             Self::Margin { .. } => RuleGrammar::Margin,
             Self::Page { .. } => RuleGrammar::Page,
@@ -1238,7 +1244,8 @@ rule_nodes! {
     LayerStatement => LayerStatement, Scope => Scope, StartingStyle => StartingStyle,
     PositionTry => PositionTry, NestedDeclarations => NestedDeclarations,
     Function => Function, FunctionDeclarations => FunctionDeclarations,
-    ColorProfile => ColorProfile, When => When, Else => Else, Document => Document,
+    ColorProfile => ColorProfile, ViewTransition => ViewTransition, When => When, Else => Else,
+    Document => Document,
     CustomMedia => CustomMedia, Region => Region, Footnote => Footnote,
     Sidenote => Sidenote, BdColour => BdColour, Unknown => Unknown,
 }
@@ -1302,6 +1309,7 @@ impl RuleNode {
             RuleGrammar::Function => Self::Function(payload),
             RuleGrammar::FunctionDeclarations => Self::FunctionDeclarations(payload),
             RuleGrammar::ColorProfile => Self::ColorProfile(payload),
+            RuleGrammar::ViewTransition => Self::ViewTransition(payload),
             RuleGrammar::When => Self::When(payload),
             RuleGrammar::Else => Self::Else(payload),
             RuleGrammar::Document => Self::Document(payload),
@@ -1935,6 +1943,7 @@ const fn grammar_name(grammar: RuleGrammar) -> &'static str {
         RuleGrammar::PositionTry => "position-try",
         RuleGrammar::Function => "function",
         RuleGrammar::ColorProfile => "color-profile",
+        RuleGrammar::ViewTransition => "view-transition",
         RuleGrammar::When => "when",
         RuleGrammar::Else => "else",
         RuleGrammar::Document => "document",

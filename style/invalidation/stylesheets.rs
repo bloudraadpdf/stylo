@@ -653,7 +653,7 @@ impl StylesheetInvalidationSet {
                 // We'll restyle when the font face loads, if needed.
             },
             Page(..) | Margin(..) | Footnote(..) | Sidenote(..) | BdColour(..)
-            | ColorProfile(..) | Region(..) => {
+            | ColorProfile(..) | ViewTransition(..) | Region(..) => {
                 // Do nothing, we don't support OM mutations on print documents, and page rules
                 // can't affect anything else. moegoe Family 17 `@region` is enumerated by the
                 // moegoe-css cascade reader, not by the standard invalidation path. CSS Color 5
