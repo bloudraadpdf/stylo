@@ -74,7 +74,7 @@ pub enum TimingKeyword {
 /// Before flag, defined as per https://drafts.csswg.org/css-easing/#before-flag
 /// This flag is never user-specified.
 #[allow(missing_docs)]
-#[derive(PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 #[repr(u8)]
 pub enum BeforeFlag {
     Unset,

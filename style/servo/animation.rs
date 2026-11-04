@@ -102,20 +102,15 @@ impl PropertyAnimation {
     }
 
     /// The output of the timing function given the progress ration of this animation.
-    fn timing_function_output(&self, progress: f64) -> f64 {
+    fn timing_function_output(&self, progress: f64, before_flag: BeforeFlag) -> f64 {
         let epsilon = 1. / (200. * self.duration);
-        // FIXME: Need to set the before flag correctly.
-        // In order to get the before flag, we have to know the current animation phase
-        // and whether the iteration is reversed. For now, we skip this calculation
-        // by treating as if the flag is unset at all times.
-        // https://drafts.csswg.org/css-easing/#step-timing-function-algo
         self.timing_function
-            .calculate_output(progress, BeforeFlag::Unset, epsilon)
+            .calculate_output(progress, before_flag, epsilon)
     }
 
     /// Update the given animation at a given point of progress.
-    fn calculate_value(&self, progress: f64) -> AnimationValue {
-        let progress = self.timing_function_output(progress);
+    fn calculate_value(&self, progress: f64, before_flag: BeforeFlag) -> AnimationValue {
+        let progress = self.timing_function_output(progress, before_flag);
         let procedure = Procedure::Interpolate { progress };
         self.animate(&self.from, &self.to, procedure).unwrap_or_else(|()| {
             // Fall back to discrete interpolation
@@ -585,7 +580,16 @@ impl Animation {
         mut start_percentages: impl Iterator<Item = f32>,
         directed_progress: f64,
     ) -> (usize, Option<usize>) {
-        let to = start_percentages.position(|start| directed_progress as f32 <= start);
+        // Web Animations 1 section 5.3.1: below 1, the interval starts at the last keyframe whose offset
+        // does not exceed the progress; from 1 on, it is the interval that ends at offset 1.
+        let progress = directed_progress as f32;
+        let to = start_percentages.position(|start| {
+            if progress >= 1. {
+                start >= 1.
+            } else {
+                progress < start
+            }
+        });
         (to.and_then(|index| index.checked_sub(1)).unwrap_or(0), to)
     }
 
@@ -780,13 +784,15 @@ impl Animation {
             AnimationState::Canceled => return,
         };
 
-        if total_progress < 0.
+        let before_phase = total_progress < 0.;
+        if before_phase
             && self.fill_mode != AnimationFillMode::Backwards
             && self.fill_mode != AnimationFillMode::Both
         {
             return;
         }
-        if self.has_ended(now)
+        let after_phase = self.has_ended(now);
+        if after_phase
             && self.fill_mode != AnimationFillMode::Forwards
             && self.fill_mode != AnimationFillMode::Both
         {
@@ -832,15 +838,18 @@ impl Animation {
                 map.insert(value.id().to_owned(), value.clone());
             }
         };
-        if directed_progress <= 0.0 {
-            add_declarations_to_map(&prev_keyframe);
-            return;
-        }
         if directed_progress >= 1.0 {
             add_declarations_to_map(&next_keyframe);
             return;
         }
 
+        // Web Animations 1 section 4.10: the before flag is set before the active interval when going
+        // forwards, and after it when going backwards.
+        let before_flag = match self.current_direction {
+            AnimationDirection::Normal if before_phase => BeforeFlag::Set,
+            AnimationDirection::Reverse if after_phase => BeforeFlag::Set,
+            _ => BeforeFlag::Unset,
+        };
         let percentage_between_keyframes =
             (next_keyframe.start_percentage - prev_keyframe.start_percentage).abs() as f64;
         let duration_between_keyframes = percentage_between_keyframes * self.duration;
@@ -859,7 +868,7 @@ impl Animation {
                 interpolate_size: self.interpolate_size(),
             };
 
-            let value = animation.calculate_value(progress_between_keyframes);
+            let value = animation.calculate_value(progress_between_keyframes, before_flag);
             map.insert(value.id().to_owned(), value);
         }
     }
@@ -982,11 +991,12 @@ impl Transition {
         //      time of the style change event, times the reversing shortening
         //      factor of the old transition
         //    2.  1 minus the reversing shortening factor of the old transition."
-        let transition_progress = ((now - replaced_transition.start_time)
-            / (replaced_transition.property_animation.duration))
-            .min(1.0)
-            .max(0.0);
-        let timing_function_output = replaced_animation.timing_function_output(transition_progress);
+        let elapsed_progress = (now - replaced_transition.start_time)
+            / (replaced_transition.property_animation.duration);
+        let timing_function_output = replaced_animation.timing_function_output(
+            elapsed_progress.clamp(0.0, 1.0),
+            Transition::before_flag(elapsed_progress),
+        );
         let old_reversing_shortening_factor = replaced_transition.reversing_shortening_factor;
         self.reversing_shortening_factor = ((timing_function_output
             * old_reversing_shortening_factor)
@@ -1032,7 +1042,17 @@ impl Transition {
     pub fn calculate_value(&self, time: f64) -> AnimationValue {
         let progress = (time - self.start_time) / (self.property_animation.duration);
         self.property_animation
-            .calculate_value(progress.clamp(0.0, 1.0))
+            .calculate_value(progress.clamp(0.0, 1.0), Self::before_flag(progress))
+    }
+
+    /// A transition always runs forwards, so its before flag is set before its active interval (Web Animations 1
+    /// section 4.10).
+    fn before_flag(progress: f64) -> BeforeFlag {
+        if progress < 0. {
+            BeforeFlag::Set
+        } else {
+            BeforeFlag::Unset
+        }
     }
 }
 
@@ -2160,15 +2180,35 @@ mod tests {
 
     #[test]
     fn brackets_a_progress_sitting_on_a_keyframe() {
-        // The offset a progress lands exactly on is the one it is heading
-        // towards, so the interval that closes there is the one still in play.
-        assert_eq!(bracketing(0.5), (0, Some(1)));
+        // Web Animations 1 section 5.3.1: the interval starts at the keyframe the progress lands on.
+        assert_eq!(bracketing(0.5), (1, Some(2)));
     }
 
     #[test]
     fn brackets_the_ends_of_the_animation() {
-        // Nothing precedes the first keyframe, and nothing follows the last.
-        assert_eq!(bracketing(0.), (0, Some(0)));
+        assert_eq!(bracketing(0.), (0, Some(1)));
         assert_eq!(bracketing(1.), (1, Some(2)));
+    }
+
+    #[test]
+    fn a_step_easing_applies_at_the_start_of_its_interval() {
+        use crate::values::computed::easing::ComputedTimingFunction;
+        use crate::values::generics::easing::{BeforeFlag, StepPosition};
+
+        let animation = super::PropertyAnimation {
+            from: AnimationValue::Opacity(1.),
+            to: AnimationValue::Opacity(0.5),
+            timing_function: ComputedTimingFunction::Steps(1, StepPosition::JumpStart),
+            duration: 1.,
+            interpolate_size: InterpolateSize::NumericOnly,
+        };
+        assert_eq!(
+            animation.calculate_value(0., BeforeFlag::Unset),
+            AnimationValue::Opacity(0.5)
+        );
+        assert_eq!(
+            animation.calculate_value(0., BeforeFlag::Set),
+            AnimationValue::Opacity(1.)
+        );
     }
 }
