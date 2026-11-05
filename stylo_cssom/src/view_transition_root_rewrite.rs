@@ -128,6 +128,8 @@ impl StyleRuleExpansion {
 }
 
 pub fn expand_style_rule(prelude: &str, body: &str) -> StyleRuleExpansion {
+    // A comment in a selector list is not part of a selector: a projected selector must not keep it as a prefix.
+    let prelude = &*crate::css_scan::strip_comments(prelude);
     let mut source_selectors = vec![prelude.to_owned()];
     if let Some(selectors) = ordinary_selectors_from_mixed_view_transition_list(prelude) {
         source_selectors.push(selectors);
@@ -1558,4 +1560,17 @@ mod tests {
             "{visibility:hidden;}"
         )));
     }
+    #[test]
+    fn a_commented_selector_list_projects_onto_the_group_carrier() {
+        let expansion = super::expand_style_rule(
+            "/* view transition pseudos */ ::view-transition-group(*)",
+            "animation:unset",
+        );
+        let generated = expansion.generated;
+
+        assert!(!generated.contains("/*"));
+        assert!(generated.contains(super::GROUP_ANIMATION_CARRIER_ELEMENT));
+        assert!(!generated.contains(&format!(">{}", super::GROUP_ANIMATION_CARRIER_ELEMENT)));
+    }
+
 }
