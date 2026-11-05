@@ -2761,6 +2761,7 @@ mod tests {
             PropertyDeclaration::InterpolateSize(value) => {
                 PropertyDeclaration::InterpolateSize(*value)
             },
+            PropertyDeclaration::Interactivity(value) => PropertyDeclaration::Interactivity(*value),
             PropertyDeclaration::BackfaceVisibility(value) => {
                 PropertyDeclaration::BackfaceVisibility(*value)
             },

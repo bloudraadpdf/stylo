@@ -5455,6 +5455,13 @@ animation_type = "none"
 affects = ""
 keyword = { values = ["numeric-only", "allow-keywords"] }
 
+[interactivity]
+struct = "inherited_ui"
+spec = "https://drafts.csswg.org/css-ui-4/#propdef-interactivity"
+animation_type = "discrete"
+affects = ""
+keyword = { values = ["auto", "inert"] }
+
 [quotes]
 type = "Quotes"
 initial = "computed::Quotes::get_initial_value()"
