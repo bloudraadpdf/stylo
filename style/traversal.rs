@@ -273,6 +273,7 @@ pub trait DomTraversal<E: TElement>: Sync {
 /// first styled Element, ignoring pending restyles. The resolved style is made
 /// available via a callback, and can be dropped by the time this function
 /// returns in the display:none subtree case.
+#[allow(unsafe_code)]
 pub fn resolve_style<E>(
     context: &mut StyleContext<E>,
     element: E,
@@ -337,6 +338,9 @@ where
             ancestor.and_then(|a| a.borrow_data().map(|data| data.styles.primary().clone()));
     }
 
+    // Container queries of the elements below find these ancestors through their data, so
+    // the resolved styles stay in that data until the resolution ends.
+    let mut styled_ancestors = SmallVec::<[(E, bool); 16]>::new();
     for ancestor in ancestors_requiring_style_resolution.iter().rev() {
         context.thread_local.bloom_filter.assert_complete(*ancestor);
 
@@ -364,6 +368,11 @@ where
         if let Some(ref mut cache) = undisplayed_style_cache {
             cache.insert(ancestor.opaque(), style.clone().unwrap());
         }
+        if rule_inclusion == RuleInclusion::All {
+            let had_data = ancestor.has_data();
+            unsafe { ancestor.ensure_data() }.styles.primary = style.clone();
+            styled_ancestors.push((*ancestor, had_data));
+        }
         context.thread_local.bloom_filter.push(*ancestor);
     }
 
@@ -376,6 +385,14 @@ where
     )
     .resolve_style(style.as_deref(), layout_parent_style.as_deref())
     .into();
+
+    for (ancestor, had_data) in styled_ancestors {
+        if had_data {
+            unsafe { ancestor.ensure_data() }.styles.primary = None;
+        } else {
+            unsafe { ancestor.clear_data() };
+        }
+    }
 
     if let Some(ref mut cache) = undisplayed_style_cache {
         cache.insert(element.opaque(), styles.primary().clone());
