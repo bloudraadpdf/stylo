@@ -979,6 +979,7 @@ fn project_declarations(
     properties: &[&str],
     replacement: Option<&str>,
 ) -> Option<String> {
+    let body = crate::css_scan::strip_comments(body);
     let mut output = String::new();
     for range in split_top_level(body.as_bytes(), b';') {
         let declaration = &body[range];
@@ -1249,6 +1250,10 @@ mod tests {
         ));
 
         assert!(rewritten.contains("--moegoe-view-transition-group-clip-path:inset(1px 2px)"));
+        assert!(rewrite_view_transition_root(
+            "html::view-transition-group(card){/* a comment */clip-path:inset(1px)}"
+        )
+        .contains("--moegoe-view-transition-group-clip-path:inset(1px)"));
         assert!(rewritten.contains("--moegoe-view-transition-image-pair-clip-path:inset(3px)"));
     }
 

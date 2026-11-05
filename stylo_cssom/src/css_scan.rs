@@ -238,6 +238,30 @@ pub fn find_matching_delimiter(
     None
 }
 
+/// `css` without its comments; strings keep their content.
+pub fn strip_comments(css: &str) -> std::borrow::Cow<'_, str> {
+    let bytes = css.as_bytes();
+    if !css.contains("/*") {
+        return std::borrow::Cow::Borrowed(css);
+    }
+    let mut output = String::with_capacity(css.len());
+    let mut start = 0;
+    let mut cursor = 0;
+    while cursor < bytes.len() {
+        match skip_string_or_comment(bytes, cursor) {
+            Some(after) if bytes[cursor] == b'/' => {
+                output.push_str(&css[start..cursor]);
+                start = after;
+                cursor = after;
+            },
+            Some(after) => cursor = after,
+            None => cursor += 1,
+        }
+    }
+    output.push_str(&css[start..]);
+    std::borrow::Cow::Owned(output)
+}
+
 pub fn split_top_level(bytes: &[u8], delimiter: u8) -> Vec<std::ops::Range<usize>> {
     let mut ranges = Vec::new();
     let mut start = 0;
