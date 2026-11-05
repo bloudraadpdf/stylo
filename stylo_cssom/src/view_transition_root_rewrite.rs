@@ -861,15 +861,26 @@ fn project_animation_carrier_declarations(body: &str) -> Option<String> {
     )
 }
 
+/// The inset declarations of a group rule, physical and logical, as written: the carrier, which is not positioned,
+/// resolves them to its computed physical insets.
 fn project_group_positioned_inset_declarations(body: &str) -> Option<String> {
-    let mut output = String::new();
-    for property in ["top", "right", "bottom", "left"] {
-        let replacement = format!("{INTERNAL_GROUP_PLACEMENT_PREFIX}{property}");
-        if let Some(declaration) = project_declarations(body, &[property], Some(&replacement)) {
-            output.push_str(&declaration);
-        }
-    }
-    (!output.is_empty()).then_some(output)
+    project_declarations(
+        body,
+        &[
+            "inset",
+            "inset-block",
+            "inset-block-start",
+            "inset-block-end",
+            "inset-inline",
+            "inset-inline-start",
+            "inset-inline-end",
+            "top",
+            "right",
+            "bottom",
+            "left",
+        ],
+        None,
+    )
 }
 
 fn project_group_authored_transform_marker(body: &str) -> Option<String> {
@@ -1274,6 +1285,15 @@ mod tests {
         assert!(rewritten.contains(&format!(
             ":root>{TRANSITION_STYLE_ELEMENT}{{animation:fade 1s;}}"
         )));
+    }
+
+    #[test]
+    fn projects_logical_and_physical_group_insets_to_the_carrier() {
+        let rewritten = rewrite_view_transition_root(
+            "html::view-transition-group(card){inset-block-start:0;left:5px;color:red}",
+        );
+
+        assert!(rewritten.contains("{inset-block-start:0;left:5px;}"), "{rewritten}");
     }
 
     #[test]
