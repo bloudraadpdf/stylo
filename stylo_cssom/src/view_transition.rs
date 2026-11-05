@@ -50,7 +50,7 @@ impl ComputedViewTransitionGroup {
                 let mut parser = Parser::new(&mut input);
                 parser
                     .parse_entirely(|input| {
-                        CustomIdent::parse(input, &["normal", "contain", "nearest", "none"]).map(
+                        CustomIdent::parse(input, &["normal", "contain", "nearest"]).map(
                             |name| {
                                 Self::Named(ViewTransitionNameIdentity(name.0.as_ref().to_owned()))
                             },
@@ -213,4 +213,23 @@ fn contains_auto_navigation(parser: &mut Parser<'_, '_>) -> bool {
         }
     }
     found
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ComputedViewTransitionGroup, ViewTransitionNameIdentity};
+
+    #[test]
+    fn parses_none_as_a_group_name() {
+        assert_eq!(
+            ComputedViewTransitionGroup::parse("none"),
+            Some(ComputedViewTransitionGroup::Named(ViewTransitionNameIdentity(
+                "none".to_owned()
+            )))
+        );
+        assert_eq!(
+            ComputedViewTransitionGroup::parse("contain"),
+            Some(ComputedViewTransitionGroup::Contain)
+        );
+    }
 }
