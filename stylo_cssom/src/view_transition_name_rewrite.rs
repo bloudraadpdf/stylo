@@ -6,8 +6,10 @@ use crate::css_scan::{hex_encode, rewrite_style_rules, split_top_level};
 
 pub const INTERNAL_NAME_PROPERTY: &str = "--moegoe-view-transition-name";
 pub const INTERNAL_SCOPE_PROPERTY: &str = "--moegoe-view-transition-name-scope";
+pub const INTERNAL_CLASS_SCOPE_PROPERTY: &str = "--moegoe-view-transition-class-scope";
 
 const AUTHORED_PROPERTY: &str = "view-transition-name";
+const AUTHORED_CLASS_PROPERTY: &str = "view-transition-class";
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ViewTransitionNameTreeScope(String);
 
@@ -65,18 +67,20 @@ fn mirror_name_declarations(body: &str, scope: &ViewTransitionNameTreeScope) -> 
         let Some(colon) = declaration.find(':') else {
             continue;
         };
-        if !declaration[..colon]
-            .trim()
-            .eq_ignore_ascii_case(AUTHORED_PROPERTY)
-        {
-            continue;
-        }
+        let property = declaration[..colon].trim();
         let value = &declaration[colon + 1..];
-        output.push_str(INTERNAL_NAME_PROPERTY);
-        output.push(':');
-        output.push_str(value);
-        output.push(';');
-        output.push_str(INTERNAL_SCOPE_PROPERTY);
+        let scope_property = if property.eq_ignore_ascii_case(AUTHORED_PROPERTY) {
+            output.push_str(INTERNAL_NAME_PROPERTY);
+            output.push(':');
+            output.push_str(value);
+            output.push(';');
+            INTERNAL_SCOPE_PROPERTY
+        } else if property.eq_ignore_ascii_case(AUTHORED_CLASS_PROPERTY) {
+            INTERNAL_CLASS_SCOPE_PROPERTY
+        } else {
+            continue;
+        };
+        output.push_str(scope_property);
         output.push(':');
         output.push_str(scope.as_css());
         if declaration_is_important(value) {
@@ -95,6 +99,10 @@ pub fn rewrite_view_transition_names<'a>(
         .as_bytes()
         .windows(AUTHORED_PROPERTY.len())
         .any(|window| window.eq_ignore_ascii_case(AUTHORED_PROPERTY.as_bytes()))
+        && !css
+            .as_bytes()
+            .windows(AUTHORED_CLASS_PROPERTY.len())
+            .any(|window| window.eq_ignore_ascii_case(AUTHORED_CLASS_PROPERTY.as_bytes()))
     {
         return Cow::Borrowed(css);
     }
@@ -113,22 +121,26 @@ pub fn mirror_inline_view_transition_names(
     declarations
         .into_iter()
         .flat_map(|declaration| {
-            let mirrored = declaration.matches_name(AUTHORED_PROPERTY).then(|| {
-                let important = declaration.important();
-                [
+            let important = declaration.important();
+            let scope_declaration = |property| {
+                stylo_cssom_model::RuleDeclaration::new(property, scope.as_css())
+                    .with_importance(important)
+            };
+            let mirrored = if declaration.matches_name(AUTHORED_PROPERTY) {
+                vec![
                     stylo_cssom_model::RuleDeclaration::new(
                         INTERNAL_NAME_PROPERTY,
                         declaration.value(),
                     )
                     .with_importance(important),
-                    stylo_cssom_model::RuleDeclaration::new(
-                        INTERNAL_SCOPE_PROPERTY,
-                        scope.as_css(),
-                    )
-                    .with_importance(important),
+                    scope_declaration(INTERNAL_SCOPE_PROPERTY),
                 ]
-            });
-            std::iter::once(declaration).chain(mirrored.into_iter().flatten())
+            } else if declaration.matches_name(AUTHORED_CLASS_PROPERTY) {
+                vec![scope_declaration(INTERNAL_CLASS_SCOPE_PROPERTY)]
+            } else {
+                Vec::new()
+            };
+            std::iter::once(declaration).chain(mirrored)
         })
         .collect()
 }
@@ -167,5 +179,32 @@ mod tests {
                 "--moegoe-view-transition-name-scope:document:true",
             ]
         );
+    }
+
+    #[test]
+    fn classes_record_their_declaration_tree_scope() {
+        let shadow = ViewTransitionNameTreeScope::shadow("host");
+        let mirrored = mirror_inline_view_transition_names(
+            vec![stylo_cssom_model::RuleDeclaration::new(
+                AUTHORED_CLASS_PROPERTY,
+                "red",
+            )],
+            &shadow,
+        )
+        .iter()
+        .map(|declaration| format!("{}:{}", declaration.name(), declaration.value()))
+        .collect::<Vec<_>>();
+        assert_eq!(
+            mirrored,
+            [
+                "view-transition-class:red".to_owned(),
+                format!("--moegoe-view-transition-class-scope:{}", shadow.as_css()),
+            ]
+        );
+        let rewritten = rewrite_view_transition_names("div{view-transition-class:red}", &shadow);
+        assert!(rewritten.contains(&format!(
+            "--moegoe-view-transition-class-scope:{}",
+            shadow.as_css()
+        )));
     }
 }
