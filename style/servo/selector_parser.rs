@@ -454,6 +454,12 @@ impl PseudoElement {
         *self == PseudoElement::Marker
     }
 
+    /// Whether this pseudo-element is the ::scroll-marker-group pseudo.
+    #[inline]
+    pub fn is_scroll_marker_group(&self) -> bool {
+        *self == PseudoElement::ScrollMarkerGroup
+    }
+
     /// Whether this pseudo-element is the ::selection pseudo.
     #[inline]
     pub fn is_selection(&self) -> bool {

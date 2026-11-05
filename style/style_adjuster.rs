@@ -341,6 +341,9 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
                     .is_page_or_footnote_float()
         );
         blockify_if!(self.style.is_absolutely_positioned());
+        // As in Chromium, so that the layout and size containment of the group apply (CSSWG #11708, #11166).
+        #[cfg(feature = "servo")]
+        blockify_if!(self.style.pseudo.is_some_and(|pseudo| pseudo.is_scroll_marker_group()));
 
         if !blockify {
             return;
