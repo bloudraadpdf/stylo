@@ -66,6 +66,7 @@ pub enum ScrollButtonDirection {
 #[allow(missing_docs)]
 pub enum ViewTransitionPseudoKind {
     Group,
+    GroupChildren,
     ImagePair,
     Old,
     New,
@@ -357,37 +358,38 @@ impl PseudoElement {
                 ViewTransitionPseudoKind::ImagePair => 12,
                 ViewTransitionPseudoKind::Old => 13,
                 ViewTransitionPseudoKind::New => 14,
+                ViewTransitionPseudoKind::GroupChildren => 15,
             },
             Self::ViewTransitionGroup(_) => 11,
             Self::ViewTransitionImagePair(_) => 12,
             Self::ViewTransitionOld(_) | Self::ViewTransitionOldRoot => 13,
             Self::ViewTransitionNew(_) | Self::ViewTransitionNewRoot => 14,
-            Self::DetailsSummary => 15,
-            Self::DetailsContent => 16,
-            Self::Marker => 17,
-            Self::ScrollMarkerGroup => 18,
-            Self::ScrollMarker => 19,
-            Self::ScrollButton(_) => 20,
-            Self::FootnoteCall => 21,
-            Self::FootnoteMarker => 22,
-            Self::BdBeforeBreak => 23,
-            Self::BdAfterBreak => 24,
-            Self::BdFootnoteArea => 25,
-            Self::BdSidenoteCall => 26,
-            Self::BdSidenoteMarker => 27,
-            Self::ColorSwatch => 28,
-            Self::Placeholder => 29,
-            Self::FileSelectorButton => 30,
-            Self::Checkmark => 31,
-            Self::PickerSelect => 32,
-            Self::ServoTextControlInnerContainer => 33,
-            Self::ServoTextControlInnerEditor => 34,
-            Self::ServoAnonymousBox => 35,
-            Self::ServoAnonymousTable => 36,
-            Self::ServoAnonymousTableCell => 37,
-            Self::ServoAnonymousTableRow => 38,
-            Self::ServoTableGrid => 39,
-            Self::ServoTableWrapper => 40,
+            Self::DetailsSummary => 16,
+            Self::DetailsContent => 17,
+            Self::Marker => 18,
+            Self::ScrollMarkerGroup => 19,
+            Self::ScrollMarker => 20,
+            Self::ScrollButton(_) => 21,
+            Self::FootnoteCall => 22,
+            Self::FootnoteMarker => 23,
+            Self::BdBeforeBreak => 24,
+            Self::BdAfterBreak => 25,
+            Self::BdFootnoteArea => 26,
+            Self::BdSidenoteCall => 27,
+            Self::BdSidenoteMarker => 28,
+            Self::ColorSwatch => 29,
+            Self::Placeholder => 30,
+            Self::FileSelectorButton => 31,
+            Self::Checkmark => 32,
+            Self::PickerSelect => 33,
+            Self::ServoTextControlInnerContainer => 34,
+            Self::ServoTextControlInnerEditor => 35,
+            Self::ServoAnonymousBox => 36,
+            Self::ServoAnonymousTable => 37,
+            Self::ServoAnonymousTableCell => 38,
+            Self::ServoAnonymousTableRow => 39,
+            Self::ServoTableGrid => 40,
+            Self::ServoTableWrapper => 41,
         }
     }
 
@@ -1174,7 +1176,15 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
         } else {
             &["none", "match-element"][..]
         };
-        let name_argument = if parser.try_parse(|parser| parser.expect_delim('*')).is_ok() {
+        let class_selector_alone = {
+            let state = parser.state();
+            let dot = matches!(parser.next_including_whitespace(), Ok(&Token::Delim('.')));
+            parser.reset(&state);
+            dot
+        };
+        let name_argument = if class_selector_alone
+            || parser.try_parse(|parser| parser.expect_delim('*')).is_ok()
+        {
             None
         } else {
             Some(crate::values::CustomIdent::parse(parser, excluded)?.0)
@@ -1204,6 +1214,7 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
         }
         let kind = match_ignore_ascii_case! { &name,
             "view-transition-group" => ViewTransitionPseudoKind::Group,
+            "view-transition-group-children" if classes.is_empty() => ViewTransitionPseudoKind::GroupChildren,
             "view-transition-image-pair" => ViewTransitionPseudoKind::ImagePair,
             "view-transition-old" => ViewTransitionPseudoKind::Old,
             "view-transition-new" => ViewTransitionPseudoKind::New,
@@ -1233,6 +1244,13 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             ViewTransitionPseudoKind::Old => PseudoElement::ViewTransitionOld(argument),
             ViewTransitionPseudoKind::New if root => PseudoElement::ViewTransitionNewRoot,
             ViewTransitionPseudoKind::New => PseudoElement::ViewTransitionNew(argument),
+            ViewTransitionPseudoKind::GroupChildren => {
+                PseudoElement::ViewTransitionSelector(Box::new(ViewTransitionSelector {
+                    kind,
+                    name: Some(argument),
+                    classes: Box::new([]),
+                }))
+            },
         })
     }
 
