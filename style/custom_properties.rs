@@ -2935,12 +2935,21 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
             return Err(());
         };
 
+        // Skip the closing parenthesis of the reference value, and the whitespace before it.
+        let start = fallback.start.get();
+        let end = reference.end - 1;
+        let trimmed_end = start + css[start..end].trim_ascii_end().len();
+        let last_token_type = if trimmed_end == end {
+            fallback.last_token_type
+        } else {
+            token_types(&css[start..trimmed_end]).1
+        };
         self.chunk(
             css,
-            fallback.start.get(),
-            reference.end - 1, // Skip the closing parenthesis of the reference value.
+            start,
+            trimmed_end,
             fallback.first_token_type,
-            fallback.last_token_type,
+            last_token_type,
             url_data,
             frame,
             references,
