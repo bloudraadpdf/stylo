@@ -293,8 +293,14 @@ impl ::selectors::parser::PseudoElement for PseudoElement {
     type Impl = SelectorImpl;
 
     fn accepts_state_pseudo_classes(&self) -> bool {
-        matches!(self, Self::ScrollMarker | Self::ScrollButton(_))
-            || self.is_in_pseudo_element_tree()
+        matches!(
+            self,
+            Self::ScrollMarker | Self::ScrollButton(_) | Self::DetailsContent
+        ) || self.is_in_pseudo_element_tree()
+    }
+
+    fn is_element_backed(&self) -> bool {
+        matches!(self, Self::DetailsContent)
     }
 
     fn is_in_pseudo_element_tree(&self) -> bool {
