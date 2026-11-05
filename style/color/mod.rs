@@ -931,11 +931,15 @@ mod tests {
 
     #[test]
     fn equivalent_colors_treat_powerless_hues_as_missing() {
-        let color = |space, c0: f32, c1: f32, c2: f32| AbsoluteColor::new(space, c0, c1, c2, 1.0);
+        let color = |space, c0: f64, c1: f64, c2: f64| AbsoluteColor::new(space, c0, c1, c2, 1.0);
         let equivalent = |a: AbsoluteColor, b: AbsoluteColor| a.is_equivalent(&b);
         assert!(equivalent(
             color(ColorSpace::Oklch, 0.5, 0.0, 40.0),
             color(ColorSpace::Oklch, 0.5, 0.0, 200.0)
+        ));
+        assert!(equivalent(
+            color(ColorSpace::Oklch, 0.5, 0.000004, 40.0),
+            color(ColorSpace::Oklch, 0.5, 0.000004, 200.0)
         ));
         assert!(equivalent(
             color(ColorSpace::Lch, 50.0, 0.0015, 30.0),
