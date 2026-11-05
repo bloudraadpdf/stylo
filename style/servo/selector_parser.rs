@@ -295,7 +295,7 @@ impl ::selectors::parser::PseudoElement for PseudoElement {
     fn accepts_state_pseudo_classes(&self) -> bool {
         matches!(
             self,
-            Self::ScrollMarker | Self::ScrollButton(_) | Self::DetailsContent
+            Self::ScrollMarkerGroup | Self::ScrollMarker | Self::ScrollButton(_) | Self::DetailsContent
         ) || self.is_in_pseudo_element_tree()
     }
 
@@ -310,6 +310,11 @@ impl ::selectors::parser::PseudoElement for PseudoElement {
 
     fn accepts_enabled_disabled_pseudo_classes(&self) -> bool {
         matches!(self, Self::ScrollButton(_))
+    }
+
+    /// CSS Overflow 5 §3.3.2: `:focus-within` matches a ::scroll-marker-group with a focused ::scroll-marker.
+    fn accepts_focus_within_pseudo_class(&self) -> bool {
+        matches!(self, Self::ScrollMarkerGroup)
     }
 
     fn valid_after_slotted(&self) -> bool {
@@ -726,6 +731,10 @@ impl ::selectors::parser::NonTSPseudoClass for NonTSPseudoClass {
 
     fn is_enabled_or_disabled(&self) -> bool {
         matches!(self, Self::Enabled | Self::Disabled)
+    }
+
+    fn is_focus_within(&self) -> bool {
+        matches!(self, Self::FocusWithin)
     }
 
     fn visit<V>(&self, _: &mut V) -> bool

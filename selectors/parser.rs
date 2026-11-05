@@ -47,6 +47,11 @@ pub trait PseudoElement: Sized + ToCss {
         false
     }
 
+    /// Whether `:focus-within` can follow this pseudo-element.
+    fn accepts_focus_within_pseudo_class(&self) -> bool {
+        false
+    }
+
     /// Whether this pseudo-element is valid after a ::slotted(..) pseudo.
     fn valid_after_slotted(&self) -> bool {
         false
@@ -98,6 +103,11 @@ pub trait NonTSPseudoClass: Sized + ToCss {
 
     /// Whether this pseudo-class is `:enabled` or `:disabled`.
     fn is_enabled_or_disabled(&self) -> bool {
+        false
+    }
+
+    /// Whether this pseudo-class is `:focus-within`.
+    fn is_focus_within(&self) -> bool {
         false
     }
 
@@ -174,6 +184,9 @@ bitflags! {
 
         /// The pseudo-element permits `:enabled` and `:disabled` after it.
         const AFTER_ENABLEABLE_PSEUDO = 1 << 10;
+
+        /// The pseudo-element permits `:focus-within` after it.
+        const AFTER_FOCUS_WITHIN_PSEUDO = 1 << 11;
     }
 }
 
@@ -3444,6 +3457,10 @@ where
                     SelectorParsingState::AFTER_ENABLEABLE_PSEUDO,
                     p.accepts_enabled_disabled_pseudo_classes(),
                 );
+                state.set(
+                    SelectorParsingState::AFTER_FOCUS_WITHIN_PSEUDO,
+                    p.accepts_focus_within_pseudo_class(),
+                );
                 if !p.accepts_state_pseudo_classes() {
                     state.insert(SelectorParsingState::AFTER_NON_STATEFUL_PSEUDO_ELEMENT);
                 }
@@ -3826,6 +3843,7 @@ where
         && !pseudo_class.is_user_action_state()
         && !(state.intersects(SelectorParsingState::AFTER_ENABLEABLE_PSEUDO)
             && pseudo_class.is_enabled_or_disabled())
+        && !(state.intersects(SelectorParsingState::AFTER_FOCUS_WITHIN_PSEUDO) && pseudo_class.is_focus_within())
     {
         return Err(location.new_custom_error(SelectorParseErrorKind::InvalidState));
     }
