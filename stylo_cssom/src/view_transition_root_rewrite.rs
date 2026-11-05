@@ -161,15 +161,19 @@ pub fn expand_style_rule(prelude: &str, body: &str) -> StyleRuleExpansion {
         project_named_ancestor_capture_selectors(prelude, GROUP_PSEUDO),
         project_group_border_declarations(body),
     );
-    append_projected_rule(
-        &mut rule,
-        project_named_ancestor_capture_selectors(prelude, b"::view-transition-image-pair"),
-        project_declarations(
-            body,
-            &["opacity"],
-            Some(INTERNAL_IMAGE_PAIR_OPACITY_PROPERTY),
+    for (pseudo, property) in [
+        (GROUP_PSEUDO, INTERNAL_ROOT_GROUP_OPACITY_PROPERTY),
+        (
+            b"::view-transition-image-pair".as_slice(),
+            INTERNAL_IMAGE_PAIR_OPACITY_PROPERTY,
         ),
-    );
+    ] {
+        append_projected_rule(
+            &mut rule,
+            project_named_ancestor_capture_selectors(prelude, pseudo),
+            project_declarations(body, &["opacity"], Some(property)),
+        );
+    }
     append_projected_rule(
         &mut rule,
         project_group_animation_carrier_selectors(prelude),
@@ -210,15 +214,6 @@ pub fn expand_style_rule(prelude: &str, body: &str) -> StyleRuleExpansion {
         &mut rule,
         project_hidden_root_group_selectors(prelude),
         project_display_declarations(body),
-    );
-    append_projected_rule(
-        &mut rule,
-        project_hidden_root_group_selectors(prelude),
-        project_declarations(
-            body,
-            &["opacity"],
-            Some(INTERNAL_ROOT_GROUP_OPACITY_PROPERTY),
-        ),
     );
     if let (Some(selectors), Some(declarations)) = (
         project_selectors(prelude),
@@ -1424,6 +1419,18 @@ mod tests {
     }
 
     #[test]
+    fn projects_named_group_opacity_to_its_capture_images() {
+        let rewritten =
+            rewrite_view_transition_root("html::view-transition-group(target){opacity:0}");
+
+        assert!(rewritten.contains(&format!(
+            "html:where([data-moegoe-view-transition-name=\"{}\"]){SPECIFICITY_WITNESS}::view-transition-new(root)",
+            super::encode_named_capture_name("target")
+        )));
+        assert!(rewritten.contains("{--moegoe-view-transition-root-group-opacity:0;}"));
+    }
+
+    #[test]
     fn projects_reserved_root_group_display_to_both_capture_children() {
         let rewritten = rewrite_view_transition_root(
             "html::view-transition-group(root){display:none;opacity:0;animation:unset}",
@@ -1434,11 +1441,15 @@ mod tests {
             "html:where(:not([data-moegoe-view-transition-name]))::view-transition-new(root)",
             "{display:none;}",
         )));
-        assert!(rewritten.contains(concat!(
-            "html:where(:not([data-moegoe-view-transition-name]))::view-transition-old(root),",
-            "html:where(:not([data-moegoe-view-transition-name]))::view-transition-new(root)",
-            "{--moegoe-view-transition-root-group-opacity:0;}",
+        assert!(rewritten.contains(&format!(
+            "html:where(:not([data-moegoe-view-transition-name])){SPECIFICITY_WITNESS}::view-transition-old(root),"
         )));
+        assert_eq!(
+            rewritten
+                .matches("--moegoe-view-transition-root-group-opacity:0;")
+                .count(),
+            1
+        );
         assert_eq!(rewritten.matches("animation:unset").count(), 2);
     }
 
