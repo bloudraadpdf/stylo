@@ -417,3 +417,100 @@ impl<'a, 'b> StyleQueryContainer<'a, 'b> {
         true
     }
 }
+
+#[cfg(all(test, feature = "servo"))]
+mod tests {
+    use super::*;
+    use crate::applicable_declarations::CascadePriority;
+    use crate::custom_properties::CustomPropertiesBuilder;
+    use crate::custom_properties::DeferFontRelativeCustomPropertyResolution;
+    use crate::dom::{AttributeTracker, DummyAttributeProvider};
+    use crate::properties::{PropertyDeclaration, StyleBuilder};
+    use crate::rule_cache::RuleCacheConditions;
+    use crate::rule_tree::CascadeLevel;
+    use crate::stylesheets::container_rule::ContainerSizeQuery;
+    use crate::stylesheets::layer_rule::LayerOrder;
+    use crate::stylesheets::{CssRule, StylesheetInDocument};
+    use crate::stylist::Stylist;
+    use crate::test_support::{
+        author_parser_context, parse_stylesheet, test_device, test_url_data,
+    };
+    use crate::values::computed::{Context, StyleContainer};
+    use selectors::matching::QuirksMode;
+
+    fn container_matches(declarations: &str, feature: &str) -> KleeneValue {
+        let sheet = parse_stylesheet(&format!("#c {{ {declarations} }}"));
+        let stylist = Stylist::new(test_device(), QuirksMode::NoQuirks);
+        let guard = sheet.shared_lock.read();
+        let block = sheet
+            .contents(&guard)
+            .rules(&guard)
+            .iter()
+            .find_map(|rule| match *rule {
+                CssRule::Style(ref rule) => Some(rule.read_with(&guard).block.clone()),
+                _ => None,
+            })
+            .expect("a container rule");
+        let block = block.read_with(&guard);
+        let mut conditions = RuleCacheConditions::default();
+        let mut context = Context::new(
+            StyleBuilder::new(stylist.device(), Some(&stylist), None, None, None, false),
+            QuirksMode::NoQuirks,
+            &mut conditions,
+            ContainerSizeQuery::none(),
+        );
+        let mut tracker = AttributeTracker::new(&DummyAttributeProvider);
+        let mut builder = CustomPropertiesBuilder::new(&stylist, &mut context);
+        for (declaration, _) in block.declaration_importance_iter() {
+            if let PropertyDeclaration::Custom(ref declaration) = *declaration {
+                let priority = CascadePriority::new(
+                    CascadeLevel::same_tree_author_normal(),
+                    LayerOrder::root(),
+                );
+                builder.cascade(declaration, priority, 0, &mut tracker);
+            }
+        }
+        let _ = builder.build(DeferFontRelativeCustomPropertyResolution::No, &mut tracker);
+        let container_style = context.builder.build();
+
+        let url_data = test_url_data();
+        let parser_context = author_parser_context(&url_data);
+        let mut input = cssparser::ParserInput::new(feature);
+        let feature = cssparser::Parser::new(&mut input)
+            .parse_entirely(|input| StyleFeature::parse(&parser_context, input))
+            .expect("a style feature");
+        let mut conditions = RuleCacheConditions::default();
+        let mut context = Context::new(
+            StyleBuilder::for_inheritance(
+                stylist.device(),
+                Some(&stylist),
+                Some(&container_style),
+                None,
+            ),
+            QuirksMode::NoQuirks,
+            &mut conditions,
+            ContainerSizeQuery::none(),
+        );
+        context.style_container = Some(StyleContainer {
+            parent_style: None,
+            attributes: &DummyAttributeProvider,
+        });
+        feature.matches(&context)
+    }
+
+    #[test]
+    fn declarations_substitute_references_against_the_container() {
+        for (declarations, feature) in [
+            ("--foo: bar", "--foo: bar"),
+            ("--foo: bar", "--foo: var(--foo)"),
+            ("--foo: bar", "--foo: var(--missing, bar)"),
+            ("--x: 3; --y: 2", "--x > var(--y)"),
+        ] {
+            assert_eq!(
+                container_matches(declarations, feature),
+                KleeneValue::True,
+                "{feature}"
+            );
+        }
+    }
+}

@@ -811,6 +811,7 @@ impl VariableValue {
     ) -> Result<Self, ParseError<'i>> {
         let mut references = References::default();
         let mut missing_closing_characters = String::new();
+        input.skip_whitespace();
         let start_position = input.position();
         let (first_token_type, last_token_type) = parse_declaration_value(
             input,
@@ -819,10 +820,7 @@ impl VariableValue {
             &mut references,
             &mut missing_closing_characters,
         )?;
-        let mut css = input
-            .slice_from(start_position)
-            .trim_ascii_start()
-            .to_owned();
+        let mut css = input.slice_from(start_position).to_owned();
         if !missing_closing_characters.is_empty() {
             // Unescaped backslash at EOF in a quoted string is ignored.
             if css.ends_with("\\")
