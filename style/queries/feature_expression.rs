@@ -26,6 +26,8 @@ pub enum FeatureType {
     Media,
     /// We're parsing a container feature.
     Container,
+    /// We're parsing a style feature, inside a container `style()` query.
+    Style,
 }
 
 impl FeatureType {
@@ -40,6 +42,7 @@ impl FeatureType {
         match *self {
             FeatureType::Media => &MEDIA_FEATURES,
             FeatureType::Container => &CONTAINER_FEATURES,
+            FeatureType::Style => &[],
         }
     }
 
@@ -62,7 +65,7 @@ enum LegacyRange {
 
 /// The operator that was specified in this feature.
 #[derive(Clone, Copy, Debug, Eq, MallocSizeOf, PartialEq, ToShmem)]
-enum Operator {
+pub(crate) enum Operator {
     /// =
     Equal,
     /// >
@@ -91,7 +94,7 @@ impl ToCss for Operator {
 }
 
 impl Operator {
-    fn is_compatible_with(self, right_op: Self) -> bool {
+    pub(crate) fn is_compatible_with(self, right_op: Self) -> bool {
         // Some operators are not compatible with each other in multi-range
         // context.
         match self {
@@ -105,7 +108,7 @@ impl Operator {
         }
     }
 
-    fn evaluate(&self, cmp: Ordering) -> bool {
+    pub(crate) fn evaluate(&self, cmp: Ordering) -> bool {
         match *self {
             Self::Equal => cmp == Ordering::Equal,
             Self::GreaterThan => cmp == Ordering::Greater,
@@ -115,7 +118,7 @@ impl Operator {
         }
     }
 
-    fn parse<'i>(input: &mut Parser<'i, '_>) -> Result<Self, ParseError<'i>> {
+    pub(crate) fn parse<'i>(input: &mut Parser<'i, '_>) -> Result<Self, ParseError<'i>> {
         let location = input.current_source_location();
         let operator = match *input.next()? {
             Token::Delim('=') => return Ok(Operator::Equal),

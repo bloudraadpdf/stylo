@@ -7,15 +7,14 @@
 //! https://drafts.csswg.org/mediaqueries-4/#typedef-media-condition
 //! https://drafts.csswg.org/css-contain-3/#typedef-container-condition
 
+use super::style_feature::StyleFeature;
 use super::{FeatureFlags, FeatureType, QueryFeatureExpression};
-use crate::custom_properties;
 use crate::derives::*;
 use crate::stylesheets::CustomMediaEvaluator;
 use crate::values::{computed, AtomString, DashedIdent};
 use crate::{error_reporting::ContextualParseError, parser::Parse, parser::ParserContext};
 use cssparser::{match_ignore_ascii_case, Parser, SourcePosition, Token};
 use selectors::kleene_value::KleeneValue;
-use servo_arc::Arc;
 use std::fmt::{self, Write};
 use style_traits::{CssWriter, ParseError, StyleParseErrorKind, ToCss};
 
@@ -32,82 +31,6 @@ pub enum Operator {
 enum AllowOr {
     Yes,
     No,
-}
-
-/// A style query feature:
-/// https://drafts.csswg.org/css-conditional-5/#typedef-style-feature
-#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
-pub struct StyleFeature {
-    name: custom_properties::Name,
-    // TODO: This is a "primary" reference, probably should be unconditionally measured.
-    #[ignore_malloc_size_of = "Arc"]
-    value: Option<Arc<custom_properties::SpecifiedValue>>,
-}
-
-impl ToCss for StyleFeature {
-    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
-    where
-        W: fmt::Write,
-    {
-        dest.write_str("--")?;
-        crate::values::serialize_atom_identifier(&self.name, dest)?;
-        if let Some(ref v) = self.value {
-            dest.write_str(": ")?;
-            v.to_css(dest)?;
-        }
-        Ok(())
-    }
-}
-
-impl StyleFeature {
-    fn parse<'i, 't>(
-        context: &ParserContext,
-        input: &mut Parser<'i, 't>,
-        feature_type: FeatureType,
-    ) -> Result<Self, ParseError<'i>> {
-        if !static_prefs::pref!("layout.css.style-queries.enabled")
-            || feature_type != FeatureType::Container
-        {
-            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
-        }
-        // TODO: Allow parsing nested style feature queries.
-        let ident = input.expect_ident()?;
-        // TODO(emilio): Maybe support non-custom properties?
-        let name = match custom_properties::parse_name(ident.as_ref()) {
-            Ok(name) => custom_properties::Name::from(name),
-            Err(()) => return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError)),
-        };
-        let value = if input.try_parse(|i| i.expect_colon()).is_ok() {
-            input.skip_whitespace();
-            Some(Arc::new(custom_properties::SpecifiedValue::parse(
-                input,
-                &context.url_data,
-                &context.namespaces,
-            )?))
-        } else {
-            None
-        };
-        Ok(Self { name, value })
-    }
-
-    fn matches(&self, ctx: &computed::Context) -> KleeneValue {
-        // FIXME(emilio): Confirm this is the right style to query.
-        let registration = ctx
-            .builder
-            .stylist
-            .expect("container queries should have a stylist around")
-            .get_custom_property_registration(&self.name);
-        let current_value = ctx
-            .inherited_custom_properties()
-            .get(registration, &self.name);
-        KleeneValue::from(match self.value {
-            Some(ref v) => current_value.is_some_and(|cur| {
-                custom_properties::compute_variable_value(v, registration, ctx)
-                    .is_some_and(|v| v == *cur)
-            }),
-            None => current_value.is_some(),
-        })
-    }
 }
 
 /// A boolean value for a pref query.
@@ -229,8 +152,10 @@ pub enum QueryCondition {
     Operation(Box<[QueryCondition]>, Operator),
     /// A condition wrapped in parenthesis.
     InParens(Box<QueryCondition>),
-    /// A <style> query.
-    Style(StyleFeature),
+    /// A `style()` query.
+    Style(Box<QueryCondition>),
+    /// A `<style-feature>` inside a `style()` query.
+    StyleFeature(StyleFeature),
     /// A -moz-pref() query.
     MozPref(MozPrefFeature),
     /// [ <function-token> <any-value>? ) ] | [ ( <any-value>? ) ]
@@ -265,6 +190,7 @@ impl ToCss for QueryCondition {
                 c.to_css(dest)?;
                 dest.write_char(')')
             },
+            QueryCondition::StyleFeature(ref f) => f.to_css(dest),
             QueryCondition::MozPref(ref c) => {
                 dest.write_str("-moz-pref(")?;
                 c.to_css(dest)?;
@@ -329,9 +255,9 @@ impl QueryCondition {
             Self::Custom(..)
             | Self::Feature(..)
             | Self::GeneralEnclosed(..)
-            | Self::Style(..)
+            | Self::StyleFeature(..)
             | Self::MozPref(..) => {},
-            Self::Not(ref cond) => cond.visit(visitor),
+            Self::Not(ref cond) | Self::Style(ref cond) => cond.visit(visitor),
             Self::Operation(ref conds, _op) => {
                 for cond in conds.iter() {
                     cond.visit(visitor);
@@ -345,13 +271,11 @@ impl QueryCondition {
     /// container queries.
     pub fn cumulative_flags(&self) -> FeatureFlags {
         let mut result = FeatureFlags::empty();
-        self.visit(&mut |condition| {
-            if let Self::Style(..) = condition {
-                result.insert(FeatureFlags::STYLE);
-            }
-            if let Self::Feature(ref f) = condition {
-                result.insert(f.feature_flags())
-            }
+        self.visit(&mut |condition| match condition {
+            Self::Style(..) => result.insert(FeatureFlags::STYLE),
+            Self::GeneralEnclosed(..) => result.insert(FeatureFlags::GENERAL_ENCLOSED),
+            Self::Feature(ref f) => result.insert(f.feature_flags()),
+            _ => {},
         });
         result
     }
@@ -421,12 +345,14 @@ impl QueryCondition {
         // Base case. Make sure to preserve this error as it's more generally
         // relevant.
         let feature_error = match input.try_parse(|input| {
-            QueryFeatureExpression::parse_in_parenthesis_block(context, input, feature_type)
+            Self::parse_feature_in_parenthesis_block(context, input, feature_type)
         }) {
-            Ok(expr) => return Ok(Self::Feature(expr)),
+            Ok(feature) => return Ok(feature),
             Err(e) => e,
         };
-        if static_prefs::pref!("layout.css.custom-media.enabled") {
+        if feature_type != FeatureType::Style
+            && static_prefs::pref!("layout.css.custom-media.enabled")
+        {
             if let Ok(custom) = input.try_parse(|input| DashedIdent::parse(context, input)) {
                 return Ok(Self::Custom(custom));
             }
@@ -435,6 +361,40 @@ impl QueryCondition {
             return Ok(Self::InParens(Box::new(inner)));
         }
         Err(feature_error)
+    }
+
+    fn parse_feature_in_parenthesis_block<'i>(
+        context: &ParserContext,
+        input: &mut Parser<'i, '_>,
+        feature_type: FeatureType,
+    ) -> Result<Self, ParseError<'i>> {
+        if feature_type == FeatureType::Style {
+            let feature = StyleFeature::parse(context, input)?;
+            return Ok(Self::InParens(Box::new(Self::StyleFeature(feature))));
+        }
+        QueryFeatureExpression::parse_in_parenthesis_block(context, input, feature_type)
+            .map(Self::Feature)
+    }
+
+    /// https://drafts.csswg.org/css-conditional-5/#typedef-style-query
+    fn parse_style_query<'i>(
+        context: &ParserContext,
+        input: &mut Parser<'i, '_>,
+        feature_type: FeatureType,
+    ) -> Result<Self, ParseError<'i>> {
+        if !static_prefs::pref!("layout.css.style-queries.enabled")
+            || feature_type != FeatureType::Container
+        {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+        if let Ok(condition) = input.try_parse(|input| {
+            let condition = Self::parse(context, input, FeatureType::Style)?;
+            input.expect_exhausted()?;
+            Ok::<_, ParseError>(condition)
+        }) {
+            return Ok(condition);
+        }
+        StyleFeature::parse(context, input).map(Self::StyleFeature)
     }
 
     fn try_parse_block<'i, T, F>(
@@ -484,11 +444,11 @@ impl QueryCondition {
             Token::Function(ref name) => {
                 match_ignore_ascii_case! { name,
                     "style" => {
-                        let feature = Self::try_parse_block(context, input, start, |input| {
-                            StyleFeature::parse(context, input, feature_type)
+                        let query = Self::try_parse_block(context, input, start, |input| {
+                            Self::parse_style_query(context, input, feature_type)
                         });
-                        if let Some(feature) = feature {
-                            return Ok(Self::Style(feature));
+                        if let Some(query) = query {
+                            return Ok(Self::Style(Box::new(query)));
                         }
                     },
                     "-moz-pref" => {
@@ -527,7 +487,8 @@ impl QueryCondition {
             QueryCondition::GeneralEnclosed(_) => KleeneValue::Unknown,
             QueryCondition::InParens(ref c) => c.matches(context, custom),
             QueryCondition::Not(ref c) => !c.matches(context, custom),
-            QueryCondition::Style(ref c) => c.matches(context),
+            QueryCondition::Style(ref c) => c.matches(context, custom),
+            QueryCondition::StyleFeature(ref f) => f.matches(context),
             QueryCondition::MozPref(ref c) => c.matches(context),
             QueryCondition::Operation(ref conditions, op) => {
                 debug_assert!(!conditions.is_empty(), "We never create an empty op");

@@ -27,8 +27,10 @@ use crate::properties;
 use crate::properties::{ComputedValues, StyleBuilder};
 use crate::rule_cache::RuleCacheConditions;
 use crate::rule_tree::CascadeLevel;
+use crate::dom::{AttributeProvider, TElement};
 use crate::stylesheets::container_rule::{
-    ContainerConditions, ContainerInfo, ContainerSizeQuery, ContainerSizeQueryResult,
+    ContainerConditions, ContainerInfo, ContainerLookupResult, ContainerSizeQuery,
+    ContainerSizeQueryResult,
 };
 use crate::stylist::Stylist;
 use crate::values::generics::ClampToNonNegative;
@@ -399,6 +401,15 @@ pub mod url;
 mod tree_counting;
 use self::tree_counting::TreeCounting;
 
+/// What the style features of a container query read from the query container, beside its
+/// style.
+pub struct StyleContainer<'a> {
+    /// The style the query container inherits from.
+    pub parent_style: Option<Arc<ComputedValues>>,
+    /// The attributes of the query container, for `attr()`.
+    pub attributes: &'a dyn AttributeProvider,
+}
+
 /// A `Context` is all the data a specified value could ever need to compute
 /// itself and be transformed to a computed value.
 pub struct Context<'a> {
@@ -437,6 +448,9 @@ pub struct Context<'a> {
 
     /// Returns the container information to evaluate a given container query.
     pub container_info: Option<ContainerInfo>,
+
+    /// What the style features of a container query read from the query container.
+    pub style_container: Option<StyleContainer<'a>>,
 
     /// Whether we're computing a value for a non-inherited property.
     /// False if we are computed a value for an inherited property or not computing for a property
@@ -483,6 +497,7 @@ impl<'a> Context<'a> {
             quirks_mode,
             for_smil_animation: false,
             container_info: None,
+            style_container: None,
             for_non_inherited_property: false,
             rule_cache_conditions: RefCell::new(&mut conditions),
             scope: CascadeLevel::same_tree_author_normal(),
@@ -493,35 +508,40 @@ impl<'a> Context<'a> {
         f(&context)
     }
 
-    /// Creates a suitable context for container query evaluation for the style
-    /// specified.
-    pub fn for_container_query_evaluation<F, R>(
-        device: &Device,
-        stylist: Option<&Stylist>,
-        container_info_and_style: Option<(ContainerInfo, Arc<ComputedValues>)>,
-        container_size_query: ContainerSizeQuery,
+    /// Creates a suitable context to evaluate a container query against `container`.
+    pub fn for_container_query_evaluation<E, F, R>(
+        device: &'a Device,
+        stylist: Option<&'a Stylist>,
+        container: Option<&'a ContainerLookupResult<E>>,
+        container_size_query: ContainerSizeQuery<'a>,
         f: F,
     ) -> R
     where
+        E: TElement + 'a,
         F: FnOnce(&Context) -> R,
     {
         let mut conditions = RuleCacheConditions::default();
-
-        let (container_info, style) = match container_info_and_style {
-            Some((ci, s)) => (Some(ci), Some(s)),
-            None => (None, None),
-        };
-
-        let style = style.as_ref().map(|s| &**s);
         let quirks_mode = device.quirks_mode();
         let context = Context {
-            builder: StyleBuilder::for_inheritance(device, stylist, style, None),
+            builder: StyleBuilder::for_inheritance(
+                device,
+                stylist,
+                container.map(|c| &*c.style),
+                None,
+            ),
             cached_system_font: None,
             in_media_query: false,
             in_container_query: true,
             quirks_mode,
             for_smil_animation: false,
-            container_info,
+            container_info: container.map(|c| c.info),
+            style_container: container.map(|c| StyleContainer {
+                parent_style: c
+                    .element
+                    .traversal_parent()
+                    .and_then(|parent| Some(parent.borrow_data()?.styles.primary().clone())),
+                attributes: &c.element,
+            }),
             for_non_inherited_property: false,
             rule_cache_conditions: RefCell::new(&mut conditions),
             scope: CascadeLevel::same_tree_author_normal(),
@@ -547,6 +567,7 @@ impl<'a> Context<'a> {
             in_container_query: false,
             quirks_mode,
             container_info: None,
+            style_container: None,
             for_smil_animation: false,
             for_non_inherited_property: false,
             rule_cache_conditions: RefCell::new(rule_cache_conditions),
@@ -572,6 +593,7 @@ impl<'a> Context<'a> {
             in_container_query: false,
             quirks_mode,
             container_info: None,
+            style_container: None,
             for_smil_animation,
             for_non_inherited_property: false,
             rule_cache_conditions: RefCell::new(rule_cache_conditions),
@@ -597,6 +619,7 @@ impl<'a> Context<'a> {
             in_container_query: false,
             quirks_mode: stylist.quirks_mode(),
             container_info: None,
+            style_container: None,
             for_smil_animation: false,
             for_non_inherited_property: false,
             rule_cache_conditions: RefCell::new(rule_cache_conditions),

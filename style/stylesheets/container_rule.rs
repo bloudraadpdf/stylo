@@ -117,7 +117,7 @@ impl ContainerConditions {
     }
 
     /// Match when any listed condition matches its selected container.
-    pub(crate) fn matches<E>(
+    pub fn matches<E>(
         &self,
         stylist: &Stylist,
         element: E,
@@ -364,7 +364,9 @@ impl ContainerCondition {
     }
 
     /// Tries to match a container query condition for a given element.
-    pub(crate) fn matches<E>(
+    ///
+    /// A query with `<general-enclosed>` selects no query container, so it is unknown.
+    pub fn matches<E>(
         &self,
         stylist: &Stylist,
         element: E,
@@ -374,23 +376,24 @@ impl ContainerCondition {
     where
         E: TElement,
     {
+        if self.flags.contains(FeatureFlags::GENERAL_ENCLOSED) {
+            return KleeneValue::Unknown;
+        }
         let result = self.find_container(element, originating_element_style);
         let Some(condition) = self.query() else {
             return KleeneValue::from(result.is_some());
         };
-        let (container, info) = match result {
-            Some(r) => (Some(r.element), Some((r.info, r.style))),
-            None => (None, None),
-        };
         // Set up the lookup for the container in question, as the condition may be using container
         // query lengths.
         let size_query_container_lookup = ContainerSizeQuery::for_option_element(
-            container, /* known_parent_style = */ None, /* is_pseudo = */ false,
+            result.as_ref().map(|r| r.element),
+            /* known_parent_style = */ None,
+            /* is_pseudo = */ false,
         );
         Context::for_container_query_evaluation(
             stylist.device(),
             Some(stylist),
-            info,
+            result.as_ref(),
             size_query_container_lookup,
             |context| {
                 let matches = condition.matches(context, &mut CustomMediaEvaluator::none());
@@ -754,6 +757,67 @@ impl<'a> ContainerSizeQuery<'a> {
                 }
             },
             Self::Evaluated(info) => *info,
+        }
+    }
+}
+
+#[cfg(all(test, feature = "servo"))]
+mod tests {
+    use super::*;
+    use crate::test_support::{author_parser_context, pref_lock, test_url_data, BoolPrefGuard};
+    use cssparser::ParserInput;
+
+    fn parse(query: &str) -> ContainerConditions {
+        let _lock = pref_lock().lock().unwrap();
+        let _style_queries = BoolPrefGuard::set("layout.css.style-queries.enabled", true);
+        let url_data = test_url_data();
+        let context = author_parser_context(&url_data);
+        let mut input = ParserInput::new(query);
+        Parser::new(&mut input)
+            .parse_entirely(|input| ContainerConditions::parse(&context, input))
+            .unwrap()
+    }
+
+    #[test]
+    fn style_queries_serialize_nested_conditions_and_ranges() {
+        for (query, expected) in [
+            (
+                "style(  ( --FOO: BAR) OR ( prop: val  ) )",
+                "style((--FOO: BAR) or ( prop: val  ))",
+            ),
+            ("style(( (  (( (--foo )) )  )))", "style((((((--foo))))))"),
+            ("style((not ((--foo: BAR))))", "style((not ((--foo: BAR))))"),
+            (
+                "style(100px  > --\\{foo >10px)",
+                "style(100px > --\\{foo > 10px)",
+            ),
+            ("style(--foo: bar !important)", "style(--foo: bar)"),
+            (
+                "style(--foo < --bar <= --baz)",
+                "style(--foo < --bar <= --baz)",
+            ),
+        ] {
+            assert_eq!(parse(query).to_css_string(), expected);
+        }
+    }
+
+    #[test]
+    fn invalid_style_features_are_general_enclosed() {
+        for query in [
+            "style(--foo: bar;)",
+            "style(style(--foo: bar))",
+            "style(10px < 10em > 10)",
+            "style( < 10em)",
+            "style(10px < 10em !)",
+            "style(10px ! < 10em)",
+            "(width > 0px) or (foo: bar)",
+        ] {
+            let conditions = parse(query);
+            let condition = conditions.iter().next().unwrap();
+            assert!(
+                condition.flags.contains(FeatureFlags::GENERAL_ENCLOSED),
+                "{query}"
+            );
         }
     }
 }

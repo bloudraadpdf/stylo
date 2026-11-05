@@ -12,6 +12,7 @@ pub mod condition;
 #[macro_use]
 pub mod feature;
 pub mod feature_expression;
+pub mod style_feature;
 pub mod values;
 
 pub use self::condition::QueryCondition;
