@@ -846,9 +846,35 @@ fn project_background_declarations(body: &str) -> Option<String> {
     )
 }
 
+const ANCESTOR_PLACEMENT_INSETS: [&str; 4] = ["top", "right", "bottom", "left"];
+
+/// The registrations of the projected insets of groups and image pairs, so that they compute in the context of the
+/// capture, viewport units included.
+pub fn ancestor_placement_registrations() -> stylo_cssom_model::InternalStylesheetRoot {
+    stylo_cssom_model::InternalStylesheetRoot::new(
+        stylo_cssom_model::StyleOrigin::UserAgent,
+        [
+            INTERNAL_GROUP_PLACEMENT_PREFIX,
+            INTERNAL_IMAGE_PAIR_PLACEMENT_PREFIX,
+        ]
+        .into_iter()
+        .flat_map(|prefix| {
+            ANCESTOR_PLACEMENT_INSETS.map(|inset| {
+                stylo_cssom_model::RuleNode::property(
+                    format!("{prefix}{inset}"),
+                    "<length-percentage> | auto",
+                    false,
+                    Some("auto"),
+                )
+            })
+        })
+        .collect::<Vec<_>>(),
+    )
+}
+
 fn project_ancestor_placement_declarations(body: &str, prefix: &str) -> Option<String> {
     let mut output = String::new();
-    for property in ["top", "right", "bottom", "left", "transform"] {
+    for property in ANCESTOR_PLACEMENT_INSETS.into_iter().chain(["transform"]) {
         let replacement = format!("{prefix}{property}");
         if let Some(declaration) = project_declarations(body, &[property], Some(&replacement)) {
             output.push_str(&declaration);
@@ -1416,6 +1442,25 @@ mod tests {
 
             assert_eq!(rewritten, css);
         }
+    }
+
+    #[test]
+    fn registers_the_projected_ancestor_insets() {
+        let registrations = super::ancestor_placement_registrations().projection_serialization();
+
+        for name in [
+            "--moegoe-view-transition-group-top",
+            "--moegoe-view-transition-image-pair-left",
+        ] {
+            assert!(
+                registrations.contains(&format!("@property {name}")),
+                "{registrations}"
+            );
+        }
+        assert_eq!(
+            registrations.matches("<length-percentage> | auto").count(),
+            8
+        );
     }
 
     #[test]
