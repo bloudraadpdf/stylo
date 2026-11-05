@@ -348,6 +348,13 @@ impl ::selectors::parser::PseudoElement for PseudoElement {
 pub const EAGER_PSEUDO_COUNT: usize = 5;
 
 impl PseudoElement {
+    /// Whether the pseudo-element generates a box outside the box of its originating element: ::scroll-marker-group
+    /// and ::scroll-button() generate sibling boxes, except on the root element, whose box contains them (CSS Overflow 5
+    /// §3.1.4, §3.2; CSS Conditional 5 §5).
+    pub fn generates_box_outside_originating_element(&self, originating_element_is_root: bool) -> bool {
+        matches!(self, Self::ScrollMarkerGroup | Self::ScrollButton(_)) && !originating_element_is_root
+    }
+
     /// Gets the canonical index of this eagerly-cascaded pseudo-element.
     #[inline]
     pub fn eager_index(&self) -> usize {
@@ -933,6 +940,11 @@ pub struct ExtraMatchingData<'a> {
     /// The style of the originating element in order to evaluate @container
     /// size queries affecting pseudo-elements.
     pub originating_element_style: Option<&'a ComputedValues>,
+
+    /// Whether the pseudo-element generates a box outside the box of its
+    /// originating element, which then is no container of its size queries
+    /// (CSS Conditional 5 §5).
+    pub pseudo_element_box_outside_originating_element: bool,
 }
 
 impl ::selectors::SelectorImpl for SelectorImpl {

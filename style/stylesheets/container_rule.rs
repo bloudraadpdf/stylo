@@ -122,21 +122,26 @@ impl ContainerConditions {
         &self,
         stylist: &Stylist,
         element: E,
-        originating_element_style: Option<&ComputedValues>,
+        originating_element: Option<OriginatingElement>,
         invalidation_flags: &mut ComputedValueFlags,
     ) -> KleeneValue
     where
         E: TElement,
     {
         KleeneValue::any(self.iter(), |condition| {
-            condition.matches(
-                stylist,
-                element,
-                originating_element_style,
-                invalidation_flags,
-            )
+            condition.matches(stylist, element, originating_element, invalidation_flags)
         })
     }
+}
+
+/// The originating element of a pseudo-element whose container queries are evaluated.
+#[derive(Clone, Copy)]
+pub struct OriginatingElement<'a> {
+    /// The style of the originating element.
+    pub style: &'a ComputedValues,
+    /// Whether the originating element can be the container of a size query: not when the pseudo-element generates a
+    /// box outside the box of the originating element (CSS Conditional 5 §5).
+    pub size_container: bool,
 }
 
 impl ToCss for ContainerConditions {
@@ -362,11 +367,16 @@ impl ContainerCondition {
     pub fn find_container<E>(
         &self,
         e: E,
-        originating_element_style: Option<&ComputedValues>,
+        originating_element: Option<OriginatingElement>,
     ) -> Option<ContainerLookupResult<E>>
     where
         E: TElement,
     {
+        let originating_element_style = originating_element
+            .filter(|originating| {
+                originating.size_container || self.flags.container_axes().is_empty()
+            })
+            .map(|originating| originating.style);
         match traverse_container(
             e,
             originating_element_style,
@@ -386,7 +396,7 @@ impl ContainerCondition {
         &self,
         stylist: &Stylist,
         element: E,
-        originating_element_style: Option<&ComputedValues>,
+        originating_element: Option<OriginatingElement>,
         invalidation_flags: &mut ComputedValueFlags,
     ) -> KleeneValue
     where
@@ -395,7 +405,7 @@ impl ContainerCondition {
         if self.flags.contains(FeatureFlags::GENERAL_ENCLOSED) {
             return KleeneValue::Unknown;
         }
-        let result = self.find_container(element, originating_element_style);
+        let result = self.find_container(element, originating_element);
         let Some(condition) = self.query() else {
             return KleeneValue::from(result.is_some());
         };

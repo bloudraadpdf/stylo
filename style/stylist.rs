@@ -42,7 +42,7 @@ use crate::shared_lock::{Locked, SharedRwLockReadGuard, StylesheetGuards};
 use crate::sharing::{RevalidationResult, ScopeRevalidationResult};
 use crate::stylesheet_set::{DataValidity, DocumentStylesheetSet, SheetRebuildKind};
 use crate::stylesheet_set::{DocumentStylesheetFlusher, SheetCollectionFlusher};
-use crate::stylesheets::container_rule::ContainerConditions;
+use crate::stylesheets::container_rule::{ContainerConditions, OriginatingElement};
 use crate::stylesheets::import_rule::{ImportLayer, ImportScope};
 use crate::stylesheets::keyframes_rule::KeyframesAnimation;
 use crate::stylesheets::layer_rule::{LayerName, LayerOrder};
@@ -3547,11 +3547,21 @@ impl CascadeData {
                 None => return true,
                 Some(ref c) => c,
             };
+            let originating_element =
+                context
+                    .extra_data
+                    .originating_element_style
+                    .map(|style| OriginatingElement {
+                        style,
+                        size_container: !context
+                            .extra_data
+                            .pseudo_element_box_outside_originating_element,
+                    });
             let matches = conditions
                 .matches(
                     stylist,
                     element,
-                    context.extra_data.originating_element_style,
+                    originating_element,
                     &mut context.extra_data.cascade_input_flags,
                 )
                 .to_bool(/* unknown = */ false);

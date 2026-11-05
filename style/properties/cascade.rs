@@ -24,7 +24,7 @@ use crate::rule_tree::{CascadeLevel, StrongRuleNode};
 use crate::selector_parser::PseudoElement;
 use crate::shared_lock::StylesheetGuards;
 use crate::style_adjuster::StyleAdjuster;
-use crate::stylesheets::container_rule::ContainerSizeQuery;
+use crate::stylesheets::container_rule::{ContainerSizeQuery, OriginatingElement};
 use crate::stylesheets::{Origin, layer_rule::LayerOrder};
 use crate::stylist::Stylist;
 #[cfg(feature = "gecko")]
@@ -350,7 +350,13 @@ where
         context.set_calling_element(ElementCallSite {
             stylist,
             element,
-            originating_element_style: pseudo.and(parent_style),
+            originating_element: pseudo.zip(parent_style).map(|(pseudo, style)| {
+                OriginatingElement {
+                    style,
+                    size_container: !pseudo
+                        .generates_box_outside_originating_element(element.is_root()),
+                }
+            }),
         });
     }
 

@@ -12,12 +12,12 @@ use super::{
 };
 use crate::computed_value_flags::ComputedValueFlags;
 use crate::dom::{TElement, TNode, TShadowRoot};
-use crate::properties::{CSSWideKeyword, ComputedValues};
+use crate::properties::CSSWideKeyword;
 use crate::properties_and_values::registry::PropertyRegistrationData;
 use crate::properties_and_values::rule::Inherits;
 use crate::properties_and_values::syntax::data_type::DependentDataTypes;
 use crate::rule_tree::CascadeLevel;
-use crate::stylesheets::container_rule::ContainerConditions;
+use crate::stylesheets::container_rule::{ContainerConditions, OriginatingElement};
 use crate::stylesheets::function_rule::{FunctionDescriptor, FunctionDescriptorName, FunctionRule};
 use crate::stylesheets::{Origin, UrlExtraData};
 use crate::stylist::{CascadeData, Stylist};
@@ -162,8 +162,8 @@ pub struct ElementCallSite<'a, E> {
     pub stylist: &'a Stylist,
     /// The element, or the originating element of a pseudo-element.
     pub element: E,
-    /// The originating element's style when styling a pseudo-element.
-    pub originating_element_style: Option<&'a ComputedValues>,
+    /// The originating element when styling a pseudo-element.
+    pub originating_element: Option<OriginatingElement<'a>>,
 }
 
 impl<'a, E: TElement + 'a> ElementCallSite<'a, E> {
@@ -222,12 +222,7 @@ impl<'a, E: TElement + 'a> CallingElement<'a> for ElementCallSite<'a, E> {
         flags: &mut ComputedValueFlags,
     ) -> bool {
         conditions
-            .matches(
-                self.stylist,
-                self.element,
-                self.originating_element_style,
-                flags,
-            )
+            .matches(self.stylist, self.element, self.originating_element, flags)
             .to_bool(/* unknown = */ false)
     }
 }
