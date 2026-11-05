@@ -717,6 +717,7 @@ impl ::selectors::parser::NonTSPseudoClass for NonTSPseudoClass {
             NonTSPseudoClass::Active
                 | NonTSPseudoClass::Hover
                 | NonTSPseudoClass::Focus
+                | NonTSPseudoClass::FocusVisible
                 | NonTSPseudoClass::TargetAfter
                 | NonTSPseudoClass::TargetBefore
                 | NonTSPseudoClass::TargetCurrent

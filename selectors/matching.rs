@@ -469,7 +469,12 @@ where
             },
         }
 
-        if !iter.matches_for_stateless_pseudo_element(context.pseudo_element_is_only_child) {
+        let matches_state = |pseudo_class: &<E::Impl as SelectorImpl>::NonTSPseudoClass| {
+            context
+                .pseudo_element_state_matching_fn
+                .is_some_and(|matches| matches(pseudo_class))
+        };
+        if !iter.matches_for_stateless_pseudo_element(context.pseudo_element_is_only_child, &matches_state) {
             return KleeneValue::False;
         }
 

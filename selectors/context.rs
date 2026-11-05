@@ -193,6 +193,10 @@ where
     /// of its parent in its pseudo-element tree, for `:only-child` to its right.
     pub pseudo_element_is_only_child: bool,
 
+    /// An optional hook function for checking whether a state pseudo-class to the right of the
+    /// pseudo-element matches when matching_mode is ForStatelessPseudoElement.
+    pub pseudo_element_state_matching_fn: Option<&'a dyn Fn(&Impl::NonTSPseudoClass) -> bool>,
+
     /// Extra implementation-dependent matching data.
     pub extra_data: Impl::ExtraMatchingData<'a>,
 
@@ -265,6 +269,7 @@ where
             in_negation: false,
             pseudo_element_matching_fn: None,
             pseudo_element_is_only_child: false,
+            pseudo_element_state_matching_fn: None,
             extra_data: Default::default(),
             current_relative_selector_anchor: None,
             selector_caches,
