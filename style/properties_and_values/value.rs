@@ -804,6 +804,19 @@ mod tests {
     }
 
     #[test]
+    fn container_relative_lengths_are_not_computationally_independent() {
+        let syntax = Descriptor::from_str("<length>", false).expect("the syntax must parse");
+        let url_data = UrlExtraData::from(url::Url::parse("about:blank").unwrap());
+        for (css, independent) in [("1px", true), ("1vw", true), ("1cqw", false), ("1cqmax", false)] {
+            let mut input = cssparser::ParserInput::new(css);
+            let parsed = CSSParser::new(&mut input).parse_entirely(|input| {
+                SpecifiedValue::parse(input, &syntax, &url_data, AllowComputationallyDependent::No)
+            });
+            assert_eq!(parsed.is_ok(), independent, "{css}");
+        }
+    }
+
+    #[test]
     fn transform_function_is_one_function() {
         assert!(computed("<transform-function>", "translateX(1px) scale(2)").is_err());
         assert!(computed("<transform-function>", "none").is_err());

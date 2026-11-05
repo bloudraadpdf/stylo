@@ -1528,22 +1528,40 @@ impl NoCalcLength {
             },
             // Container query lengths. Inherit the limitation from viewport units since
             // we may fall back to them.
-            "cqw" if !context.in_page_rule() && (cfg!(feature = "gecko") || cfg!(feature = "servo")) => {
+            "cqw" if !context.in_page_rule()
+                && context.allows_computational_dependence()
+                && (cfg!(feature = "gecko") || cfg!(feature = "servo")) =>
+            {
                 Self::ContainerRelative(ContainerRelativeLength::Cqw(value))
             },
-            "cqh" if !context.in_page_rule() && (cfg!(feature = "gecko") || cfg!(feature = "servo")) => {
+            "cqh" if !context.in_page_rule()
+                && context.allows_computational_dependence()
+                && (cfg!(feature = "gecko") || cfg!(feature = "servo")) =>
+            {
                 Self::ContainerRelative(ContainerRelativeLength::Cqh(value))
             },
-            "cqi" if !context.in_page_rule() && (cfg!(feature = "gecko") || cfg!(feature = "servo")) => {
+            "cqi" if !context.in_page_rule()
+                && context.allows_computational_dependence()
+                && (cfg!(feature = "gecko") || cfg!(feature = "servo")) =>
+            {
                 Self::ContainerRelative(ContainerRelativeLength::Cqi(value))
             },
-            "cqb" if !context.in_page_rule() && (cfg!(feature = "gecko") || cfg!(feature = "servo")) => {
+            "cqb" if !context.in_page_rule()
+                && context.allows_computational_dependence()
+                && (cfg!(feature = "gecko") || cfg!(feature = "servo")) =>
+            {
                 Self::ContainerRelative(ContainerRelativeLength::Cqb(value))
             },
-            "cqmin" if !context.in_page_rule() && (cfg!(feature = "gecko") || cfg!(feature = "servo")) => {
+            "cqmin" if !context.in_page_rule()
+                && context.allows_computational_dependence()
+                && (cfg!(feature = "gecko") || cfg!(feature = "servo")) =>
+            {
                 Self::ContainerRelative(ContainerRelativeLength::Cqmin(value))
             },
-            "cqmax" if !context.in_page_rule() && (cfg!(feature = "gecko") || cfg!(feature = "servo")) => {
+            "cqmax" if !context.in_page_rule()
+                && context.allows_computational_dependence()
+                && (cfg!(feature = "gecko") || cfg!(feature = "servo")) =>
+            {
                 Self::ContainerRelative(ContainerRelativeLength::Cqmax(value))
             },
             // moegoe -bd-* fork extension (F24): PDFreactor-compatible
