@@ -252,6 +252,13 @@ impl RangeOperand {
     }
 }
 
+fn equivalent(a: Option<&ComputedRegisteredValue>, b: Option<&ComputedRegisteredValue>) -> bool {
+    match (a, b) {
+        (Some(a), Some(b)) => a.is_equivalent(b),
+        (a, b) => a.is_none() && b.is_none(),
+    }
+}
+
 /// The query container, as seen from a container query evaluation context.
 pub(crate) struct StyleQueryContainer<'a, 'b> {
     context: &'a computed::Context<'b>,
@@ -312,7 +319,7 @@ impl<'a, 'b> StyleQueryContainer<'a, 'b> {
     fn declaration_matches(&self, name: &Name, value: Option<&Arc<SpecifiedValue>>) -> bool {
         let current = self.get(self.custom_properties(), name);
         let Some(value) = value else {
-            return current != self.initial(name);
+            return !equivalent(current, self.initial(name));
         };
         let mut keyword_input = ParserInput::new(value.css_text());
         let queried = match CSSWideKeyword::parse(&mut Parser::new(&mut keyword_input)) {
@@ -349,7 +356,7 @@ impl<'a, 'b> StyleQueryContainer<'a, 'b> {
                 None => None,
             },
         };
-        queried.as_ref() == current
+        equivalent(queried.as_ref(), current)
     }
 
     /// Parses the whole of a value without references.

@@ -377,7 +377,35 @@ impl SpecifiedValue {
     }
 }
 
+impl ComputedValueComponent {
+    fn is_equivalent(&self, other: &Self) -> bool {
+        match (self, other) {
+            (
+                Self::Color(computed::Color::Absolute(a)),
+                Self::Color(computed::Color::Absolute(b)),
+            ) => a.is_equivalent(b),
+            _ => self == other,
+        }
+    }
+}
+
 impl ComputedValue {
+    /// Whether this value and `other` are equal, with equivalent colors equal (CSS Color 4 §12).
+    pub fn is_equivalent(&self, other: &Self) -> bool {
+        match (&self.v, &other.v) {
+            (ValueInner::Component(a), ValueInner::Component(b)) => a.is_equivalent(b),
+            (ValueInner::List(a), ValueInner::List(b)) => {
+                a.multiplier == b.multiplier
+                    && a.components.len() == b.components.len()
+                    && a.components
+                        .iter()
+                        .zip(b.components.iter())
+                        .all(|(a, b)| a.is_equivalent(b))
+            },
+            (a, b) => a == b,
+        }
+    }
+
     fn to_declared_value(&self) -> properties::CustomDeclarationValue {
         if let ValueInner::Universal(ref var) = self.v {
             return properties::CustomDeclarationValue::Unparsed(Arc::clone(var));

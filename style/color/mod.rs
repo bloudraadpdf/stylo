@@ -609,6 +609,41 @@ impl AbsoluteColor {
         })
     }
 
+    /// Whether this color and `other` are equivalent colors (CSS Color 4 §12).
+    pub fn is_equivalent(&self, other: &Self) -> bool {
+        const EPSILON: ColorFloat = 0.00001;
+        let equal = |a: Option<ColorFloat>, b: Option<ColorFloat>| match (a, b) {
+            (Some(a), Some(b)) => (a - b).abs() <= EPSILON,
+            (a, b) => a.is_none() && b.is_none(),
+        };
+        let (a, b) = (self.for_comparison(), other.for_comparison());
+        if a.0 == b.0 {
+            return a.1.iter().zip(b.1.iter()).all(|(a, b)| equal(*a, *b));
+        }
+        if a.1.iter().chain(b.1.iter()).any(Option::is_none) {
+            return false;
+        }
+        let (a, b) = (
+            self.to_color_space(ColorSpace::Oklab),
+            other.to_color_space(ColorSpace::Oklab),
+        );
+        [a.c0(), a.c1(), a.c2(), a.alpha()]
+            .into_iter()
+            .zip([b.c0(), b.c1(), b.c2(), b.alpha()])
+            .all(|(a, b)| equal(a, b))
+    }
+
+    /// The color space and the components, alpha last, that compare for equivalence: powerless
+    /// components are missing, and the legacy color syntaxes are in srgb.
+    fn for_comparison(&self) -> (ColorSpace, [Option<ColorFloat>; 4]) {
+        let color = match self.color_space {
+            ColorSpace::Hsl | ColorSpace::Hwb => self.to_color_space(ColorSpace::Srgb),
+            _ => *self,
+        };
+        let ([c0, c1, c2], _) = color.prepared_source_components();
+        (color.color_space, [c0, c1, c2, color.alpha()])
+    }
+
     /// Convert this color to the specified color space.
     pub fn to_color_space(&self, color_space: ColorSpace) -> Self {
         self.to_color_space_impl(color_space)
@@ -893,6 +928,40 @@ impl From<PredefinedColorSpace> for ColorSpace {
 #[cfg(test)]
 mod tests {
     use super::{AbsoluteColor, ColorSpace};
+
+    #[test]
+    fn equivalent_colors_treat_powerless_hues_as_missing() {
+        let color = |space, c0: f32, c1: f32, c2: f32| AbsoluteColor::new(space, c0, c1, c2, 1.0);
+        let equivalent = |a: AbsoluteColor, b: AbsoluteColor| a.is_equivalent(&b);
+        assert!(equivalent(
+            color(ColorSpace::Oklch, 0.5, 0.0, 40.0),
+            color(ColorSpace::Oklch, 0.5, 0.0, 200.0)
+        ));
+        assert!(equivalent(
+            color(ColorSpace::Lch, 50.0, 0.0015, 30.0),
+            color(ColorSpace::Lch, 50.0, 0.0015, 200.0)
+        ));
+        assert!(!equivalent(
+            color(ColorSpace::Lch, 50.0, 0.0016, 30.0),
+            color(ColorSpace::Lch, 50.0, 0.0016, 200.0)
+        ));
+        assert!(equivalent(
+            color(ColorSpace::Hwb, 30.0, 60.0, 40.0),
+            color(ColorSpace::Hwb, 200.0, 60.0, 40.0)
+        ));
+        assert!(equivalent(
+            AbsoluteColor::srgb_legacy(255, 0, 0, 1.0),
+            color(ColorSpace::Srgb, 1.0, 0.0, 0.0)
+        ));
+        assert!(equivalent(
+            color(ColorSpace::Srgb, 0.0, 0.0, 0.0),
+            color(ColorSpace::Oklab, 0.0, 0.0, 0.0)
+        ));
+        assert!(!equivalent(
+            color(ColorSpace::Oklch, 0.5, 0.2, 40.0),
+            color(ColorSpace::Oklch, 0.5, 0.2, 200.0)
+        ));
+    }
 
     #[test]
     fn hwb_to_hsl_to_srgb_keeps_zero_channel_exact() {

@@ -26,10 +26,11 @@ fn normalize(value: ColorFloat) -> ColorFloat {
 type Transform = euclid::default::Transform3D<ColorFloat>;
 type Vector = euclid::default::Vector3D<ColorFloat>;
 
-/// Chroma at or below this value has a powerless LCH hue.
-pub const LCH_HUE_EPSILON: ColorFloat = 0.0015;
-/// Chroma at or below this value has a powerless OkLCH hue.
-pub const OKLCH_HUE_EPSILON: ColorFloat = 0.000004;
+/// Chroma at or below this value has a powerless LCH hue. The value is in the precision of
+/// authored numbers, so an authored chroma of exactly the epsilon is powerless.
+pub const LCH_HUE_EPSILON: ColorFloat = 0.0015_f32 as ColorFloat;
+/// Chroma at or below this value has a powerless OkLCH hue, in the precision of authored numbers.
+pub const OKLCH_HUE_EPSILON: ColorFloat = 0.000004_f32 as ColorFloat;
 
 /// Normalize hue into [0, 360).
 #[inline]
