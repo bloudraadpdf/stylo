@@ -6,7 +6,7 @@
 //!
 //! https://drafts.csswg.org/css-conditional-5/#typedef-style-feature
 
-use super::feature_expression::Operator;
+use super::feature_expression::{consume_until_comparison, Operator};
 use crate::custom_properties::{self, ComputedCustomProperties, Name, SpecifiedValue};
 use crate::derives::*;
 use crate::dom::AttributeTracker;
@@ -16,7 +16,7 @@ use crate::properties_and_values::value::ComputedValue as ComputedRegisteredValu
 use crate::stylesheets::{CssRuleType, Origin};
 use crate::values::computed::{self, ToComputedValue};
 use crate::values::specified::{Angle, Length, Number, Percentage, Resolution, Time};
-use cssparser::{Parser, ParserInput, Token};
+use cssparser::{Parser, ParserInput};
 use selectors::kleene_value::KleeneValue;
 use servo_arc::Arc;
 use std::cmp::Ordering;
@@ -111,20 +111,7 @@ impl StyleRangeValue {
         context: &ParserContext,
         input: &mut Parser<'i, '_>,
     ) -> Result<Self, ParseError<'i>> {
-        input.skip_whitespace();
-        let start = input.position();
-        loop {
-            let state = input.state();
-            if matches!(
-                input.next_including_whitespace_and_comments(),
-                Err(_) | Ok(&Token::Delim('<' | '>' | '='))
-            ) {
-                input.reset(&state);
-                break;
-            }
-        }
-        let css = input.slice_from(start);
-        let mut value_input = ParserInput::new(css);
+        let mut value_input = ParserInput::new(consume_until_comparison(input));
         Parser::new(&mut value_input)
             .parse_entirely(|input| {
                 if let Ok(name) = input.try_parse(|input| {
@@ -265,15 +252,15 @@ impl RangeOperand {
     }
 }
 
-/// The query container, as seen from a style query evaluation context.
-struct StyleQueryContainer<'a, 'b> {
+/// The query container, as seen from a container query evaluation context.
+pub(crate) struct StyleQueryContainer<'a, 'b> {
     context: &'a computed::Context<'b>,
     stylist: &'a crate::stylist::Stylist,
     container: &'a computed::StyleContainer<'b>,
 }
 
 impl<'a, 'b> StyleQueryContainer<'a, 'b> {
-    fn new(context: &'a computed::Context<'b>) -> Option<Self> {
+    pub(crate) fn new(context: &'a computed::Context<'b>) -> Option<Self> {
         Some(Self {
             context,
             stylist: context.builder.stylist?,
@@ -305,7 +292,7 @@ impl<'a, 'b> StyleQueryContainer<'a, 'b> {
     }
 
     /// Replaces `var()`, `attr()` and `env()` against the container.
-    fn substitute(&self, value: &SpecifiedValue) -> Option<SpecifiedValue> {
+    pub(crate) fn substitute(&self, value: &SpecifiedValue) -> Option<SpecifiedValue> {
         if !value.has_references() {
             return Some(value.clone());
         }
@@ -365,13 +352,12 @@ impl<'a, 'b> StyleQueryContainer<'a, 'b> {
         queried.as_ref() == current
     }
 
-    fn operand(&self, value: &StyleRangeValue) -> Option<RangeOperand> {
-        let value = match value {
-            StyleRangeValue::Property(name) => self
-                .get(self.custom_properties(), name)?
-                .to_variable_value(),
-            StyleRangeValue::Value(value) => self.substitute(value)?,
-        };
+    /// Parses the whole of a value without references.
+    pub(crate) fn parse<T>(
+        &self,
+        value: &SpecifiedValue,
+        parse: impl for<'i, 't> FnOnce(&ParserContext, &mut Parser<'i, 't>) -> Result<T, ParseError<'i>>,
+    ) -> Option<T> {
         let context = ParserContext::new(
             Origin::Author,
             &value.url_data,
@@ -384,8 +370,20 @@ impl<'a, 'b> StyleQueryContainer<'a, 'b> {
         );
         let mut input = ParserInput::new(value.css_text());
         Parser::new(&mut input)
-            .parse_entirely(|input| RangeOperand::parse(&context, self.context, input))
+            .parse_entirely(|input| parse(&context, input))
             .ok()
+    }
+
+    fn operand(&self, value: &StyleRangeValue) -> Option<RangeOperand> {
+        let value = match value {
+            StyleRangeValue::Property(name) => self
+                .get(self.custom_properties(), name)?
+                .to_variable_value(),
+            StyleRangeValue::Value(value) => self.substitute(value)?,
+        };
+        self.parse(&value, |context, input| {
+            RangeOperand::parse(context, self.context, input)
+        })
     }
 
     fn range_matches(

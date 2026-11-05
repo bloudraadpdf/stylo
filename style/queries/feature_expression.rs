@@ -7,14 +7,17 @@
 
 use super::feature::{Evaluator, QueryFeatureDescription};
 use super::feature::{FeatureFlags, KeywordDiscriminant};
+use super::style_feature::StyleQueryContainer;
+use crate::custom_properties::SpecifiedValue;
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
 use crate::str::{starts_with_ignore_ascii_case, string_as_ascii_lowercase};
 use crate::values::computed::{self, ToComputedValue};
 use crate::values::specified::{Integer, Length, Number, Ratio, Resolution};
 use crate::{Atom, Zero};
-use cssparser::{Parser, Token};
+use cssparser::{Parser, ParserInput, Token};
 use selectors::kleene_value::KleeneValue;
+use servo_arc::Arc;
 use std::cmp::Ordering;
 use std::fmt::{self, Write};
 use style_traits::{CssWriter, ParseError, StyleParseErrorKind, ToCss};
@@ -239,6 +242,48 @@ impl QueryFeatureExpressionKind {
         }
     }
 
+    fn values(&self) -> impl Iterator<Item = &QueryExpressionValue> {
+        let (first, second) = match *self {
+            Self::Empty => (None, None),
+            Self::Single(ref v) | Self::LegacyRange(_, ref v) => (Some(v), None),
+            Self::Range {
+                ref left,
+                ref right,
+            } => (
+                left.as_ref().map(|(_, v)| v),
+                right.as_ref().map(|(_, v)| v),
+            ),
+        };
+        first.into_iter().chain(second)
+    }
+
+    fn has_unparsed_value(&self) -> bool {
+        self.values()
+            .any(|value| matches!(value, QueryExpressionValue::Unparsed(..)))
+    }
+
+    fn try_map(
+        &self,
+        mut map: impl FnMut(&QueryExpressionValue) -> Option<QueryExpressionValue>,
+    ) -> Option<Self> {
+        let mut bound = |bound: &Option<(Operator, QueryExpressionValue)>| match bound {
+            Some((operator, value)) => map(value).map(|value| Some((*operator, value))),
+            None => Some(None),
+        };
+        Some(match *self {
+            Self::Empty => Self::Empty,
+            Self::Single(ref v) => Self::Single(map(v)?),
+            Self::LegacyRange(range, ref v) => Self::LegacyRange(range, map(v)?),
+            Self::Range {
+                ref left,
+                ref right,
+            } => Self::Range {
+                left: bound(left)?,
+                right: bound(right)?,
+            },
+        })
+    }
+
     /// Non-ranged features only need to compare to one value at most.
     fn non_ranged_value(&self) -> Option<&QueryExpressionValue> {
         match *self {
@@ -297,6 +342,25 @@ impl ToCss for QueryFeatureExpression {
         }
         dest.write_char(')')
     }
+}
+
+/// Consumes the tokens up to the next top-level `<mf-lt>`, `<mf-gt>` or `<mf-eq>`, and returns
+/// them.
+pub(crate) fn consume_until_comparison<'i>(input: &mut Parser<'i, '_>) -> &'i str {
+    input.skip_whitespace();
+    let start = input.position();
+    loop {
+        let state = input.state();
+        match input.next_including_whitespace_and_comments() {
+            Err(_) => break,
+            Ok(&Token::Delim('<' | '>' | '=')) => {
+                input.reset(&state);
+                break;
+            },
+            Ok(_) => {},
+        }
+    }
+    input.slice_from(start)
 }
 
 fn consume_operation_or_colon<'i>(
@@ -458,7 +522,7 @@ impl QueryFeatureExpression {
         input.reset(&start);
 
         let feature = &feature_type.features()[feature_index];
-        let left_val = QueryExpressionValue::parse(feature, context, input)?;
+        let left_val = QueryExpressionValue::parse_for_type(feature_type, feature, context, input)?;
         let left_op = Operator::parse(input)?;
 
         {
@@ -475,7 +539,10 @@ impl QueryFeatureExpression {
                 if !left_op.is_compatible_with(op) {
                     return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
                 }
-                Some((op, QueryExpressionValue::parse(feature, context, input)?))
+                Some((
+                    op,
+                    QueryExpressionValue::parse_for_type(feature_type, feature, context, input)?,
+                ))
             },
             None => None,
         };
@@ -530,10 +597,11 @@ impl QueryFeatureExpression {
 
         let feature = &feature_type.features()[feature_index];
 
-        let value = QueryExpressionValue::parse(feature, context, input).map_err(|err| {
-            err.location
-                .new_custom_error(StyleParseErrorKind::MediaQueryExpectedFeatureValue)
-        })?;
+        let value = QueryExpressionValue::parse_for_type(feature_type, feature, context, input)
+            .map_err(|err| {
+                err.location
+                    .new_custom_error(StyleParseErrorKind::MediaQueryExpectedFeatureValue)
+            })?;
 
         let kind = match range {
             Some(range) => {
@@ -562,6 +630,21 @@ impl QueryFeatureExpression {
         Ok(Self::new(feature_type, feature_index, kind))
     }
 
+    /// Substitutes the unparsed values against the query container, and parses them.
+    fn resolve(&self, context: &computed::Context) -> Option<QueryFeatureExpressionKind> {
+        let container = StyleQueryContainer::new(context)?;
+        let feature = self.feature();
+        self.kind.try_map(|value| match value {
+            QueryExpressionValue::Unparsed(value) => {
+                let value = container.substitute(value)?;
+                container.parse(&value, |context, input| {
+                    QueryExpressionValue::parse(feature, context, input)
+                })
+            },
+            value => Some(value.clone()),
+        })
+    }
+
     /// Returns whether this query evaluates to true for the given device.
     pub fn matches(&self, context: &computed::Context) -> KleeneValue {
         macro_rules! expect {
@@ -573,10 +656,23 @@ impl QueryFeatureExpression {
             };
         }
 
+        let resolved;
+        let kind = if self.kind.has_unparsed_value() {
+            match self.resolve(context) {
+                Some(kind) => {
+                    resolved = kind;
+                    &resolved
+                },
+                None => return KleeneValue::False,
+            }
+        } else {
+            &self.kind
+        };
+
         KleeneValue::from(match self.feature().evaluator {
             Evaluator::Length(eval) => {
                 let v = eval(context);
-                self.kind
+                kind
                     .evaluate(v, |v| expect!(Length, v).to_computed_value(context))
             },
             Evaluator::OptionalLength(eval) => {
@@ -584,16 +680,16 @@ impl QueryFeatureExpression {
                     Some(v) => v,
                     None => return KleeneValue::Unknown,
                 };
-                self.kind
+                kind
                     .evaluate(v, |v| expect!(Length, v).to_computed_value(context))
             },
             Evaluator::Integer(eval) => {
                 let v = eval(context);
-                self.kind.evaluate(v, |v| expect!(Integer, v).to_computed_value(context))
+                kind.evaluate(v, |v| expect!(Integer, v).to_computed_value(context))
             },
             Evaluator::Float(eval) => {
                 let v = eval(context);
-                self.kind.evaluate(v, |v| expect!(Float, v).to_computed_value(context))
+                kind.evaluate(v, |v| expect!(Float, v).to_computed_value(context))
             },
             Evaluator::NumberRatio(eval) => {
                 let ratio = eval(context);
@@ -601,7 +697,7 @@ impl QueryFeatureExpression {
                 // to convert it if necessary.
                 // FIXME: we may need to update here once
                 // https://github.com/w3c/csswg-drafts/issues/4954 got resolved.
-                self.kind
+                kind
                     .evaluate(ratio, |v| expect!(NumberRatio, v).to_computed_value(context).used_value())
             },
             Evaluator::OptionalNumberRatio(eval) => {
@@ -610,25 +706,23 @@ impl QueryFeatureExpression {
                     None => return KleeneValue::Unknown,
                 };
                 // See above for subtleties here.
-                self.kind
+                kind
                     .evaluate(ratio, |v| expect!(NumberRatio, v).to_computed_value(context).used_value())
             },
             Evaluator::Resolution(eval) => {
                 let v = eval(context).dppx();
-                self.kind.evaluate(v, |v| {
+                kind.evaluate(v, |v| {
                     expect!(Resolution, v).to_computed_value(context).dppx()
                 })
             },
             Evaluator::Enumerated { evaluator, .. } => {
-                let computed = self
-                    .kind
+                let computed = kind
                     .non_ranged_value()
                     .map(|v| *expect!(Enumerated, v));
                 return evaluator(context, computed);
             },
             Evaluator::BoolInteger(eval) => {
-                let computed = self
-                    .kind
+                let computed = kind
                     .non_ranged_value()
                     .map(|v| expect!(BoolInteger, v).to_computed_value(context));
                 let boolean = eval(context);
@@ -657,6 +751,9 @@ pub enum QueryExpressionValue {
     /// An enumerated value, defined by the variant keyword table in the
     /// feature's `mData` member.
     Enumerated(KeywordDiscriminant),
+    /// A container feature value with `var()`, `attr()` or `env()`, substituted against the query
+    /// container.
+    Unparsed(#[ignore_malloc_size_of = "Arc"] Arc<SpecifiedValue>),
 }
 
 impl QueryExpressionValue {
@@ -675,7 +772,35 @@ impl QueryExpressionValue {
                 Evaluator::Enumerated { serializer, .. } => dest.write_str(&*serializer(value)),
                 _ => unreachable!(),
             },
+            QueryExpressionValue::Unparsed(ref value) => value.to_css(dest),
         }
+    }
+
+    /// Parses a value of `for_feature`, or for a container feature, a value with references.
+    fn parse_for_type<'i, 't>(
+        feature_type: FeatureType,
+        for_feature: &QueryFeatureDescription,
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<QueryExpressionValue, ParseError<'i>> {
+        let start = input.state();
+        let error = match Self::parse(for_feature, context, input) {
+            Ok(value) => return Ok(value),
+            Err(error) => error,
+        };
+        if feature_type != FeatureType::Container {
+            return Err(error);
+        }
+        input.reset(&start);
+        let mut value_input = ParserInput::new(consume_until_comparison(input));
+        Parser::new(&mut value_input)
+            .parse_entirely(|input| {
+                SpecifiedValue::parse(input, &context.url_data, &context.namespaces)
+            })
+            .ok()
+            .filter(SpecifiedValue::has_references)
+            .map(|value| QueryExpressionValue::Unparsed(Arc::new(value)))
+            .ok_or(error)
     }
 
     fn parse<'i, 't>(

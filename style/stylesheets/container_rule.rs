@@ -796,6 +796,10 @@ mod tests {
                 "style(--foo < --bar <= --baz)",
                 "style(--foo < --bar <= --baz)",
             ),
+            (
+                "style(10px <= calc(10em + 20em))",
+                "style(10px <= calc(10em + 20em))",
+            ),
         ] {
             assert_eq!(parse(query).to_css_string(), expected);
         }
@@ -819,5 +823,27 @@ mod tests {
                 "{query}"
             );
         }
+    }
+
+    #[test]
+    fn size_features_keep_substitution_functions_for_the_query_container() {
+        for (query, expected) in [
+            ("(width > var(--x))", "(width > var(--x))"),
+            (
+                "(var(--a, 1px) < width <= calc(var(--b) * 2))",
+                "(var(--a, 1px) < width <= calc(var(--b) * 2))",
+            ),
+        ] {
+            let conditions = parse(query);
+            let condition = conditions.iter().next().unwrap();
+            assert!(
+                !condition.flags.contains(FeatureFlags::GENERAL_ENCLOSED),
+                "{query}"
+            );
+            assert_eq!(conditions.to_css_string(), expected);
+        }
+        let conditions = parse("(width > foo)");
+        let condition = conditions.iter().next().unwrap();
+        assert!(condition.flags.contains(FeatureFlags::GENERAL_ENCLOSED));
     }
 }
