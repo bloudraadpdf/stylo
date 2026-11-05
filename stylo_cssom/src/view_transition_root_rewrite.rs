@@ -23,6 +23,8 @@ pub const INTERNAL_CAPTURE_PAINT_TRANSFORM_PROPERTY: &str =
     "--moegoe-view-transition-capture-paint-transform";
 pub const INTERNAL_GROUP_AUTHORED_TRANSFORM_MARKER: &str =
     "--moegoe-view-transition-group-authored-transform";
+pub const INTERNAL_GROUP_AUTHORED_INSET_MARKER: &str =
+    "--moegoe-view-transition-group-authored-inset";
 pub const INTERNAL_GROUP_CHILDREN_BORDER_COLOR_MARKER: &str =
     "--moegoe-view-transition-group-children-border-color";
 pub const INTERNAL_GROUP_CHILDREN_OVERFLOW_MARKER: &str =
@@ -176,11 +178,6 @@ pub fn expand_style_rule(prelude: &str, body: &str) -> StyleRuleExpansion {
     append_projected_rule(
         &mut rule,
         project_group_animation_carrier_selectors(prelude),
-        project_group_positioned_inset_declarations(body),
-    );
-    append_projected_rule(
-        &mut rule,
-        project_group_animation_carrier_selectors(prelude),
         project_group_authored_transform_marker(body),
     );
     for (pseudo, carrier) in [
@@ -238,15 +235,45 @@ pub fn expand_style_rule(prelude: &str, body: &str) -> StyleRuleExpansion {
     }
 }
 
+/// The insets of a group, which place it in the snapshot containing block (CSS View Transitions 1 §3.2).
+const GROUP_INSET_PROPERTIES: [&str; 11] = [
+    "top",
+    "right",
+    "bottom",
+    "left",
+    "inset",
+    "inset-block",
+    "inset-block-start",
+    "inset-block-end",
+    "inset-inline",
+    "inset-inline-start",
+    "inset-inline-end",
+];
+
 fn append_projected_style_tree_rules(rule: &mut String, prelude: &str, body: &str) {
+    let group_selectors = project_group_style_selectors(prelude, GROUP_PSEUDO, GROUP_STYLE_ELEMENT);
     append_projected_rule(
         rule,
-        project_group_style_selectors(prelude, GROUP_PSEUDO, GROUP_STYLE_ELEMENT),
+        group_selectors.clone(),
         project_declarations(
             body,
             &["background", "background-color", "visibility"],
             None,
         ),
+    );
+    let insets = project_declarations(body, &GROUP_INSET_PROPERTIES, None);
+    append_projected_rule(
+        rule,
+        group_selectors.clone(),
+        insets
+            .as_ref()
+            .map(|_| format!("{INTERNAL_GROUP_AUTHORED_INSET_MARKER}:1;")),
+    );
+    append_projected_rule(rule, group_selectors.clone(), insets);
+    append_projected_rule(
+        rule,
+        group_selectors,
+        project_declarations(body, &["writing-mode", "direction"], None),
     );
     let group_children_selectors =
         project_group_style_selectors(prelude, GROUP_CHILDREN_PSEUDO, GROUP_CHILDREN_STYLE_ELEMENT);
@@ -861,17 +888,6 @@ fn project_animation_carrier_declarations(body: &str) -> Option<String> {
     )
 }
 
-fn project_group_positioned_inset_declarations(body: &str) -> Option<String> {
-    let mut output = String::new();
-    for property in ["top", "right", "bottom", "left"] {
-        let replacement = format!("{INTERNAL_GROUP_PLACEMENT_PREFIX}{property}");
-        if let Some(declaration) = project_declarations(body, &[property], Some(&replacement)) {
-            output.push_str(&declaration);
-        }
-    }
-    (!output.is_empty()).then_some(output)
-}
-
 fn project_group_authored_transform_marker(body: &str) -> Option<String> {
     project_declarations(body, &["transform"], None)
         .map(|_| format!("{INTERNAL_GROUP_AUTHORED_TRANSFORM_MARKER}:1;"))
@@ -1202,6 +1218,18 @@ mod tests {
         assert!(
             rewritten.contains("--moegoe-view-transition-image-pair-transform:translateX(100px)")
         );
+    }
+
+    #[test]
+    fn projects_group_insets_and_writing_mode_to_the_style_tree() {
+        let rewritten = rewrite_view_transition_root(
+            "html::view-transition-group(target){top:unset;inset-block-end:0;writing-mode:vertical-lr;color:red}",
+        );
+
+        assert!(rewritten.contains(GROUP_STYLE_ELEMENT));
+        assert!(rewritten.contains("{--moegoe-view-transition-group-authored-inset:1;}"));
+        assert!(rewritten.contains("{top:unset;inset-block-end:0;}"));
+        assert!(rewritten.contains("{writing-mode:vertical-lr;}"));
     }
 
     #[test]
