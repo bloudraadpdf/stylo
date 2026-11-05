@@ -16,6 +16,8 @@ and activation belong to the consumer. This change supplies typed syntax only.
 
 Specification used: Moegoe's repository-local `docs/specs/css-overflow-5.md`.
 
-`:focus-within` follows only a pseudo-element that declares support for it,
-`::scroll-marker-group` (CSS Overflow 5 section 3.3.2). The group accepts
+`:focus-within` follows only a pseudo-element that declares support for it:
+`::scroll-marker-group` (CSS Overflow 5 section 3.3.2), and `::scroll-marker`
+and `::scroll-button()`, which `:focus` applies to (Selectors 4: `:focus-within`
+applies to each pseudo-element that `:focus` applies to). The group accepts
 state pseudo-classes, so the user-action states parse after it too.

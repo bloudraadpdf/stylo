@@ -144,12 +144,15 @@ mod tests {
     use super::{parse_dom_selector, selector_targets_pseudo_element};
 
     #[test]
-    fn focus_within_follows_only_the_scroll_marker_group() {
-        assert_eq!(
-            super::selector_serializations("#s::scroll-marker-group:focus-within"),
-            ["#s::scroll-marker-group:focus-within"]
-        );
-        for source in ["::scroll-marker:focus-within", "::before:focus-within", "::scroll-marker-group:disabled"] {
+    fn focus_within_follows_only_the_focusable_scroll_navigation_pseudo_elements() {
+        for source in [
+            "#s::scroll-marker-group:focus-within",
+            "#s::scroll-marker:focus-within",
+            "#s::scroll-button(up):focus-within",
+        ] {
+            assert_eq!(super::selector_serializations(source), [source]);
+        }
+        for source in ["::before:focus-within", "::scroll-marker-group:disabled"] {
             assert!(super::selector_serializations(source).is_empty(), "{source}");
         }
     }

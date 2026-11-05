@@ -317,9 +317,10 @@ impl ::selectors::parser::PseudoElement for PseudoElement {
         matches!(self, Self::ScrollButton(_))
     }
 
-    /// CSS Overflow 5 §3.3.2: `:focus-within` matches a ::scroll-marker-group with a focused ::scroll-marker.
+    /// `:focus-within` applies to each pseudo-element that `:focus` applies to (Selectors 4 §9.5) and to a
+    /// ::scroll-marker-group with a focused ::scroll-marker (CSS Overflow 5 §3.3.2).
     fn accepts_focus_within_pseudo_class(&self) -> bool {
-        matches!(self, Self::ScrollMarkerGroup)
+        matches!(self, Self::ScrollMarkerGroup | Self::ScrollMarker | Self::ScrollButton(_))
     }
 
     fn valid_after_slotted(&self) -> bool {
