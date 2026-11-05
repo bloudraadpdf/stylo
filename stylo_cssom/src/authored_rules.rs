@@ -631,6 +631,7 @@ fn parse_view_transition_compatibility_rule(source: &str) -> Option<stylo_cssom_
     if !has_view_transition_selector || selector.starts_with('@') {
         return None;
     }
+    crate::selector_query::parse_selector(selector).ok()?;
 
     let active = crate::active_view_transition_selector::rewrite_stylesheet(source);
     let projected = crate::view_transition_root_rewrite::rewrite_view_transition_root(&active);
@@ -2289,6 +2290,15 @@ mod tests {
             parsed.rule_nodes()[1].projection_serialization(),
             "html::view-transition-old(root) { opacity: 1 }"
         );
+    }
+
+    #[test]
+    fn stylesheet_drops_a_view_transition_rule_with_an_invalid_selector_list() {
+        let css = "::view-transition-group(*) ::view-transition-image-pair(*), ::view-transition-old(*) { display: none }";
+
+        let parsed = ParsedStylesheet::parse(css).expect("the view-transition fixture must parse");
+
+        assert!(parsed.rule_nodes().is_empty());
     }
 
     #[test]
