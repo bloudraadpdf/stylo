@@ -874,7 +874,7 @@ pub fn ancestor_placement_registrations() -> stylo_cssom_model::InternalStyleshe
 
 fn project_ancestor_placement_declarations(body: &str, prefix: &str) -> Option<String> {
     let mut output = String::new();
-    for property in ANCESTOR_PLACEMENT_INSETS.into_iter().chain(["transform"]) {
+    for property in ANCESTOR_PLACEMENT_INSETS.into_iter().chain(["transform", "clip-path"]) {
         let replacement = format!("{prefix}{property}");
         if let Some(declaration) = project_declarations(body, &[property], Some(&replacement)) {
             output.push_str(&declaration);
@@ -1239,6 +1239,17 @@ mod tests {
         assert!(
             rewritten.contains("--moegoe-view-transition-image-pair-transform:translateX(100px)")
         );
+    }
+
+    #[test]
+    fn projects_group_and_image_pair_clip_paths_to_the_captures() {
+        let rewritten = rewrite_view_transition_root(concat!(
+            "html::view-transition-group(card){clip-path:inset(1px 2px)}",
+            "html::view-transition-image-pair(card){clip-path:inset(3px)}",
+        ));
+
+        assert!(rewritten.contains("--moegoe-view-transition-group-clip-path:inset(1px 2px)"));
+        assert!(rewritten.contains("--moegoe-view-transition-image-pair-clip-path:inset(3px)"));
     }
 
     #[test]
