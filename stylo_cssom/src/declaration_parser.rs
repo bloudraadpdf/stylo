@@ -1,10 +1,7 @@
 use std::sync::Arc;
 
 use cssparser::{Parser, ParserInput, Token, parse_important};
-use style::values::specified::{
-    ContainerName, ContainerType,
-    position::{PositionTryFallbacks, PositionTryOrder},
-};
+use style::values::specified::position::{PositionTryFallbacks, PositionTryOrder};
 use style::{
     parser::{Parse, ParserContext},
     properties::{
@@ -111,60 +108,6 @@ impl CssomDeclarationContext {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-enum SpecifiedContainerShorthand {
-    CssWide(CSSWideKeyword),
-    Longhands {
-        name: ContainerName,
-        container_type: ContainerType,
-    },
-}
-
-impl SpecifiedContainerShorthand {
-    fn parse(css: &str) -> Option<Self> {
-        parse_fragment_with(css, |context, input| {
-            if let Ok(keyword) = input.try_parse(|input| {
-                let ident = input.expect_ident()?;
-                CSSWideKeyword::from_ident(ident).map_err(|()| {
-                    input.new_custom_error::<StyleParseErrorKind<'_>, StyleParseErrorKind<'_>>(
-                        StyleParseErrorKind::UnspecifiedError,
-                    )
-                })
-            }) {
-                return Ok(Self::CssWide(keyword));
-            }
-
-            let name = ContainerName::parse(context, input)?;
-            let container_type = if input.try_parse(|input| input.expect_delim('/')).is_ok() {
-                ContainerType::parse(context, input)?
-            } else {
-                ContainerType::NORMAL
-            };
-            Ok(Self::Longhands {
-                name,
-                container_type,
-            })
-        })
-    }
-
-    fn declarations(self) -> Option<SourcePropertyDeclaration> {
-        match self {
-            Self::CssWide(keyword) => {
-                css_wide_longhand_declarations(&["container-name", "container-type"], keyword)
-            },
-            Self::Longhands {
-                name,
-                container_type,
-            } => {
-                let mut declarations = SourcePropertyDeclaration::default();
-                declarations.push(PropertyDeclaration::ContainerName(name));
-                declarations.push(PropertyDeclaration::ContainerType(container_type));
-                Some(declarations)
-            },
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
 enum SpecifiedPositionTryShorthand {
     CssWide(CSSWideKeyword),
     Longhands {
@@ -211,9 +154,6 @@ pub(crate) fn adapter_shorthand_is_valid(property: &str, value: &str) -> Option<
     use stylo_cssom_model::AdapterRoute;
 
     match inline_style_cssom_property_schema(property)?.parser {
-        AdapterRoute::ContainerShorthand => {
-            Some(SpecifiedContainerShorthand::parse(value).is_some())
-        },
         AdapterRoute::PositionTryShorthand => Some(position_try_shorthand_is_valid(value)),
         AdapterRoute::Stylo | AdapterRoute::Unsupported => None,
     }
@@ -1200,25 +1140,6 @@ fn declaration_block_get_property_value(
     property: &str,
 ) -> Option<String> {
     let adapter = inline_style_cssom_property_schema(property).map(|schema| schema.serializer);
-    if adapter == Some(stylo_cssom_model::AdapterRoute::ContainerShorthand) {
-        let name = declaration_block_get_property_value(block, "container-name")?;
-        let container_type = declaration_block_get_property_value(block, "container-type")?;
-        let name_id = PropertyId::parse_enabled_for_all_content("container-name").ok()?;
-        let type_id = PropertyId::parse_enabled_for_all_content("container-type").ok()?;
-        if block.property_priority(&name_id) != block.property_priority(&type_id) {
-            return None;
-        }
-        if let ShorthandCssWideValue::Uniform(keyword) =
-            ShorthandCssWideValue::from_longhands(&name, &container_type)?
-        {
-            return Some(keyword.to_str().to_owned());
-        }
-        return if container_type == "normal" {
-            Some(name)
-        } else {
-            Some(format!("{name} / {container_type}"))
-        };
-    }
     if adapter == Some(stylo_cssom_model::AdapterRoute::PositionTryShorthand) {
         return position_try_shorthand_value(block);
     }
@@ -1670,14 +1591,6 @@ fn declaration_block_set_property_with_context(
 ) -> bool {
     if matches!(rule_type, CssRuleType::Style) {
         match inline_style_cssom_property_schema(property).map(|schema| schema.parser) {
-            Some(stylo_cssom_model::AdapterRoute::ContainerShorthand) => {
-                return apply_parsed_shorthand(
-                    block,
-                    SpecifiedContainerShorthand::parse(value)
-                        .and_then(SpecifiedContainerShorthand::declarations),
-                    priority,
-                );
-            },
             Some(stylo_cssom_model::AdapterRoute::PositionTryShorthand) => {
                 return apply_parsed_shorthand(
                     block,

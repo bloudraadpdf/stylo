@@ -4677,6 +4677,17 @@ mod tests {
     }
 
     #[test]
+    fn servo_parses_the_container_shorthand() {
+        let _lock = pref_lock().lock().unwrap();
+        let _container_queries = BoolPrefGuard::set("layout.container-queries.enabled", true);
+        let _scroll_state = BoolPrefGuard::set("layout.css.scroll-state.enabled", true);
+        assert_standard_properties(&["container"]);
+        for value in ["none", "a", "a b / size", "a / inline-size scroll-state"] {
+            assert_property_roundtrip("container", value);
+        }
+    }
+
+    #[test]
     fn servo_parses_scrollbar_properties() {
         assert_standard_properties(&["scrollbar-width", "scrollbar-color", "scrollbar-gutter"]);
     }

@@ -317,7 +317,6 @@ impl ComputedRetainedKeywordClass {
 pub enum AdapterRoute {
     Unsupported,
     Stylo,
-    ContainerShorthand,
     PositionTryShorthand,
 }
 

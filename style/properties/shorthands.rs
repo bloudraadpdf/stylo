@@ -971,7 +971,6 @@ pub mod border {
     }
 }
 
-#[cfg(feature = "gecko")]
 pub mod container {
     use super::*;
     pub use crate::properties::shorthands_generated::container::*;
