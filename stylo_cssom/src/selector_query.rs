@@ -116,6 +116,10 @@ pub fn serialize_selector_list(selectors: &ParsedSelectorList) -> String {
     cssparser::ToCss::to_css_string(selectors)
 }
 
+pub fn serialize_pseudo_element(pseudo: &PseudoElement) -> String {
+    cssparser::ToCss::to_css_string(pseudo)
+}
+
 pub fn selector_serializations(source: &str) -> Vec<String> {
     parse_selector(source)
         .map(|list| {
