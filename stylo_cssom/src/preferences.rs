@@ -28,6 +28,11 @@ const REQUIRED_SERVO_STYLE_PREFS: &[RequiredServoStylePref] = &[
         rationale: "the style-query half of @container support",
     },
     RequiredServoStylePref {
+        name: "layout.css.scroll-state.enabled",
+        value: true,
+        rationale: "container-type: scroll-state and scroll-state() container queries",
+    },
+    RequiredServoStylePref {
         name: "layout.css.basic-shape-shape.enabled",
         value: true,
         rationale: "clip-path: shape(...) parsing",

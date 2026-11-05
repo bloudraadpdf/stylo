@@ -126,6 +126,8 @@ bitflags! {
         const STYLE = 1 << 7;
         /// The query contains `<general-enclosed>`.
         const GENERAL_ENCLOSED = 1 << 8;
+        /// The feature requires a scroll-state container.
+        const CONTAINER_REQUIRES_SCROLL_STATE = 1 << 9;
     }
 }
 

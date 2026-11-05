@@ -973,6 +973,10 @@ pub trait TElement:
         display: &Display,
     ) -> euclid::default::Size2D<Option<app_units::Au>>;
 
+    /// Returns the scroll state of the element to be used in container scroll-state queries, as
+    /// last snapshotted after layout.
+    fn query_container_scroll_state(&self) -> crate::queries::scroll_state::ContainerScrollState;
+
     /// Returns true if the element has all of specified selector flags.
     fn has_selector_flags(&self, flags: ElementSelectorFlags) -> bool;
 

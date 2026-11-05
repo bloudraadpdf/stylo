@@ -215,3 +215,7 @@ pointer
 any-pointer
 hover
 any-hover
+stuck
+snapped
+scrollable
+scrolled

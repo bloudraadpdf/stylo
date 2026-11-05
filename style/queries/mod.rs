@@ -12,6 +12,7 @@ pub mod condition;
 #[macro_use]
 pub mod feature;
 pub mod feature_expression;
+pub mod scroll_state;
 pub mod style_feature;
 pub mod values;
 

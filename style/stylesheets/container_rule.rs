@@ -13,6 +13,7 @@ use crate::logical_geometry::{LogicalSize, WritingMode};
 use crate::parser::ParserContext;
 use crate::properties::ComputedValues;
 use crate::queries::feature::{AllowsRanges, Evaluator, FeatureFlags, QueryFeatureDescription};
+use crate::queries::scroll_state::ContainerScrollState;
 use crate::queries::values::Orientation;
 use crate::queries::{FeatureType, QueryCondition};
 use crate::shared_lock::{
@@ -322,6 +323,12 @@ impl ContainerCondition {
         if !available_axes.contains(self.flags.container_axes()) {
             return TraversalResult::InProgress;
         }
+        let scroll_state = self
+            .flags
+            .contains(FeatureFlags::CONTAINER_REQUIRES_SCROLL_STATE);
+        if scroll_state && !container_type.intersects(ContainerType::SCROLL_STATE) {
+            return TraversalResult::InProgress;
+        }
 
         // Filter by container-name.
         if let Some(name) = self.name() {
@@ -334,10 +341,19 @@ impl ContainerCondition {
         }
 
         let size = potential_container.query_container_size(&box_style.clone_display());
+        let scroll_state = if scroll_state {
+            potential_container.query_container_scroll_state()
+        } else {
+            ContainerScrollState::default()
+        };
         let style = style.to_arc();
         TraversalResult::Done(ContainerLookupResult {
             element: potential_container,
-            info: ContainerInfo { size, wm },
+            info: ContainerInfo {
+                size,
+                wm,
+                scroll_state,
+            },
             style,
         })
     }
@@ -418,11 +434,20 @@ impl ContainerCondition {
 pub struct ContainerInfo {
     size: Size2D<Option<Au>>,
     wm: WritingMode,
+    scroll_state: ContainerScrollState,
 }
 
 impl ContainerInfo {
     fn size(&self) -> Option<Size2D<Au>> {
         Some(Size2D::new(self.size.width?, self.size.height?))
+    }
+
+    pub(crate) fn writing_mode(&self) -> WritingMode {
+        self.wm
+    }
+
+    pub(crate) fn scroll_state(&self) -> ContainerScrollState {
+        self.scroll_state
     }
 }
 
@@ -770,6 +795,7 @@ mod tests {
     fn parse(query: &str) -> ContainerConditions {
         let _lock = pref_lock().lock().unwrap();
         let _style_queries = BoolPrefGuard::set("layout.css.style-queries.enabled", true);
+        let _scroll_state = BoolPrefGuard::set("layout.css.scroll-state.enabled", true);
         let url_data = test_url_data();
         let context = author_parser_context(&url_data);
         let mut input = ParserInput::new(query);
@@ -815,6 +841,54 @@ mod tests {
             "style(10px < 10em !)",
             "style(10px ! < 10em)",
             "(width > 0px) or (foo: bar)",
+        ] {
+            let conditions = parse(query);
+            let condition = conditions.iter().next().unwrap();
+            assert!(
+                condition.flags.contains(FeatureFlags::GENERAL_ENCLOSED),
+                "{query}"
+            );
+        }
+    }
+
+    #[test]
+    fn scroll_state_queries_serialize_bare_features_and_conditions() {
+        for (query, expected) in [
+            (
+                "scroll-state(        snapped:inline)",
+                "scroll-state(snapped: inline)",
+            ),
+            ("scroll-STate(snapped:    )", "scroll-STate(snapped:    )"),
+            ("scroll-STate(snapped)", "scroll-state(snapped)"),
+            (
+                "scroll-state(  ( snapped: INLINE) OR ( SNAPPED: BlOCK  ) )",
+                "scroll-state((snapped: inline) or (snapped: block))",
+            ),
+            (
+                "scroll-state((scrollable: left))",
+                "scroll-state((scrollable: left))",
+            ),
+            (
+                "scroll-state(not ((stuck: top) and (stuck: bottom)))",
+                "scroll-state(not ((stuck: top) and (stuck: bottom)))",
+            ),
+        ] {
+            assert_eq!(parse(query).to_css_string(), expected);
+        }
+    }
+
+    #[test]
+    fn scroll_state_features_require_a_scroll_state_container() {
+        let conditions = parse("scroll-state(scrolled: inline-end)");
+        let condition = conditions.iter().next().unwrap();
+        assert!(condition
+            .flags
+            .contains(FeatureFlags::CONTAINER_REQUIRES_SCROLL_STATE));
+        for query in [
+            "scroll-state(stuck: auto)",
+            "scroll-state(style(stuck: top))",
+            "style(scroll-state(stuck: top))",
+            "scroll-state(--foo)",
         ] {
             let conditions = parse(query);
             let condition = conditions.iter().next().unwrap();

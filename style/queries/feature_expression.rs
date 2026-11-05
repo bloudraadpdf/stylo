@@ -31,6 +31,8 @@ pub enum FeatureType {
     Container,
     /// We're parsing a style feature, inside a container `style()` query.
     Style,
+    /// We're parsing a scroll-state feature, inside a container `scroll-state()` query.
+    ScrollState,
 }
 
 impl FeatureType {
@@ -40,12 +42,14 @@ impl FeatureType {
         #[cfg(feature = "servo")]
         use crate::servo::media_queries::MEDIA_FEATURES;
 
+        use super::scroll_state::SCROLL_STATE_FEATURES;
         use crate::stylesheets::container_rule::CONTAINER_FEATURES;
 
         match *self {
             FeatureType::Media => &MEDIA_FEATURES,
             FeatureType::Container => &CONTAINER_FEATURES,
             FeatureType::Style => &[],
+            FeatureType::ScrollState => &SCROLL_STATE_FEATURES,
         }
     }
 
