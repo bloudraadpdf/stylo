@@ -78,6 +78,7 @@ impl ViewTransitionPseudoKind {
 
         Some(match pseudo {
             ViewTransitionGroup(_) => Self::Group,
+            ViewTransitionGroupChildren(_) => Self::GroupChildren,
             ViewTransitionImagePair(_) => Self::ImagePair,
             ViewTransitionOld(_) | ViewTransitionOldRoot => Self::Old,
             ViewTransitionNew(_) | ViewTransitionNewRoot => Self::New,
@@ -102,6 +103,7 @@ impl ViewTransitionSelector {
     fn matches(&self, pseudo: &PseudoElement, classes: &[Atom]) -> bool {
         let name = match pseudo {
             PseudoElement::ViewTransitionGroup(name)
+            | PseudoElement::ViewTransitionGroupChildren(name)
             | PseudoElement::ViewTransitionImagePair(name)
             | PseudoElement::ViewTransitionOld(name)
             | PseudoElement::ViewTransitionNew(name) => Some(name.clone()),
@@ -146,6 +148,7 @@ pub enum PseudoElement {
     Highlight(Atom),
     ViewTransition,
     ViewTransitionGroup(Atom),
+    ViewTransitionGroupChildren(Atom),
     ViewTransitionImagePair(Atom),
     ViewTransitionOld(Atom),
     ViewTransitionNew(Atom),
@@ -220,12 +223,14 @@ impl ToCss for PseudoElement {
             ViewTransition => "::view-transition",
             Highlight(ref name)
             | ViewTransitionGroup(ref name)
+            | ViewTransitionGroupChildren(ref name)
             | ViewTransitionImagePair(ref name)
             | ViewTransitionOld(ref name)
             | ViewTransitionNew(ref name) => {
                 dest.write_str(match self {
                     Highlight(_) => "::highlight(",
                     ViewTransitionGroup(_) => "::view-transition-group(",
+                    ViewTransitionGroupChildren(_) => "::view-transition-group-children(",
                     ViewTransitionImagePair(_) => "::view-transition-image-pair(",
                     ViewTransitionOld(_) => "::view-transition-old(",
                     ViewTransitionNew(_) => "::view-transition-new(",
@@ -372,6 +377,7 @@ impl PseudoElement {
                 ViewTransitionPseudoKind::GroupChildren => 15,
             },
             Self::ViewTransitionGroup(_) => 11,
+            Self::ViewTransitionGroupChildren(_) => 15,
             Self::ViewTransitionImagePair(_) => 12,
             Self::ViewTransitionOld(_) | Self::ViewTransitionOldRoot => 13,
             Self::ViewTransitionNew(_) | Self::ViewTransitionNewRoot => 14,
@@ -529,6 +535,7 @@ impl PseudoElement {
             | PseudoElement::Highlight(_)
             | PseudoElement::ViewTransition
             | PseudoElement::ViewTransitionGroup(_)
+            | PseudoElement::ViewTransitionGroupChildren(_)
             | PseudoElement::ViewTransitionImagePair(_)
             | PseudoElement::ViewTransitionOld(_)
             | PseudoElement::ViewTransitionNew(_)
@@ -1260,13 +1267,7 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             ViewTransitionPseudoKind::Old => PseudoElement::ViewTransitionOld(argument),
             ViewTransitionPseudoKind::New if root => PseudoElement::ViewTransitionNewRoot,
             ViewTransitionPseudoKind::New => PseudoElement::ViewTransitionNew(argument),
-            ViewTransitionPseudoKind::GroupChildren => {
-                PseudoElement::ViewTransitionSelector(Box::new(ViewTransitionSelector {
-                    kind,
-                    name: Some(argument),
-                    classes: Box::new([]),
-                }))
-            },
+            ViewTransitionPseudoKind::GroupChildren => PseudoElement::ViewTransitionGroupChildren(argument),
         })
     }
 

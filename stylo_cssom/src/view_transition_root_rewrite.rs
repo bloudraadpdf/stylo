@@ -31,6 +31,7 @@ pub const INTERNAL_GROUP_CHILDREN_OVERFLOW_MARKER: &str =
     "--moegoe-view-transition-group-children-overflow";
 pub const GROUP_ANIMATION_CARRIER_ELEMENT: &str = "moegoe-internal-view-transition-group";
 pub const IMAGE_PAIR_ANIMATION_CARRIER_ELEMENT: &str = "moegoe-internal-view-transition-image-pair";
+pub const GROUP_CHILDREN_ANIMATION_CARRIER_ELEMENT: &str = "moegoe-internal-view-transition-group-children";
 pub const OLD_ANIMATION_CARRIER_ELEMENT: &str = "moegoe-internal-view-transition-old";
 pub const NEW_ANIMATION_CARRIER_ELEMENT: &str = "moegoe-internal-view-transition-new";
 pub const TRANSITION_STYLE_ELEMENT: &str = "moegoe-internal-view-transition-style";
@@ -185,6 +186,10 @@ pub fn expand_style_rule(prelude: &str, body: &str) -> StyleRuleExpansion {
         project_group_authored_transform_marker(body),
     );
     for (pseudo, carrier) in [
+        (
+            b"::view-transition-group-children".as_slice(),
+            GROUP_CHILDREN_ANIMATION_CARRIER_ELEMENT,
+        ),
         (
             b"::view-transition-image-pair".as_slice(),
             IMAGE_PAIR_ANIMATION_CARRIER_ELEMENT,
