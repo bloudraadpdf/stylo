@@ -332,9 +332,14 @@ fn append_projected_style_tree_rules(rule: &mut String, prelude: &str, body: &st
         project_transition_style_selectors(prelude),
         project_declarations(
             body,
-            &["background", "background-color", "visibility"],
+            &["background", "background-color", "visibility", "position"],
             None,
         ),
+    );
+    append_projected_rule(
+        rule,
+        project_transition_style_selectors(prelude),
+        project_declarations(body, &GROUP_INSET_PROPERTIES, None),
     );
 }
 
@@ -1240,6 +1245,16 @@ mod tests {
         assert!(
             rewritten.contains("--moegoe-view-transition-image-pair-transform:translateX(100px)")
         );
+    }
+
+    #[test]
+    fn projects_the_box_of_the_transition_to_its_style_element() {
+        let rewritten = rewrite_view_transition_root(
+            "::view-transition{position:absolute;left:20px;top:40px;width:700px;height:500px}",
+        );
+
+        assert!(rewritten.contains(&format!("{TRANSITION_STYLE_ELEMENT}{{position:absolute;}}")));
+        assert!(rewritten.contains(&format!("{TRANSITION_STYLE_ELEMENT}{{left:20px;top:40px;}}")));
     }
 
     #[test]
