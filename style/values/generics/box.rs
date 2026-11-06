@@ -700,3 +700,35 @@ impl<L: Zero + ToCss> ToCss for OverflowClipMargin<L> {
         Ok(())
     }
 }
+
+/// https://drafts.csswg.org/css-contain-3/#container-name
+#[repr(transparent)]
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+pub struct GenericContainerName<Name>(
+    #[css(iterable, if_empty = "none")] pub crate::OwnedSlice<Name>,
+);
+
+pub use self::GenericContainerName as ContainerName;
+
+impl<Name> ContainerName<Name> {
+    /// Return the `none` value.
+    pub fn none() -> Self {
+        Self(Default::default())
+    }
+
+    /// Returns whether this is the `none` value.
+    pub fn is_none(&self) -> bool {
+        self.0.is_empty()
+    }
+}

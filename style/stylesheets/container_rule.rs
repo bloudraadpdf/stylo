@@ -22,7 +22,7 @@ use crate::shared_lock::{
 use crate::stylesheets::{CssRules, CustomMediaEvaluator};
 use crate::stylist::Stylist;
 use crate::values::computed::{CSSPixelLength, ContainerType, Context, Ratio};
-use crate::values::specified::ContainerName;
+use crate::values::computed::ContainerName;
 use app_units::Au;
 use cssparser::{Parser, SourceLocation};
 use euclid::default::Size2D;

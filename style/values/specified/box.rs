@@ -10,12 +10,12 @@ use crate::parser::{Parse, ParserContext};
 use crate::properties::{LonghandId, PropertyDeclarationId, PropertyId};
 use crate::values::computed::{Context, ToComputedValue};
 use crate::values::generics::box_::{
-    BaselineShiftKeyword, GenericBaselineShift, GenericContainIntrinsicSize, GenericFloat,
-    GenericOverflowClipMargin, GenericPerspective, GenericSnapBlock, GenericSnapInline,
-    OverflowClipMarginBox, SnapBlockAlignment, SnapInlineAlignment,
+    BaselineShiftKeyword, GenericBaselineShift, GenericContainIntrinsicSize, GenericContainerName,
+    GenericFloat, GenericOverflowClipMargin, GenericPerspective, GenericSnapBlock,
+    GenericSnapInline, OverflowClipMarginBox, SnapBlockAlignment, SnapInlineAlignment,
 };
 use crate::values::specified::length::{Length, LengthPercentage, NonNegativeLength};
-use crate::values::specified::{AllowQuirks, NonNegativeNumberOrPercentage};
+use crate::values::specified::{AllowQuirks, Integer, NonNegativeNumberOrPercentage};
 use crate::values::CustomIdent;
 use cssparser::{match_ignore_ascii_case, Parser};
 use num_traits::FromPrimitive;
@@ -2092,58 +2092,139 @@ impl ContainerType {
 }
 
 /// https://drafts.csswg.org/css-contain-3/#container-name
-#[repr(transparent)]
-#[derive(
-    Clone,
-    Debug,
-    MallocSizeOf,
-    PartialEq,
-    SpecifiedValueInfo,
-    ToComputedValue,
-    ToCss,
-    ToResolvedValue,
-    ToShmem,
-    ToTyped,
-)]
-pub struct ContainerName(#[css(iterable, if_empty = "none")] pub crate::OwnedSlice<CustomIdent>);
+pub type ContainerName = GenericContainerName<ContainerNameItem>;
 
-impl ContainerName {
-    /// Return the `none` value.
-    pub fn none() -> Self {
-        Self(Default::default())
+/// A `<custom-ident>` of `container-name`, or the `ident()` function that constructs one.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem)]
+pub enum ContainerNameItem {
+    /// A `<custom-ident>`.
+    Ident(CustomIdent),
+    /// https://drafts.csswg.org/css-values-5/#ident
+    #[css(function = "ident")]
+    Function(#[css(iterable)] crate::OwnedSlice<IdentArg>),
+}
+
+impl style_traits::ToTyped for ContainerNameItem {}
+
+/// An `<ident-arg>` of `ident()`: `<string> | <integer> | <ident>`.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
+pub enum IdentArg {
+    /// A `<string>`.
+    String(crate::OwnedStr),
+    /// An `<integer>`.
+    Integer(Integer),
+    /// An `<ident>`.
+    Ident(crate::Atom),
+}
+
+impl SpecifiedValueInfo for IdentArg {}
+
+impl ToCss for IdentArg {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        match self {
+            Self::String(string) => cssparser::serialize_string(string, dest),
+            Self::Integer(integer) => integer.to_css(dest),
+            Self::Ident(ident) => crate::values::serialize_atom_identifier(ident, dest),
+        }
     }
+}
 
-    /// Returns whether this is the `none` value.
-    pub fn is_none(&self) -> bool {
-        self.0.is_empty()
-    }
-
-    fn parse_internal<'i>(
+impl IdentArg {
+    fn parse<'i>(
+        context: &ParserContext,
         input: &mut Parser<'i, '_>,
-        for_query: bool,
     ) -> Result<Self, ParseError<'i>> {
-        let mut idents = vec![];
-        let location = input.current_source_location();
-        let first = input.expect_ident()?;
-        if !for_query && first.eq_ignore_ascii_case("none") {
+        if let Ok(string) =
+            input.try_parse(|input| input.expect_string().map(|s| s.as_ref().to_owned()))
+        {
+            return Ok(Self::String(string.into()));
+        }
+        if let Ok(integer) = input.try_parse(|input| Integer::parse(context, input)) {
+            return Ok(Self::Integer(integer));
+        }
+        Ok(Self::Ident(crate::Atom::from(
+            input.expect_ident()?.as_ref(),
+        )))
+    }
+}
+
+impl ToComputedValue for ContainerNameItem {
+    type ComputedValue = CustomIdent;
+
+    fn to_computed_value(&self, context: &Context) -> CustomIdent {
+        match self {
+            Self::Ident(ident) => ident.clone(),
+            Self::Function(args) => {
+                let mut name = String::new();
+                for arg in args.iter() {
+                    match arg {
+                        IdentArg::String(string) => name.push_str(string),
+                        IdentArg::Integer(integer) => {
+                            let _ = write!(name, "{}", integer.to_computed_value(context));
+                        },
+                        IdentArg::Ident(ident) => name.push_str(ident),
+                    }
+                }
+                CustomIdent(crate::Atom::from(name))
+            },
+        }
+    }
+
+    fn from_computed_value(computed: &CustomIdent) -> Self {
+        Self::Ident(computed.clone())
+    }
+}
+
+const DISALLOWED_CONTAINER_NAMES: &'static [&'static str] = &["none", "not", "or", "and"];
+
+impl ContainerNameItem {
+    fn parse<'i>(
+        context: &ParserContext,
+        input: &mut Parser<'i, '_>,
+    ) -> Result<Self, ParseError<'i>> {
+        if input
+            .try_parse(|input| input.expect_function_matching("ident"))
+            .is_ok()
+        {
+            let args = input.parse_nested_block(|input| {
+                let mut args = vec![IdentArg::parse(context, input)?];
+                while let Ok(arg) = input.try_parse(|input| IdentArg::parse(context, input)) {
+                    args.push(arg);
+                }
+                Ok(args)
+            })?;
+            return Ok(Self::Function(args.into()));
+        }
+        Ok(Self::Ident(CustomIdent::parse(
+            input,
+            DISALLOWED_CONTAINER_NAMES,
+        )?))
+    }
+}
+
+impl Parse for ContainerName {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if input
+            .try_parse(|input| input.expect_ident_matching("none"))
+            .is_ok()
+        {
             return Ok(Self::none());
         }
-        const DISALLOWED_CONTAINER_NAMES: &'static [&'static str] = &["none", "not", "or", "and"];
-        idents.push(CustomIdent::from_ident(
-            location,
-            first,
-            DISALLOWED_CONTAINER_NAMES,
-        )?);
-        if !for_query {
-            while let Ok(name) =
-                input.try_parse(|input| CustomIdent::parse(input, DISALLOWED_CONTAINER_NAMES))
-            {
-                idents.push(name);
-            }
+        let mut items = vec![ContainerNameItem::parse(context, input)?];
+        while let Ok(item) = input.try_parse(|input| ContainerNameItem::parse(context, input)) {
+            items.push(item);
         }
-        Ok(ContainerName(idents.into()))
+        Ok(GenericContainerName(items.into()))
     }
+}
 
+impl GenericContainerName<CustomIdent> {
     /// https://github.com/w3c/csswg-drafts/issues/7203
     /// Only a single name allowed in @container rule.
     /// Disallow none for container-name in @container rule.
@@ -2151,16 +2232,10 @@ impl ContainerName {
         _: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        Self::parse_internal(input, /* for_query = */ true)
-    }
-}
-
-impl Parse for ContainerName {
-    fn parse<'i, 't>(
-        _: &ParserContext,
-        input: &mut Parser<'i, 't>,
-    ) -> Result<Self, ParseError<'i>> {
-        Self::parse_internal(input, /* for_query = */ false)
+        let location = input.current_source_location();
+        let first = input.expect_ident()?;
+        let name = CustomIdent::from_ident(location, first, DISALLOWED_CONTAINER_NAMES)?;
+        Ok(GenericContainerName(vec![name].into()))
     }
 }
 

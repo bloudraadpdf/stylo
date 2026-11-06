@@ -17,13 +17,17 @@ use std::fmt;
 use style_traits::{CssWriter, ToCss};
 
 pub use crate::values::generics::box_::{SnapBlockAlignment, SnapInlineAlignment};
+
+/// A computed value for the `container-name` property.
+pub type ContainerName =
+    crate::values::generics::box_::GenericContainerName<crate::values::CustomIdent>;
 pub use crate::values::specified::box_::{
     AlignmentBaseline, Appearance, BaselineSource, BookmarkLevel, BookmarkState, BreakBetween,
-    BreakWithin, Clear, Contain, ContainerName, ContainerType, ContentVisibility, Display,
-    FloatDefer, FloatReference, FootnoteDisplay, FootnotePolicy, MarginBreak, MarginTrim,
-    ObjectFit, Overflow, OverflowAnchor, OverscrollBehavior, PositionProperty, ScrollMarkerGroup,
-    ScrollMarkerGroupMode, ScrollMarkerGroupPosition, ScrollSnapAlign, ScrollSnapAxis,
-    ScrollSnapStop, ScrollSnapStrictness, ScrollSnapType, ScrollbarGutter, TouchAction, WillChange,
+    BreakWithin, Clear, Contain, ContainerType, ContentVisibility, Display, FloatDefer,
+    FloatReference, FootnoteDisplay, FootnotePolicy, MarginBreak, MarginTrim, ObjectFit, Overflow,
+    OverflowAnchor, OverscrollBehavior, PositionProperty, ScrollMarkerGroup, ScrollMarkerGroupMode,
+    ScrollMarkerGroupPosition, ScrollSnapAlign, ScrollSnapAxis, ScrollSnapStop,
+    ScrollSnapStrictness, ScrollSnapType, ScrollbarGutter, TouchAction, WillChange,
     WritingModeProperty,
 };
 
