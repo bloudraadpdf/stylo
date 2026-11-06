@@ -514,11 +514,12 @@ impl PseudoElement {
         self.is_precomputed()
     }
 
-    /// Whether this pseudo-element skips flex/grid container display-based
-    /// fixup.
+    /// Whether this pseudo-element skips flex/grid container display-based fixup: ::before and ::after boxes are
+    /// children of their originating element, and ::scroll-marker-group and ::scroll-button() boxes are siblings of it,
+    /// so each is an item of an item container that is its layout parent (CSS Overflow 5 §3.1.4, §3.2).
     #[inline]
     pub fn skip_item_display_fixup(&self) -> bool {
-        !self.is_before_or_after()
+        !self.is_before_or_after() && !matches!(self, Self::ScrollMarkerGroup | Self::ScrollButton(_))
     }
 
     /// Whether this pseudo-element is precomputed.
