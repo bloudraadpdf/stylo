@@ -984,12 +984,13 @@ pub trait TElement:
         None
     }
 
-    /// The length that layout resolved for the anchor functions of `value`, a computed value of the element (CSS
-    /// Anchor Positioning 1 §3.2.1, §5.1.1, style & layout interleaving).
-    fn resolve_anchor_dependent_value(
+    /// What layout resolved the anchor function `function` in `property` of the element to, or `None` before layout
+    /// resolved the element (CSS Anchor Positioning 1 §3.2.1, §5.1.1, style & layout interleaving).
+    fn resolve_anchor_function(
         &self,
-        _value: crate::values::computed::position::AnchorDependentValue,
-    ) -> Option<crate::values::computed::LengthPercentage> {
+        _property: crate::values::computed::position::AnchorProperty,
+        _function: &crate::values::computed::length_percentage::CalcNode,
+    ) -> Option<crate::values::computed::position::AnchorFunctionResolution> {
         None
     }
 

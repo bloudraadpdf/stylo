@@ -653,16 +653,17 @@ impl<'a> Context<'a> {
         }
     }
 
-    /// The length that layout resolved for the anchor functions of `value`, a computed value of the calling
-    /// element. A style with it depends on layout and is not cached.
-    pub fn resolve_anchor_dependent_value(
+    /// What layout resolved the anchor function `function` in `property` of the calling element to. A style with it
+    /// depends on layout and is not cached.
+    pub fn resolve_anchor_function(
         &self,
-        value: position::AnchorDependentValue,
-    ) -> Option<LengthPercentage> {
+        property: position::AnchorProperty,
+        function: &length_percentage::CalcNode,
+    ) -> Option<position::AnchorFunctionResolution> {
         let resolved = self
             .calling_element
             .as_ref()?
-            .resolve_anchor_dependent_value(value)?;
+            .resolve_anchor_function(property, function)?;
         self.rule_cache_conditions.borrow_mut().set_uncacheable();
         Some(resolved)
     }

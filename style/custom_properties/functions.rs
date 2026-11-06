@@ -150,11 +150,12 @@ pub trait CallingElement<'a> {
         flags: &mut ComputedValueFlags,
     ) -> bool;
 
-    /// The length that layout resolved for the anchor functions of `value`, a computed value of the element.
-    fn resolve_anchor_dependent_value(
+    /// What layout resolved the anchor function `function` in `property` of the element to.
+    fn resolve_anchor_function(
         &self,
-        value: crate::values::computed::position::AnchorDependentValue,
-    ) -> Option<crate::values::computed::LengthPercentage>;
+        property: crate::values::computed::position::AnchorProperty,
+        function: &crate::values::computed::length_percentage::CalcNode,
+    ) -> Option<crate::values::computed::position::AnchorFunctionResolution>;
 }
 
 /// The function scope without an element: the document tree of the declaration's origin.
@@ -232,14 +233,15 @@ impl<'a, E: TElement + 'a> CallingElement<'a> for ElementCallSite<'a, E> {
             .to_bool(/* unknown = */ false)
     }
 
-    fn resolve_anchor_dependent_value(
+    fn resolve_anchor_function(
         &self,
-        value: crate::values::computed::position::AnchorDependentValue,
-    ) -> Option<crate::values::computed::LengthPercentage> {
+        property: crate::values::computed::position::AnchorProperty,
+        function: &crate::values::computed::length_percentage::CalcNode,
+    ) -> Option<crate::values::computed::position::AnchorFunctionResolution> {
         // A pseudo-element's own box is not the box that layout resolved for its originating element.
         self.originating_element
             .is_none()
-            .then(|| self.element.resolve_anchor_dependent_value(value))
+            .then(|| self.element.resolve_anchor_function(property, function))
             .flatten()
     }
 }

@@ -29,6 +29,7 @@ pub use crate::values::specified::position::{
 };
 use crate::Zero;
 use std::fmt::{self, Write};
+use style_traits::values::specified::AllowedNumericType;
 use style_traits::{CssWriter, ToCss};
 
 /// The computed value of `anchor-name`.
@@ -181,17 +182,88 @@ impl crate::values::computed::length_percentage::ToAnchorCalcNode for Inset {
     }
 }
 
-/// A computed value whose anchor functions layout resolves, with the physical side or axis of its property (CSS
-/// Anchor Positioning 1 §3.2.1, §5.1.1, style & layout interleaving).
-pub enum AnchorDependentValue<'a> {
+/// The property of an anchor function that layout resolves, with its physical side or axis (CSS Anchor Positioning 1
+/// §3.2.1, §5.1.1, style & layout interleaving).
+#[derive(Clone, Copy, Debug)]
+pub enum AnchorProperty {
     /// An inset property.
-    Inset(PhysicalSide, &'a Inset),
+    Inset(PhysicalSide),
     /// `width`, `height`, `min-width` or `min-height`.
-    Size(crate::logical_geometry::PhysicalAxis, &'a crate::values::computed::Size),
+    Size(crate::logical_geometry::PhysicalAxis),
     /// `max-width` or `max-height`.
-    MaxSize(crate::logical_geometry::PhysicalAxis, &'a crate::values::computed::MaxSize),
+    MaxSize(crate::logical_geometry::PhysicalAxis),
     /// A margin property.
-    Margin(PhysicalSide, &'a crate::values::computed::Margin),
+    Margin(PhysicalSide),
+}
+
+/// What layout resolved an anchor function to.
+#[derive(Clone, Copy, Debug)]
+pub enum AnchorFunctionResolution {
+    /// The length of a resolvable anchor function.
+    Length(crate::values::computed::Length),
+    /// The function is not resolvable: it takes its fallback, or makes its declaration invalid at computed-value time
+    /// (§3.2.1, §5.1.1).
+    Invalid,
+}
+
+/// Why the anchor functions of a value stay unsubstituted.
+enum AnchorSubstitutionFailure {
+    /// Layout has not resolved the element.
+    Unresolved,
+    /// An anchor function without a fallback is not resolvable.
+    Invalid,
+}
+
+/// Replaces each anchor function of `node` by the length that `resolve` gives, or else by its fallback.
+fn substitute_anchor_functions(
+    node: &mut crate::values::computed::length_percentage::CalcNode,
+    resolve: &mut dyn FnMut(
+        &crate::values::computed::length_percentage::CalcNode,
+    ) -> Option<AnchorFunctionResolution>,
+) -> Result<(), AnchorSubstitutionFailure> {
+    use crate::values::computed::length_percentage::{CalcLengthPercentageLeaf, CalcNode};
+    let mut outcome = Ok(());
+    node.visit_depth_first(|node| {
+        if outcome.is_err() {
+            return;
+        }
+        let fallback = match node {
+            CalcNode::Anchor(function) => function.fallback.as_ref().map(|fallback| (**fallback).clone()),
+            CalcNode::AnchorSize(function) => function.fallback.as_ref().map(|fallback| (**fallback).clone()),
+            _ => return,
+        };
+        outcome = match resolve(node) {
+            None => Err(AnchorSubstitutionFailure::Unresolved),
+            Some(AnchorFunctionResolution::Length(length)) => {
+                *node = CalcNode::Leaf(CalcLengthPercentageLeaf::Length(length));
+                Ok(())
+            },
+            Some(AnchorFunctionResolution::Invalid) => match fallback {
+                Some(mut fallback) => substitute_anchor_functions(&mut fallback, &mut *resolve)
+                    .map(|()| *node = fallback),
+                None => Err(AnchorSubstitutionFailure::Invalid),
+            },
+        };
+    });
+    outcome
+}
+
+/// The value with its anchor functions substituted: `Ok(None)` when it is invalid at computed-value time, `Err` when
+/// layout has not resolved the element.
+fn resolve_anchor_functions<T: crate::values::computed::length_percentage::ToAnchorCalcNode>(
+    value: &T,
+    property: AnchorProperty,
+    context: &Context,
+    clamping_mode: style_traits::values::specified::AllowedNumericType,
+) -> Result<Option<LengthPercentage>, ()> {
+    let mut node = value.to_anchor_calc_node()?;
+    match substitute_anchor_functions(&mut node, &mut |function| {
+        context.resolve_anchor_function(property, function)
+    }) {
+        Ok(()) => Ok(Some(LengthPercentage::new_calc(node, clamping_mode))),
+        Err(AnchorSubstitutionFailure::Invalid) => Ok(None),
+        Err(AnchorSubstitutionFailure::Unresolved) => Err(()),
+    }
 }
 
 /// A computed value that style & layout interleaving replaced, as the cascade computed it.
@@ -290,10 +362,14 @@ impl ResolveAnchors for Inset {
         let Some(side) = physical_side(property) else {
             return self;
         };
-        let resolved = context.resolve_anchor_dependent_value(AnchorDependentValue::Inset(side, &self));
-        match resolved {
-            Some(length) => replaced(context, property, AnchorBase::Inset(self), Self::LengthPercentage(length)),
-            None => self,
+        match resolve_anchor_functions(&self, AnchorProperty::Inset(side), context, AllowedNumericType::All) {
+            Ok(resolved) => replaced(
+                context,
+                property,
+                AnchorBase::Inset(self),
+                resolved.map_or(Self::Auto, Self::LengthPercentage),
+            ),
+            Err(()) => self,
         }
     }
 }
@@ -306,15 +382,14 @@ impl ResolveAnchors for crate::values::computed::Size {
         let Some(axis) = physical_axis(property) else {
             return self;
         };
-        let resolved = context.resolve_anchor_dependent_value(AnchorDependentValue::Size(axis, &self));
-        match resolved {
-            Some(length) => replaced(
+        match resolve_anchor_functions(&self, AnchorProperty::Size(axis), context, AllowedNumericType::NonNegative) {
+            Ok(resolved) => replaced(
                 context,
                 property,
                 AnchorBase::Size(self),
-                Self::LengthPercentage(generics::NonNegative(length)),
+                resolved.map_or(Self::Auto, |length| Self::LengthPercentage(generics::NonNegative(length))),
             ),
-            None => self,
+            Err(()) => self,
         }
     }
 }
@@ -327,15 +402,15 @@ impl ResolveAnchors for crate::values::computed::MaxSize {
         let Some(axis) = physical_axis(property) else {
             return self;
         };
-        let resolved = context.resolve_anchor_dependent_value(AnchorDependentValue::MaxSize(axis, &self));
-        match resolved {
-            Some(length) => replaced(
+        match resolve_anchor_functions(&self, AnchorProperty::MaxSize(axis), context, AllowedNumericType::NonNegative)
+        {
+            Ok(resolved) => replaced(
                 context,
                 property,
                 AnchorBase::MaxSize(self),
-                Self::LengthPercentage(generics::NonNegative(length)),
+                resolved.map_or(Self::None, |length| Self::LengthPercentage(generics::NonNegative(length))),
             ),
-            None => self,
+            Err(()) => self,
         }
     }
 }
@@ -348,10 +423,14 @@ impl ResolveAnchors for crate::values::computed::Margin {
         let Some(side) = physical_side(property) else {
             return self;
         };
-        let resolved = context.resolve_anchor_dependent_value(AnchorDependentValue::Margin(side, &self));
-        match resolved {
-            Some(length) => replaced(context, property, AnchorBase::Margin(self), Self::LengthPercentage(length)),
-            None => self,
+        match resolve_anchor_functions(&self, AnchorProperty::Margin(side), context, AllowedNumericType::All) {
+            Ok(resolved) => replaced(
+                context,
+                property,
+                AnchorBase::Margin(self),
+                Self::LengthPercentage(resolved.unwrap_or_else(LengthPercentage::zero)),
+            ),
+            Err(()) => self,
         }
     }
 }
