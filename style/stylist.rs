@@ -631,6 +631,13 @@ pub struct Stylist {
     /// Flags set from computing registered custom property initial values.
     initial_values_for_custom_properties_flags: ComputedValueFlags,
 
+    /// The `@property` registrations of the author style sheets of the document and of its shadow trees, the last
+    /// valid one of each name in shadow-including document order, as the embedder resolves them. They replace the
+    /// registrations of the author cascade data, which knows no shadow tree.
+    /// <https://drafts.css-houdini.org/css-properties-values-api-1/#determining-registration>
+    #[cfg_attr(feature = "servo", ignore_malloc_size_of = "Arc")]
+    author_custom_property_registrations: Option<PrecomputedHashMap<Atom, Arc<PropertyRegistration>>>,
+
     /// The total number of times the stylist has been rebuilt.
     num_rebuilds: usize,
 }
@@ -851,6 +858,7 @@ impl Stylist {
             rule_tree: RuleTree::new(),
             script_custom_properties: Default::default(),
             initial_values_for_custom_properties: Default::default(),
+            author_custom_property_registrations: None,
             initial_values_for_custom_properties_flags: Default::default(),
             num_rebuilds: 0,
         }
@@ -886,8 +894,12 @@ impl Stylist {
         if let Some(registration) = self.custom_property_script_registry().get(name) {
             return &registration.data;
         }
-        for (data, _) in self.iter_origins() {
-            if let Some(registration) = data.custom_property_registrations.get(name) {
+        for (data, origin) in self.iter_origins() {
+            let registration = match (&self.author_custom_property_registrations, origin) {
+                (Some(registrations), Origin::Author) => registrations.get(name),
+                _ => data.custom_property_registrations.get(name),
+            };
+            if let Some(registration) = registration {
                 return &registration.data;
             }
         }
@@ -929,26 +941,58 @@ impl Stylist {
                 };
                 map.insert(k, value);
             }
-            for (data, _) in self.iter_origins() {
-                for (k, v) in data.custom_property_registrations.iter() {
-                    if seen_names.insert(k.clone()) {
-                        let last_value = &v.last().unwrap().0;
-                        let Ok(value) = last_value.compute_initial_value(&context) else {
-                            continue;
-                        };
-                        let map = if last_value.inherits() {
-                            &mut initial_values.inherited
-                        } else {
-                            &mut initial_values.non_inherited
-                        };
-                        map.insert(k, value);
-                    }
+            let mut register = |name: &Atom, registration: &PropertyRegistration| {
+                if !seen_names.insert(name.clone()) {
+                    return;
+                }
+                let Ok(value) = registration.compute_initial_value(&context) else {
+                    return;
+                };
+                let map = if registration.inherits() {
+                    &mut initial_values.inherited
+                } else {
+                    &mut initial_values.non_inherited
+                };
+                map.insert(name, value);
+            };
+            for (data, origin) in self.iter_origins() {
+                match (&self.author_custom_property_registrations, origin) {
+                    (Some(registrations), Origin::Author) => {
+                        for (name, registration) in registrations.iter() {
+                            register(name, registration);
+                        }
+                    },
+                    _ => {
+                        for (name, registrations) in data.custom_property_registrations.iter() {
+                            register(name, &registrations.last().unwrap().0);
+                        }
+                    },
                 }
             }
             initial_values_flags = context.builder.flags();
         }
         self.initial_values_for_custom_properties_flags = initial_values_flags;
         self.initial_values_for_custom_properties = initial_values;
+    }
+
+    /// Replaces the `@property` registrations of the author origin with `registrations`, the last valid one of each
+    /// name in shadow-including document order over the author style sheets of the document and of its shadow trees
+    /// (css-properties-values-api-1 §2.1, §2.8).
+    pub fn set_author_custom_property_registrations(
+        &mut self,
+        registrations: PrecomputedHashMap<Atom, Arc<PropertyRegistration>>,
+    ) {
+        let unchanged = self.author_custom_property_registrations.as_ref().is_some_and(|previous| {
+            previous.len() == registrations.len()
+                && registrations.iter().all(|(name, registration)| {
+                    previous.get(name).is_some_and(|previous| Arc::ptr_eq(previous, registration))
+                })
+        });
+        if unchanged {
+            return;
+        }
+        self.author_custom_property_registrations = Some(registrations);
+        self.rebuild_initial_values_for_custom_properties();
     }
 
     /// Rebuilds (if needed) the CascadeData given a sheet collection.
