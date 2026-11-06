@@ -38,9 +38,9 @@ Outside markers of block-container list items have blockified computed display.
 Inside markers and markers of inline flow list items stay inline. This applies to
 inline flow-root list items as block containers and preserves item/root flags.
 Lazy pseudo keyframes use the lazy pseudo cascade with their originating primary
-style. Marker effect levels retain the generated marker property restrictions,
-including inherited text properties. Static computed values and user-agent
-marker rules remain unrestricted.
+style. Author and effect levels apply the generated property restrictions of
+`::marker` (with inherited text properties), `::placeholder` and the highlight
+pseudo-elements. User-agent rules remain unrestricted.
 Eager pseudo and ordinary element keyframe paths remain unchanged.
 Moegoe consumes the published registered revision, without a local override.
 No upstream issue or pull request has been submitted for this patch.

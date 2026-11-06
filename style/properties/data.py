@@ -1334,6 +1334,24 @@ class PropertyRestrictions:
             + PropertyRestrictions.spec(data, "css-fonts")
             + PropertyRestrictions.spec(data, "css-animations")
             + PropertyRestrictions.spec(data, "css-transitions")
+            + ["animation-range-start", "animation-range-end"]
+        )
+
+    # https://drafts.csswg.org/css-pseudo-4/#highlight-styling
+    @staticmethod
+    def highlight(data):
+        return set(
+            [
+                "color",
+                "background-color",
+                "text-shadow",
+                "text-underline-position",
+                "text-underline-offset",
+                "fill",
+                "stroke",
+                "stroke-width",
+            ]
+            + PropertyRestrictions.shorthand(data, "text-decoration")
         )
 
     # https://www.w3.org/TR/webvtt1/#the-cue-pseudo-element

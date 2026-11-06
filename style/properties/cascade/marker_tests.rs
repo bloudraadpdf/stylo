@@ -62,8 +62,12 @@ fn assert_cascade_restriction(
 }
 
 #[test]
-fn marker_animation_and_transition_cascades_keep_property_restrictions() {
-    for level in [CascadeLevel::Animations, CascadeLevel::Transitions] {
+fn marker_author_and_effect_cascades_keep_property_restrictions() {
+    for level in [
+        CascadeLevel::same_tree_author_normal(),
+        CascadeLevel::Animations,
+        CascadeLevel::Transitions,
+    ] {
         assert_cascade_restriction(level, Some(&PseudoElement::Marker), true);
     }
 }
@@ -89,12 +93,7 @@ fn inheritable_text_effects_retain_marker_property_flags() {
 
 #[test]
 fn marker_ua_and_ordinary_element_effects_keep_all_properties() {
-    for level in [
-        CascadeLevel::UANormal,
-        CascadeLevel::same_tree_author_normal(),
-    ] {
-        assert_cascade_restriction(level, Some(&PseudoElement::Marker), false);
-    }
+    assert_cascade_restriction(CascadeLevel::UANormal, Some(&PseudoElement::Marker), false);
     for level in [CascadeLevel::Animations, CascadeLevel::Transitions] {
         assert_cascade_restriction(level, None, false);
     }

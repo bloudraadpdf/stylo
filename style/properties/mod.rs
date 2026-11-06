@@ -82,6 +82,8 @@ bitflags! {
         ///
         /// https://drafts.csswg.org/css-cascade/#legacy-shorthand
         const IS_LEGACY_SHORTHAND = 1 << 6;
+        /// This longhand property applies to the highlight pseudo-elements.
+        const APPLIES_TO_HIGHLIGHT = 1 << 7;
 
         /* The following flags are currently not used in Rust code, they
          * only need to be listed in corresponding properties so that

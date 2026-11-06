@@ -135,16 +135,13 @@ pub enum PseudoElement {
     FirstLetter,
     FirstLine,
 
-    // If/when ::placeholder is added, adjust our property_restriction
-    // implementation to do property filtering for it.  Also, make sure
-    // the UA sheet has the !important rules some of the
-    // APPLIES_TO_PLACEHOLDER properties expect!
-
     // Non-eager pseudos.
     Backdrop,
     PickerIcon,
     GrammarError,
     SpellingError,
+    TargetText,
+    SearchText,
     Highlight(Atom),
     ViewTransition,
     ViewTransitionGroup(Atom),
@@ -186,6 +183,9 @@ pub enum PseudoElement {
     ColorSwatch,
     Placeholder,
     FileSelectorButton,
+    SliderThumb,
+    SliderTrack,
+    SliderFill,
     Checkmark,
     PickerSelect,
 
@@ -221,6 +221,8 @@ impl ToCss for PseudoElement {
             PickerIcon => "::picker-icon",
             GrammarError => "::grammar-error",
             SpellingError => "::spelling-error",
+            TargetText => "::target-text",
+            SearchText => "::search-text",
             ViewTransition => "::view-transition",
             Highlight(ref name)
             | ViewTransitionGroup(ref name)
@@ -282,6 +284,9 @@ impl ToCss for PseudoElement {
             ColorSwatch => "::color-swatch",
             Placeholder => "::placeholder",
             FileSelectorButton => "::file-selector-button",
+            SliderThumb => "::slider-thumb",
+            SliderTrack => "::slider-track",
+            SliderFill => "::slider-fill",
             Checkmark => "::checkmark",
             PickerSelect => "::picker(select)",
             ServoTextControlInnerContainer => "::-servo-text-control-inner-container",
@@ -302,7 +307,11 @@ impl ::selectors::parser::PseudoElement for PseudoElement {
     fn accepts_state_pseudo_classes(&self) -> bool {
         matches!(
             self,
-            Self::ScrollMarkerGroup | Self::ScrollMarker | Self::ScrollButton(_) | Self::DetailsContent
+            Self::ScrollMarkerGroup
+                | Self::ScrollMarker
+                | Self::ScrollButton(_)
+                | Self::DetailsContent
+                | Self::FileSelectorButton
         ) || self.is_in_pseudo_element_tree()
     }
 
@@ -420,14 +429,19 @@ impl PseudoElement {
             Self::FileSelectorButton => 32,
             Self::Checkmark => 33,
             Self::PickerSelect => 34,
-            Self::ServoTextControlInnerContainer => 35,
-            Self::ServoTextControlInnerEditor => 36,
-            Self::ServoAnonymousBox => 37,
-            Self::ServoAnonymousTable => 38,
-            Self::ServoAnonymousTableCell => 39,
-            Self::ServoAnonymousTableRow => 40,
-            Self::ServoTableGrid => 41,
-            Self::ServoTableWrapper => 42,
+            Self::TargetText => 35,
+            Self::SearchText => 36,
+            Self::SliderThumb => 37,
+            Self::SliderTrack => 38,
+            Self::SliderFill => 39,
+            Self::ServoTextControlInnerContainer => 40,
+            Self::ServoTextControlInnerEditor => 41,
+            Self::ServoAnonymousBox => 42,
+            Self::ServoAnonymousTable => 43,
+            Self::ServoAnonymousTableCell => 44,
+            Self::ServoAnonymousTableRow => 45,
+            Self::ServoTableGrid => 46,
+            Self::ServoTableWrapper => 47,
         }
     }
 
@@ -477,6 +491,20 @@ impl PseudoElement {
     #[inline]
     pub fn is_selection(&self) -> bool {
         *self == PseudoElement::Selection
+    }
+
+    /// Whether this pseudo-element is a highlight pseudo-element (CSS Pseudo 4 §3.1).
+    #[inline]
+    pub fn is_highlight(&self) -> bool {
+        matches!(
+            self,
+            Self::Selection
+                | Self::TargetText
+                | Self::SearchText
+                | Self::GrammarError
+                | Self::SpellingError
+                | Self::Highlight(_)
+        )
     }
 
     /// Whether this pseudo-element is the ::before pseudo.
@@ -560,6 +588,8 @@ impl PseudoElement {
             | PseudoElement::PickerIcon
             | PseudoElement::GrammarError
             | PseudoElement::SpellingError
+            | PseudoElement::TargetText
+            | PseudoElement::SearchText
             | PseudoElement::Highlight(_)
             | PseudoElement::ViewTransition
             | PseudoElement::ViewTransitionGroup(_)
@@ -586,6 +616,9 @@ impl PseudoElement {
             | PseudoElement::BdSidenoteMarker
             | PseudoElement::Placeholder
             | PseudoElement::FileSelectorButton
+            | PseudoElement::SliderThumb
+            | PseudoElement::SliderTrack
+            | PseudoElement::SliderFill
             | PseudoElement::Checkmark
             | PseudoElement::PickerSelect
             | PseudoElement::DetailsContent
@@ -626,6 +659,9 @@ impl PseudoElement {
         match *self {
             PseudoElement::FirstLetter => Some(PropertyFlags::APPLIES_TO_FIRST_LETTER),
             PseudoElement::FirstLine => Some(PropertyFlags::APPLIES_TO_FIRST_LINE),
+            PseudoElement::Marker => Some(PropertyFlags::APPLIES_TO_MARKER),
+            PseudoElement::Placeholder => Some(PropertyFlags::APPLIES_TO_PLACEHOLDER),
+            _ if self.is_highlight() => Some(PropertyFlags::APPLIES_TO_HIGHLIGHT),
             _ => None,
         }
     }
@@ -1153,6 +1189,11 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             "checkmark" => Checkmark,
             "grammar-error" => GrammarError,
             "spelling-error" => SpellingError,
+            "target-text" => TargetText,
+            "search-text" => SearchText,
+            "slider-thumb" => SliderThumb,
+            "slider-track" => SliderTrack,
+            "slider-fill" => SliderFill,
             "view-transition" => ViewTransition,
             "-servo-text-control-inner-container" => {
                 if !self.in_user_agent_stylesheet() {

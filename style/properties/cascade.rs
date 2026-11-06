@@ -98,16 +98,10 @@ where
     )
 }
 
-#[derive(Clone, Copy)]
-enum DeclarationRestriction {
-    AllLevels(PropertyFlags),
-    Effects(PropertyFlags),
-}
-
 struct DeclarationIterator<'a> {
     // Global to the iteration.
     guards: &'a StylesheetGuards<'a>,
-    restriction: Option<DeclarationRestriction>,
+    restriction: Option<PropertyFlags>,
     // The rule we're iterating over.
     current_rule_node: Option<&'a StrongRuleNode>,
     // Per rule state.
@@ -125,17 +119,7 @@ impl<'a> DeclarationIterator<'a> {
         guards: &'a StylesheetGuards,
         pseudo: Option<&PseudoElement>,
     ) -> Self {
-        let restriction = pseudo.and_then(|pseudo| {
-            if pseudo.is_marker() {
-                Some(DeclarationRestriction::Effects(
-                    PropertyFlags::APPLIES_TO_MARKER,
-                ))
-            } else {
-                pseudo
-                    .property_restriction()
-                    .map(DeclarationRestriction::AllLevels)
-            }
-        });
+        let restriction = pseudo.and_then(PseudoElement::property_restriction);
         let mut iter = Self {
             guards,
             current_rule_node: Some(rule_node),
@@ -180,16 +164,7 @@ impl<'a> Iterator for DeclarationIterator<'a> {
                     continue;
                 }
 
-                let restriction = match self.restriction {
-                    Some(DeclarationRestriction::AllLevels(flags)) => Some(flags),
-                    Some(DeclarationRestriction::Effects(flags))
-                        if self.priority.cascade_level().is_animation() =>
-                    {
-                        Some(flags)
-                    },
-                    _ => None,
-                };
-                if let Some(restriction) = restriction {
+                if let Some(restriction) = self.restriction {
                     // decl.id() is either a longhand or a custom
                     // property.  Custom properties are always allowed, but
                     // longhands are only allowed if they have our

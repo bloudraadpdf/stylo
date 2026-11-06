@@ -568,6 +568,7 @@ static ${name}: LonghandIdSet = LonghandIdSet {
     MARKER_RESTRICTIONS = PropertyRestrictions.marker(data)
     PLACEHOLDER_RESTRICTIONS = PropertyRestrictions.placeholder(data)
     CUE_RESTRICTIONS = PropertyRestrictions.cue(data)
+    HIGHLIGHT_RESTRICTIONS = PropertyRestrictions.highlight(data)
 
     def restriction_flags(property):
         name = property.name
@@ -582,6 +583,8 @@ static ${name}: LonghandIdSet = LonghandIdSet {
             flags.append("APPLIES_TO_MARKER")
         if name in CUE_RESTRICTIONS:
             flags.append("APPLIES_TO_CUE")
+        if name in HIGHLIGHT_RESTRICTIONS:
+            flags.append("APPLIES_TO_HIGHLIGHT")
         return flags
 
 %>
