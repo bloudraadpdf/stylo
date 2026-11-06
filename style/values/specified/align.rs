@@ -366,12 +366,15 @@ impl SelfAlignment {
             return Ok(SelfAlignment(value));
         }
 
-        // <overflow-position>? <self-position>
+        // <overflow-position>? [ normal | <self-position> ]
         let overflow_position = input
             .try_parse(parse_overflow_position)
             .unwrap_or(AlignFlags::empty());
-        let self_position = parse_self_position(input, axis, true)?;
-        Ok(SelfAlignment(overflow_position | self_position))
+        let position = match input.try_parse(|input| input.expect_ident_matching("normal")) {
+            Ok(()) => AlignFlags::NORMAL,
+            Err(_) => parse_self_position(input, axis, true)?,
+        };
+        Ok(SelfAlignment(overflow_position | position))
     }
 
     fn list_keywords(f: KeywordsCollectFn, axis: AxisDirection) {

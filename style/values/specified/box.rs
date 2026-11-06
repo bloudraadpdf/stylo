@@ -2133,6 +2133,35 @@ impl ToCss for IdentArg {
 }
 
 impl IdentArg {
+    /// Parses the arguments of `ident()`, after its function token.
+    pub(crate) fn parse_function_arguments<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Vec<Self>, ParseError<'i>> {
+        input.parse_nested_block(|input| {
+            let mut args = vec![Self::parse(context, input)?];
+            while let Ok(arg) = input.try_parse(|input| Self::parse(context, input)) {
+                args.push(arg);
+            }
+            Ok(args)
+        })
+    }
+
+    /// The identifier that the arguments of `ident()` concatenate to.
+    pub(crate) fn concatenate(args: &[Self], context: &Context) -> crate::Atom {
+        let mut name = String::new();
+        for arg in args {
+            match arg {
+                Self::String(string) => name.push_str(string),
+                Self::Integer(integer) => {
+                    let _ = write!(name, "{}", integer.to_computed_value(context));
+                },
+                Self::Ident(ident) => name.push_str(ident),
+            }
+        }
+        crate::Atom::from(name)
+    }
+
     fn parse<'i>(
         context: &ParserContext,
         input: &mut Parser<'i, '_>,
@@ -2157,19 +2186,7 @@ impl ToComputedValue for ContainerNameItem {
     fn to_computed_value(&self, context: &Context) -> CustomIdent {
         match self {
             Self::Ident(ident) => ident.clone(),
-            Self::Function(args) => {
-                let mut name = String::new();
-                for arg in args.iter() {
-                    match arg {
-                        IdentArg::String(string) => name.push_str(string),
-                        IdentArg::Integer(integer) => {
-                            let _ = write!(name, "{}", integer.to_computed_value(context));
-                        },
-                        IdentArg::Ident(ident) => name.push_str(ident),
-                    }
-                }
-                CustomIdent(crate::Atom::from(name))
-            },
+            Self::Function(args) => CustomIdent(IdentArg::concatenate(args, context)),
         }
     }
 
@@ -2189,14 +2206,7 @@ impl ContainerNameItem {
             .try_parse(|input| input.expect_function_matching("ident"))
             .is_ok()
         {
-            let args = input.parse_nested_block(|input| {
-                let mut args = vec![IdentArg::parse(context, input)?];
-                while let Ok(arg) = input.try_parse(|input| IdentArg::parse(context, input)) {
-                    args.push(arg);
-                }
-                Ok(args)
-            })?;
-            return Ok(Self::Function(args.into()));
+            return Ok(Self::Function(IdentArg::parse_function_arguments(context, input)?.into()));
         }
         Ok(Self::Ident(CustomIdent::parse(
             input,

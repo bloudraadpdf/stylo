@@ -3783,7 +3783,6 @@ fn rewrite_declaration_value_idents_in(
 fn rewrite_css_identifier_tokens(
     value: &str,
     replacement_for: impl Fn(&str) -> Option<&'static str>,
-    quoted_identifiers: bool,
 ) -> Option<String> {
     struct TokenReplacement {
         start_byte: usize,
@@ -3813,7 +3812,7 @@ fn rewrite_css_identifier_tokens(
                     });
                 }
             },
-            Token::QuotedString(name) if quoted_identifiers => {
+            Token::QuotedString(name) => {
                 if let Some(replacement) = replacement_for(name.as_ref()) {
                     let quote = value.as_bytes().get(start).copied().unwrap_or(b'"');
                     let quote = if matches!(quote, b'\'' | b'"') {
@@ -3871,21 +3870,7 @@ pub(crate) fn rewrite_pdfreactor_font_family_value(value: &str) -> Option<String
         }
     }
 
-    rewrite_css_identifier_tokens(value, native_alias, true)
-}
-
-fn rewrite_position_visibility_value(value: &str) -> Option<String> {
-    fn stylo_backing_keyword(name: &str) -> Option<&'static str> {
-        if name.eq_ignore_ascii_case("anchor-valid") {
-            Some("anchors-valid")
-        } else if name.eq_ignore_ascii_case("anchor-visible") {
-            Some("anchors-visible")
-        } else {
-            None
-        }
-    }
-
-    rewrite_css_identifier_tokens(value, stylo_backing_keyword, false)
+    rewrite_css_identifier_tokens(value, native_alias)
 }
 
 fn rewrite_string_set_keywords(css: &str, compat: CompatMode) -> Option<String> {
@@ -4730,16 +4715,6 @@ fn scan_block<'i>(parser: &mut Parser<'i, '_>, state: &mut TranslateState, full_
                     if state.compat == CompatMode::Prince
                         && state.at_page_depth > 0
                         && let Some(replacement) = rewrite_page_viewport_units(value)
-                    {
-                        state.value_replacements.push(ValueReplacement {
-                            start_byte: value_start,
-                            end_byte: value_end,
-                            replacement,
-                        });
-                    }
-
-                    if name.eq_ignore_ascii_case("position-visibility")
-                        && let Some(replacement) = rewrite_position_visibility_value(value)
                     {
                         state.value_replacements.push(ValueReplacement {
                             start_byte: value_start,
@@ -8591,28 +8566,6 @@ mod grid_lanes_property_projection_tests {
             translate_compat(stylesheet, CompatMode::None).rewritten,
             stylesheet
         );
-    }
-}
-
-#[cfg(test)]
-mod position_visibility_syntax_adapter_tests {
-    use super::{CompatMode, translate_compat};
-
-    #[test]
-    fn normative_singular_keywords_project_to_the_stylo_backing_keywords() {
-        let stylesheet = ".valid { position-visibility: anchor-valid no-overflow } .visible { POSITION-VISIBILITY: anchor-visible }";
-
-        assert_eq!(
-            translate_compat(stylesheet, CompatMode::None).rewritten,
-            ".valid { position-visibility: anchors-valid no-overflow } .visible { POSITION-VISIBILITY: anchors-visible }"
-        );
-    }
-
-    #[test]
-    fn position_visibility_text_outside_its_declaration_value_is_unchanged() {
-        let stylesheet = r#".x { --condition: anchor-visible; content: "position-visibility: anchor-valid"; position-visibility: var(--condition) }"#;
-
-        assert!(translate_compat(stylesheet, CompatMode::None).is_borrowed());
     }
 }
 

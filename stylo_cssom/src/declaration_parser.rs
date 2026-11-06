@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use cssparser::{Parser, ParserInput, Token, parse_important};
-use style::values::specified::position::{PositionTryFallbacks, PositionTryOrder};
+use style::values::specified::position::{
+    PositionTryOrder, SpecifiedPositionTryFallbacks as PositionTryFallbacks,
+};
 use style::{
     parser::{Parse, ParserContext},
     properties::{
@@ -13,7 +15,7 @@ use style::{
     stylesheets::{CssRuleType, Namespaces, Origin, UrlExtraData},
 };
 use style_traits::ToCss;
-use style_traits::{ParsingMode, StyleParseErrorKind};
+use style_traits::ParsingMode;
 
 use crate::{
     context::ABOUT_BLANK, style_fragment_parser::parse_style_fragment_with as parse_fragment_with,

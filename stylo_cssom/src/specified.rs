@@ -201,16 +201,6 @@ fn project_inline_compatibility_declaration(
                 ),
             )
         },
-        Property::Standard(property) if property.schema().name == "position-visibility" => one(
-            property.schema().name,
-            replace_projected_idents(
-                &declaration.value,
-                &[
-                    ("anchor-visible", "anchors-visible"),
-                    ("anchor-valid", "anchors-valid"),
-                ],
-            ),
-        ),
         Property::Standard(property)
             if matches!(property.schema().name, "text-align" | "text-align-all") =>
         {
@@ -739,49 +729,38 @@ fn replace_projected_ident(
     source: &str,
     replacement: &str,
 ) -> String {
-    replace_projected_idents(value, &[(source, replacement)])
-}
-
-fn replace_projected_idents(
-    value: &stylo_cssom_model::SpecifiedStyleValue,
-    replacements: &[(&str, &str)],
-) -> String {
     let mut value = value.clone();
-    rewrite_projected_component_idents(&mut value, replacements);
+    rewrite_projected_component_idents(&mut value, source, replacement);
     projected_specified_style_value_text(&value)
 }
 
 fn rewrite_projected_component_idents(
     value: &mut stylo_cssom_model::SpecifiedStyleValue,
-    replacements: &[(&str, &str)],
+    source: &str,
+    replacement: &str,
 ) {
     use stylo_cssom_model::{SpecifiedComponentValue as Component, SpecifiedStyleValue as Value};
 
-    fn rewrite_components(values: &mut [Component], replacements: &[(&str, &str)]) {
+    fn rewrite_components(values: &mut [Component], source: &str, replacement: &str) {
         for component in values {
             match component {
-                Component::Ident(value) => {
-                    if let Some((_, replacement)) = replacements
-                        .iter()
-                        .find(|(source, _)| value.eq_ignore_ascii_case(source))
-                    {
-                        *value = (*replacement).into();
-                    }
+                Component::Ident(value) if value.eq_ignore_ascii_case(source) => {
+                    *value = replacement.into();
                 },
                 Component::Function { arguments, .. } => {
-                    rewrite_components(arguments, replacements)
+                    rewrite_components(arguments, source, replacement)
                 },
-                Component::Block { values, .. } => rewrite_components(values, replacements),
+                Component::Block { values, .. } => rewrite_components(values, source, replacement),
                 _ => {},
             }
         }
     }
 
     match value {
-        Value::Components(values) => rewrite_components(values, replacements),
+        Value::Components(values) => rewrite_components(values, source, replacement),
         Value::List { values, .. } => {
             for value in values {
-                rewrite_projected_component_idents(value, replacements);
+                rewrite_projected_component_idents(value, source, replacement);
             }
         },
         Value::CssWide(_) | Value::Opacity(_) | Value::TokenStream(_) => {},

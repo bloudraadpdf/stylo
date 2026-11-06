@@ -531,6 +531,17 @@ where
     where
         W: Write,
     {
+        self.to_css_with_fallback(dest, |fallback, dest| fallback.to_css(dest))
+    }
+}
+
+impl<Fallback> GenericAnchorSizeFunction<Fallback> {
+    /// Serializes the function, with `fallback` serializing its fallback.
+    pub fn to_css_with_fallback<W: Write>(
+        &self,
+        dest: &mut CssWriter<W>,
+        fallback: impl FnOnce(&Fallback, &mut CssWriter<W>) -> std::fmt::Result,
+    ) -> std::fmt::Result {
         dest.write_str("anchor-size(")?;
         let mut previous_entry_printed = false;
         if !self.target_element.value.0.is_empty() {
@@ -548,7 +559,7 @@ where
             if previous_entry_printed {
                 dest.write_str(", ")?;
             }
-            f.to_css(dest)?;
+            fallback(f, dest)?;
         }
         dest.write_str(")")
     }

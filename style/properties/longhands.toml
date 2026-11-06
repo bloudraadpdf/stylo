@@ -213,7 +213,7 @@ struct = "box"
 animation_type = "discrete"
 # css-page-3 Appendix A: vertical-align longhand applicable inside @page
 # and margin boxes.
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 spec = "https://drafts.csswg.org/css-inline-3/#alignment-baseline"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
@@ -455,7 +455,7 @@ servo_restyle_damage = "rebuild_box"
 affects = "layout"
 # css-page-3 Appendix A: vertical-align longhand applicable inside @page
 # and margin boxes.
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [baseline-source]
 type = "BaselineSource"
@@ -467,7 +467,7 @@ servo_restyle_damage = "rebuild_box"
 affects = "layout"
 # css-page-3 Appendix A: vertical-align longhand applicable inside @page
 # and margin boxes.
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 # CSS Inline 3 §6 — first/last line half-leading trim.
 [text-box-trim]
@@ -729,7 +729,7 @@ struct = "svg"
 extra_prefixes = ["webkit"]
 spec = "https://drafts.fxtf.org/css-masking-1/#propdef-clip-path"
 affects = "paint"
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 servo_restyle_damage = "repaint"
 
 [border-shape]
@@ -755,7 +755,7 @@ initial = "crate::color::AbsoluteColor::BLACK"
 struct = "inherited_text"
 ignored_when_colors_disabled = true
 spec = "https://drafts.csswg.org/css-color/#color"
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 servo_restyle_damage = "repaint"
 affects = "paint"
 
@@ -1134,7 +1134,7 @@ struct = "counters"
 initial_specified_value = "specified::Content::normal()"
 animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-content/#propdef-content"
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -1153,7 +1153,7 @@ struct = "counters"
 servo_pref = "layout.unimplemented"
 animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-lists/#propdef-counter-increment"
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -1164,7 +1164,7 @@ struct = "counters"
 servo_pref = "layout.unimplemented"
 animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-lists-3/#propdef-counter-reset"
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -1174,7 +1174,7 @@ initial = "Default::default()"
 struct = "counters"
 animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-lists-3/#propdef-counter-set"
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -1322,7 +1322,7 @@ initial = "computed::FontFamily::serif()"
 struct = "font"
 animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-fonts/#propdef-font-family"
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 gecko_ffi_name = "mFont.family"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
@@ -1372,7 +1372,7 @@ struct = "font"
 initial_specified_value = "specified::FontSize::medium()"
 allow_quirks = true
 spec = "https://drafts.csswg.org/css-fonts/#propdef-font-size"
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -1393,7 +1393,7 @@ struct = "font"
 initial_specified_value = "specified::FontStretch::normal()"
 gecko_ffi_name = "mFont.stretch"
 spec = "https://drafts.csswg.org/css-fonts/#propdef-font-width"
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -1403,7 +1403,7 @@ initial = "computed::FontStyle::normal()"
 struct = "font"
 initial_specified_value = "specified::FontStyle::normal()"
 spec = "https://drafts.csswg.org/css-fonts/#propdef-font-style"
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 gecko_ffi_name = "mFont.style"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
@@ -1459,7 +1459,7 @@ gecko_ffi_name = "mFont.variantAlternates"
 affects = "layout"
 # css-page-3 Appendix A: font-variant longhand applicable inside @page
 # and margin boxes.
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [font-variant-east-asian]
 type = "FontVariantEastAsian"
@@ -1472,7 +1472,7 @@ spec = "https://drafts.csswg.org/css-fonts/#propdef-font-variant-east-asian"
 affects = "layout"
 # css-page-3 Appendix A: font-variant longhand applicable inside @page
 # and margin boxes.
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [font-variant-ligatures]
 type = "FontVariantLigatures"
@@ -1485,7 +1485,7 @@ spec = "https://drafts.csswg.org/css-fonts/#propdef-font-variant-ligatures"
 affects = "layout"
 # css-page-3 Appendix A: font-variant longhand applicable inside @page
 # and margin boxes.
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [font-variant-numeric]
 type = "FontVariantNumeric"
@@ -1498,7 +1498,7 @@ spec = "https://drafts.csswg.org/css-fonts/#propdef-font-variant-numeric"
 affects = "layout"
 # css-page-3 Appendix A: font-variant longhand applicable inside @page
 # and margin boxes.
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [font-variation-settings]
 type = "FontVariationSettings"
@@ -1518,7 +1518,7 @@ struct = "font"
 initial_specified_value = "specified::FontWeight::normal()"
 gecko_ffi_name = "mFont.weight"
 spec = "https://drafts.csswg.org/css-fonts/#propdef-font-weight"
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -1745,7 +1745,7 @@ spec = "https://drafts.csswg.org/css-text/#propdef-letter-spacing"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 # css-page-3 Appendix A: applicable inside @page and margin boxes.
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [lighting-color]
 type = "Color"
@@ -1759,7 +1759,7 @@ type = "LineHeight"
 initial = "computed::LineHeight::normal()"
 struct = "font"
 spec = "https://drafts.csswg.org/css2/visudet.html#propdef-line-height"
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -2067,7 +2067,7 @@ servo_restyle_damage = "repaint"
 affects = "paint"
 # css-page-3 Appendix A: outline longhand applicable inside @page and margin
 # boxes.
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [outline-offset]
 type = "BorderSideOffset"
@@ -2078,7 +2078,7 @@ servo_restyle_damage = "repaint"
 affects = "overflow"
 # css-page-3 Appendix A: outline longhand applicable inside @page and margin
 # boxes.
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [outline-style]
 type = "OutlineStyle"
@@ -2091,7 +2091,7 @@ servo_restyle_damage = "repaint"
 affects = "overflow"
 # css-page-3 Appendix A: outline longhand applicable inside @page and margin
 # boxes.
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [outline-width]
 type = "BorderSideWidth"
@@ -2103,7 +2103,7 @@ servo_restyle_damage = "repaint"
 affects = "overflow"
 # css-page-3 Appendix A: outline longhand applicable inside @page and margin
 # boxes.
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [overflow-anchor]
 type = "OverflowAnchor"
@@ -2222,7 +2222,7 @@ struct = "box"
 logical_group = "overflow"
 animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-overflow-3/#propdef-overflow-x"
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -2233,7 +2233,7 @@ struct = "box"
 logical_group = "overflow"
 animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-overflow-3/#propdef-overflow-y"
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -5430,9 +5430,9 @@ affects = "layout"
 
 [position-visibility]
 type = "PositionVisibility"
-initial = "computed::PositionVisibility::ANCHORS_VISIBLE"
+initial = "computed::PositionVisibility::ANCHOR_VISIBLE"
 struct = "position"
-initial_specified_value = "specified::PositionVisibility::ANCHORS_VISIBLE"
+initial_specified_value = "specified::PositionVisibility::ANCHOR_VISIBLE"
 animation_type = "discrete"
 gecko_pref = "layout.css.anchor-positioning.enabled"
 servo_pref = "layout.unimplemented"
@@ -5470,7 +5470,7 @@ animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-content/#propdef-quotes"
 servo_restyle_damage = "rebuild_box"
 # css-page-3 Appendix A: applicable inside @page and margin boxes.
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 affects = "layout"
 
 [resize]
@@ -5732,7 +5732,7 @@ initial = "computed::TextAlign::Start"
 struct = "inherited_text"
 animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-text-4/#text-align-all-property"
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
@@ -5752,7 +5752,7 @@ spec = "https://drafts.csswg.org/css-text/#propdef-text-indent"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 # css-page-3 Appendix A: applicable inside @page and margin boxes.
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [text-justify]
 type = "TextJustify"
@@ -5781,7 +5781,7 @@ spec = "https://drafts.csswg.org/css-text/#propdef-text-transform"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 # css-page-3 Appendix A: applicable inside @page and margin boxes.
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [top]
 type = "Inset"
@@ -5807,7 +5807,7 @@ affects = "paint"
 type = "Transform"
 initial = "generics::transform::Transform::none()"
 struct = "box"
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 extra_prefixes = ["moz:layout.css.prefixes.transforms"]
 flags = "CAN_ANIMATE_ON_COMPOSITOR"
 spec = "https://drafts.csswg.org/css-transforms/#propdef-transform"
@@ -5818,7 +5818,7 @@ affects = "overflow"
 type = "TransformBox"
 initial = "computed::TransformBox::ViewBox"
 struct = "box"
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 spec = "https://drafts.csswg.org/css-transforms/#transform-box"
 animation_type = "discrete"
 affects = "overflow"
@@ -5827,7 +5827,7 @@ affects = "overflow"
 type = "TransformOrigin"
 initial = "computed::TransformOrigin::initial_value()"
 struct = "box"
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 extra_prefixes = ["moz:layout.css.prefixes.transforms", "webkit"]
 gecko_ffi_name = "mTransformOrigin"
 boxed = true
@@ -6256,7 +6256,7 @@ spec = "https://drafts.csswg.org/css-text/#propdef-word-spacing"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 # css-page-3 Appendix A: applicable inside @page and margin boxes.
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [word-space-transform]
 type = "WordSpaceTransform"
@@ -6977,7 +6977,7 @@ struct = "text"
 initial_specified_value = "specified::TextDecorationLine::none()"
 animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-text-decor/#propdef-text-decoration-line"
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 servo_restyle_damage = "recalculate_overflow"
 affects = "overflow"
 
@@ -6988,7 +6988,7 @@ struct = "text"
 initial_specified_value = "specified::Color::currentcolor()"
 ignored_when_colors_disabled = true
 spec = "https://drafts.csswg.org/css-text-decor/#propdef-text-decoration-color"
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 servo_restyle_damage = "recalculate_overflow"
 affects = "paint"
 
@@ -7033,7 +7033,7 @@ initial = "generics::text::GenericTextDecorationLength::Auto"
 struct = "text"
 initial_specified_value = "generics::text::GenericTextDecorationLength::Auto"
 spec = "https://drafts.csswg.org/css-text-decor-4/#text-decoration-width-property"
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 affects = "overflow"
 
 # moegoe G (Prince) — per-position `text-decoration` longhands. Each
@@ -8213,7 +8213,7 @@ gecko_ffi_name = "mFont.variantCaps"
 servo_restyle_damage = "rebuild_box"
 # css-page-3 Appendix A: font-variant longhand applicable inside @page
 # and margin boxes.
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [font-variant-caps.keyword]
 values = ["normal", "small-caps", "all-small-caps", "petite-caps", "all-petite-caps", "unicase", "titling-caps"]
@@ -8237,7 +8237,7 @@ gecko_pref = "layout.css.font-variant-emoji.enabled"
 has_effect_on_gecko_scrollbars = false
 # css-page-3 Appendix A: font-variant longhand applicable inside @page
 # and margin boxes.
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 keyword = { values = ["normal", "text", "emoji", "unicode"] }
 
 [font-variant-position]
@@ -8248,7 +8248,7 @@ affects = "layout"
 gecko_ffi_name = "mFont.variantPosition"
 # css-page-3 Appendix A: font-variant longhand applicable inside @page
 # and margin boxes.
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 keyword = { values = ["normal", "sub", "super"], gecko_constant_prefix = "NS_FONT_VARIANT_POSITION" }
 
 [font-optical-sizing]
@@ -8304,7 +8304,7 @@ spec = "https://drafts.csswg.org/css-writing-modes/#propdef-direction"
 animation_type = "none"
 affects = "layout"
 servo_restyle_damage = "rebuild_box"
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 keyword = { values = ["ltr", "rtl"] }
 
 [-moz-box-collapse]
@@ -8457,7 +8457,7 @@ affects = "layout"
 servo_restyle_damage = "rebuild_box"
 # css-page-3 Appendix A: white-space longhand applicable inside @page
 # and margin boxes.
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 keyword = { values = ["wrap", "nowrap"] }
 
 [text-wrap-style]
@@ -8587,7 +8587,7 @@ spec = "https://drafts.csswg.org/css-writing-modes/#propdef-unicode-bidi"
 animation_type = "none"
 affects = "layout"
 servo_restyle_damage = "rebuild_box"
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 keyword = { values = ["normal", "embed", "isolate", "bidi-override", "isolate-override", "plaintext"] }
 
 [text-decoration-style]
@@ -8596,7 +8596,7 @@ spec = "https://drafts.csswg.org/css-text-decor/#propdef-text-decoration-style"
 animation_type = "discrete"
 affects = "overflow"
 servo_restyle_damage = "recalculate_overflow"
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 keyword = { values = ["solid", "double", "dotted", "dashed", "wavy", "-moz-none"] }
 
 [ime-mode]
@@ -8718,7 +8718,7 @@ affects = "layout"
 servo_restyle_damage = "rebuild_box"
 # css-page-3 Appendix A: white-space longhand applicable inside @page
 # and margin boxes.
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 keyword = { values = ["collapse", "preserve", "preserve-breaks", "break-spaces"], extra_gecko_values = ["preserve-spaces"], extra_servo_values = ["discard", "preserve-spaces"], gecko_aliases = ["-moz-pre-space=preserve-spaces"] }
 
 [white-space-trim]

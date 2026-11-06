@@ -244,7 +244,7 @@ pub use self::position::AspectRatio;
 pub use self::position::Inset;
 pub use self::position::PositionAnchor;
 pub use self::position::PositionAnchorKeyword;
-pub use self::position::PositionTryFallbacks;
+pub use self::position::SpecifiedPositionTryFallbacks as PositionTryFallbacks;
 pub use self::position::PositionTryOrder;
 pub use self::position::PositionVisibility;
 pub use self::position::{GridAutoFlow, GridTemplateAreas, Position, PositionOrAuto};

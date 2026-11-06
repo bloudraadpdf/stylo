@@ -13,16 +13,16 @@ use crate::values::computed::{
     Context, Integer, LengthPercentage, NonNegativeNumber, Percentage, ToComputedValue,
 };
 use crate::values::generics;
-#[cfg(feature = "gecko")]
 use crate::values::generics::position::TreeScoped;
 use crate::values::generics::position::{
     AnchorSideKeyword, AspectRatio as GenericAspectRatio, GenericAnchorFunction, GenericAnchorSide,
     GenericInset, Position as GenericPosition, PositionComponent as GenericPositionComponent,
     PositionOrAuto as GenericPositionOrAuto, ZIndex as GenericZIndex,
 };
+use crate::values::specified::position::{AnchorNameIdent, AnchorScopeKeyword, PositionAnchorKeyword};
 pub use crate::values::specified::position::{
-    AnchorName, AnchorScope, DashedIdentAndOrTryTactic, GridAutoFlow, GridLanesDirection,
-    GridLanesDirectionAxis, GridTemplateAreas, MasonryAutoFlow, PositionAnchor, PositionArea,
+    DashedIdentAndOrTryTactic, GridAutoFlow, GridLanesDirection,
+    GridLanesDirectionAxis, GridTemplateAreas, MasonryAutoFlow, PositionArea,
     PositionAreaAxis, PositionAreaKeyword, PositionAreaType, PositionTryFallbacks,
     PositionTryFallbacksTryTactic, PositionTryFallbacksTryTacticKeyword, PositionTryOrder,
     PositionVisibility,
@@ -30,6 +30,15 @@ pub use crate::values::specified::position::{
 use crate::Zero;
 use std::fmt::{self, Write};
 use style_traits::{CssWriter, ToCss};
+
+/// The computed value of `anchor-name`.
+pub type AnchorName = TreeScoped<AnchorNameIdent>;
+
+/// The computed value of `anchor-scope`.
+pub type AnchorScope = TreeScoped<AnchorScopeKeyword>;
+
+/// The computed value of `position-anchor`.
+pub type PositionAnchor = TreeScoped<PositionAnchorKeyword>;
 
 /// The computed value of a CSS `<position>`
 pub type Position = GenericPosition<HorizontalPosition, VerticalPosition>;

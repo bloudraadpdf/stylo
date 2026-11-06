@@ -2594,6 +2594,16 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
         self.to_css_impl(dest, ArgumentLevel::ArgumentRoot)
     }
 
+    /// Serializes the tree as the `<length-percentage>` fallback of an anchor function: a single value without a
+    /// `calc()` wrapper.
+    fn to_css_as_fallback<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        let level = match *self {
+            Self::Leaf(_) | Self::Anchor(_) | Self::AnchorSize(_) => ArgumentLevel::ArgumentRoot,
+            _ => ArgumentLevel::CalculationRoot,
+        };
+        self.to_css_impl(dest, level)
+    }
+
     fn to_css_impl<W>(&self, dest: &mut CssWriter<W>, level: ArgumentLevel) -> fmt::Result
     where
         W: Write,
@@ -2854,8 +2864,10 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 }
             },
             Self::Leaf(ref l) => l.to_css(dest)?,
-            Self::Anchor(ref f) => f.to_css(dest)?,
-            Self::AnchorSize(ref f) => f.to_css(dest)?,
+            Self::Anchor(ref f) => f.to_css_with_fallback(dest, |f, dest| f.to_css_as_fallback(dest))?,
+            Self::AnchorSize(ref f) => {
+                f.to_css_with_fallback(dest, |f, dest| f.to_css_as_fallback(dest))?
+            },
         }
 
         if write_closing_paren {

@@ -453,36 +453,129 @@ impl AnchorNameIdent {
     }
 }
 
-impl Parse for AnchorNameIdent {
-    fn parse<'i, 't>(
-        context: &ParserContext,
-        input: &mut Parser<'i, 't>,
-    ) -> Result<Self, ParseError<'i>> {
-        let location = input.current_source_location();
-        let first = input.expect_ident()?;
-        if first.eq_ignore_ascii_case("none") {
-            return Ok(Self::none());
-        }
-        // The common case is probably just to have a single anchor name, so
-        // space for four on the stack should be plenty.
-        let mut idents: SmallVec<[DashedIdent; 4]> =
-            smallvec![DashedIdent::from_ident(location, first,)?];
-        while input.try_parse(|input| input.expect_comma()).is_ok() {
-            idents.push(DashedIdent::parse(context, input)?);
-        }
-        Ok(AnchorNameIdent(ArcSlice::from_iter(idents.drain(..))))
-    }
-}
-
-/// https://drafts.csswg.org/css-anchor-position-1/#propdef-anchor-name
-pub type AnchorName = TreeScoped<AnchorNameIdent>;
-
-impl AnchorName {
+impl TreeScoped<AnchorNameIdent> {
     /// Return the `none` value.
     pub fn none() -> Self {
         Self::with_default_level(AnchorNameIdent::none())
     }
 }
+
+/// A `<dashed-ident>`, or the `ident()` function that constructs one.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem)]
+pub enum DashedIdentOrFunction {
+    /// A `<dashed-ident>`.
+    Ident(DashedIdent),
+    /// https://drafts.csswg.org/css-values-5/#ident
+    #[css(function = "ident")]
+    Function(
+        #[css(iterable)]
+        #[ignore_malloc_size_of = "Arc"]
+        crate::ArcSlice<specified::box_::IdentArg>,
+    ),
+}
+
+impl Parse for DashedIdentOrFunction {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if input
+            .try_parse(|input| input.expect_function_matching("ident"))
+            .is_ok()
+        {
+            return Ok(Self::Function(ArcSlice::from_iter(
+                specified::box_::IdentArg::parse_function_arguments(context, input)?.into_iter(),
+            )));
+        }
+        Ok(Self::Ident(DashedIdent::parse(context, input)?))
+    }
+}
+
+impl ToComputedValue for DashedIdentOrFunction {
+    type ComputedValue = DashedIdent;
+
+    fn to_computed_value(&self, context: &Context) -> DashedIdent {
+        match self {
+            Self::Ident(ident) => ident.clone(),
+            Self::Function(args) => {
+                DashedIdent(specified::box_::IdentArg::concatenate(args, context))
+            },
+        }
+    }
+
+    fn from_computed_value(computed: &DashedIdent) -> Self {
+        Self::Ident(computed.clone())
+    }
+}
+
+/// The specified `<dashed-ident>#` of `anchor-name` and `anchor-scope`.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem)]
+#[css(comma)]
+pub struct DashedIdentList(
+    #[css(iterable)]
+    #[ignore_malloc_size_of = "Arc"]
+    pub crate::ArcSlice<DashedIdentOrFunction>,
+);
+
+impl Parse for DashedIdentList {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        Ok(Self(ArcSlice::from_iter(
+            input
+                .parse_comma_separated(|input| DashedIdentOrFunction::parse(context, input))?
+                .into_iter(),
+        )))
+    }
+}
+
+impl ToComputedValue for DashedIdentList {
+    type ComputedValue = ArcSlice<DashedIdent>;
+
+    fn to_computed_value(&self, context: &Context) -> ArcSlice<DashedIdent> {
+        ArcSlice::from_iter(self.0.iter().map(|ident| ident.to_computed_value(context)))
+    }
+
+    fn from_computed_value(computed: &ArcSlice<DashedIdent>) -> Self {
+        Self(ArcSlice::from_iter(
+            computed.iter().map(ToComputedValue::from_computed_value),
+        ))
+    }
+}
+
+/// The specified value of `anchor-name`.
+#[derive(Clone, Debug, MallocSizeOf, Parse, PartialEq, SpecifiedValueInfo, ToCss, ToShmem)]
+pub enum SpecifiedAnchorName {
+    /// `none`
+    None,
+    /// `<dashed-ident>#`
+    Idents(DashedIdentList),
+}
+
+impl style_traits::ToTyped for SpecifiedAnchorName {}
+
+impl ToComputedValue for SpecifiedAnchorName {
+    type ComputedValue = AnchorNameIdent;
+
+    fn to_computed_value(&self, context: &Context) -> AnchorNameIdent {
+        match self {
+            Self::None => AnchorNameIdent::none(),
+            Self::Idents(idents) => AnchorNameIdent(idents.to_computed_value(context)),
+        }
+    }
+
+    fn from_computed_value(computed: &AnchorNameIdent) -> Self {
+        if computed.0.is_empty() {
+            Self::None
+        } else {
+            Self::Idents(ToComputedValue::from_computed_value(&computed.0))
+        }
+    }
+}
+
+/// https://drafts.csswg.org/css-anchor-position-1/#propdef-anchor-name
+pub type AnchorName = TreeScoped<SpecifiedAnchorName>;
 
 /// https://drafts.csswg.org/css-anchor-position-1/#propdef-scope
 #[derive(
@@ -519,36 +612,45 @@ impl AnchorScopeKeyword {
     }
 }
 
-impl Parse for AnchorScopeKeyword {
-    fn parse<'i, 't>(
-        context: &ParserContext,
-        input: &mut Parser<'i, 't>,
-    ) -> Result<Self, ParseError<'i>> {
-        let location = input.current_source_location();
-        let first = input.expect_ident()?;
-        if first.eq_ignore_ascii_case("none") {
-            return Ok(Self::None);
+/// The specified value of `anchor-scope`.
+#[derive(Clone, Debug, MallocSizeOf, Parse, PartialEq, SpecifiedValueInfo, ToCss, ToShmem)]
+pub enum SpecifiedAnchorScope {
+    /// `none`
+    None,
+    /// `all`
+    All,
+    /// `<dashed-ident>#`
+    Idents(DashedIdentList),
+}
+
+impl style_traits::ToTyped for SpecifiedAnchorScope {}
+
+impl ToComputedValue for SpecifiedAnchorScope {
+    type ComputedValue = AnchorScopeKeyword;
+
+    fn to_computed_value(&self, context: &Context) -> AnchorScopeKeyword {
+        match self {
+            Self::None => AnchorScopeKeyword::None,
+            Self::All => AnchorScopeKeyword::All,
+            Self::Idents(idents) => AnchorScopeKeyword::Idents(idents.to_computed_value(context)),
         }
-        if first.eq_ignore_ascii_case("all") {
-            return Ok(Self::All);
+    }
+
+    fn from_computed_value(computed: &AnchorScopeKeyword) -> Self {
+        match computed {
+            AnchorScopeKeyword::None => Self::None,
+            AnchorScopeKeyword::All => Self::All,
+            AnchorScopeKeyword::Idents(idents) => {
+                Self::Idents(ToComputedValue::from_computed_value(idents))
+            },
         }
-        // Authors using more than a handful of anchored elements is likely
-        // uncommon, so we only pre-allocate for 8 on the stack here.
-        let mut idents: SmallVec<[DashedIdent; 8]> =
-            smallvec![DashedIdent::from_ident(location, first,)?];
-        while input.try_parse(|input| input.expect_comma()).is_ok() {
-            idents.push(DashedIdent::parse(context, input)?);
-        }
-        Ok(AnchorScopeKeyword::Idents(ArcSlice::from_iter(
-            idents.drain(..),
-        )))
     }
 }
 
 /// https://drafts.csswg.org/css-anchor-position-1/#propdef-scope
-pub type AnchorScope = TreeScoped<AnchorScopeKeyword>;
+pub type AnchorScope = TreeScoped<SpecifiedAnchorScope>;
 
-impl AnchorScope {
+impl TreeScoped<AnchorScopeKeyword> {
     /// Return the `none` value.
     pub fn none() -> Self {
         Self::with_default_level(AnchorScopeKeyword::none())
@@ -583,15 +685,58 @@ pub enum PositionAnchorKeyword {
     Ident(DashedIdent),
 }
 
-/// https://drafts.csswg.org/css-anchor-position-1/#propdef-position-anchor
-pub type PositionAnchor = TreeScoped<PositionAnchorKeyword>;
-
-impl PositionAnchor {
+impl TreeScoped<PositionAnchorKeyword> {
     /// Return the `normal` value.
     pub fn normal() -> Self {
         Self::with_default_level(PositionAnchorKeyword::Normal)
     }
 }
+
+/// The specified value of `position-anchor`.
+#[derive(Clone, Debug, MallocSizeOf, Parse, PartialEq, SpecifiedValueInfo, ToCss, ToShmem)]
+pub enum SpecifiedPositionAnchor {
+    /// `normal`
+    Normal,
+    /// `none`
+    None,
+    /// `auto`
+    Auto,
+    /// `match-parent`
+    MatchParent,
+    /// `<dashed-ident>`
+    Ident(DashedIdentOrFunction),
+}
+
+impl style_traits::ToTyped for SpecifiedPositionAnchor {}
+
+impl ToComputedValue for SpecifiedPositionAnchor {
+    type ComputedValue = PositionAnchorKeyword;
+
+    fn to_computed_value(&self, context: &Context) -> PositionAnchorKeyword {
+        match self {
+            Self::Normal => PositionAnchorKeyword::Normal,
+            Self::None => PositionAnchorKeyword::None,
+            Self::Auto => PositionAnchorKeyword::Auto,
+            Self::MatchParent => PositionAnchorKeyword::MatchParent,
+            Self::Ident(ident) => PositionAnchorKeyword::Ident(ident.to_computed_value(context)),
+        }
+    }
+
+    fn from_computed_value(computed: &PositionAnchorKeyword) -> Self {
+        match computed {
+            PositionAnchorKeyword::Normal => Self::Normal,
+            PositionAnchorKeyword::None => Self::None,
+            PositionAnchorKeyword::Auto => Self::Auto,
+            PositionAnchorKeyword::MatchParent => Self::MatchParent,
+            PositionAnchorKeyword::Ident(ident) => {
+                Self::Ident(ToComputedValue::from_computed_value(ident))
+            },
+        }
+    }
+}
+
+/// https://drafts.csswg.org/css-anchor-position-1/#propdef-position-anchor
+pub type PositionAnchor = TreeScoped<SpecifiedPositionAnchor>;
 
 #[derive(
     Clone,
@@ -704,20 +849,30 @@ pub struct DashedIdentAndOrTryTactic {
     pub try_tactic: PositionTryFallbacksTryTactic,
 }
 
-impl Parse for DashedIdentAndOrTryTactic {
+/// The specified `<dashed-ident> || <try-tactic>` of `position-try-fallbacks`, where `ident()` may construct the
+/// name.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem)]
+pub struct SpecifiedDashedIdentAndOrTryTactic {
+    /// `<dashed-ident>`
+    pub ident: Option<DashedIdentOrFunction>,
+    /// `<try-tactic>`
+    pub try_tactic: PositionTryFallbacksTryTactic,
+}
+
+impl Parse for SpecifiedDashedIdentAndOrTryTactic {
     fn parse<'i, 't>(
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
         let mut result = Self {
-            ident: DashedIdent::empty(),
+            ident: None,
             try_tactic: PositionTryFallbacksTryTactic::default(),
         };
 
         loop {
-            if result.ident.is_empty() {
-                if let Ok(ident) = input.try_parse(|i| DashedIdent::parse(context, i)) {
-                    result.ident = ident;
+            if result.ident.is_none() {
+                if let Ok(ident) = input.try_parse(|i| DashedIdentOrFunction::parse(context, i)) {
+                    result.ident = Some(ident);
                     continue;
                 }
             }
@@ -732,10 +887,32 @@ impl Parse for DashedIdentAndOrTryTactic {
             break;
         }
 
-        if result.ident.is_empty() && result.try_tactic.is_empty() {
+        if result.ident.is_none() && result.try_tactic.is_empty() {
             return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
         }
-        return Ok(result);
+        Ok(result)
+    }
+}
+
+impl ToComputedValue for SpecifiedDashedIdentAndOrTryTactic {
+    type ComputedValue = DashedIdentAndOrTryTactic;
+
+    fn to_computed_value(&self, context: &Context) -> DashedIdentAndOrTryTactic {
+        DashedIdentAndOrTryTactic {
+            ident: self
+                .ident
+                .as_ref()
+                .map_or_else(DashedIdent::empty, |ident| ident.to_computed_value(context)),
+            try_tactic: self.try_tactic.clone(),
+        }
+    }
+
+    fn from_computed_value(computed: &DashedIdentAndOrTryTactic) -> Self {
+        Self {
+            ident: (!computed.ident.is_empty())
+                .then(|| DashedIdentOrFunction::from_computed_value(&computed.ident)),
+            try_tactic: computed.try_tactic.clone(),
+        }
     }
 }
 
@@ -743,7 +920,6 @@ impl Parse for DashedIdentAndOrTryTactic {
     Clone,
     Debug,
     MallocSizeOf,
-    Parse,
     PartialEq,
     SpecifiedValueInfo,
     ToComputedValue,
@@ -757,9 +933,40 @@ impl Parse for DashedIdentAndOrTryTactic {
 pub enum PositionTryFallbacksItem {
     /// `<dashed-ident> || <try-tactic>`
     IdentAndOrTactic(DashedIdentAndOrTryTactic),
+    /// `<position-area>`
+    PositionArea(PositionArea),
+}
+
+/// The specified `[ [<dashed-ident> || <try-tactic>] | <'position-area'> ]` of `position-try-fallbacks`.
+#[derive(Clone, Debug, MallocSizeOf, Parse, PartialEq, SpecifiedValueInfo, ToCss, ToShmem)]
+pub enum SpecifiedPositionTryFallbacksItem {
+    /// `<dashed-ident> || <try-tactic>`
+    IdentAndOrTactic(SpecifiedDashedIdentAndOrTryTactic),
     #[parse(parse_fn = "PositionArea::parse_except_none")]
     /// `<position-area>`
     PositionArea(PositionArea),
+}
+
+impl ToComputedValue for SpecifiedPositionTryFallbacksItem {
+    type ComputedValue = PositionTryFallbacksItem;
+
+    fn to_computed_value(&self, context: &Context) -> PositionTryFallbacksItem {
+        match self {
+            Self::IdentAndOrTactic(item) => {
+                PositionTryFallbacksItem::IdentAndOrTactic(item.to_computed_value(context))
+            },
+            Self::PositionArea(area) => PositionTryFallbacksItem::PositionArea(*area),
+        }
+    }
+
+    fn from_computed_value(computed: &PositionTryFallbacksItem) -> Self {
+        match computed {
+            PositionTryFallbacksItem::IdentAndOrTactic(item) => {
+                Self::IdentAndOrTactic(ToComputedValue::from_computed_value(item))
+            },
+            PositionTryFallbacksItem::PositionArea(area) => Self::PositionArea(*area),
+        }
+    }
 }
 
 #[derive(
@@ -797,7 +1004,25 @@ impl PositionTryFallbacks {
     }
 }
 
-impl Parse for PositionTryFallbacks {
+/// The specified value of `position-try-fallbacks`.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem)]
+#[css(comma)]
+pub struct SpecifiedPositionTryFallbacks(
+    #[css(iterable, if_empty = "none")]
+    #[ignore_malloc_size_of = "Arc"]
+    pub crate::ArcSlice<SpecifiedPositionTryFallbacksItem>,
+);
+
+impl style_traits::ToTyped for SpecifiedPositionTryFallbacks {}
+
+impl SpecifiedPositionTryFallbacks {
+    /// Return the `none` value.
+    pub fn none() -> Self {
+        Self(Default::default())
+    }
+}
+
+impl Parse for SpecifiedPositionTryFallbacks {
     fn parse<'i, 't>(
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
@@ -807,12 +1032,28 @@ impl Parse for PositionTryFallbacks {
         }
         // The common case is unlikely to include many alternate positioning
         // styles, so space for four on the stack should typically be enough.
-        let mut items: SmallVec<[PositionTryFallbacksItem; 4]> =
-            smallvec![PositionTryFallbacksItem::parse(context, input)?];
+        let mut items: SmallVec<[SpecifiedPositionTryFallbacksItem; 4]> =
+            smallvec![SpecifiedPositionTryFallbacksItem::parse(context, input)?];
         while input.try_parse(|input| input.expect_comma()).is_ok() {
-            items.push(PositionTryFallbacksItem::parse(context, input)?);
+            items.push(SpecifiedPositionTryFallbacksItem::parse(context, input)?);
         }
         Ok(Self(ArcSlice::from_iter(items.drain(..))))
+    }
+}
+
+impl ToComputedValue for SpecifiedPositionTryFallbacks {
+    type ComputedValue = PositionTryFallbacks;
+
+    fn to_computed_value(&self, context: &Context) -> PositionTryFallbacks {
+        PositionTryFallbacks(ArcSlice::from_iter(
+            self.0.iter().map(|item| item.to_computed_value(context)),
+        ))
+    }
+
+    fn from_computed_value(computed: &PositionTryFallbacks) -> Self {
+        Self(ArcSlice::from_iter(
+            computed.0.iter().map(ToComputedValue::from_computed_value),
+        ))
     }
 }
 
@@ -877,7 +1118,7 @@ impl PositionTryOrder {
     ToShmem,
     ToTyped,
 )]
-#[css(bitflags(single = "always", mixed = "anchors-valid,anchors-visible,no-overflow"))]
+#[css(bitflags(single = "always", mixed = "anchor-valid,anchor-visible,no-overflow"))]
 #[repr(C)]
 /// Specified keyword values for the position-visibility property.
 pub struct PositionVisibility(u8);
@@ -885,10 +1126,10 @@ bitflags! {
     impl PositionVisibility: u8 {
         /// Element is displayed without regard for its anchors or its overflowing status.
         const ALWAYS = 0;
-        /// anchors-valid
-        const ANCHORS_VALID = 1 << 0;
-        /// anchors-visible
-        const ANCHORS_VISIBLE = 1 << 1;
+        /// anchor-valid
+        const ANCHOR_VALID = 1 << 0;
+        /// anchor-visible
+        const ANCHOR_VISIBLE = 1 << 1;
         /// no-overflow
         const NO_OVERFLOW = 1 << 2;
     }

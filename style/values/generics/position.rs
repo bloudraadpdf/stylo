@@ -460,6 +460,17 @@ where
     where
         W: Write,
     {
+        self.to_css_with_fallback(dest, |fallback, dest| fallback.to_css(dest))
+    }
+}
+
+impl<Percentage: ToCss, Fallback> GenericAnchorFunction<Percentage, Fallback> {
+    /// Serializes the function, with `fallback` serializing its fallback.
+    pub fn to_css_with_fallback<W: Write>(
+        &self,
+        dest: &mut CssWriter<W>,
+        fallback: impl FnOnce(&Fallback, &mut CssWriter<W>) -> std::fmt::Result,
+    ) -> std::fmt::Result {
         dest.write_str("anchor(")?;
         if !self.target_element.value.is_empty() {
             self.target_element.to_css(dest)?;
@@ -469,7 +480,7 @@ where
         if let Some(f) = self.fallback.as_ref() {
             // This comma isn't really `derive()`-able, unfortunately.
             dest.write_str(", ")?;
-            f.to_css(dest)?;
+            fallback(f, dest)?;
         }
         dest.write_str(")")
     }

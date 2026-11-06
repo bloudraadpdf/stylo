@@ -35,20 +35,20 @@ kind = "two_properties"
 [padding]
 sub_properties = ["padding-top", "padding-right", "padding-bottom", "padding-left"]
 spec = "https://drafts.csswg.org/css-box/#propdef-padding"
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 kind = "four_sides"
 allow_quirks = true
 
 [padding-block]
 sub_properties = ["padding-block-start", "padding-block-end"]
 spec = "https://drafts.csswg.org/css-logical/#propdef-padding-block"
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 kind = "two_properties"
 
 [padding-inline]
 sub_properties = ["padding-inline-start", "padding-inline-end"]
 spec = "https://drafts.csswg.org/css-logical/#propdef-padding-inline"
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 kind = "two_properties"
 
 [scroll-padding]
@@ -209,13 +209,13 @@ sub_properties = [
 ]
 spec = "https://drafts.csswg.org/css-backgrounds-3/#border"
 derive_value_info = false
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [overflow]
 sub_properties = ["overflow-x", "overflow-y"]
 spec="https://drafts.csswg.org/css-overflow/#propdef-overflow"
 kind = "two_properties"
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 # CSS Overflow 4 §5.1 — standard block-container line clamp. Keeping
 # `line-clamp` exclusively in the shorthand table makes it impossible for
@@ -259,7 +259,7 @@ spec = "https://drafts.csswg.org/css-contain-3/#container-shorthand"
 [vertical-align]
 sub_properties = ["alignment-baseline", "baseline-shift", "baseline-source"]
 spec = "https://drafts.csswg.org/css-inline-3/#transverse-alignment"
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [page-break-before]
 flags = "IS_LEGACY_SHORTHAND"
@@ -279,12 +279,12 @@ spec = "https://drafts.csswg.org/css-break-3/#page-break-properties"
 [text-align]
 sub_properties = ["text-align-all", "text-align-last"]
 spec = "https://drafts.csswg.org/css-text-4/#text-align-property"
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [text-box]
 sub_properties = ["text-box-trim", "text-box-edge"]
 spec = "https://drafts.csswg.org/css-inline-3/#text-box-shorthand"
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [text-spacing]
 sub_properties = ["text-spacing-trim", "text-autospace"]
@@ -321,7 +321,7 @@ sub_properties = [
   "background-clip"
 ]
 spec = "https://drafts.csswg.org/css-backgrounds/#the-background"
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [inset]
 sub_properties = ["top", "right", "bottom", "left"]
@@ -451,7 +451,7 @@ spec = "https://drafts.csswg.org/css-lists/#propdef-list-style"
 [background-position]
 sub_properties = ["background-position-x", "background-position-y"]
 spec = "https://drafts.csswg.org/css-backgrounds-4/#the-background-position"
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [mask]
 # CSS Masking 1 section 8.7: the `mask` shorthand also resets every
@@ -591,7 +591,7 @@ spec = "https://drafts.csswg.org/css-borders-4/#corner-shorthand"
 
 [outline]
 sub_properties = ["outline-color", "outline-style", "outline-width"]
-rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 spec = "https://drafts.csswg.org/css-ui/#propdef-outline"
 
 [columns]
@@ -890,7 +890,7 @@ derive_serialize = true
 engine = "servo"
 sub_properties = ["width", "height"]
 kind = "two_properties"
-rule_types_allowed = ["style", "keyframe", "scope", "position-try"]
+rule_types_allowed = ["style", "keyframe", "scope"]
 spec = "https://drafts.csswg.org/css-sizing-4/#propdef-size"
 
 [min-size]

@@ -998,20 +998,15 @@ impl GenericAnchorFunction<Box<CalcNode>, Box<CalcNode>> {
             let fallback = i
                 .try_parse(|i| {
                     i.expect_comma()?;
-                    Ok::<Box<CalcNode>, ParseError<'i>>(Box::new(
-                        CalcNode::parse_argument(
-                            context,
-                            i,
-                            AllowParse {
-                                units: CalcUnits::LENGTH_PERCENTAGE,
-                                additional_functions,
-                                allow_size_keyword: false,
-                            },
-                        )?
-                        .into_length_or_percentage(AllowedNumericType::All)
-                        .map_err(|_| i.new_custom_error(StyleParseErrorKind::UnspecifiedError))?
-                        .node,
-                    ))
+                    CalcNode::parse_anchor_fallback(
+                        context,
+                        i,
+                        AllowParse {
+                            units: CalcUnits::LENGTH_PERCENTAGE,
+                            additional_functions,
+                            allow_size_keyword: false,
+                        },
+                    )
                 })
                 .ok();
             Ok(Self {
@@ -1034,17 +1029,34 @@ impl GenericAnchorSizeFunction<Box<CalcNode>> {
             return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
         }
         GenericAnchorSizeFunction::parse_inner(context, input, |i| {
-            Ok(Box::new(
-                CalcNode::parse_argument(
-                    context,
-                    i,
-                    AllowParse::new(CalcUnits::LENGTH_PERCENTAGE),
-                )?
-                .into_length_or_percentage(AllowedNumericType::All)
-                .map_err(|_| i.new_custom_error(StyleParseErrorKind::UnspecifiedError))?
-                .node,
-            ))
+            CalcNode::parse_anchor_fallback(context, i, AllowParse::new(CalcUnits::LENGTH_PERCENTAGE))
         })
+    }
+}
+
+impl CalcNode {
+    /// Parses the `<length-percentage>` fallback of an anchor function in a math function: a literal `0` is a
+    /// `<length>` there.
+    fn parse_anchor_fallback<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+        allowed: AllowParse,
+    ) -> Result<Box<Self>, ParseError<'i>> {
+        let zero = input.try_parse(|i| match i.expect_number() {
+            Ok(number) if number == 0. => i.expect_exhausted().map_err(|_| ()),
+            _ => Err(()),
+        });
+        if zero.is_ok() {
+            return Ok(Box::new(Self::Leaf(Leaf::Length(NoCalcLength::Absolute(
+                AbsoluteLength::Px(0.),
+            )))));
+        }
+        Ok(Box::new(
+            Self::parse_argument(context, input, allowed)?
+                .into_length_or_percentage(AllowedNumericType::All)
+                .map_err(|_| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))?
+                .node,
+        ))
     }
 }
 

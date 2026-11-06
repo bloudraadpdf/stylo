@@ -3146,7 +3146,7 @@ pub mod position_try {
     pub use crate::properties::shorthands_generated::position_try::*;
 
     use super::*;
-    use crate::values::specified::position::{PositionTryFallbacks, PositionTryOrder};
+    use crate::values::specified::{PositionTryFallbacks, PositionTryOrder};
 
     pub fn parse_value<'i, 't>(
         context: &ParserContext,
