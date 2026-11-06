@@ -12,8 +12,8 @@ use crate::values::computed::text::TextEmphasisStyle as ComputedTextEmphasisStyl
 use crate::values::computed::{Context, ToComputedValue};
 use crate::values::generics::text::{
     GenericHyphenateLimitChars, GenericHyphenateLimitLines, GenericInitialLetter,
-    GenericTextDecorationInset, GenericTextDecorationLength, GenericTextFit, GenericTextIndent,
-    GenericTextSizeAdjust, TextFitLines, TextFitMode,
+    GenericInitialLetterSink, GenericTextDecorationInset, GenericTextDecorationLength,
+    GenericTextFit, GenericTextIndent, GenericTextSizeAdjust, TextFitLines, TextFitMode,
 };
 use crate::values::generics::NumberOrAuto;
 use crate::values::specified::length::LengthPercentage;
@@ -28,6 +28,9 @@ use style_traits::{KeywordsCollectFn, SpecifiedValueInfo};
 
 /// A specified type for the `initial-letter` property.
 pub type InitialLetter = GenericInitialLetter<Number, Integer>;
+
+/// The specified sink of the `initial-letter` property.
+pub type InitialLetterSink = GenericInitialLetterSink<Integer>;
 
 /// The specified value of `text-size-adjust`.
 pub type TextSizeAdjust = GenericTextSizeAdjust<NonNegativePercentage>;
@@ -201,29 +204,6 @@ impl Parse for HyphenateLimitChars {
     }
 }
 
-#[derive(Clone, Copy)]
-enum InitialLetterSinkKeyword {
-    Drop,
-    Raise,
-}
-
-fn parse_initial_letter_sink_keyword<'i, 't>(
-    input: &mut Parser<'i, 't>,
-) -> Result<InitialLetterSinkKeyword, ParseError<'i>> {
-    let location = input.current_source_location();
-    let ident = input.expect_ident_cloned()?;
-    Ok(match_ignore_ascii_case! { &ident,
-        "drop" => InitialLetterSinkKeyword::Drop,
-        "raise" => InitialLetterSinkKeyword::Raise,
-        _ => return Err(location.new_custom_error(StyleParseErrorKind::UnspecifiedError)),
-    })
-}
-
-#[allow(clippy::cast_possible_truncation)]
-fn initial_letter_drop_sink(size: Number) -> Integer {
-    Integer::new(size.get().floor() as i32)
-}
-
 impl Parse for InitialLetter {
     fn parse<'i, 't>(
         context: &ParserContext,
@@ -237,17 +217,31 @@ impl Parse for InitialLetter {
         }
         let leading_keyword = input.try_parse(parse_initial_letter_sink_keyword).ok();
         let size = Number::parse_at_least_one(context, input)?;
-        let keyword =
-            leading_keyword.or_else(|| input.try_parse(parse_initial_letter_sink_keyword).ok());
-        let sink = match keyword {
-            Some(InitialLetterSinkKeyword::Drop) => initial_letter_drop_sink(size.clone()),
-            Some(InitialLetterSinkKeyword::Raise) => Integer::new(1),
+        let sink = match leading_keyword {
+            Some(keyword) => keyword,
             None => input
-                .try_parse(|i| Integer::parse_positive(context, i))
-                .unwrap_or_else(|_| crate::Zero::zero()),
+                .try_parse(parse_initial_letter_sink_keyword)
+                .or_else(|_| {
+                    input
+                        .try_parse(|i| Integer::parse_positive(context, i))
+                        .map(InitialLetterSink::Integer)
+                })
+                .unwrap_or(InitialLetterSink::Omitted),
         };
         Ok(Self { size, sink })
     }
+}
+
+fn parse_initial_letter_sink_keyword<'i, 't>(
+    input: &mut Parser<'i, 't>,
+) -> Result<InitialLetterSink, ParseError<'i>> {
+    let location = input.current_source_location();
+    let ident = input.expect_ident_cloned()?;
+    Ok(match_ignore_ascii_case! { &ident,
+        "drop" => InitialLetterSink::Drop,
+        "raise" => InitialLetterSink::Raise,
+        _ => return Err(location.new_custom_error(StyleParseErrorKind::UnspecifiedError)),
+    })
 }
 
 #[cfg(test)]
@@ -426,21 +420,19 @@ mod tests {
     }
 
     #[test]
-    fn drop_and_raise_keywords_compute_the_sink_in_either_order() {
-        for (css, expected_size, expected_sink) in [
-            ("3 drop", 3.0, 3),
-            ("drop 3", 3.0, 3),
-            ("2.51 drop", 2.51, 2),
-            ("3 raise", 3.0, 1),
-            ("raise 3", 3.0, 1),
-            ("3 2", 3.0, 2),
+    fn drop_and_raise_keywords_serialise_after_the_size() {
+        for (css, expected) in [
+            ("1.23", "1.23"),
+            ("3 drop", "3 drop"),
+            ("drop 3", "3 drop"),
+            ("2.51 drop", "2.51 drop"),
+            ("3 raise", "3 raise"),
+            ("raise 3", "3 raise"),
+            ("3 2", "3 2"),
         ] {
-            let value = parse_initial_letter(css);
-            assert_eq!(
-                (value.size.get(), value.sink.value()),
-                (expected_size, expected_sink)
-            );
+            assert_eq!(parse_initial_letter(css).to_css_string(), expected);
         }
+        assert!(parse_value::<InitialLetter>("1 drop 3").is_err());
     }
 
     #[test]

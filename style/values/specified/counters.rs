@@ -409,6 +409,21 @@ fn parse_target_text_keyword<'i, 't>(
     }
 }
 
+/// An item of the alternative text of `content`: `<string> | <counter> | <attr()>` (CSS Generated Content 3
+/// §1).
+fn parse_alt_content_item<'i, 't>(
+    context: &ParserContext,
+    input: &mut Parser<'i, 't>,
+) -> Result<ContentItem, ParseError<'i>> {
+    match parse_content_item(context, input, false, true, false, false, false, false)? {
+        item @ (generics::ContentItem::String(_)
+        | generics::ContentItem::Counter(..)
+        | generics::ContentItem::Counters(..)
+        | generics::ContentItem::Attr(_)) => Ok(item),
+        _ => Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError)),
+    }
+}
+
 fn parse_content_item<'i, 't>(
     context: &ParserContext,
     input: &mut Parser<'i, 't>,
@@ -681,16 +696,10 @@ impl Parse for Content {
                 continue;
             }
 
-            let item = parse_content_item(
-                context,
-                input,
-                alt_start.is_none(),
-                alt_start.is_none(),
-                alt_start.is_none(),
-                alt_start.is_none(),
-                alt_start.is_none(),
-                alt_start.is_none(),
-            )?;
+            let item = match alt_start {
+                None => parse_content_item(context, input, true, true, true, true, true, true)?,
+                Some(_) => parse_alt_content_item(context, input)?,
+            };
             items.push(item);
         }
         if items.is_empty() {
@@ -1077,5 +1086,22 @@ mod tests {
             function.arguments[0],
             generics::ScriptContentArgument::Counter(..)
         ));
+    }
+
+    /// css-content-3 § 1: the alternative text takes `<counter>`; css-counter-styles-3: predefined counter style names
+    /// match in any ASCII case.
+    #[cfg(feature = "servo")]
+    #[test]
+    fn alt_text_takes_counters_and_predefined_names_match_in_any_case() {
+        for (css, expected) in [
+            (r#""" / counter(cnt)"#, r#""" / counter(cnt)"#),
+            (r#""a" / counter(cnt) "b""#, r#""a" / counter(cnt) "b""#),
+            ("counter(cnt, DECIMAL)", "counter(cnt)"),
+            (r#"counters(cnt, ".", dECiMaL) / "alt""#, r#"counters(cnt, ".") / "alt""#),
+            ("counter(cnt, Upper-Roman)", "counter(cnt, upper-roman)"),
+            ("counter(cnt, MyStyle)", "counter(cnt, MyStyle)"),
+        ] {
+            assert_eq!(parse_content_value(css).to_css_string(), expected);
+        }
     }
 }

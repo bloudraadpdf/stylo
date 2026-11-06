@@ -245,23 +245,23 @@ impl<Integer: ToCss + PartialEq> ToCss for GenericHyphenateLimitChars<Integer> {
 pub struct GenericInitialLetter<Number, Integer> {
     /// The size, >=1, or 0 if `normal`.
     pub size: Number,
-    /// The sink, >=1, if specified, 0 otherwise.
-    pub sink: Integer,
+    /// The sink.
+    pub sink: GenericInitialLetterSink<Integer>,
 }
 
 pub use self::GenericInitialLetter as InitialLetter;
-impl<N: Zero, I: Zero> InitialLetter<N, I> {
+impl<N: Zero, I> InitialLetter<N, I> {
     /// Returns `normal`.
     #[inline]
     pub fn normal() -> Self {
         InitialLetter {
             size: N::zero(),
-            sink: I::zero(),
+            sink: GenericInitialLetterSink::Omitted,
         }
     }
 }
 
-impl<N: ToCss + Zero, I: ToCss + Zero> ToCss for InitialLetter<N, I> {
+impl<N: ToCss + Zero, I: ToCss> ToCss for InitialLetter<N, I> {
     fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
     where
         W: Write,
@@ -270,12 +270,42 @@ impl<N: ToCss + Zero, I: ToCss + Zero> ToCss for InitialLetter<N, I> {
             return dest.write_str("normal");
         }
         self.size.to_css(dest)?;
-        if !self.sink.is_zero() {
-            dest.write_char(' ')?;
-            self.sink.to_css(dest)?;
+        match &self.sink {
+            GenericInitialLetterSink::Omitted => Ok(()),
+            GenericInitialLetterSink::Drop => dest.write_str(" drop"),
+            GenericInitialLetterSink::Raise => dest.write_str(" raise"),
+            GenericInitialLetterSink::Integer(sink) => {
+                dest.write_char(' ')?;
+                sink.to_css(dest)
+            },
         }
-        Ok(())
     }
+}
+
+/// The sink of an `initial-letter`: omitted, a keyword, or a number of lines (CSS Inline 3 §7.2).
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(C, u8)]
+pub enum GenericInitialLetterSink<Integer> {
+    /// No sink: as `drop`.
+    #[css(skip)]
+    Omitted,
+    /// `drop`: the size, floored.
+    Drop,
+    /// `raise`: one line.
+    Raise,
+    /// A number of lines.
+    Integer(Integer),
 }
 
 /// Implements type for text-decoration-thickness

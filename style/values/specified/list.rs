@@ -301,6 +301,7 @@ pub enum ListStyleType {
     /// <https://www.w3.org/TR/css-counter-styles-3/#valdef-counter-style-name-tibetan>
     Tibetan,
     /// Custom counter style name.
+    #[parse(parse_fn = "parse_custom_counter_style_name")]
     Custom(crate::values::CustomIdent),
     /// Han "Earthly Branch" ordinals (e.g., 子, 丑, 寅, ..., 亥).
     /// <https://www.w3.org/TR/css-counter-styles-3/#valdef-counter-style-name-cjk-earthly-branch>
@@ -323,6 +324,20 @@ pub enum ListStyleType {
     /// Iroha-order katakana lettering (e.g., イ, ロ, ハ, ..., ス, イイ, イロ)
     /// <https://www.w3.org/TR/css-counter-styles-3/#katakana-iroha>
     KatakanaIroha,
+}
+
+/// A counter style name that is no predefined name in any ASCII case, which the keywords match (CSS Counter
+/// Styles 3 §1).
+#[cfg(feature = "servo")]
+fn parse_custom_counter_style_name<'i, 't>(
+    _: &ParserContext,
+    input: &mut Parser<'i, 't>,
+) -> Result<crate::values::CustomIdent, ParseError<'i>> {
+    let mut keywords = Vec::new();
+    <ListStyleType as style_traits::SpecifiedValueInfo>::collect_completion_keywords(
+        &mut |names| keywords.extend_from_slice(names),
+    );
+    crate::values::CustomIdent::parse(input, &keywords)
 }
 
 #[cfg(feature = "servo")]
