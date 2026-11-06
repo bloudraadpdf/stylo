@@ -252,6 +252,19 @@ const GROUP_INSET_PROPERTIES: [&str; 11] = [
     "inset-inline-end",
 ];
 
+/// The corner radii of a group, which round its background (CSS Backgrounds 3 §5.2).
+const GROUP_RADIUS_PROPERTIES: [&str; 9] = [
+    "border-radius",
+    "border-top-left-radius",
+    "border-top-right-radius",
+    "border-bottom-right-radius",
+    "border-bottom-left-radius",
+    "border-start-start-radius",
+    "border-start-end-radius",
+    "border-end-start-radius",
+    "border-end-end-radius",
+];
+
 fn append_projected_style_tree_rules(rule: &mut String, prelude: &str, body: &str) {
     let group_selectors = project_group_style_selectors(prelude, GROUP_PSEUDO, GROUP_STYLE_ELEMENT);
     append_projected_rule(
@@ -262,6 +275,11 @@ fn append_projected_style_tree_rules(rule: &mut String, prelude: &str, body: &st
             &["background", "background-color", "visibility"],
             None,
         ),
+    );
+    append_projected_rule(
+        rule,
+        group_selectors.clone(),
+        project_declarations(body, &GROUP_RADIUS_PROPERTIES, None),
     );
     let insets = project_declarations(body, &GROUP_INSET_PROPERTIES, None);
     append_projected_rule(
@@ -1289,6 +1307,15 @@ mod tests {
         assert!(rewritten.contains("{--moegoe-view-transition-group-authored-inset:1;}"));
         assert!(rewritten.contains("{top:unset;inset-block-end:0;}"));
         assert!(rewritten.contains("{writing-mode:vertical-lr;}"));
+    }
+
+    #[test]
+    fn projects_group_corner_radii_to_the_style_tree() {
+        let rewritten = rewrite_view_transition_root(
+            "html::view-transition-group(target){border-radius:50px;border-top-left-radius:2px;color:red}",
+        );
+
+        assert!(rewritten.contains("{border-radius:50px;border-top-left-radius:2px;}"));
     }
 
     #[test]
