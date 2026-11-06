@@ -10,6 +10,7 @@ use crate::counter_style::{CounterStyle, CounterStyleParsingFlags};
 use crate::counter_style::{CounterStyle, CounterStyleParsingFlags, Symbol, SymbolsType};
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
+use crate::values::computed::{Context, ToComputedValue};
 use cssparser::{Parser, Token};
 #[cfg(feature = "servo")]
 use std::fmt::{self, Write};
@@ -380,15 +381,14 @@ pub struct QuoteList(
     pub crate::ArcSlice<QuotePair>,
 );
 
-/// Specified and computed `quotes` property: `auto`, `none`, or a list
-/// of characters.
+/// Specified and computed `quotes` property: `auto`, `none`, `match-parent`,
+/// or a list of characters.
 #[derive(
     Clone,
     Debug,
     MallocSizeOf,
     PartialEq,
     SpecifiedValueInfo,
-    ToComputedValue,
     ToCss,
     ToResolvedValue,
     ToShmem,
@@ -400,6 +400,28 @@ pub enum Quotes {
     QuoteList(QuoteList),
     /// auto (use lang-dependent quote marks)
     Auto,
+    /// match-parent: the quotation mark system of the parent; computes to
+    /// the inherited list, or else stays the keyword, which means `auto` as
+    /// the parent resolves it.
+    MatchParent,
+}
+
+impl ToComputedValue for Quotes {
+    type ComputedValue = Self;
+
+    fn to_computed_value(&self, context: &Context) -> Self {
+        match self {
+            Self::MatchParent => match context.builder.get_parent_list().clone_quotes() {
+                inherited @ Self::QuoteList(_) => inherited,
+                Self::Auto | Self::MatchParent => Self::MatchParent,
+            },
+            specified => specified.clone(),
+        }
+    }
+
+    fn from_computed_value(computed: &Self) -> Self {
+        computed.clone()
+    }
 }
 
 impl Parse for Quotes {
@@ -419,6 +441,13 @@ impl Parse for Quotes {
             .is_ok()
         {
             return Ok(Quotes::QuoteList(QuoteList::default()));
+        }
+
+        if input
+            .try_parse(|input| input.expect_ident_matching("match-parent"))
+            .is_ok()
+        {
+            return Ok(Quotes::MatchParent);
         }
 
         let mut quotes = Vec::new();
