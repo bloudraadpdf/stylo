@@ -1434,9 +1434,29 @@ impl Stylist {
         } else {
             None
         };
-        let fallback_block = fallback_rule
-            .as_ref()
-            .map(|r| &r.read_with(guards.author).block);
+        Some(self.resolve_position_try_rule(
+            style,
+            guards,
+            element,
+            fallback_rule,
+            &name_and_try_tactic.try_tactic,
+        ))
+    }
+
+    /// Computes the style of a position option: `rule` (if any) in the position fallback origin over `style`, then
+    /// `try_tactic` (CSS Anchor Positioning 1 §6.5.2).
+    pub fn resolve_position_try_rule<E>(
+        &self,
+        style: &ComputedValues,
+        guards: &StylesheetGuards,
+        element: E,
+        rule: Option<&Arc<Locked<PositionTryRule>>>,
+        try_tactic: &PositionTryFallbacksTryTactic,
+    ) -> Arc<ComputedValues>
+    where
+        E: TElement,
+    {
+        let fallback_block = rule.map(|r| &r.read_with(guards.author).block);
         let pseudo = style
             .pseudo()
             .map(|pseudo| pseudo.clone())
@@ -1469,7 +1489,7 @@ impl Stylist {
         crate::style_resolver::with_default_parent_styles(
             element,
             |parent_style, layout_parent_style| {
-                Some(self.cascade_style_and_visited(
+                self.cascade_style_and_visited(
                     Some(element),
                     pseudo.as_ref(),
                     inputs,
@@ -1477,10 +1497,10 @@ impl Stylist {
                     parent_style,
                     layout_parent_style,
                     FirstLineReparenting::No,
-                    &name_and_try_tactic.try_tactic,
+                    try_tactic,
                     /* rule_cache = */ None,
                     &mut RuleCacheConditions::default(),
-                ))
+                )
             },
         )
     }
