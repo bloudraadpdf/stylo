@@ -57,6 +57,11 @@ pub trait PseudoElement: Sized + ToCss {
         false
     }
 
+    /// Whether the user action pseudo-classes can follow this pseudo-element (Selectors 4 §3.6.3).
+    fn accepts_user_action_pseudo_classes(&self) -> bool {
+        false
+    }
+
     /// Whether this pseudo-element is valid after a ::slotted(..) pseudo.
     fn valid_after_slotted(&self) -> bool {
         false
@@ -214,6 +219,9 @@ bitflags! {
 
         /// The pseudo-element permits `:current` after it.
         const AFTER_CURRENT_PSEUDO = 1 << 13;
+
+        /// The pseudo-element permits the user action pseudo-classes after it.
+        const AFTER_USER_ACTION_PSEUDO = 1 << 14;
     }
 }
 
@@ -3495,6 +3503,10 @@ where
                     p.accepts_current_pseudo_class(),
                 );
                 state.set(
+                    SelectorParsingState::AFTER_USER_ACTION_PSEUDO,
+                    p.accepts_user_action_pseudo_classes(),
+                );
+                state.set(
                     SelectorParsingState::AFTER_NON_STATEFUL_PSEUDO_ELEMENT,
                     !p.accepts_state_pseudo_classes(),
                 );
@@ -3846,7 +3858,8 @@ where
     Impl: SelectorImpl,
 {
     let after_current_pseudo = state.intersects(SelectorParsingState::AFTER_CURRENT_PSEUDO);
-    if !state.allows_non_functional_pseudo_classes() && !after_current_pseudo {
+    let after_user_action_pseudo = state.intersects(SelectorParsingState::AFTER_USER_ACTION_PSEUDO);
+    if !state.allows_non_functional_pseudo_classes() && !after_current_pseudo && !after_user_action_pseudo {
         return Err(location.new_custom_error(SelectorParseErrorKind::InvalidState));
     }
 
@@ -3886,7 +3899,9 @@ where
     if after_current_pseudo && pseudo_class.is_current() {
         return Ok(Component::NonTSPseudoClass(pseudo_class));
     }
-    if !state.allows_non_functional_pseudo_classes() {
+    if !state.allows_non_functional_pseudo_classes()
+        && !(after_user_action_pseudo && pseudo_class.is_user_action_state())
+    {
         return Err(location.new_custom_error(SelectorParseErrorKind::InvalidState));
     }
     if state.intersects(SelectorParsingState::AFTER_NON_ELEMENT_BACKED_PSEUDO)

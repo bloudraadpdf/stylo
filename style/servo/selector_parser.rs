@@ -339,6 +339,12 @@ impl ::selectors::parser::PseudoElement for PseudoElement {
         matches!(self, Self::SearchText)
     }
 
+    /// Selectors 4 §3.6.3 lets the user action pseudo-classes follow any pseudo-element; a highlight pseudo-element
+    /// and a `::column` have no state of their own (CSS Pseudo 4 §3, CSS Multicol 2 §4.1).
+    fn accepts_user_action_pseudo_classes(&self) -> bool {
+        !self.is_highlight() && !matches!(self, Self::Column)
+    }
+
     fn valid_after_slotted(&self) -> bool {
         matches!(
             self,
