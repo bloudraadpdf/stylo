@@ -1,4 +1,4 @@
-use cssparser::{Parser, ParserInput, Token, serialize_identifier};
+use cssparser::{Parser, ParserInput, serialize_identifier};
 use style::values::CustomIdent;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -159,60 +159,6 @@ pub enum NavigationViewTransition {
     #[default]
     None,
     Auto,
-}
-
-pub fn parse_navigation_view_transition(css: &str) -> NavigationViewTransition {
-    let mut input = ParserInput::new(css);
-    let mut parser = Parser::new(&mut input);
-    while let Ok(token) = parser.next_including_whitespace_and_comments() {
-        let is_view_transition = matches!(
-            token.clone(),
-            Token::AtKeyword(name) if name.eq_ignore_ascii_case("view-transition")
-        );
-        if is_view_transition && consume_at_rule(&mut parser) {
-            return NavigationViewTransition::Auto;
-        }
-    }
-    NavigationViewTransition::None
-}
-
-fn consume_at_rule<'i>(parser: &mut Parser<'i, '_>) -> bool {
-    while let Ok(token) = parser.next_including_whitespace_and_comments() {
-        match token.clone() {
-            Token::Semicolon => return false,
-            Token::CurlyBracketBlock => {
-                let parsed = parser.parse_nested_block(
-                    |inner| -> Result<bool, cssparser::ParseError<'i, ()>> {
-                        Ok(contains_auto_navigation(inner))
-                    },
-                );
-                return parsed.unwrap_or(false);
-            },
-            _ => {},
-        }
-    }
-    false
-}
-
-fn contains_auto_navigation(parser: &mut Parser<'_, '_>) -> bool {
-    let mut found = false;
-    while let Ok(token) = parser.next_including_whitespace_and_comments() {
-        let Token::Ident(name) = token.clone() else {
-            continue;
-        };
-        if !name.eq_ignore_ascii_case("navigation") {
-            continue;
-        }
-        parser.skip_whitespace();
-        if parser.expect_colon().is_err() {
-            continue;
-        }
-        parser.skip_whitespace();
-        if matches!(parser.next(), Ok(Token::Ident(value)) if value.eq_ignore_ascii_case("auto")) {
-            found = true;
-        }
-    }
-    found
 }
 
 #[cfg(test)]

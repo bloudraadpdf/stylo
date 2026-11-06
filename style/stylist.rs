@@ -54,6 +54,7 @@ use crate::stylesheets::{
     CounterStyleRule, CssRule, CssRuleRef, EffectiveRulesIterator, FontFaceRule,
     FontFeatureValuesRule, FontPaletteValuesRule, Origin, OriginSet, PagePseudoClassFlags,
     PageRule, PerOrigin, PerOriginIter, PositionTryRule, StylesheetContents, StylesheetInDocument,
+    ViewTransitionRule,
 };
 use crate::stylesheets::{CustomMediaEvaluator, CustomMediaMap};
 #[cfg(feature = "gecko")]
@@ -2283,6 +2284,9 @@ pub struct ExtraStyleData {
 
     /// A map of effective page rules.
     pub pages: PageRuleMap,
+
+    /// A list of effective @view-transition rules: the last one in layer order applies.
+    pub view_transitions: LayerOrderedVec<Arc<ViewTransitionRule>>,
 }
 
 impl ExtraStyleData {
@@ -2349,6 +2353,7 @@ impl ExtraStyleData {
 
     fn sort_by_layer(&mut self, layers: &[CascadeLayer]) {
         self.font_faces.sort(layers);
+        self.view_transitions.sort(layers);
         self.font_feature_values.sort(layers);
         self.font_palette_values.sort(layers);
         self.counter_styles.sort(layers);
@@ -2357,6 +2362,7 @@ impl ExtraStyleData {
 
     fn clear(&mut self) {
         self.font_faces.clear();
+        self.view_transitions.clear();
         self.font_feature_values.clear();
         self.font_palette_values.clear();
         self.counter_styles.clear();
@@ -4259,6 +4265,11 @@ impl CascadeData {
                 CssRule::FontFeatureValues(ref rule) => {
                     self.extra_data
                         .add_font_feature_values(rule, containing_rule_state.layer_id);
+                },
+                CssRule::ViewTransition(ref rule) => {
+                    self.extra_data
+                        .view_transitions
+                        .push(rule.clone(), containing_rule_state.layer_id);
                 },
                 CssRule::FontPaletteValues(ref rule) => {
                     self.extra_data
