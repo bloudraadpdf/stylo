@@ -1409,6 +1409,8 @@ impl Stylist {
         guards: &StylesheetGuards,
         element: E,
         fallback_item: &PositionTryFallbacksItem,
+        parent_style: Option<&ComputedValues>,
+        layout_parent_style: Option<&ComputedValues>,
     ) -> Option<Arc<ComputedValues>>
     where
         E: TElement,
@@ -1434,17 +1436,20 @@ impl Stylist {
         } else {
             None
         };
-        Some(self.resolve_position_try_rule(
+        Some(self.cascade_position_option(
             style,
             guards,
             element,
             fallback_rule,
             &name_and_try_tactic.try_tactic,
+            parent_style,
+            layout_parent_style,
         ))
     }
 
     /// Computes the style of a position option: `rule` (if any) in the position fallback origin over `style`, then
-    /// `try_tactic` (CSS Anchor Positioning 1 §6.5.2).
+    /// `try_tactic` (CSS Anchor Positioning 1 §6.5.2). A pseudo-element inherits from `originating_style`; an element
+    /// from its parent.
     pub fn resolve_position_try_rule<E>(
         &self,
         style: &ComputedValues,
@@ -1452,6 +1457,47 @@ impl Stylist {
         element: E,
         rule: Option<&Arc<Locked<PositionTryRule>>>,
         try_tactic: &PositionTryFallbacksTryTactic,
+        originating_style: Option<&ComputedValues>,
+    ) -> Arc<ComputedValues>
+    where
+        E: TElement,
+    {
+        match originating_style {
+            Some(originating) => self.cascade_position_option(
+                style,
+                guards,
+                element,
+                rule,
+                try_tactic,
+                Some(originating),
+                Some(originating),
+            ),
+            None => crate::style_resolver::with_default_parent_styles(
+                element,
+                |parent_style, layout_parent_style| {
+                    self.cascade_position_option(
+                        style,
+                        guards,
+                        element,
+                        rule,
+                        try_tactic,
+                        parent_style,
+                        layout_parent_style,
+                    )
+                },
+            ),
+        }
+    }
+
+    fn cascade_position_option<E>(
+        &self,
+        style: &ComputedValues,
+        guards: &StylesheetGuards,
+        element: E,
+        rule: Option<&Arc<Locked<PositionTryRule>>>,
+        try_tactic: &PositionTryFallbacksTryTactic,
+        parent_style: Option<&ComputedValues>,
+        layout_parent_style: Option<&ComputedValues>,
     ) -> Arc<ComputedValues>
     where
         E: TElement,
@@ -1486,22 +1532,17 @@ impl Stylist {
             }
             inputs
         };
-        crate::style_resolver::with_default_parent_styles(
-            element,
-            |parent_style, layout_parent_style| {
-                self.cascade_style_and_visited(
-                    Some(element),
-                    pseudo.as_ref(),
-                    inputs,
-                    guards,
-                    parent_style,
-                    layout_parent_style,
-                    FirstLineReparenting::No,
-                    try_tactic,
-                    /* rule_cache = */ None,
-                    &mut RuleCacheConditions::default(),
-                )
-            },
+        self.cascade_style_and_visited(
+            Some(element),
+            pseudo.as_ref(),
+            inputs,
+            guards,
+            parent_style,
+            layout_parent_style,
+            FirstLineReparenting::No,
+            try_tactic,
+            /* rule_cache = */ None,
+            &mut RuleCacheConditions::default(),
         )
     }
 

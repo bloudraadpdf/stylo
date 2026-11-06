@@ -415,20 +415,23 @@ where
             &conditions,
         );
 
-        ResolvedStyle(match pseudo {
-            None => self.with_position_option(values),
-            Some(_) => values,
-        })
+        ResolvedStyle(self.with_position_option(values, pseudo, parent_style, layout_parent_style))
     }
 
-    /// The style with the position option that layout chose for the element applied (CSS Anchor Positioning 1 §6,
-    /// style & layout interleaving).
-    fn with_position_option(&self, style: Arc<ComputedValues>) -> Arc<ComputedValues> {
+    /// The style of the element or of its pseudo-element `pseudo` with the position option that layout chose for it
+    /// applied (CSS Anchor Positioning 1 §6, style & layout interleaving).
+    fn with_position_option(
+        &self,
+        style: Arc<ComputedValues>,
+        pseudo: Option<&PseudoElement>,
+        parent_style: Option<&ComputedValues>,
+        layout_parent_style: Option<&ComputedValues>,
+    ) -> Arc<ComputedValues> {
         let fallbacks = style.clone_position_try_fallbacks();
         if fallbacks.is_none() {
             return style;
         }
-        let Some(index) = self.element.position_option() else {
+        let Some(index) = self.element.position_option(pseudo) else {
             return style;
         };
         let resolved = fallbacks.0.get(index).and_then(|item| {
@@ -437,6 +440,8 @@ where
                 &self.context.shared.guards,
                 self.element,
                 item,
+                parent_style,
+                layout_parent_style,
             )
         });
         match resolved {

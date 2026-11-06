@@ -977,10 +977,10 @@ pub trait TElement:
     /// last snapshotted after layout.
     fn query_container_scroll_state(&self) -> crate::queries::scroll_state::ContainerScrollState;
 
-    /// The index into `position-try-fallbacks` of the position option that layout chose for the element, which
-    /// applies to its computed style (CSS Anchor Positioning 1 §6, style & layout interleaving). Asked only for an
-    /// element with position options.
-    fn position_option(&self) -> Option<usize> {
+    /// The index into `position-try-fallbacks` of the position option that layout chose for the element, or for its
+    /// pseudo-element `pseudo`, which applies to its computed style (CSS Anchor Positioning 1 §6, style & layout
+    /// interleaving). Asked only for a style with position options.
+    fn position_option(&self, _pseudo: Option<&PseudoElement>) -> Option<usize> {
         None
     }
 
