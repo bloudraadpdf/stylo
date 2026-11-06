@@ -144,6 +144,31 @@ mod tests {
     use super::{parse_dom_selector, selector_targets_pseudo_element};
 
     #[test]
+    fn column_pseudo_element_follows_the_selector_grammar() {
+        for source in [
+            "::column",
+            "::column::scroll-marker",
+            "::column::scroll-marker:target-current",
+            "::before::column",
+            "::before::column::scroll-marker",
+        ] {
+            assert_eq!(super::selector_serializations(source), [source]);
+        }
+        for source in [
+            "::column:hover",
+            "::column::before",
+            "::column::first-letter",
+            "::column::first-line",
+            "::first-letter::column",
+            "::column::slotted(*)",
+            "::column::scroll-marker::marker",
+            "::before::marker::marker",
+        ] {
+            assert!(super::selector_serializations(source).is_empty(), "{source}");
+        }
+    }
+
+    #[test]
     fn focus_within_follows_only_the_focusable_scroll_navigation_pseudo_elements() {
         for source in [
             "#s::scroll-marker-group:focus-within",

@@ -75,6 +75,17 @@ pub trait PseudoElement: Sized + ToCss {
         false
     }
 
+    /// Whether this pseudo-element is ::column, which only some pseudo-elements can follow.
+    /// https://drafts.csswg.org/css-multicol-2/#column-pseudo
+    fn is_column(&self) -> bool {
+        false
+    }
+
+    /// Whether this pseudo-element is valid when directly after a ::column pseudo.
+    fn valid_after_column(&self) -> bool {
+        false
+    }
+
     /// The count we contribute to the specificity from this pseudo-element.
     fn specificity_count(&self) -> u32 {
         1
@@ -187,6 +198,9 @@ bitflags! {
 
         /// The pseudo-element permits `:focus-within` after it.
         const AFTER_FOCUS_WITHIN_PSEUDO = 1 << 11;
+
+        /// Whether the last pseudo-element we parsed is ::column, which only some pseudo-elements can follow.
+        const AFTER_COLUMN_PSEUDO = 1 << 12;
     }
 }
 
@@ -3449,9 +3463,11 @@ where
                     state.insert(SelectorParsingState::AFTER_PART_LIKE);
                 } else {
                     state.insert(SelectorParsingState::AFTER_NON_ELEMENT_BACKED_PSEUDO);
-                    if p.is_before_or_after() {
-                        state.insert(SelectorParsingState::AFTER_BEFORE_OR_AFTER_PSEUDO);
-                    }
+                    state.set(
+                        SelectorParsingState::AFTER_BEFORE_OR_AFTER_PSEUDO,
+                        p.is_before_or_after(),
+                    );
+                    state.set(SelectorParsingState::AFTER_COLUMN_PSEUDO, p.is_column());
                 }
                 state.set(
                     SelectorParsingState::AFTER_ENABLEABLE_PSEUDO,
@@ -3461,9 +3477,10 @@ where
                     SelectorParsingState::AFTER_FOCUS_WITHIN_PSEUDO,
                     p.accepts_focus_within_pseudo_class(),
                 );
-                if !p.accepts_state_pseudo_classes() {
-                    state.insert(SelectorParsingState::AFTER_NON_STATEFUL_PSEUDO_ELEMENT);
-                }
+                state.set(
+                    SelectorParsingState::AFTER_NON_STATEFUL_PSEUDO_ELEMENT,
+                    !p.accepts_state_pseudo_classes(),
+                );
                 if p.is_in_pseudo_element_tree() {
                     state.insert(SelectorParsingState::IN_PSEUDO_ELEMENT_TREE);
                 }
@@ -3720,10 +3737,13 @@ where
                 // - Some states will disallow pseudos, such as the interiors of
                 // :has/:is/:where/:not (DISALLOW_PSEUDOS).
                 // - Non-element backed pseudos do not allow other pseudos to follow (AFTER_NON_ELEMENT_BACKED_PSEUDO)...
-                // - ... except ::before and ::after, which allow _some_ pseudos.
+                // - ... except ::before, ::after and ::column, which allow _some_ pseudos.
                 if state.intersects(SelectorParsingState::DISALLOW_PSEUDOS)
                     || (state.intersects(SelectorParsingState::AFTER_NON_ELEMENT_BACKED_PSEUDO)
-                        && !state.intersects(SelectorParsingState::AFTER_BEFORE_OR_AFTER_PSEUDO))
+                        && !state.intersects(
+                            SelectorParsingState::AFTER_BEFORE_OR_AFTER_PSEUDO
+                                | SelectorParsingState::AFTER_COLUMN_PSEUDO,
+                        ))
                 {
                     return Err(input.new_custom_error(SelectorParseErrorKind::InvalidState));
                 }
@@ -3764,6 +3784,12 @@ where
 
                 if state.intersects(SelectorParsingState::AFTER_BEFORE_OR_AFTER_PSEUDO)
                     && !pseudo_element.valid_after_before_or_after()
+                {
+                    return Err(input.new_custom_error(SelectorParseErrorKind::InvalidState));
+                }
+
+                if state.intersects(SelectorParsingState::AFTER_COLUMN_PSEUDO)
+                    && !pseudo_element.valid_after_column()
                 {
                     return Err(input.new_custom_error(SelectorParseErrorKind::InvalidState));
                 }

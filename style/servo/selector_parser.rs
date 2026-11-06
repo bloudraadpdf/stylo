@@ -162,6 +162,7 @@ pub enum PseudoElement {
     ScrollMarkerGroup,
     ScrollMarker,
     ScrollButton(Option<ScrollButtonDirection>),
+    Column,
     FootnoteCall,
     FootnoteMarker,
     // moegoe Family 13: PDFreactor break + footnote-area pseudos.
@@ -270,6 +271,7 @@ impl ToCss for PseudoElement {
                 }
                 return dest.write_str(")");
             },
+            Column => "::column",
             FootnoteCall => "::footnote-call",
             FootnoteMarker => "::footnote-marker",
             BdBeforeBreak => "::-bd-before-break",
@@ -339,8 +341,18 @@ impl ::selectors::parser::PseudoElement for PseudoElement {
         matches!(self, Self::Before | Self::After)
     }
 
+    /// A ::before or ::after box can be a multi-column container (CSS Multicol 2 §4.8).
     fn valid_after_before_or_after(&self) -> bool {
-        matches!(self, Self::Marker)
+        matches!(self, Self::Marker | Self::Column)
+    }
+
+    fn is_column(&self) -> bool {
+        matches!(self, Self::Column)
+    }
+
+    /// A ::column has a ::scroll-marker and no other pseudo-element (CSS Multicol 2 §4.8).
+    fn valid_after_column(&self) -> bool {
+        matches!(self, Self::ScrollMarker)
     }
 }
 
@@ -395,26 +407,27 @@ impl PseudoElement {
             Self::ScrollMarkerGroup => 19,
             Self::ScrollMarker => 20,
             Self::ScrollButton(_) => 21,
-            Self::FootnoteCall => 22,
-            Self::FootnoteMarker => 23,
-            Self::BdBeforeBreak => 24,
-            Self::BdAfterBreak => 25,
-            Self::BdFootnoteArea => 26,
-            Self::BdSidenoteCall => 27,
-            Self::BdSidenoteMarker => 28,
-            Self::ColorSwatch => 29,
-            Self::Placeholder => 30,
-            Self::FileSelectorButton => 31,
-            Self::Checkmark => 32,
-            Self::PickerSelect => 33,
-            Self::ServoTextControlInnerContainer => 34,
-            Self::ServoTextControlInnerEditor => 35,
-            Self::ServoAnonymousBox => 36,
-            Self::ServoAnonymousTable => 37,
-            Self::ServoAnonymousTableCell => 38,
-            Self::ServoAnonymousTableRow => 39,
-            Self::ServoTableGrid => 40,
-            Self::ServoTableWrapper => 41,
+            Self::Column => 22,
+            Self::FootnoteCall => 23,
+            Self::FootnoteMarker => 24,
+            Self::BdBeforeBreak => 25,
+            Self::BdAfterBreak => 26,
+            Self::BdFootnoteArea => 27,
+            Self::BdSidenoteCall => 28,
+            Self::BdSidenoteMarker => 29,
+            Self::ColorSwatch => 30,
+            Self::Placeholder => 31,
+            Self::FileSelectorButton => 32,
+            Self::Checkmark => 33,
+            Self::PickerSelect => 34,
+            Self::ServoTextControlInnerContainer => 35,
+            Self::ServoTextControlInnerEditor => 36,
+            Self::ServoAnonymousBox => 37,
+            Self::ServoAnonymousTable => 38,
+            Self::ServoAnonymousTableCell => 39,
+            Self::ServoAnonymousTableRow => 40,
+            Self::ServoTableGrid => 41,
+            Self::ServoTableWrapper => 42,
         }
     }
 
@@ -563,6 +576,7 @@ impl PseudoElement {
             | PseudoElement::ScrollMarkerGroup
             | PseudoElement::ScrollMarker
             | PseudoElement::ScrollButton(_)
+            | PseudoElement::Column
             | PseudoElement::FootnoteCall
             | PseudoElement::FootnoteMarker
             | PseudoElement::BdBeforeBreak
@@ -1115,6 +1129,7 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             "marker" => Marker,
             "scroll-marker-group" => ScrollMarkerGroup,
             "scroll-marker" => ScrollMarker,
+            "column" => Column,
             "footnote-call" => FootnoteCall,
             "footnote-marker" => FootnoteMarker,
             // moegoe Family 13: PDFreactor break + footnote-area pseudos.
