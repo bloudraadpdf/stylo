@@ -2598,7 +2598,7 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
     /// `calc()` wrapper.
     fn to_css_as_fallback<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
         let level = match *self {
-            Self::Leaf(_) | Self::Anchor(_) | Self::AnchorSize(_) => ArgumentLevel::ArgumentRoot,
+            Self::Leaf(_) => ArgumentLevel::ArgumentRoot,
             _ => ArgumentLevel::CalculationRoot,
         };
         self.to_css_impl(dest, level)
@@ -2710,7 +2710,8 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 },
             },
             Self::Leaf(ref leaf) if leaf.is_function() => false,
-            Self::Leaf(_) | Self::Anchor(_) | Self::AnchorSize(_) => match level {
+            Self::Anchor(_) | Self::AnchorSize(_) => false,
+            Self::Leaf(_) => match level {
                 ArgumentLevel::CalculationRoot => {
                     dest.write_str("calc(")?;
                     true
