@@ -33,7 +33,11 @@ fn assert_cascade_restriction(
         StyleSource::from_declarations(declarations),
         CascadePriority::new(level, LayerOrder::root()),
     )));
-    let ids = DeclarationIterator::new(&rule, &guards, pseudo)
+    let ids = DeclarationIterator::new(
+        &rule,
+        &guards,
+        pseudo.and_then(PseudoElement::property_restriction),
+    )
         .map(|(declaration, _, _)| declaration.id().to_owned())
         .collect::<Vec<_>>();
     for id in [LonghandId::FontSize, LonghandId::Color] {

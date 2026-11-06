@@ -98,6 +98,37 @@ where
     )
 }
 
+/// Cascades `rule_node` for `pseudo` of `element` without the property restriction of `pseudo`, for a user agent
+/// that applies every property to it.
+pub fn cascade_unrestricted_pseudo<E>(
+    stylist: &Stylist,
+    pseudo: &PseudoElement,
+    rule_node: &StrongRuleNode,
+    guards: &StylesheetGuards,
+    parent_style: &ComputedValues,
+    element: E,
+) -> Arc<ComputedValues>
+where
+    E: TElement,
+{
+    apply_declarations(
+        stylist,
+        Some(pseudo),
+        rule_node,
+        guards,
+        DeclarationIterator::new(rule_node, guards, None),
+        Some(parent_style),
+        Some(parent_style),
+        FirstLineReparenting::No,
+        &Default::default(),
+        CascadeMode::Unvisited { visited_rules: None },
+        ComputedValueFlags::empty(),
+        None,
+        &mut Default::default(),
+        Some(element),
+    )
+}
+
 struct DeclarationIterator<'a> {
     // Global to the iteration.
     guards: &'a StylesheetGuards<'a>,
@@ -117,9 +148,8 @@ impl<'a> DeclarationIterator<'a> {
     fn new(
         rule_node: &'a StrongRuleNode,
         guards: &'a StylesheetGuards,
-        pseudo: Option<&PseudoElement>,
+        restriction: Option<PropertyFlags>,
     ) -> Self {
-        let restriction = pseudo.and_then(PseudoElement::property_restriction);
         let mut iter = Self {
             guards,
             current_rule_node: Some(rule_node),
@@ -209,7 +239,11 @@ where
         pseudo,
         rule_node,
         guards,
-        DeclarationIterator::new(rule_node, guards, pseudo),
+        DeclarationIterator::new(
+            rule_node,
+            guards,
+            pseudo.and_then(PseudoElement::property_restriction),
+        ),
         parent_style,
         layout_parent_style,
         first_line_reparenting,
