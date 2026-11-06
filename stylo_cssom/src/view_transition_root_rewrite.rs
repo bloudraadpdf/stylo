@@ -252,6 +252,21 @@ const GROUP_INSET_PROPERTIES: [&str; 11] = [
     "inset-inline-end",
 ];
 
+/// The margins of a group, which offset its box (CSS Box Model 3 §3).
+const GROUP_MARGIN_PROPERTIES: [&str; 11] = [
+    "margin",
+    "margin-top",
+    "margin-right",
+    "margin-bottom",
+    "margin-left",
+    "margin-block",
+    "margin-block-start",
+    "margin-block-end",
+    "margin-inline",
+    "margin-inline-start",
+    "margin-inline-end",
+];
+
 /// The corner radii of a group, which round its background (CSS Backgrounds 3 §5.2).
 const GROUP_RADIUS_PROPERTIES: [&str; 9] = [
     "border-radius",
@@ -280,6 +295,11 @@ fn append_projected_style_tree_rules(rule: &mut String, prelude: &str, body: &st
         rule,
         group_selectors.clone(),
         project_declarations(body, &GROUP_RADIUS_PROPERTIES, None),
+    );
+    append_projected_rule(
+        rule,
+        group_selectors.clone(),
+        project_declarations(body, &GROUP_MARGIN_PROPERTIES, None),
     );
     let insets = project_declarations(body, &GROUP_INSET_PROPERTIES, None);
     append_projected_rule(
@@ -1316,6 +1336,15 @@ mod tests {
         );
 
         assert!(rewritten.contains("{border-radius:50px;border-top-left-radius:2px;}"));
+    }
+
+    #[test]
+    fn projects_group_margins_to_the_style_tree() {
+        let rewritten = rewrite_view_transition_root(
+            "html::view-transition-group(target){margin:-10px 0 0 -10px;margin-inline-start:2px;color:red}",
+        );
+
+        assert!(rewritten.contains("{margin:-10px 0 0 -10px;margin-inline-start:2px;}"));
     }
 
     #[test]
