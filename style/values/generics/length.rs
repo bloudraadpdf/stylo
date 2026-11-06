@@ -706,7 +706,6 @@ impl TryTacticAdjustment for AnchorSizeKeyword {
 /// Specified type for `margin` properties, which allows
 /// the use of the `anchor-size()` function.
 #[derive(
-    Animate,
     Clone,
     ComputeSquaredDistance,
     Debug,

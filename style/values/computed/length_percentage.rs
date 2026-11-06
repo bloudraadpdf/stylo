@@ -1461,30 +1461,88 @@ impl Animate for LengthPercentage {
             (Unpacked::Percentage(one), Unpacked::Percentage(other)) => {
                 Self::new_percent(one.animate(&other, procedure)?)
             },
-            _ => {
-                use calc::CalcNodeLeaf;
-
-                fn product_with(mut node: CalcNode, product: f32) -> CalcNode {
-                    let mut number = CalcNode::Leaf(CalcLengthPercentageLeaf::new_number(product));
-                    if !node.try_product_in_place(&mut number) {
-                        CalcNode::Product(vec![node, number].into())
-                    } else {
-                        node
-                    }
-                }
-
-                let (l, r) = procedure.weights();
-                let one = product_with(self.to_calc_node(), l as f32);
-                let other = product_with(other.to_calc_node(), r as f32);
-
-                Self::new_calc(
-                    CalcNode::Sum(vec![one, other].into()),
-                    AllowedNumericType::All,
-                )
-                .reduce_zero_dimension()
-            },
+            _ => Self::mix(
+                self.to_calc_node(),
+                other.to_calc_node(),
+                procedure,
+                AllowedNumericType::All,
+            )
+            .reduce_zero_dimension(),
         })
     }
+}
+
+/// A computed value that a calculation tree can represent, anchor functions included: an operand of a `calc()` mix.
+pub(crate) trait ToAnchorCalcNode {
+    /// The calculation tree of the value, or `Err` for a keyword.
+    fn to_anchor_calc_node(&self) -> Result<CalcNode, ()>;
+}
+
+impl LengthPercentage {
+    /// The `calc()` mix of two calculation trees: values that resolve only at used-value time, such as anchor
+    /// functions, interpolate as `calc(one * left + other * right)` (CSS Values 4 §3.2.1, CSS Anchor Positioning 1
+    /// §3.2.1).
+    pub(crate) fn mix(
+        one: CalcNode,
+        other: CalcNode,
+        procedure: Procedure,
+        clamping_mode: AllowedNumericType,
+    ) -> Self {
+        use calc::CalcNodeLeaf;
+
+        fn product_with(mut node: CalcNode, product: f32) -> CalcNode {
+            let mut number = CalcNode::Leaf(CalcLengthPercentageLeaf::new_number(product));
+            if !node.try_product_in_place(&mut number) {
+                CalcNode::Product(vec![node, number].into())
+            } else {
+                node
+            }
+        }
+
+        let (l, r) = procedure.weights();
+        Self::new_calc(
+            CalcNode::Sum(vec![product_with(one, l as f32), product_with(other, r as f32)].into()),
+            clamping_mode,
+        )
+    }
+
+    /// The `calc()` mix of two anchor-dependent values.
+    pub(crate) fn mix_anchor_values<T: ToAnchorCalcNode>(
+        one: &T,
+        other: &T,
+        procedure: Procedure,
+        clamping_mode: AllowedNumericType,
+    ) -> Result<Self, ()> {
+        Ok(Self::mix(
+            one.to_anchor_calc_node()?,
+            other.to_anchor_calc_node()?,
+            procedure,
+            clamping_mode,
+        ))
+    }
+}
+
+/// The calculation tree of an `anchor-size()` function.
+pub(crate) fn anchor_size_calc_node<F: ToAnchorCalcNode>(
+    function: &crate::values::generics::length::GenericAnchorSizeFunction<F>,
+) -> Result<CalcNode, ()> {
+    Ok(CalcNode::AnchorSize(Box::new(
+        crate::values::generics::length::GenericAnchorSizeFunction {
+            target_element: function.target_element.clone(),
+            size: function.size,
+            fallback: fallback_calc_node(function.fallback.as_ref())?,
+        },
+    )))
+}
+
+/// The calculation tree of the fallback of an anchor function.
+pub(crate) fn fallback_calc_node<F: ToAnchorCalcNode>(
+    fallback: Option<&F>,
+) -> Result<crate::values::generics::Optional<Box<CalcNode>>, ()> {
+    Ok(fallback
+        .map(|fallback| fallback.to_anchor_calc_node().map(Box::new))
+        .transpose()?
+        .into())
 }
 
 impl LengthPercentage {

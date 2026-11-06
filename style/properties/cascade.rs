@@ -338,6 +338,7 @@ where
     context.style().add_flags(cascade_input_flags);
 
     let using_cached_reset_properties;
+    let rule_cache = rule_cache.filter(|_| !element.map_or(false, |e| e.has_anchor_layout_inputs()));
     let ignore_colors = context.builder.device.forced_colors().is_active();
     let mut cascade = Cascade::new(first_line_reparenting, try_tactic, ignore_colors);
     let mut declarations = Default::default();

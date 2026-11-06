@@ -1641,10 +1641,21 @@ pub struct ComputedValuesInner {
     /// essentially an optimization to avoid referencing the root rule node.
     pub rules: Option<StrongRuleNode>,
 
+    /// The parts of the style that few elements have, out of line.
+    rare: Option<Arc<RareComputedValues>>,
+}
+
+/// The parts of a style that few elements have: a style without them pays one pointer.
+#[cfg(feature = "servo")]
+#[derive(Clone, Debug, Default)]
+pub struct RareComputedValues {
     /// The element's computed values if visited, only computed if there's a
     /// relevant link for this element. A element's "relevant link" is the
     /// element being matched if it is a link or the nearest ancestor link.
     visited_style: Option<Arc<ComputedValues>>,
+
+    /// What style & layout interleaving replaced in this style.
+    anchor_layout_base: Option<crate::values::computed::position::AnchorLayoutBase>,
 }
 
 /// The struct that Servo uses to represent computed values.
@@ -1879,6 +1890,7 @@ impl ComputedValues {
         effective_zoom: computed::Zoom,
         flags: ComputedValueFlags,
         authored_control_style: super::authored_control_style::AuthoredControlStyle,
+        anchor_layout_base: Option<crate::values::computed::position::AnchorLayoutBase>,
         rules: Option<StrongRuleNode>,
         visited_style: Option<Arc<ComputedValues>>,
         % for style_struct in data.active_style_structs():
@@ -1891,10 +1903,15 @@ impl ComputedValues {
                 attribute_references,
                 writing_mode,
                 rules,
-                visited_style,
                 effective_zoom,
                 flags,
                 authored_control_style,
+                rare: (visited_style.is_some() || anchor_layout_base.is_some()).then(|| {
+                    Arc::new(RareComputedValues {
+                        visited_style,
+                        anchor_layout_base,
+                    })
+                }),
             % for style_struct in data.active_style_structs():
                 ${style_struct.ident},
             % endfor
@@ -1932,13 +1949,20 @@ impl ComputedValues {
                 attribute_references: AttributeReferences::default(),
                 writing_mode: WritingMode::empty(),
                 rules: None,
-                visited_style: None,
                 effective_zoom: crate::values::computed::Zoom::ONE,
                 flags: ComputedValueFlags::empty(),
                 authored_control_style: Default::default(),
+                rare: None,
             },
             pseudo: None,
         })
+    }
+
+    /// Records `base`, the style before the position option of this style applied.
+    pub fn set_position_option_base(&mut self, base: Arc<ComputedValues>) {
+        let mut rare = self.inner.rare.as_deref().cloned().unwrap_or_default();
+        rare.anchor_layout_base.get_or_insert_with(Default::default).option_base = Some(base);
+        self.inner.rare = Some(Arc::new(rare));
     }
 
     /// Converts the computed values to an Arc<> from a reference.
@@ -2001,7 +2025,12 @@ impl ops::DerefMut for ComputedValues {
 impl ComputedValuesInner {
     /// Returns the visited style, if any.
     pub fn visited_style(&self) -> Option<&ComputedValues> {
-        self.visited_style.as_deref()
+        self.rare.as_ref()?.visited_style.as_deref()
+    }
+
+    /// What style & layout interleaving replaced in this style: the base that layout positions from.
+    pub fn anchor_layout_base(&self) -> Option<&crate::values::computed::position::AnchorLayoutBase> {
+        self.rare.as_ref()?.anchor_layout_base.as_ref()
     }
 
     % for style_struct in data.active_style_structs():
@@ -2336,6 +2365,9 @@ pub struct StyleBuilder<'a> {
     #[cfg(feature = "servo")]
     pub authored_control_style: super::authored_control_style::AuthoredControlStyle,
 
+    /// The computed values that style & layout interleaving replaced.
+    pub anchor_layout_base: crate::values::computed::position::AnchorLayoutBase,
+
     /// The element's style if visited, only computed if there's a relevant link
     /// for this element.  A element's "relevant link" is the element being
     /// matched if it is a link or the nearest ancestor link.
@@ -2379,6 +2411,7 @@ impl<'a> StyleBuilder<'a> {
             flags: Cell::new(flags),
             #[cfg(feature = "servo")]
             authored_control_style: Default::default(),
+            anchor_layout_base: Default::default(),
             visited_style: None,
             % for style_struct in data.active_style_structs():
             % if style_struct.inherited:
@@ -2424,6 +2457,7 @@ impl<'a> StyleBuilder<'a> {
             flags: Cell::new(style_to_derive_from.flags),
             #[cfg(feature = "servo")]
             authored_control_style: style_to_derive_from.authored_control_style,
+            anchor_layout_base: Default::default(),
             visited_style: None,
             % for style_struct in data.active_style_structs():
             ${style_struct.ident}: StyleStructRef::Borrowed(
@@ -2677,6 +2711,8 @@ impl<'a> StyleBuilder<'a> {
             self.flags.get(),
             #[cfg(feature = "servo")]
             self.authored_control_style,
+            #[cfg(feature = "servo")]
+            self.anchor_layout_base.into_present(),
             self.rules,
             self.visited_style,
             % for style_struct in data.active_style_structs():

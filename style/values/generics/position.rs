@@ -353,7 +353,6 @@ impl<N> ToAnimatedZero for AspectRatio<N> {
 /// the size of the style struct, which would not be great.
 /// On the other hand, we trade for code duplication, so... :(
 #[derive(
-    Animate,
     Clone,
     ComputeSquaredDistance,
     Debug,

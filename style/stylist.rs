@@ -24,7 +24,6 @@ use crate::invalidation::media_queries::{
 };
 use crate::invalidation::stylesheets::{RuleChangeKind, StylesheetInvalidationSet};
 use crate::media_queries::Device;
-#[cfg(feature = "gecko")]
 use crate::properties::StyleBuilder;
 use crate::properties::{
     self, AnimationDeclarations, CascadeMode, ComputedValues, FirstLineReparenting,
@@ -57,7 +56,6 @@ use crate::stylesheets::{
     ViewTransitionRule,
 };
 use crate::stylesheets::{CustomMediaEvaluator, CustomMediaMap};
-#[cfg(feature = "gecko")]
 use crate::values::specified::position::PositionTryFallbacksItem;
 use crate::values::specified::position::PositionTryFallbacksTryTactic;
 use crate::values::{AtomIdent, computed};
@@ -1405,7 +1403,6 @@ impl Stylist {
     }
 
     /// Computes a fallback style lazily given the current and parent styles, and name.
-    #[cfg(feature = "gecko")]
     pub fn resolve_position_try<E>(
         &self,
         style: &ComputedValues,
@@ -1442,6 +1439,7 @@ impl Stylist {
             .map(|r| &r.read_with(guards.author).block);
         let pseudo = style
             .pseudo()
+            .map(|pseudo| pseudo.clone())
             .or_else(|| element.implemented_pseudo_element());
         let inputs = {
             let mut inputs = CascadeInputs::new_from_style(style);
@@ -1848,7 +1846,6 @@ impl Stylist {
 
     /// Returns the registered `@position-try-rule` animation for the specified name.
     #[inline]
-    #[cfg(feature = "gecko")]
     fn lookup_position_try<'a, E>(
         &'a self,
         name: &Atom,

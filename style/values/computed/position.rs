@@ -155,6 +155,227 @@ impl<Percentage: TryTacticAdjustment, Fallback: TryTacticAdjustment> TryTacticAd
 
 /// A computed type for `inset` properties.
 pub type Inset = GenericInset<Percentage, LengthPercentage>;
+
+impl crate::values::computed::length_percentage::ToAnchorCalcNode for Inset {
+    fn to_anchor_calc_node(
+        &self,
+    ) -> Result<crate::values::computed::length_percentage::CalcNode, ()> {
+        use crate::values::computed::length_percentage::{
+            anchor_size_calc_node, fallback_calc_node, CalcLengthPercentageLeaf, CalcNode,
+        };
+        match self {
+            Self::Auto => Err(()),
+            Self::LengthPercentage(lp) | Self::AnchorContainingCalcFunction(lp) => Ok(lp.to_calc_node()),
+            Self::AnchorFunction(function) => Ok(CalcNode::Anchor(Box::new(GenericAnchorFunction {
+                target_element: function.target_element.clone(),
+                side: match function.side {
+                    GenericAnchorSide::Keyword(keyword) => GenericAnchorSide::Keyword(keyword),
+                    GenericAnchorSide::Percentage(percentage) => GenericAnchorSide::Percentage(Box::new(
+                        CalcNode::Leaf(CalcLengthPercentageLeaf::Percentage(percentage)),
+                    )),
+                },
+                fallback: fallback_calc_node(function.fallback.as_ref())?,
+            }))),
+            Self::AnchorSizeFunction(function) => anchor_size_calc_node(&**function),
+        }
+    }
+}
+
+/// A computed value whose anchor functions layout resolves, with the physical side or axis of its property (CSS
+/// Anchor Positioning 1 §3.2.1, §5.1.1, style & layout interleaving).
+pub enum AnchorDependentValue<'a> {
+    /// An inset property.
+    Inset(PhysicalSide, &'a Inset),
+    /// `width`, `height`, `min-width` or `min-height`.
+    Size(crate::logical_geometry::PhysicalAxis, &'a crate::values::computed::Size),
+    /// `max-width` or `max-height`.
+    MaxSize(crate::logical_geometry::PhysicalAxis, &'a crate::values::computed::MaxSize),
+    /// A margin property.
+    Margin(PhysicalSide, &'a crate::values::computed::Margin),
+}
+
+/// A computed value that style & layout interleaving replaced, as the cascade computed it.
+#[derive(Clone, Debug)]
+pub enum AnchorBase {
+    /// An inset property.
+    Inset(Inset),
+    /// `width`, `height`, `min-width` or `min-height`.
+    Size(crate::values::computed::Size),
+    /// `max-width` or `max-height`.
+    MaxSize(crate::values::computed::MaxSize),
+    /// A margin property.
+    Margin(crate::values::computed::Margin),
+}
+
+/// A replaced computed value with its property.
+#[derive(Clone, Debug)]
+pub struct AnchorBaseValue {
+    /// The physical longhand.
+    pub property: crate::properties::LonghandId,
+    /// The value before the replacement.
+    pub value: AnchorBase,
+}
+
+/// What style & layout interleaving replaced in a style: the base that layout positions from.
+#[derive(Clone, Debug, Default)]
+pub struct AnchorLayoutBase {
+    /// The values whose anchor functions layout resolved, as the cascade computed them.
+    pub values: Vec<AnchorBaseValue>,
+    /// The style before the position option applied.
+    pub option_base: Option<servo_arc::Arc<crate::properties::ComputedValues>>,
+}
+
+impl AnchorLayoutBase {
+    /// The value that the cascade computed for `property` before interleaving replaced it.
+    pub fn value(&self, property: crate::properties::LonghandId) -> Option<&AnchorBase> {
+        self.values
+            .iter()
+            .find(|value| value.property == property)
+            .map(|value| &value.value)
+    }
+
+    pub(crate) fn into_present(self) -> Option<Self> {
+        (!self.values.is_empty() || self.option_base.is_some()).then_some(self)
+    }
+}
+
+/// A computed value that may hold anchor functions, which layout resolves through the element.
+pub trait ResolveAnchors: Sized {
+    /// The value with its anchor functions replaced by the length that layout resolved for them in `property`.
+    /// The cascade keeps the replaced value as the base for layout.
+    fn resolve_anchors(self, property: crate::properties::LonghandId, context: &mut Context) -> Self;
+}
+
+fn physical_side(property: crate::properties::LonghandId) -> Option<PhysicalSide> {
+    use crate::properties::LonghandId;
+    Some(match property {
+        LonghandId::Top | LonghandId::MarginTop => PhysicalSide::Top,
+        LonghandId::Right | LonghandId::MarginRight => PhysicalSide::Right,
+        LonghandId::Bottom | LonghandId::MarginBottom => PhysicalSide::Bottom,
+        LonghandId::Left | LonghandId::MarginLeft => PhysicalSide::Left,
+        _ => return None,
+    })
+}
+
+fn physical_axis(property: crate::properties::LonghandId) -> Option<crate::logical_geometry::PhysicalAxis> {
+    use crate::logical_geometry::PhysicalAxis;
+    use crate::properties::LonghandId;
+    Some(match property {
+        LonghandId::Width | LonghandId::MinWidth | LonghandId::MaxWidth => PhysicalAxis::Horizontal,
+        LonghandId::Height | LonghandId::MinHeight | LonghandId::MaxHeight => PhysicalAxis::Vertical,
+        _ => return None,
+    })
+}
+
+/// Records `base` as the value that interleaving replaced by `resolved` in `property`.
+fn replaced<T>(
+    context: &mut Context,
+    property: crate::properties::LonghandId,
+    base: AnchorBase,
+    resolved: T,
+) -> T {
+    context
+        .builder
+        .anchor_layout_base
+        .values
+        .push(AnchorBaseValue { property, value: base });
+    resolved
+}
+
+impl ResolveAnchors for Inset {
+    fn resolve_anchors(self, property: crate::properties::LonghandId, context: &mut Context) -> Self {
+        if matches!(self, Self::Auto | Self::LengthPercentage(_)) {
+            return self;
+        }
+        let Some(side) = physical_side(property) else {
+            return self;
+        };
+        let resolved = context.resolve_anchor_dependent_value(AnchorDependentValue::Inset(side, &self));
+        match resolved {
+            Some(length) => replaced(context, property, AnchorBase::Inset(self), Self::LengthPercentage(length)),
+            None => self,
+        }
+    }
+}
+
+impl ResolveAnchors for crate::values::computed::Size {
+    fn resolve_anchors(self, property: crate::properties::LonghandId, context: &mut Context) -> Self {
+        if !matches!(self, Self::AnchorSizeFunction(_) | Self::AnchorContainingCalcFunction(_)) {
+            return self;
+        }
+        let Some(axis) = physical_axis(property) else {
+            return self;
+        };
+        let resolved = context.resolve_anchor_dependent_value(AnchorDependentValue::Size(axis, &self));
+        match resolved {
+            Some(length) => replaced(
+                context,
+                property,
+                AnchorBase::Size(self),
+                Self::LengthPercentage(generics::NonNegative(length)),
+            ),
+            None => self,
+        }
+    }
+}
+
+impl ResolveAnchors for crate::values::computed::MaxSize {
+    fn resolve_anchors(self, property: crate::properties::LonghandId, context: &mut Context) -> Self {
+        if !matches!(self, Self::AnchorSizeFunction(_) | Self::AnchorContainingCalcFunction(_)) {
+            return self;
+        }
+        let Some(axis) = physical_axis(property) else {
+            return self;
+        };
+        let resolved = context.resolve_anchor_dependent_value(AnchorDependentValue::MaxSize(axis, &self));
+        match resolved {
+            Some(length) => replaced(
+                context,
+                property,
+                AnchorBase::MaxSize(self),
+                Self::LengthPercentage(generics::NonNegative(length)),
+            ),
+            None => self,
+        }
+    }
+}
+
+impl ResolveAnchors for crate::values::computed::Margin {
+    fn resolve_anchors(self, property: crate::properties::LonghandId, context: &mut Context) -> Self {
+        if !matches!(self, Self::AnchorSizeFunction(_) | Self::AnchorContainingCalcFunction(_)) {
+            return self;
+        }
+        let Some(side) = physical_side(property) else {
+            return self;
+        };
+        let resolved = context.resolve_anchor_dependent_value(AnchorDependentValue::Margin(side, &self));
+        match resolved {
+            Some(length) => replaced(context, property, AnchorBase::Margin(self), Self::LengthPercentage(length)),
+            None => self,
+        }
+    }
+}
+
+impl crate::values::animated::Animate for Inset {
+    fn animate(
+        &self,
+        other: &Self,
+        procedure: crate::values::animated::Procedure,
+    ) -> Result<Self, ()> {
+        Ok(match (self, other) {
+            (Self::Auto, Self::Auto) => Self::Auto,
+            (Self::LengthPercentage(one), Self::LengthPercentage(other)) => {
+                Self::LengthPercentage(one.animate(other, procedure)?)
+            },
+            _ => Self::AnchorContainingCalcFunction(LengthPercentage::mix_anchor_values(
+                self,
+                other,
+                procedure,
+                style_traits::values::specified::AllowedNumericType::All,
+            )?),
+        })
+    }
+}
 impl TryTacticAdjustment for Inset {
     // https://drafts.csswg.org/css-anchor-position-1/#swap-due-to-a-try-tactic:
     //

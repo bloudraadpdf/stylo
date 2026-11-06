@@ -653,6 +653,20 @@ impl<'a> Context<'a> {
         }
     }
 
+    /// The length that layout resolved for the anchor functions of `value`, a computed value of the calling
+    /// element. A style with it depends on layout and is not cached.
+    pub fn resolve_anchor_dependent_value(
+        &self,
+        value: position::AnchorDependentValue,
+    ) -> Option<LengthPercentage> {
+        let resolved = self
+            .calling_element
+            .as_ref()?
+            .resolve_anchor_dependent_value(value)?;
+        self.rule_cache_conditions.borrow_mut().set_uncacheable();
+        Some(resolved)
+    }
+
     /// Whether a `@container` rule in a custom function body applies to the calling element.
     pub fn function_container_matches(&self, conditions: &ContainerConditions) -> bool {
         let Some(ref element) = self.calling_element else {

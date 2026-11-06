@@ -806,6 +806,33 @@ pub fn resolve_anchor_size(
 /// A computed type for `margin` properties.
 pub type Margin = generics::GenericMargin<LengthPercentage>;
 
+impl super::length_percentage::ToAnchorCalcNode for Margin {
+    fn to_anchor_calc_node(&self) -> Result<super::length_percentage::CalcNode, ()> {
+        match self {
+            Self::Auto => Err(()),
+            Self::LengthPercentage(lp) | Self::AnchorContainingCalcFunction(lp) => Ok(lp.to_calc_node()),
+            Self::AnchorSizeFunction(function) => super::length_percentage::anchor_size_calc_node(&**function),
+        }
+    }
+}
+
+impl Animate for Margin {
+    fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
+        Ok(match (self, other) {
+            (Self::Auto, Self::Auto) => Self::Auto,
+            (Self::LengthPercentage(one), Self::LengthPercentage(other)) => {
+                Self::LengthPercentage(one.animate(other, procedure)?)
+            },
+            _ => Self::AnchorContainingCalcFunction(LengthPercentage::mix_anchor_values(
+                self,
+                other,
+                procedure,
+                style_traits::values::specified::AllowedNumericType::All,
+            )?),
+        })
+    }
+}
+
 impl TryTacticAdjustment for MaxSize {
     fn try_tactic_adjustment(&mut self, old_side: PhysicalSide, new_side: PhysicalSide) {
         debug_assert!(

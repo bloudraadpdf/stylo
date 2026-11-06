@@ -977,6 +977,28 @@ pub trait TElement:
     /// last snapshotted after layout.
     fn query_container_scroll_state(&self) -> crate::queries::scroll_state::ContainerScrollState;
 
+    /// The index into `position-try-fallbacks` of the position option that layout chose for the element, which
+    /// applies to its computed style (CSS Anchor Positioning 1 §6, style & layout interleaving). Asked only for an
+    /// element with position options.
+    fn position_option(&self) -> Option<usize> {
+        None
+    }
+
+    /// The length that layout resolved for the anchor functions of `value`, a computed value of the element (CSS
+    /// Anchor Positioning 1 §3.2.1, §5.1.1, style & layout interleaving).
+    fn resolve_anchor_dependent_value(
+        &self,
+        _value: crate::values::computed::position::AnchorDependentValue,
+    ) -> Option<crate::values::computed::LengthPercentage> {
+        None
+    }
+
+    /// Whether layout gives the element a position option or resolved anchor functions, so that its style depends
+    /// on layout and is not shared.
+    fn has_anchor_layout_inputs(&self) -> bool {
+        false
+    }
+
     /// Returns true if the element has all of specified selector flags.
     fn has_selector_flags(&self, flags: ElementSelectorFlags) -> bool;
 

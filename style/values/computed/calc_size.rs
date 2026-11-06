@@ -8,7 +8,12 @@
 
 use crate::values::animated::{Animate, Procedure};
 use crate::values::computed::length::{MaxSize, NonNegativeLengthPercentage, Size};
-use crate::values::computed::length_percentage::CalcLengthPercentageLeaf;
+use crate::values::computed::length_percentage::{
+    anchor_size_calc_node, CalcLengthPercentageLeaf, CalcNode as ComputedCalcNode, ToAnchorCalcNode,
+};
+use crate::values::computed::LengthPercentage;
+use crate::values::generics::NonNegative;
+use style_traits::values::specified::AllowedNumericType;
 use crate::values::generics::length::{GenericCalcSize, GenericCalcSizeBasis};
 use crate::values::specified::calc::{CalcNode, CalcSizeCalculation, Leaf};
 use crate::values::specified::length::{AbsoluteLength, NoCalcLength};
@@ -115,8 +120,14 @@ macro_rules! animate_size {
                     (Self::LengthPercentage(a), Self::LengthPercentage(b)) => {
                         Self::LengthPercentage(a.animate(b, procedure)?)
                     },
-                    (Self::AnchorContainingCalcFunction(a), Self::AnchorContainingCalcFunction(b)) => {
-                        Self::AnchorContainingCalcFunction(a.animate(b, procedure)?)
+                    (Self::AnchorSizeFunction(_) | Self::AnchorContainingCalcFunction(_), _)
+                    | (_, Self::AnchorSizeFunction(_) | Self::AnchorContainingCalcFunction(_)) => {
+                        Self::AnchorContainingCalcFunction(NonNegative(LengthPercentage::mix_anchor_values(
+                            self,
+                            other,
+                            procedure,
+                            AllowedNumericType::NonNegative,
+                        )?))
                     },
                     (Self::LengthPercentage(lp), _) => {
                         let to = other.to_calc_size(allow_keywords)?;
@@ -138,6 +149,18 @@ macro_rules! animate_size {
         impl Animate for $ty {
             fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
                 self.animate_size(other, procedure, false)
+            }
+        }
+
+        impl ToAnchorCalcNode for $ty {
+            fn to_anchor_calc_node(&self) -> Result<ComputedCalcNode, ()> {
+                match self {
+                    Self::LengthPercentage(lp) | Self::AnchorContainingCalcFunction(lp) => {
+                        Ok(lp.0.to_calc_node())
+                    },
+                    Self::AnchorSizeFunction(function) => anchor_size_calc_node(&**function),
+                    _ => Err(()),
+                }
             }
         }
     };

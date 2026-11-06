@@ -415,7 +415,38 @@ where
             &conditions,
         );
 
-        ResolvedStyle(values)
+        ResolvedStyle(match pseudo {
+            None => self.with_position_option(values),
+            Some(_) => values,
+        })
+    }
+
+    /// The style with the position option that layout chose for the element applied (CSS Anchor Positioning 1 §6,
+    /// style & layout interleaving).
+    fn with_position_option(&self, style: Arc<ComputedValues>) -> Arc<ComputedValues> {
+        let fallbacks = style.clone_position_try_fallbacks();
+        if fallbacks.is_none() {
+            return style;
+        }
+        let Some(index) = self.element.position_option() else {
+            return style;
+        };
+        let resolved = fallbacks.0.get(index).and_then(|item| {
+            self.context.shared.stylist.resolve_position_try(
+                &style,
+                &self.context.shared.guards,
+                self.element,
+                item,
+            )
+        });
+        match resolved {
+            Some(mut option_style) => {
+                #[cfg(feature = "servo")]
+                Arc::make_mut(&mut option_style).set_position_option_base(style);
+                option_style
+            },
+            None => style,
+        }
     }
 
     /// Cascade the element and pseudo-element styles with the default parents.

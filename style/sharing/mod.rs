@@ -667,6 +667,11 @@ impl<E: TElement> StyleSharingCache<E> {
             return;
         }
 
+        if element.has_anchor_layout_inputs() {
+            debug!("Failing to insert to the cache: style depends on layout");
+            return;
+        }
+
         if element.smil_override().is_some() {
             debug!("Failing to insert to the cache: SMIL");
             return;
@@ -722,6 +727,11 @@ impl<E: TElement> StyleSharingCache<E> {
                 "{:?} Cannot share style: style sharing cache disabled",
                 target.element
             );
+            return None;
+        }
+
+        if target.element.has_anchor_layout_inputs() {
+            debug!("{:?} Cannot share style: style depends on layout", target.element);
             return None;
         }
 
@@ -914,7 +924,7 @@ impl<E: TElement> StyleSharingCache<E> {
         visited_rules: Option<&StrongRuleNode>,
         target: E,
     ) -> Option<PrimaryStyle> {
-        if shared_context.options.disable_style_sharing_cache {
+        if shared_context.options.disable_style_sharing_cache || target.has_anchor_layout_inputs() {
             return None;
         }
 
