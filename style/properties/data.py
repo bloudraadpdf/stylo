@@ -1235,6 +1235,8 @@ class PropertyRestrictions:
             + PropertyRestrictions.spec(data, "css-text")
             + PropertyRestrictions.spec(data, "css-shapes")
             + PropertyRestrictions.spec(data, "css-text-decor")
+            # Animations apply to all elements (CSS Animations 1); CSS Pseudo 4 §2.2 allows other properties.
+            + PropertyRestrictions.spec(data, "css-animations")
         )
         props = props.union(PropertyRestrictions.svg_text_properties())
         props = props.union(PropertyRestrictions.webkit_text_properties())
@@ -1265,6 +1267,8 @@ class PropertyRestrictions:
             + PropertyRestrictions.spec(data, "css-backgrounds")
             + PropertyRestrictions.spec(data, "css-text")
             + PropertyRestrictions.spec(data, "css-text-decor")
+            # Animations apply to all elements (CSS Animations 1); CSS Pseudo 4 §2.1.2 allows other properties.
+            + PropertyRestrictions.spec(data, "css-animations")
         )
         props = props.union(PropertyRestrictions.svg_text_properties())
         props = props.union(PropertyRestrictions.webkit_text_properties())

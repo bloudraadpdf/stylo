@@ -52,6 +52,11 @@ pub trait PseudoElement: Sized + ToCss {
         false
     }
 
+    /// Whether `:current` can follow this pseudo-element.
+    fn accepts_current_pseudo_class(&self) -> bool {
+        false
+    }
+
     /// Whether this pseudo-element is valid after a ::slotted(..) pseudo.
     fn valid_after_slotted(&self) -> bool {
         false
@@ -119,6 +124,11 @@ pub trait NonTSPseudoClass: Sized + ToCss {
 
     /// Whether this pseudo-class is `:focus-within`.
     fn is_focus_within(&self) -> bool {
+        false
+    }
+
+    /// Whether this pseudo-class is `:current`.
+    fn is_current(&self) -> bool {
         false
     }
 
@@ -201,6 +211,9 @@ bitflags! {
 
         /// Whether the last pseudo-element we parsed is ::column, which only some pseudo-elements can follow.
         const AFTER_COLUMN_PSEUDO = 1 << 12;
+
+        /// The pseudo-element permits `:current` after it.
+        const AFTER_CURRENT_PSEUDO = 1 << 13;
     }
 }
 
@@ -3478,6 +3491,10 @@ where
                     p.accepts_focus_within_pseudo_class(),
                 );
                 state.set(
+                    SelectorParsingState::AFTER_CURRENT_PSEUDO,
+                    p.accepts_current_pseudo_class(),
+                );
+                state.set(
                     SelectorParsingState::AFTER_NON_STATEFUL_PSEUDO_ELEMENT,
                     !p.accepts_state_pseudo_classes(),
                 );
@@ -3828,7 +3845,8 @@ where
     P: Parser<'i, Impl = Impl>,
     Impl: SelectorImpl,
 {
-    if !state.allows_non_functional_pseudo_classes() {
+    let after_current_pseudo = state.intersects(SelectorParsingState::AFTER_CURRENT_PSEUDO);
+    if !state.allows_non_functional_pseudo_classes() && !after_current_pseudo {
         return Err(location.new_custom_error(SelectorParseErrorKind::InvalidState));
     }
 
@@ -3865,6 +3883,12 @@ where
     }
 
     let pseudo_class = P::parse_non_ts_pseudo_class(parser, location, name)?;
+    if after_current_pseudo && pseudo_class.is_current() {
+        return Ok(Component::NonTSPseudoClass(pseudo_class));
+    }
+    if !state.allows_non_functional_pseudo_classes() {
+        return Err(location.new_custom_error(SelectorParseErrorKind::InvalidState));
+    }
     if state.intersects(SelectorParsingState::AFTER_NON_ELEMENT_BACKED_PSEUDO)
         && !pseudo_class.is_user_action_state()
         && !(state.intersects(SelectorParsingState::AFTER_ENABLEABLE_PSEUDO)

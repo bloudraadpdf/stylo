@@ -334,6 +334,11 @@ impl ::selectors::parser::PseudoElement for PseudoElement {
         matches!(self, Self::ScrollMarkerGroup | Self::ScrollMarker | Self::ScrollButton(_))
     }
 
+    /// `:current` represents the focused match of `::search-text` (CSS Pseudo 4 §3.1).
+    fn accepts_current_pseudo_class(&self) -> bool {
+        matches!(self, Self::SearchText)
+    }
+
     fn valid_after_slotted(&self) -> bool {
         matches!(
             self,
@@ -734,6 +739,7 @@ pub enum NonTSPseudoClass {
     BdNoContent,
     BdStaticForm,
     Checked,
+    Current,
     /// The :state` pseudo-class.
     CustomState(CustomState),
     Default,
@@ -809,6 +815,10 @@ impl ::selectors::parser::NonTSPseudoClass for NonTSPseudoClass {
         matches!(self, Self::FocusWithin)
     }
 
+    fn is_current(&self) -> bool {
+        matches!(self, Self::Current)
+    }
+
     fn visit<V>(&self, _: &mut V) -> bool
     where
         V: SelectorVisitor<Impl = Self::Impl>,
@@ -860,6 +870,7 @@ impl ToCss for NonTSPseudoClass {
             Self::BdNoContent => ":-bd-no-content",
             Self::BdStaticForm => ":-bd-static-form",
             Self::Checked => ":checked",
+            Self::Current => ":current",
             Self::CustomState(ref state) => {
                 dest.write_str(":state(")?;
                 state.0.to_css(dest)?;
@@ -956,6 +967,7 @@ impl NonTSPseudoClass {
             Self::Dir(ref direction) => direction.element_state(),
             Self::BdNoContent
             | Self::BdStaticForm
+            | Self::Current
             | Self::CustomState(_)
             | Self::Heading(_)
             | Self::Lang(_)
@@ -1062,6 +1074,7 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             "any-link" => NonTSPseudoClass::AnyLink,
             "autofill" => NonTSPseudoClass::Autofill,
             "checked" => NonTSPseudoClass::Checked,
+            "current" => NonTSPseudoClass::Current,
             "default" => NonTSPseudoClass::Default,
             "defined" => NonTSPseudoClass::Defined,
             "disabled" => NonTSPseudoClass::Disabled,
