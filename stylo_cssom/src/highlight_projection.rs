@@ -16,6 +16,8 @@ pub fn project_custom_highlight_root(root: &InternalStylesheetRoot) -> InternalS
     )
 }
 
+/// Rewrite each highlight selector to also match the projection wrappers of the highlighted text, keeping the
+/// pseudo-element selector, which the highlight cascade of the originating element matches (CSS Pseudo 4 §3.5).
 pub fn project_highlight_selectors(css: &str) -> String {
     const PSEUDO: &[u8] = b"::highlight(";
     const SIMPLE_HIGHLIGHTS: &[(&[u8], &str)] = &[
@@ -29,6 +31,8 @@ pub fn project_highlight_selectors(css: &str) -> String {
     let mut quote = None;
     let mut comment = false;
     let mut selector_start = 0;
+    let mut source_selector_start = 0;
+    let mut projected = false;
     let mut depth = 0_usize;
     while index < bytes.len() {
         if comment {
@@ -77,6 +81,7 @@ pub fn project_highlight_selectors(css: &str) -> String {
                 push_css_string(&mut filter, &name);
                 filter.push_str("\"]");
                 push_projected_highlight(&mut output, selector_start, &filter);
+                projected = true;
                 index = name_end + 1;
                 continue;
             }
@@ -92,15 +97,23 @@ pub fn project_highlight_selectors(css: &str) -> String {
                     })
         }) {
             push_projected_highlight(&mut output, selector_start, &format!("[{attribute}]"));
+            projected = true;
             index += pseudo.len();
             continue;
         }
         let byte = bytes[index];
+        if projected && depth == 0 && matches!(byte, b'{' | b',') {
+            push_pseudo_element_selector(&mut output, css[source_selector_start..index].trim());
+        }
         copy_next_char(css, &mut output, &mut index);
         match byte {
             b'(' => depth += 1,
             b')' => depth = depth.saturating_sub(1),
-            b'{' | b'}' | b';' | b',' if depth == 0 => selector_start = output.len(),
+            b'{' | b'}' | b';' | b',' if depth == 0 => {
+                selector_start = output.len();
+                source_selector_start = index;
+                projected = false;
+            },
             _ => {},
         }
     }
@@ -131,6 +144,15 @@ fn push_projected_highlight(output: &mut String, selector_start: usize, filter: 
     output.push_str(":where(");
     output.push_str(filter);
     output.push(')');
+}
+
+/// Append the original pseudo-element `selector` to the projected selector list when it parses on its own, so an
+/// unsupported pseudo-element selector does not invalidate the projected rule.
+fn push_pseudo_element_selector(output: &mut String, selector: &str) {
+    if crate::selector_query::parse_selector(selector).is_ok() {
+        let end = output.trim_end().len();
+        output.insert_str(end, &format!(", {selector}"));
+    }
 }
 
 fn copy_next_char(source: &str, output: &mut String, offset: &mut usize) {
@@ -205,7 +227,7 @@ mod tests {
     fn target_text_projection_retains_origin_and_selector_lists() {
         assert_eq!(
             project_highlight_selectors("p::TARGET-TEXT, .marked { color: lime }"),
-            ":is(p:where(:not(moegoe-highlight)) > moegoe-highlight, p:where(:not(moegoe-highlight)) > moegoe-highlight moegoe-highlight):where([data-moegoe-target-text]), .marked { color: lime }"
+            ":is(p:where(:not(moegoe-highlight)) > moegoe-highlight, p:where(:not(moegoe-highlight)) > moegoe-highlight moegoe-highlight):where([data-moegoe-target-text]), p::TARGET-TEXT, .marked { color: lime }"
         );
         assert_eq!(
             project_highlight_selectors("::target-textual { color: red }"),
@@ -213,7 +235,7 @@ mod tests {
         );
         assert_eq!(
             project_highlight_selectors("p::target-text { content: '::target-text' }"),
-            ":is(p:where(:not(moegoe-highlight)) > moegoe-highlight, p:where(:not(moegoe-highlight)) > moegoe-highlight moegoe-highlight):where([data-moegoe-target-text]) { content: '::target-text' }"
+            ":is(p:where(:not(moegoe-highlight)) > moegoe-highlight, p:where(:not(moegoe-highlight)) > moegoe-highlight moegoe-highlight):where([data-moegoe-target-text]), p::target-text { content: '::target-text' }"
         );
     }
 
@@ -223,8 +245,8 @@ mod tests {
         assert_eq!(
             project_highlight_selectors(css),
             concat!(
-                "moegoe-highlight:where([data-moegoe-custom-highlight=\"note\"]), ",
-                ":is(#owner:where(:not(moegoe-highlight)) > moegoe-highlight, #owner:where(:not(moegoe-highlight)) > moegoe-highlight moegoe-highlight):where([data-moegoe-custom-highlight=\"mark\"]) ",
+                "moegoe-highlight:where([data-moegoe-custom-highlight=\"note\"]), ::highlight(note), ",
+                ":is(#owner:where(:not(moegoe-highlight)) > moegoe-highlight, #owner:where(:not(moegoe-highlight)) > moegoe-highlight moegoe-highlight):where([data-moegoe-custom-highlight=\"mark\"]), #owner::HIGHLIGHT(mark) ",
                 "{ color: blue } p { color: red }"
             )
         );
@@ -236,8 +258,8 @@ mod tests {
         assert_eq!(
             project_highlight_selectors(css),
             concat!(
-                "moegoe-highlight:where([data-moegoe-selection]), ",
-                ":is(#owner:where(:not(moegoe-highlight)) > moegoe-highlight, #owner:where(:not(moegoe-highlight)) > moegoe-highlight moegoe-highlight):where([data-moegoe-selection]) { color: blue }"
+                "moegoe-highlight:where([data-moegoe-selection]), ::selection, ",
+                ":is(#owner:where(:not(moegoe-highlight)) > moegoe-highlight, #owner:where(:not(moegoe-highlight)) > moegoe-highlight moegoe-highlight):where([data-moegoe-selection]), #owner::SELECTION { color: blue }"
             )
         );
     }
@@ -247,14 +269,14 @@ mod tests {
         assert_eq!(
             project_highlight_selectors("main .M::selection, div ::selection, div > ::selection {}"),
             concat!(
-                ":is(main .M:where(:not(moegoe-highlight)) > moegoe-highlight, main .M:where(:not(moegoe-highlight)) > moegoe-highlight moegoe-highlight):where([data-moegoe-selection]), ",
-                ":is(div :where(:not(moegoe-highlight)) > moegoe-highlight, div :where(:not(moegoe-highlight)) > moegoe-highlight moegoe-highlight):where([data-moegoe-selection]), ",
-                ":is(div > :where(:not(moegoe-highlight)) > moegoe-highlight, div > :where(:not(moegoe-highlight)) > moegoe-highlight moegoe-highlight):where([data-moegoe-selection]) {}"
+                ":is(main .M:where(:not(moegoe-highlight)) > moegoe-highlight, main .M:where(:not(moegoe-highlight)) > moegoe-highlight moegoe-highlight):where([data-moegoe-selection]), main .M::selection, ",
+                ":is(div :where(:not(moegoe-highlight)) > moegoe-highlight, div :where(:not(moegoe-highlight)) > moegoe-highlight moegoe-highlight):where([data-moegoe-selection]), div ::selection, ",
+                ":is(div > :where(:not(moegoe-highlight)) > moegoe-highlight, div > :where(:not(moegoe-highlight)) > moegoe-highlight moegoe-highlight):where([data-moegoe-selection]), div > ::selection {}"
             )
         );
         assert_eq!(
             project_highlight_selectors(":is(a, b)::selection { color: red }"),
-            ":is(:is(a, b):where(:not(moegoe-highlight)) > moegoe-highlight, :is(a, b):where(:not(moegoe-highlight)) > moegoe-highlight moegoe-highlight):where([data-moegoe-selection]) { color: red }"
+            ":is(:is(a, b):where(:not(moegoe-highlight)) > moegoe-highlight, :is(a, b):where(:not(moegoe-highlight)) > moegoe-highlight moegoe-highlight):where([data-moegoe-selection]), :is(a, b)::selection { color: red }"
         );
     }
 
@@ -277,8 +299,8 @@ mod tests {
             project_custom_highlight_root(&root).projection_serialization(),
             concat!(
                 "@container (width >= 400px) {",
-                "moegoe-highlight:where([data-moegoe-selection]) { color: green } ",
-                "moegoe-highlight:where([data-moegoe-custom-highlight=\"hi\"]) { color: green }}"
+                "moegoe-highlight:where([data-moegoe-selection]), ::selection { color: green } ",
+                "moegoe-highlight:where([data-moegoe-custom-highlight=\"hi\"]), ::highlight(hi) { color: green }}"
             )
         );
     }
@@ -347,7 +369,7 @@ mod tests {
     fn escaped_highlight_names_match_the_registry_string() {
         assert_eq!(
             project_highlight_selectors("::highlight(\\66 oo) { color: green }"),
-            "moegoe-highlight:where([data-moegoe-custom-highlight=\"foo\"]) { color: green }"
+            "moegoe-highlight:where([data-moegoe-custom-highlight=\"foo\"]), ::highlight(\\66 oo) { color: green }"
         );
     }
 }
