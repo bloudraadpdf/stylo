@@ -571,28 +571,25 @@ impl AnchorScope {
 )]
 #[repr(u8)]
 pub enum PositionAnchorKeyword {
+    /// `normal`
+    Normal,
     /// `none`
     None,
     /// `auto`
     Auto,
+    /// `match-parent`
+    MatchParent,
     /// `<dashed-ident>`
     Ident(DashedIdent),
-}
-
-impl PositionAnchorKeyword {
-    /// Return the `none` value.
-    pub fn none() -> Self {
-        Self::None
-    }
 }
 
 /// https://drafts.csswg.org/css-anchor-position-1/#propdef-position-anchor
 pub type PositionAnchor = TreeScoped<PositionAnchorKeyword>;
 
 impl PositionAnchor {
-    /// Return the `none` value.
-    pub fn none() -> Self {
-        Self::with_default_level(PositionAnchorKeyword::none())
+    /// Return the `normal` value.
+    pub fn normal() -> Self {
+        Self::with_default_level(PositionAnchorKeyword::Normal)
     }
 }
 
