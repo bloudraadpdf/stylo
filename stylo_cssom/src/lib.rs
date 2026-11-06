@@ -64,7 +64,6 @@ pub fn is_valid_custom_property_name(name: &str) -> bool {
                 || (!c.is_ascii() && !c.is_control() && !c.is_whitespace())
         })
 }
-pub mod position_try_shorthand_rewrite;
 pub mod specified;
 mod style_fragment_parser;
 pub mod symbols_function_rewrite;

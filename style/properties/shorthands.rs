@@ -3141,7 +3141,6 @@ pub mod grid_area {
     }
 }
 
-#[cfg(feature = "gecko")]
 pub mod position_try {
     pub use crate::properties::shorthands_generated::position_try::*;
 
@@ -3152,12 +3151,15 @@ pub mod position_try {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Longhands, ParseError<'i>> {
+        #[cfg(feature = "gecko")]
         let order =
             if static_prefs::pref!("layout.css.anchor-positioning.position-try-order.enabled") {
                 input.try_parse(PositionTryOrder::parse).ok()
             } else {
                 None
             };
+        #[cfg(feature = "servo")]
+        let order = input.try_parse(PositionTryOrder::parse).ok();
         let fallbacks = PositionTryFallbacks::parse(context, input)?;
         Ok(expanded! {
             position_try_order: order.unwrap_or(PositionTryOrder::normal()),
@@ -3170,11 +3172,13 @@ pub mod position_try {
         where
             W: fmt::Write,
         {
-            if let Some(o) = self.position_try_order {
-                if *o != PositionTryOrder::Normal {
-                    o.to_css(dest)?;
-                    dest.write_char(' ')?;
-                }
+            #[cfg(feature = "gecko")]
+            let order = self.position_try_order;
+            #[cfg(feature = "servo")]
+            let order = Some(self.position_try_order);
+            if let Some(order) = order.filter(|order| **order != PositionTryOrder::Normal) {
+                order.to_css(dest)?;
+                dest.write_char(' ')?;
             }
             self.position_try_fallbacks.to_css(dest)
         }

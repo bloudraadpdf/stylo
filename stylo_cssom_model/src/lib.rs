@@ -317,7 +317,6 @@ impl ComputedRetainedKeywordClass {
 pub enum AdapterRoute {
     Unsupported,
     Stylo,
-    PositionTryShorthand,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

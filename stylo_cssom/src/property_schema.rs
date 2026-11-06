@@ -50,14 +50,7 @@ fn native_properties_resolve_their_matching_schema() {
     use style::properties::property_counts;
     use stylo_cssom_model::STANDARD_PROPERTIES;
 
-    let adapted = STANDARD_PROPERTIES
-        .iter()
-        .filter(|row| matches!(row.parser, stylo_cssom_model::AdapterRoute::PositionTryShorthand))
-        .count();
-    assert_eq!(
-        STANDARD_PROPERTIES.len(),
-        property_counts::LONGHANDS_AND_SHORTHANDS + adapted
-    );
+    assert_eq!(STANDARD_PROPERTIES.len(), property_counts::LONGHANDS_AND_SHORTHANDS);
     let native = style::properties::LonghandId::ALL
         .iter()
         .map(|id| PropertyId::NonCustom((*id).into()))

@@ -1,20 +1,16 @@
 use std::sync::Arc;
 
 use cssparser::{Parser, ParserInput, Token, parse_important};
-use style::values::specified::position::{
-    PositionTryOrder, SpecifiedPositionTryFallbacks as PositionTryFallbacks,
-};
 use style::{
     parser::{Parse, ParserContext},
     properties::{
-        CSSWideKeyword, Importance, PropertyDeclaration, PropertyId, SourcePropertyDeclaration,
+        Importance, PropertyDeclaration, PropertyId, SourcePropertyDeclaration,
         declaration_block::{
             SourcePropertyDeclarationUpdate, parse_one_declaration_into, parse_style_attribute,
         },
     },
     stylesheets::{CssRuleType, Namespaces, Origin, UrlExtraData},
 };
-use style_traits::ToCss;
 use style_traits::ParsingMode;
 
 use crate::{
@@ -107,145 +103,6 @@ impl CssomDeclarationContext {
             Self::Style | Self::Margin => CssRuleType::Style,
         }
     }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-enum SpecifiedPositionTryShorthand {
-    CssWide(CSSWideKeyword),
-    Longhands {
-        order: PositionTryOrder,
-        fallbacks: PositionTryFallbacks,
-    },
-}
-
-impl SpecifiedPositionTryShorthand {
-    fn parse(css: &str) -> Option<Self> {
-        if let Ok(keyword) = CSSWideKeyword::from_ident(css.trim()) {
-            return Some(Self::CssWide(keyword));
-        }
-        parse_fragment_with(css, |context, input| {
-            let order = input
-                .try_parse(PositionTryOrder::parse)
-                .unwrap_or_else(|_| PositionTryOrder::normal());
-            let fallbacks = PositionTryFallbacks::parse(context, input)?;
-            Ok(Self::Longhands { order, fallbacks })
-        })
-    }
-
-    fn declarations(self) -> Option<SourcePropertyDeclaration> {
-        match self {
-            Self::CssWide(keyword) => css_wide_longhand_declarations(
-                &["position-try-order", "position-try-fallbacks"],
-                keyword,
-            ),
-            Self::Longhands { order, fallbacks } => {
-                let mut declarations = SourcePropertyDeclaration::default();
-                declarations.push(PropertyDeclaration::PositionTryOrder(order));
-                declarations.push(PropertyDeclaration::PositionTryFallbacks(fallbacks));
-                Some(declarations)
-            },
-        }
-    }
-}
-
-pub fn position_try_shorthand_is_valid(value: &str) -> bool {
-    SpecifiedPositionTryShorthand::parse(value).is_some()
-}
-
-pub(crate) fn adapter_shorthand_is_valid(property: &str, value: &str) -> Option<bool> {
-    use stylo_cssom_model::AdapterRoute;
-
-    match inline_style_cssom_property_schema(property)?.parser {
-        AdapterRoute::PositionTryShorthand => Some(position_try_shorthand_is_valid(value)),
-        AdapterRoute::Stylo | AdapterRoute::Unsupported => None,
-    }
-}
-
-pub(crate) fn adapter_supports_declaration(css: &str) -> Option<bool> {
-    parse_fragment_with(css, |_, input| {
-        let property = input.expect_ident_cloned()?;
-        input.expect_colon()?;
-        let supported = input.parse_until_before(cssparser::Delimiter::Bang, |input| {
-            let start = input.position();
-            input.expect_no_error_token()?;
-            Ok(adapter_shorthand_is_valid(
-                &property,
-                input.slice_from(start),
-            ))
-        })?;
-        let _ = input.try_parse(cssparser::parse_important);
-        Ok(supported)
-    })
-    .flatten()
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PositionTryShorthandLonghands {
-    order: String,
-    fallbacks: String,
-}
-
-impl PositionTryShorthandLonghands {
-    pub fn order(&self) -> &str {
-        &self.order
-    }
-
-    pub fn fallbacks(&self) -> &str {
-        &self.fallbacks
-    }
-}
-
-pub fn position_try_shorthand_longhands(value: &str) -> Option<PositionTryShorthandLonghands> {
-    Some(match SpecifiedPositionTryShorthand::parse(value)? {
-        SpecifiedPositionTryShorthand::CssWide(keyword) => PositionTryShorthandLonghands {
-            order: keyword.to_str().to_owned(),
-            fallbacks: keyword.to_str().to_owned(),
-        },
-        SpecifiedPositionTryShorthand::Longhands { order, fallbacks } => {
-            PositionTryShorthandLonghands {
-                order: order.to_css_string(),
-                fallbacks: fallbacks.to_css_string(),
-            }
-        },
-    })
-}
-
-fn css_wide_longhand_declarations(
-    properties: &[&str],
-    keyword: CSSWideKeyword,
-) -> Option<SourcePropertyDeclaration> {
-    let mut declarations = SourcePropertyDeclaration::default();
-    for property in properties {
-        let id = PropertyId::parse_enabled_for_all_content(property).ok()?;
-        let url_data: UrlExtraData = ABOUT_BLANK.clone().into();
-        let mut longhand = SourcePropertyDeclaration::default();
-        parse_one_declaration_into(
-            &mut longhand,
-            id,
-            keyword.to_str(),
-            Origin::Author,
-            &url_data,
-            None,
-            ParsingMode::DEFAULT,
-            selectors::matching::QuirksMode::NoQuirks,
-            CssRuleType::Style,
-        )
-        .ok()?;
-        for declaration in longhand.drain().declarations {
-            declarations.push(declaration);
-        }
-    }
-    Some(declarations)
-}
-
-fn apply_parsed_shorthand(
-    block: &mut style::properties::declaration_block::PropertyDeclarationBlock,
-    declarations: Option<SourcePropertyDeclaration>,
-    priority: CssomDeclarationPriority,
-) -> bool {
-    declarations.is_some_and(|declarations| {
-        declaration_block_apply_declarations(block, declarations, priority)
-    })
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1141,10 +998,6 @@ fn declaration_block_get_property_value(
     block: &style::properties::declaration_block::PropertyDeclarationBlock,
     property: &str,
 ) -> Option<String> {
-    let adapter = inline_style_cssom_property_schema(property).map(|schema| schema.serializer);
-    if adapter == Some(stylo_cssom_model::AdapterRoute::PositionTryShorthand) {
-        return position_try_shorthand_value(block);
-    }
     let id = stylo_serialized_property_id(property)?;
     let present = matches!(&id, PropertyId::Custom(_))
         && id
@@ -1154,45 +1007,6 @@ fn declaration_block_get_property_value(
     let mut out = String::new();
     block.property_value_to_css(&id, &mut out).ok()?;
     (!out.is_empty() || present).then_some(out)
-}
-
-enum ShorthandCssWideValue {
-    Absent,
-    Uniform(CSSWideKeyword),
-}
-
-impl ShorthandCssWideValue {
-    fn from_longhands(first: &str, second: &str) -> Option<Self> {
-        match (
-            CSSWideKeyword::from_ident(first),
-            CSSWideKeyword::from_ident(second),
-        ) {
-            (Err(()), Err(())) => Some(Self::Absent),
-            (Ok(first), Ok(second)) if first == second => Some(Self::Uniform(first)),
-            _ => None,
-        }
-    }
-}
-
-fn position_try_shorthand_value(
-    block: &style::properties::declaration_block::PropertyDeclarationBlock,
-) -> Option<String> {
-    let order_id = PropertyId::parse_enabled_for_all_content("position-try-order").ok()?;
-    let fallbacks_id = PropertyId::parse_enabled_for_all_content("position-try-fallbacks").ok()?;
-    if block.property_priority(&order_id) != block.property_priority(&fallbacks_id) {
-        return None;
-    }
-    let order = declaration_block_get_property_value(block, "position-try-order")?;
-    let fallbacks = declaration_block_get_property_value(block, "position-try-fallbacks")?;
-    if let ShorthandCssWideValue::Uniform(keyword) =
-        ShorthandCssWideValue::from_longhands(&order, &fallbacks)?
-    {
-        Some(keyword.to_str().to_owned())
-    } else if order == "normal" {
-        Some(fallbacks)
-    } else {
-        Some(format!("{order} {fallbacks}"))
-    }
 }
 
 fn stylo_serialized_property_id(property: &str) -> Option<PropertyId> {
@@ -1591,23 +1405,6 @@ fn declaration_block_set_property_with_context(
     url_data: &UrlExtraData,
     namespaces: &Namespaces,
 ) -> bool {
-    if matches!(rule_type, CssRuleType::Style) {
-        match inline_style_cssom_property_schema(property).map(|schema| schema.parser) {
-            Some(stylo_cssom_model::AdapterRoute::PositionTryShorthand) => {
-                return apply_parsed_shorthand(
-                    block,
-                    SpecifiedPositionTryShorthand::parse(value)
-                        .and_then(SpecifiedPositionTryShorthand::declarations),
-                    priority,
-                );
-            },
-            Some(
-                stylo_cssom_model::AdapterRoute::Stylo
-                | stylo_cssom_model::AdapterRoute::Unsupported,
-            )
-            | None => {},
-        }
-    }
     let context = declaration_parser_context(rule_type, url_data, namespaces);
     let Ok(id) = PropertyId::parse(property, &context) else {
         return false;
