@@ -267,6 +267,15 @@ const GROUP_MARGIN_PROPERTIES: [&str; 11] = [
     "margin-inline-end",
 ];
 
+/// The outline of a group (CSS UI 4 §5).
+const GROUP_OUTLINE_PROPERTIES: [&str; 5] = [
+    "outline",
+    "outline-color",
+    "outline-style",
+    "outline-width",
+    "outline-offset",
+];
+
 /// The corner radii of a group, which round its background (CSS Backgrounds 3 §5.2).
 const GROUP_RADIUS_PROPERTIES: [&str; 9] = [
     "border-radius",
@@ -300,6 +309,11 @@ fn append_projected_style_tree_rules(rule: &mut String, prelude: &str, body: &st
         rule,
         group_selectors.clone(),
         project_declarations(body, &GROUP_MARGIN_PROPERTIES, None),
+    );
+    append_projected_rule(
+        rule,
+        group_selectors.clone(),
+        project_declarations(body, &GROUP_OUTLINE_PROPERTIES, None),
     );
     let insets = project_declarations(body, &GROUP_INSET_PROPERTIES, None);
     append_projected_rule(
@@ -1345,6 +1359,15 @@ mod tests {
         );
 
         assert!(rewritten.contains("{margin:-10px 0 0 -10px;margin-inline-start:2px;}"));
+    }
+
+    #[test]
+    fn projects_group_outlines_to_the_style_tree() {
+        let rewritten = rewrite_view_transition_root(
+            "html::view-transition-group(target){outline:5px solid red;outline-offset:2px;color:red}",
+        );
+
+        assert!(rewritten.contains("{outline:5px solid red;outline-offset:2px;}"));
     }
 
     #[test]
