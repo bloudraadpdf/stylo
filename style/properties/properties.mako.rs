@@ -1958,6 +1958,13 @@ impl ComputedValues {
         })
     }
 
+    /// Replaces the computed values of this style for a visited relevant link.
+    pub fn set_visited_style(&mut self, visited: Arc<ComputedValues>) {
+        let mut rare = self.inner.rare.as_deref().cloned().unwrap_or_default();
+        rare.visited_style = Some(visited);
+        self.inner.rare = Some(Arc::new(rare));
+    }
+
     /// Records `base`, the style before the position option of this style applied.
     pub fn set_position_option_base(&mut self, base: Arc<ComputedValues>) {
         let mut rare = self.inner.rare.as_deref().cloned().unwrap_or_default();
