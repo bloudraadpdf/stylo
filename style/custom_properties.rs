@@ -1624,6 +1624,43 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
             }
         }
 
+        let resolved_keyword = match value {
+            CustomDeclarationValue::Unparsed(value)
+                if value.references.any_function
+                    && !value.references.any_var
+                    && !value.references.any_attr =>
+            {
+                let dependencies = functions::FunctionDependencies::new(
+                    value,
+                    &self
+                        .computed_context
+                        .function_scope(priority.cascade_level()),
+                );
+                if dependencies.names.is_empty()
+                    && dependencies.non_custom_references.is_empty()
+                    && dependencies.dependent_types.is_empty()
+                    && !dependencies.any_attr
+                {
+                    Substitutor::new(
+                        &self.custom_properties,
+                        self.stylist,
+                        self.computed_context,
+                        EnvironmentResolutionMode::ResolveLiveEnvironment,
+                        attribute_tracker,
+                        Some(priority.cascade_level()),
+                    )
+                    .substitute_value(value, None)
+                    .ok()
+                    .and_then(|value| functions::keyword(&value.css))
+                    .map(CustomDeclarationValue::CSSWideKeyword)
+                } else {
+                    None
+                }
+            },
+            _ => None,
+        };
+        let value = resolved_keyword.as_ref().unwrap_or(value);
+
         if matches!(
             value,
             CustomDeclarationValue::CSSWideKeyword(CSSWideKeyword::RevertRule)

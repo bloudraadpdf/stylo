@@ -438,7 +438,7 @@ impl<'a> FunctionCalls<'a> {
     }
 }
 
-fn keyword(css: &str) -> Option<CSSWideKeyword> {
+pub(super) fn keyword(css: &str) -> Option<CSSWideKeyword> {
     let mut input = ParserInput::new(css);
     Parser::new(&mut input)
         .parse_entirely(|input| {
