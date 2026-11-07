@@ -401,6 +401,23 @@ where
         }
     }
 
+    fn has_class_prefix(&self, prefix: &AtomIdent, case_sensitivity: CaseSensitivity) -> bool {
+        match self.snapshot() {
+            Some(snapshot) if snapshot.has_attrs() => {
+                let mut matched = false;
+                snapshot.each_class(|class| {
+                    matched |= selectors::attr::class_matches_prefix(
+                        class.as_ref(),
+                        prefix.as_ref(),
+                        case_sensitivity,
+                    );
+                });
+                matched
+            },
+            _ => self.element.has_class_prefix(prefix, case_sensitivity),
+        }
+    }
+
     fn has_custom_state(&self, state: &AtomIdent) -> bool {
         match self.snapshot() {
             Some(snapshot) if snapshot.has_custom_states() => snapshot.has_custom_state(state),

@@ -156,6 +156,11 @@ pub trait Element: Sized + Clone + Debug {
         None
     }
 
+    /// Flattened assigned elements for the experimental functional slot query.
+    fn flattened_assigned_elements(&self) -> Vec<Self> {
+        Vec::new()
+    }
+
     fn has_id(
         &self,
         id: &<Self::Impl as SelectorImpl>::Identifier,
@@ -165,6 +170,12 @@ pub trait Element: Sized + Clone + Debug {
     fn has_class(
         &self,
         name: &<Self::Impl as SelectorImpl>::Identifier,
+        case_sensitivity: CaseSensitivity,
+    ) -> bool;
+
+    fn has_class_prefix(
+        &self,
+        prefix: &<Self::Impl as SelectorImpl>::Identifier,
         case_sensitivity: CaseSensitivity,
     ) -> bool;
 

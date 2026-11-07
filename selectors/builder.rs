@@ -343,10 +343,16 @@ where
                 *specificity += Specificity::from(selector.specificity());
                 flags.insert(selector.flags());
             },
+            Component::HasSlotted(ref selector) => {
+                specificity.class_like_selectors += 1;
+                *specificity += Specificity::from(selector.specificity());
+                flags.insert(selector.flags());
+            },
             Component::ID(..) => {
                 specificity.id_selectors += 1;
             },
             Component::Class(..)
+            | Component::ClassPrefix(..)
             | Component::AttributeInNoNamespace { .. }
             | Component::AttributeInNoNamespaceExists { .. }
             | Component::AttributeOther(..)

@@ -1499,6 +1499,12 @@ fn on_simple_selector<C: Collector>(
                 TSStateForInvalidation::empty(),
             ))
         },
+        Component::ClassPrefix(..) => {
+            add_attr_dependency(local_name!("class"), collector)?;
+            Ok(ComponentVisitResult::Handled(
+                TSStateForInvalidation::empty(),
+            ))
+        },
         Component::ImplicitScope | Component::Scope => {
             on_scope(collector)?;
             Ok(ComponentVisitResult::Handled(

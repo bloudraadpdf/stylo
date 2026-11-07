@@ -2235,6 +2235,18 @@ impl<'le> ::selectors::Element for GeckoElement<'le> {
         snapshot_helpers::has_class_or_part(name, case_sensitivity, attr)
     }
 
+    fn has_class_prefix(&self, prefix: &AtomIdent, case_sensitivity: CaseSensitivity) -> bool {
+        let mut matched = false;
+        self.each_class(|class| {
+            matched |= selectors::attr::class_matches_prefix(
+                class.as_ref(),
+                prefix.as_ref(),
+                case_sensitivity,
+            );
+        });
+        matched
+    }
+
     #[inline]
     fn has_custom_state(&self, state: &AtomIdent) -> bool {
         if !self.is_html_element() {

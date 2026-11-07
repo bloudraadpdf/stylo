@@ -168,7 +168,10 @@ pub fn css_contains_class_or_id_selector(css: &str) -> bool {
     impl selectors::visitor::SelectorVisitor for Visitor {
         type Impl = SelectorImpl;
         fn visit_simple_selector(&mut self, component: &Component<SelectorImpl>) -> bool {
-            self.0 |= matches!(component, Component::ID(_) | Component::Class(_));
+            self.0 |= matches!(
+                component,
+                Component::ID(_) | Component::Class(_) | Component::ClassPrefix(_)
+            );
             !self.0
         }
     }

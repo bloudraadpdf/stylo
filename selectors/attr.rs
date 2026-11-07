@@ -6,6 +6,41 @@ use crate::parser::SelectorImpl;
 use cssparser::ToCss;
 use std::fmt;
 
+pub fn class_matches_prefix(class: &str, prefix: &str, case_sensitivity: CaseSensitivity) -> bool {
+    if class.len() <= prefix.len() || class.as_bytes()[prefix.len()] == b'-' {
+        return false;
+    }
+    class
+        .get(..prefix.len())
+        .is_some_and(|start| match case_sensitivity {
+            CaseSensitivity::CaseSensitive => start == prefix,
+            CaseSensitivity::AsciiCaseInsensitive => start.eq_ignore_ascii_case(prefix),
+        })
+}
+
+#[test]
+fn class_prefix_requires_a_complete_dash_separator_and_a_following_character() {
+    use CaseSensitivity::{AsciiCaseInsensitive, CaseSensitive};
+    for (class, prefix, expected) in [
+        ("foo-bar", "foo-", true),
+        ("foo--bar", "foo-", false),
+        ("foo--bar", "foo--", true),
+        ("foo-bar-", "foo-", true),
+        ("foo-bar-", "foo-bar-", false),
+        ("foo-", "foo-", false),
+        ("é-名前", "é-", true),
+        ("foo-BAR", "FOO-", false),
+    ] {
+        assert_eq!(class_matches_prefix(class, prefix, CaseSensitive), expected);
+    }
+    assert!(class_matches_prefix(
+        "FOO-bar",
+        "foo-",
+        AsciiCaseInsensitive
+    ));
+    assert!(!class_matches_prefix("É-bar", "é-", AsciiCaseInsensitive));
+}
+
 #[cfg(feature = "to_shmem")]
 use to_shmem_derive::ToShmem;
 

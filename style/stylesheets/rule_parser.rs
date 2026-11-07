@@ -877,7 +877,7 @@ impl<'a, 'i> AtRuleParser<'i> for NestedRuleParser<'a, 'i> {
                 let cond = SupportsCondition::parse(input)?;
                 AtRulePrelude::Supports(cond)
             },
-            "navigation" => AtRulePrelude::Navigation(NavigationCondition::parse(input)?),
+            "navigation" => AtRulePrelude::Navigation(NavigationCondition::parse(&self.context, input)?),
             // CSS Conditional 5 §3.1 — `@when <when-condition> { … }`.
             // The condition mixes `supports(...)` and `media(...)`
             // functional leaves with `not` / `and` / `or` combinators.

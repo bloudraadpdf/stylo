@@ -247,7 +247,7 @@ impl ToCss for QueryCondition {
 }
 
 /// <https://drafts.csswg.org/css-syntax-3/#typedef-any-value>
-fn serialize_any_value<'i, 't>(
+pub(crate) fn serialize_any_value<'i, 't>(
     input: &mut Parser<'i, 't>,
     output: &mut String,
 ) -> Result<(), ParseError<'i>> {
