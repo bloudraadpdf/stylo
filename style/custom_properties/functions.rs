@@ -7,8 +7,8 @@
 //! <https://drafts.csswg.org/css-mixins-1/#evaluating-custom-functions>
 
 use super::{
-    compute_value, Name, NonCustomReferences, Substitution, SubstitutionFunction, Substitutor,
-    VariableValue,
+    Name, NonCustomReferences, Substitution, SubstitutionFunction, Substitutor, VariableValue,
+    compute_value,
 };
 use crate::computed_value_flags::ComputedValueFlags;
 use crate::dom::{TElement, TNode, TShadowRoot};
@@ -312,6 +312,7 @@ impl FunctionDependencies {
         visiting.push(function);
         self.dependent_types |= function.dependent_types();
         let mut free = Vec::new();
+        let mut inherited = Vec::new();
         for value in function.values() {
             self.non_custom_references |= value.references.non_custom_references;
             self.any_attr |= value.references.any_attr;
@@ -322,6 +323,22 @@ impl FunctionDependencies {
                     .iter()
                     .filter_map(|reference| reference.function.variable_name().cloned()),
             );
+            for reference in &value.references.refs {
+                if let SubstitutionFunction::Inherit(ref arguments) = reference.function {
+                    if let Some(argument) = arguments.first() {
+                        let mut input = ParserInput::new(&value.css[argument.start..argument.end]);
+                        let name = Parser::new(&mut input).parse_entirely(|input| {
+                            let name = input.expect_ident()?;
+                            super::parse_name(name)
+                                .map(crate::Atom::from)
+                                .map_err(|()| input.new_error_for_next_token::<()>())
+                        });
+                        if let Ok(name) = name {
+                            inherited.push(name);
+                        }
+                    }
+                }
+            }
             for name in calls(value) {
                 if let Some((called, offset)) = lookup(scope, offset, name) {
                     free.extend(self.collect(called, scope, offset, visiting));
@@ -330,6 +347,7 @@ impl FunctionDependencies {
         }
         visiting.pop();
         free.retain(|name| !function.binds(name));
+        free.extend(inherited);
         free
     }
 }
@@ -421,6 +439,21 @@ fn owned(substitution: Substitution, url_data: &UrlExtraData) -> VariableValue {
 }
 
 impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
+    pub(super) fn inherit_function(
+        &mut self,
+        frame: Option<usize>,
+        name: &Name,
+    ) -> Option<Substitution<'a>> {
+        if let Some(frame) = frame {
+            return self.variable(self.calls.frames[frame].caller, name);
+        }
+        let registration = self.stylist.get_custom_property_registration(name);
+        self.computed_context
+            .inherited_custom_properties()
+            .get(registration, name)
+            .map(|value| Substitution::from_value(value.to_variable_value()))
+    }
+
     /// The value of `var(name)` seen from `frame`, or from the element.
     pub(super) fn frame_variable(
         &mut self,
@@ -664,6 +697,7 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
 mod tests {
     use super::super::{AttrTaintedRange, DeferredCustomProperties, VariableValue};
     use super::super::{CustomPropertiesBuilder, DeferFontRelativeCustomPropertyResolution};
+    use crate::Atom;
     use crate::applicable_declarations::CascadePriority;
     use crate::context::QuirksMode;
     use crate::dom::{AttributeProvider, AttributeTracker, ExpandedAttributeName};
@@ -675,10 +709,9 @@ mod tests {
     use crate::stylesheets::layer_rule::LayerOrder;
     use crate::stylesheets::{CssRule, DocumentStyleSheet, StylesheetInDocument};
     use crate::stylist::Stylist;
+    use crate::test_support::{BoolPrefGuard, pref_lock};
     use crate::test_support::{parse_stylesheet, test_device};
-    use crate::test_support::{pref_lock, BoolPrefGuard};
     use crate::values::computed::Context;
-    use crate::Atom;
     use servo_arc::Arc;
 
     struct Attributes(&'static [(&'static str, &'static str)]);
@@ -884,6 +917,41 @@ mod tests {
                 "{}-wrapped list argument",
                 "@function --f(--x, --y) { result: var(--x) | var(--y); } \
                  #t { --actual: --f({1px, 2px}, 3px); --expected: 1px, 2px | 3px; }",
+            ),
+        ]);
+    }
+
+    #[test]
+    fn inherit_reads_the_calling_frame() {
+        assert_templates(&[
+            (
+                "element",
+                "@function --f() { --x: FAIL; result: inherit(--x); } \
+                 #t { --x: PASS; --actual: --f(); --expected: PASS; }",
+            ),
+            (
+                "function",
+                "@function --f() { --x: PASS; result: --g(); } \
+                 @function --g() { --x: FAIL; result: inherit(--x); } \
+                 #t { --x: FAIL; --actual: --f(); --expected: PASS; }",
+            ),
+            (
+                "invalid parent value",
+                "@function --f() { --x: var(--missing); result: --g(); } \
+                 @function --g() { --x: FAIL; result: inherit(--x, PASS); } \
+                 #t { --actual: --f(); --expected: PASS; }",
+            ),
+            (
+                "cyclic parent value",
+                "@function --f() { --x: var(--x); result: --g(); } \
+                 @function --g() { --x: FAIL; result: inherit(--x, PASS); } \
+                 #t { --actual: --f(); --expected: PASS; }",
+            ),
+            (
+                "typed parent value",
+                "@function --f(--x <length>) { result: --g(); } \
+                 @function --g() { --x: 14px; result: inherit(--x); } \
+                 #t { --actual: --f(42.0px); --expected: 42px; }",
             ),
         ]);
     }

@@ -28,10 +28,10 @@ use crate::rule_tree::CascadeLevel;
 use crate::selector_map::{PrecomputedHashMap, PrecomputedHashSet};
 use crate::stylesheets::{Namespaces, UrlExtraData};
 use crate::stylist::Stylist;
+use crate::values::DashedIdent;
 use crate::values::computed::{self, ToComputedValue};
 use crate::values::generics::calc::SortKey as AttrUnit;
 use crate::values::specified::{AttrName, FontRelativeLength};
-use crate::values::DashedIdent;
 use cssparser::{
     CowRcStr, Delimiter, Parser, ParserInput, SourcePosition, Token, TokenSerializationType,
 };
@@ -49,8 +49,8 @@ use thin_vec::ThinVec;
 mod functions;
 
 pub use self::functions::{
-    document_function_scope, CallingElement, CustomFunction, ElementCallSite, FunctionBodyItem,
-    FunctionScope,
+    CallingElement, CustomFunction, ElementCallSite, FunctionBodyItem, FunctionScope,
+    document_function_scope,
 };
 
 /// CSS env-1 §3 paged-media environment variables, in CSS pixels.
@@ -653,6 +653,7 @@ enum AttributeType {
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
 enum SubstitutionFunction {
     Var(Name),
+    Inherit(Box<[FunctionArgument]>),
     Env(Name),
     Attr {
         name: AttrName,
@@ -678,7 +679,7 @@ impl SubstitutionFunction {
     fn variable_name(&self) -> Option<&Name> {
         match self {
             Self::Var(name) => Some(name),
-            Self::Env(_) | Self::Attr { .. } | Self::Function { .. } => None,
+            Self::Inherit(_) | Self::Env(_) | Self::Attr { .. } | Self::Function { .. } => None,
         }
     }
 
@@ -1035,13 +1036,19 @@ fn parse_declaration_value_block<'i, 't>(
                 let e = StyleParseErrorKind::UnbalancedCloseCurlyBracketInDeclarationValueBlock;
                 return Err(input.new_custom_error(e));
             },
-            Token::Function(ref name) if name.starts_with("--") => {
+            Token::Function(ref name)
+                if name.starts_with("--") || name.eq_ignore_ascii_case("inherit") =>
+            {
                 let our_ref_index = references.refs.len();
                 let start = token_start.byte_index() - input_start.byte_index();
                 references.refs.push(SubstitutionFunctionReference {
-                    function: SubstitutionFunction::Function {
-                        name: DashedIdent(Atom::from(name.as_ref())),
-                        arguments: Box::default(),
+                    function: if name.starts_with("--") {
+                        SubstitutionFunction::Function {
+                            name: DashedIdent(Atom::from(name.as_ref())),
+                            arguments: Box::default(),
+                        }
+                    } else {
+                        SubstitutionFunction::Inherit(Box::default())
                     },
                     start,
                     end: start,
@@ -1068,13 +1075,19 @@ fn parse_declaration_value_block<'i, 't>(
                 let reference = &mut references.refs[our_ref_index];
                 reference.end = input.position().byte_index() - input_start.byte_index()
                     + missing_closing_characters.len();
-                if let SubstitutionFunction::Function {
-                    ref mut arguments, ..
-                } = reference.function
-                {
-                    *arguments = parsed_arguments;
+                match reference.function {
+                    SubstitutionFunction::Function {
+                        ref mut arguments, ..
+                    } => {
+                        *arguments = parsed_arguments;
+                        references.any_function = true;
+                    },
+                    SubstitutionFunction::Inherit(ref mut arguments) => {
+                        *arguments = parsed_arguments;
+                        references.any_var = true;
+                    },
+                    _ => unreachable!(),
                 }
-                references.any_function = true;
             },
             Token::Function(ref name) => {
                 let substitution_kind = match SubstitutionFunctionKind::from_ident(name).ok() {
@@ -2817,6 +2830,52 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
         };
         let substitution: Option<_> = match &reference.function {
             SubstitutionFunction::Var(name) => self.variable(frame, name),
+            SubstitutionFunction::Inherit(arguments) => {
+                let [name, fallback @ ..] = &**arguments else {
+                    return Err(());
+                };
+                if fallback.len() > 1 {
+                    return Err(());
+                }
+                let name = self
+                    .chunk(
+                        css,
+                        name.start,
+                        name.end,
+                        name.first_token_type,
+                        name.last_token_type,
+                        url_data,
+                        frame,
+                        references,
+                    )
+                    .ok()
+                    .and_then(|name| {
+                        let mut input = ParserInput::new(&name.css);
+                        Parser::new(&mut input)
+                            .parse_entirely(|input| {
+                                let name = input.expect_ident()?;
+                                parse_name(name)
+                                    .map(Atom::from)
+                                    .map_err(|()| input.new_error_for_next_token::<()>())
+                            })
+                            .ok()
+                    });
+                let value = name.and_then(|name| self.inherit_function(frame, &name));
+                match (value, fallback.first()) {
+                    (Some(value), _) => Some(value),
+                    (None, Some(fallback)) => Some(self.chunk(
+                        css,
+                        fallback.start,
+                        fallback.end,
+                        fallback.first_token_type,
+                        fallback.last_token_type,
+                        url_data,
+                        frame,
+                        references,
+                    )?),
+                    (None, None) => None,
+                }
+            },
             SubstitutionFunction::Env(name) => {
                 match self.environment_resolution {
                     EnvironmentResolutionMode::ResolveLiveEnvironment => {
