@@ -286,6 +286,8 @@ mod inline_compatibility_projection_tests {
             ("border-top:1px;border-right:2px;border-bottom:3px;border-left:4px", "border-width: 1px 2px 3px 4px; border-style: none; border-color: currentcolor;"),
             ("width:100px;--a:a;all:inherit;--b:b;height:inherit", "--a: a; all: inherit; --b: b;"),
             ("margin-top:1px;color:red;margin-right:2px;margin-bottom:1px;margin-left:2px", "margin: 1px 2px; color: red;"),
+            ("margin:10px;margin-inline:10px;margin-block:10px;margin-inline-end:10px;margin-bottom:10px", "margin-top: 10px; margin-right: 10px; margin-left: 10px; margin-inline-start: 10px; margin-block: 10px; margin-inline-end: 10px; margin-bottom: 10px;"),
+            ("margin-top:10px;margin-left:10px;margin-right:10px;margin-bottom:10px;margin-inline-start:10px;margin-inline-end:10px;margin-block-start:10px;margin-block-end:10px", "margin: 10px; margin-inline: 10px; margin-block: 10px;"),
             // Overflow 4 makes the prefixed shorthand unconditionally set
             // block-ellipsis:ellipsis; unprefixed none sets no-ellipsis.
             ("-webkit-line-clamp:none", "-webkit-line-clamp: none;"),
@@ -1044,12 +1046,15 @@ fn synthesised_independent_shorthands(
                 let id = style::properties::PropertyId::parse_unchecked(property.schema().name, None).ok()?.longhand_id()?;
                 Some((id.logical_group()?, id.to_physical(style::logical_geometry::WritingMode::empty()) != id))
             };
+            // Do not move an inline-axis shorthand across block-axis members
+            // of its logical group (or vice versa). They are distinct mapping
+            // groups even though both have logical rather than physical names.
             let member_mappings = members.declarations().filter_map(mapping).collect::<Vec<_>>();
             let first = ordered_members[0];
             let last = *ordered_members.last().unwrap();
             if (first..=last).any(|offset| {
                 !ordered_members.contains(&offset) && mapping(&declarations[offset]).is_some_and(|(group, logical)| {
-                    member_mappings.iter().any(|(member_group, member_logical)| *member_group == group && *member_logical != logical)
+                    member_mappings.iter().any(|(member_group, member_logical)| *member_group == group && (*member_logical != logical || logical))
                 })
             }) {
                 continue;

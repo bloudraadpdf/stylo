@@ -360,6 +360,33 @@ pub fn parse_inline_style_declarations(
         .into()
 }
 
+// At-rules in a declaration list are ignored as complete rules. A stray
+// brace instead invalidates the declaration through the next semicolon.
+fn inline_declaration_after_at_rules(css: &str) -> Option<&str> {
+    let mut input = ParserInput::new(css);
+    let mut parser = Parser::new(&mut input);
+    loop {
+        let start = parser.position();
+        match parser.next().ok()? {
+            Token::Ident(_) => return Some(&css[start.byte_index()..]),
+            Token::AtKeyword(_) => loop {
+                match parser.next().ok()? {
+                    Token::CurlyBracketBlock => {
+                        parser.parse_nested_block(|nested| {
+                            while nested.next().is_ok() {}
+                            Ok::<_, cssparser::ParseError<'_, ()>>(())
+                        }).ok()?;
+                        break;
+                    },
+                    Token::Semicolon => break,
+                    _ => {},
+                }
+            },
+            _ => return None,
+        }
+    }
+}
+
 fn inline_native_declarations(
     css: &str,
     base_url: &Arc<str>,
@@ -369,11 +396,9 @@ fn inline_native_declarations(
         .into_iter()
         .enumerate()
     {
-        let authored = &css[range];
-        let mut input = ParserInput::new(authored);
-        if Parser::new(&mut input).expect_ident().is_err() {
+        let Some(authored) = inline_declaration_after_at_rules(&css[range]) else {
             continue;
-        }
+        };
         let empty_custom_property = authored.split_once(':').is_some_and(|(property, value)| {
             property.trim().starts_with("--")
                 && crate::css_scan::trim_ascii(value.as_bytes()).is_empty()
@@ -1771,6 +1796,10 @@ mod tests {
             ("} color:red;z-index:1", "z-index: 1;"),
             ("z-index:1;}color:red", "z-index: 1;"),
             ("/* comment */color:red", "color: red;"),
+            ("@foo{}z-index:1", "z-index: 1;"),
+            ("@foo{nested{color:red}}@bar{}z-index:1", "z-index: 1;"),
+            ("@foo{} }color:red;z-index:1", "z-index: 1;"),
+            ("{}color:red;z-index:1", "z-index: 1;"),
         ] {
             let declarations = parse_inline_style_declarations(source, "about:blank".into());
             assert_eq!(crate::specified::serialize_specified_declarations(&declarations), expected, "{source}");
