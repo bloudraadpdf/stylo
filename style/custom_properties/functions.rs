@@ -375,6 +375,7 @@ struct Frame<'a> {
 /// <https://drafts.csswg.org/css-values-5/#substitution-context>
 struct GuardedContext<'a> {
     function: Option<&'a CustomFunction>,
+    attribute: Option<crate::values::specified::AttrName>,
     cyclic: bool,
 }
 
@@ -400,13 +401,14 @@ impl<'a> FunctionCalls<'a> {
     fn guard(&mut self, function: Option<&'a CustomFunction>) -> usize {
         self.stack.push(GuardedContext {
             function,
+            attribute: None,
             cyclic: false,
         });
         self.stack.len() - 1
     }
 
     /// Ends a guard; returns whether its context became cyclic.
-    fn release(&mut self, entry: usize) -> bool {
+    pub(super) fn release(&mut self, entry: usize) -> bool {
         debug_assert_eq!(entry, self.stack.len() - 1);
         self.stack.pop().is_some_and(|context| context.cyclic)
     }
@@ -415,6 +417,23 @@ impl<'a> FunctionCalls<'a> {
         for context in &mut self.stack[entry..] {
             context.cyclic = true;
         }
+    }
+
+    pub(super) fn guard_attribute(
+        &mut self,
+        name: &crate::values::specified::AttrName,
+    ) -> Result<usize, ()> {
+        if let Some(entry) = self
+            .stack
+            .iter()
+            .position(|context| context.attribute.as_ref() == Some(name))
+        {
+            self.mark_cyclic(entry);
+            return Err(());
+        }
+        let entry = self.guard(None);
+        self.stack[entry].attribute = Some(name.clone());
+        Ok(entry)
     }
 }
 
@@ -612,10 +631,7 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
         arguments: Vec<Option<Substitution<'static>>>,
         url_data: &UrlExtraData,
     ) -> Option<Substitution<'a>> {
-        let level = self
-            .calls
-            .level
-            .expect("a value with function calls has a cascade level");
+        let level = self.calls.level.unwrap_or(self.computed_context.scope);
         let computed_context = self.computed_context;
         let scope = self
             .calls
@@ -1115,6 +1131,52 @@ mod tests {
                  #t { --cyclic: --bump(var(--cyclic)); --actual: var(--cyclic); }",
             ),
         ]);
+    }
+
+    #[test]
+    fn attribute_values_substitute_in_the_calling_frame() {
+        let attributes = Attributes(&[("data-x", "var(--x)"), ("data-f", "--f()")]);
+        for (name, css, expected) in [
+            (
+                "local",
+                "@function --f() { --x: PASS; result: attr(data-x type(*)); } \
+                 #t { --x: FAIL; --actual: --f(); }",
+                "PASS",
+            ),
+            (
+                "parameter",
+                "@function --f(--x) { result: attr(data-x type(*)); } \
+                 #t { --x: FAIL; --actual: --f(PASS); }",
+                "PASS",
+            ),
+            (
+                "typed",
+                "@function --f() returns <length> { --x: calc(10px + 2px); \
+                 result: attr(data-x type(<length>)); } #t { --actual: --f(); }",
+                "12px",
+            ),
+            (
+                "local cycle",
+                "@function --f() { --x: attr(data-x type(*)); \
+                 --y: attr(data-x type(*), PASS); result: var(--y, PASS); } \
+                 #t { --actual: --f(); }",
+                "PASS",
+            ),
+            (
+                "function cycle",
+                "@function --f() { --local: --g(); result: var(--local); } \
+                 @function --g() { result: attr(data-f type(*)); } \
+                 #t { --tmp: --f(); --actual: var(--tmp, PASS); }",
+                "PASS",
+            ),
+        ] {
+            let [actual] = cascade(css, &attributes, ["actual"]);
+            assert_eq!(
+                actual.map(|value| value.css).as_deref(),
+                Some(expected),
+                "{name}"
+            );
+        }
     }
 
     #[test]

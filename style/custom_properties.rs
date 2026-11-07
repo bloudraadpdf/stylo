@@ -2720,11 +2720,14 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
     }
 
     /// Replace the substitution functions of `value`, with `var()` seen from `frame`.
-    fn substitute_value(
+    fn substitute_value<'v>(
         &mut self,
-        value: &'a VariableValue,
+        value: &'v VariableValue,
         frame: Option<usize>,
-    ) -> Result<Substitution<'a>, ()> {
+    ) -> Result<Substitution<'v>, ()>
+    where
+        'a: 'v,
+    {
         let mut references = value.references.refs.iter().peekable();
         self.chunk(
             &value.css,
@@ -2749,17 +2752,20 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
             .map(|value| Substitution::from_value(value.to_variable_value()))
     }
 
-    fn chunk(
+    fn chunk<'v>(
         &mut self,
-        css: &'a str,
+        css: &'v str,
         start: usize,
         end: usize,
         first_token_type: TokenSerializationType,
         last_token_type: TokenSerializationType,
         url_data: &UrlExtraData,
         frame: Option<usize>,
-        references: &mut ReferenceIter<'a>,
-    ) -> Result<Substitution<'a>, ()> {
+        references: &mut ReferenceIter<'v>,
+    ) -> Result<Substitution<'v>, ()>
+    where
+        'a: 'v,
+    {
         if start == end {
             // Empty string. Easy.
             return Ok(Substitution::default());
@@ -2813,14 +2819,17 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
         Ok(Substitution::from_value(substituted))
     }
 
-    fn reference(
+    fn reference<'v>(
         &mut self,
-        css: &'a str,
+        css: &'v str,
         url_data: &UrlExtraData,
-        reference: &'a SubstitutionFunctionReference,
+        reference: &'v SubstitutionFunctionReference,
         frame: Option<usize>,
-        references: &mut ReferenceIter<'a>,
-    ) -> Result<Substitution<'a>, ()> {
+        references: &mut ReferenceIter<'v>,
+    ) -> Result<Substitution<'v>, ()>
+    where
+        'a: 'v,
+    {
         let simple_subst = |s: &str| {
             Some(Substitution::new(
                 Cow::Owned(quoted_css_string(s)),
@@ -2926,11 +2935,12 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
             },
             // https://drafts.csswg.org/css-values-5/#attr-substitution
             SubstitutionFunction::Attr { name, syntax } => {
+                let entry = self.calls.guard_attribute(name)?;
                 let attribute = name
                     .expanded_name()
                     .as_ref()
                     .and_then(|name| self.attribute_tracker.query(name));
-                attribute.map_or_else(
+                let value = attribute.map_or_else(
                     || {
                         // Special case when fallback and <attr-type> are omitted.
                         // See FAILURE: https://drafts.csswg.org/css-values-5/#attr-substitution
@@ -2962,6 +2972,15 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
                                 Some(Substitution::from_value(value))
                             },
                             AttributeType::Type(syntax) => {
+                                let value = VariableValue::parse(
+                                    &mut parser,
+                                    url_data,
+                                    &Namespaces::default(),
+                                )
+                                .ok()?;
+                                let value = self.substitute_value(&value, frame).ok()?;
+                                let mut input = ParserInput::new(&value.css);
+                                let mut parser = Parser::new(&mut input);
                                 let value = SpecifiedRegisteredValue::parse(
                                     &mut parser,
                                     syntax,
@@ -2975,7 +2994,12 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
                         }
                         .map(Substitution::attr_tainted)
                     },
-                )
+                );
+                if self.calls.release(entry) {
+                    None
+                } else {
+                    value
+                }
             },
         };
 
