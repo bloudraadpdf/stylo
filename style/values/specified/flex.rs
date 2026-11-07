@@ -7,7 +7,8 @@
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
 use crate::values::generics::flex::FlexBasis as GenericFlexBasis;
-use crate::values::specified::Size;
+use crate::values::specified::{NonNegativeLengthPercentage, Size};
+use crate::Zero;
 use cssparser::Parser;
 use style_traits::ParseError;
 
@@ -85,10 +86,10 @@ impl FlexBasis {
         GenericFlexBasis::Size(Size::auto())
     }
 
-    /// `0%`
+    /// `0px`
     #[inline]
-    pub fn zero_percent() -> Self {
-        GenericFlexBasis::Size(Size::zero_percent())
+    pub fn zero_length() -> Self {
+        GenericFlexBasis::Size(Size::LengthPercentage(NonNegativeLengthPercentage::zero()))
     }
 }
 

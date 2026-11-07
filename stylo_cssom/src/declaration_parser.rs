@@ -2349,6 +2349,24 @@ mod tests {
     }
 
     #[test]
+    fn omitted_flex_basis_is_a_definite_zero_length() {
+        for (value, basis) in [
+            ("0", "0px"),
+            ("2 3", "0px"),
+            ("0%", "0%"),
+            ("0 1 0%", "0%"),
+            ("0 1 0px", "0px"),
+        ] {
+            let block = parse_inline_style_block(&format!("flex:{value}"));
+            assert_eq!(
+                inline_style_get_property_value(&block, "flex-basis").as_deref(),
+                Some(basis),
+                "{value}"
+            );
+        }
+    }
+
+    #[test]
     fn the_shorthand_values_of_a_block_equal_an_evaluation_of_each_schema_shorthand() {
         let mut covered = 0;
         for css in [
