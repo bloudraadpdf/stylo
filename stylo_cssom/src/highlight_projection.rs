@@ -299,7 +299,7 @@ mod tests {
             project_custom_highlight_root(&root).projection_serialization(),
             concat!(
                 "@container (width >= 400px) {",
-                "moegoe-highlight:where([data-moegoe-selection]), ::selection { color: green } ",
+                "moegoe-highlight:where([data-moegoe-selection]), ::selection { color: green }",
                 "moegoe-highlight:where([data-moegoe-custom-highlight=\"hi\"]), ::highlight(hi) { color: green }}"
             )
         );
