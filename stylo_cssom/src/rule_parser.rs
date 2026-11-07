@@ -2482,6 +2482,27 @@ pub fn mutate_non_style_rule_declaration(
             else {
                 return None;
             };
+            let replacement = if value.is_empty() {
+                None
+            } else {
+                let syntax = parameters
+                    .iter()
+                    .find(|parameter| parameter.name() == name)
+                    .map_or("*", |parameter| parameter.syntax());
+                let declaration = format!("{name} type({syntax}): {value};");
+                let validated = replace_private_declarations(node, &declaration)?;
+                // A rejected value must leave the old declaration intact.
+                if !validated
+                    .payload()
+                    .declaration_block()?
+                    .declarations()
+                    .iter()
+                    .any(|declaration| declaration.name() == name)
+                {
+                    return None;
+                }
+                Some(declaration)
+            };
             let mut declarations = parameters
                 .iter()
                 .filter(|parameter| parameter.name() != name)
@@ -2494,8 +2515,8 @@ pub fn mutate_non_style_rule_declaration(
                     )
                 })
                 .collect::<Vec<_>>();
-            if !value.is_empty() {
-                declarations.push(format!("{name}: {value};"));
+            if let Some(replacement) = replacement {
+                declarations.push(replacement);
             }
             return replace_private_declarations(node, &declarations.join(" "));
         },
@@ -5213,7 +5234,6 @@ mod tests {
             (Name::Contents, "CSSContentsRule", Parent::GroupingRule),
             (Name::Result, "CSSResultRule", Parent::GroupingRule),
             (Name::Private, "CSSPrivateRule", Parent::StyleRule),
-
             (
                 Name::FunctionDeclarations,
                 "CSSFunctionDeclarations",
@@ -6458,6 +6478,59 @@ mod mixin_cssom_tests {
         assert_eq!(
             parsed.nested_rules().unwrap()[0].grammar(),
             stylo_cssom_model::RuleGrammar::Result
+        );
+    }
+
+    #[test]
+    fn private_declarations_validate_types_and_preserve_them_on_mutation() {
+        use crate::declaration_parser::CssomDeclarationPriority;
+        let parsed = ParsedCssRule::parse(
+            "div { @private { --x <length>: 10px; --bad <length>: red; --y: green; } }",
+        )
+        .unwrap();
+        let private = parsed.nested_rules().unwrap()[0].to_rule_node();
+        let block = private.payload().declaration_block().unwrap();
+        assert_eq!(block.declarations().len(), 2);
+        assert_eq!(block.declarations()[0].name(), "--x");
+        let changed = mutate_non_style_rule_declaration(
+            &private,
+            "--x",
+            "20px",
+            CssomDeclarationPriority::Normal,
+        )
+        .unwrap();
+        assert!(
+            changed
+                .serialization()
+                .contains("--x <length>: 20px;")
+        );
+        assert!(
+            mutate_non_style_rule_declaration(
+                &changed,
+                "--x",
+                "red",
+                CssomDeclarationPriority::Normal
+            )
+            .is_none()
+        );
+        let changed = replace_private_declarations(
+            &changed,
+            "--x <length>: 30px; --bad <length>: red; --y: green;",
+        )
+        .unwrap();
+        assert!(
+            changed
+                .serialization()
+                .contains("--x <length>: 30px;")
+        );
+        assert_eq!(
+            changed
+                .payload()
+                .declaration_block()
+                .unwrap()
+                .declarations()
+                .len(),
+            2
         );
     }
 
