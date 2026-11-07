@@ -1148,7 +1148,9 @@ pub(crate) fn compound_matches_featureless_host<Impl: SelectorImpl>(
     scope_matches_featureless_host: bool,
 ) -> MatchesFeaturelessHost {
     let mut matches = MatchesFeaturelessHost::Only;
+    let mut has_other_selector = false;
     for component in iter {
+        has_other_selector |= !matches!(component, Component::Has(..));
         match component {
             Component::Scope | Component::ImplicitScope if scope_matches_featureless_host => {},
             // The typed anchor closes a relative selector back onto its
@@ -1207,7 +1209,7 @@ pub(crate) fn compound_matches_featureless_host<Impl: SelectorImpl>(
             _ => return MatchesFeaturelessHost::Never,
         }
     }
-    matches
+    if has_other_selector { matches } else { MatchesFeaturelessHost::Never }
 }
 
 /// Determines whether the given element matches the given compound selector.

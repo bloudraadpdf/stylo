@@ -4959,6 +4959,12 @@ pub mod tests {
 
     #[test]
     fn host_has_relative_selector_may_match_featureless_host() {
+        let selectors = parse(":has(.match) .child").unwrap();
+        let mut iter = selectors.slice()[0].iter();
+        for _ in &mut iter {}
+        iter.next_sequence();
+        assert_eq!(crate::matching::compound_matches_featureless_host(&mut iter, false), MatchesFeaturelessHost::Never);
+
         let selectors = parse(":host:has(.match)").unwrap();
         assert_eq!(
             selectors.slice()[0].matches_featureless_host(false),
