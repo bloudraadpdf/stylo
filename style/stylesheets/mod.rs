@@ -21,6 +21,7 @@ mod loader;
 mod margin_rule;
 mod media_rule;
 mod namespace_rule;
+mod navigation_rule;
 mod nested_declarations_rule;
 pub mod origin;
 mod page_rule;
@@ -83,6 +84,7 @@ pub use self::media_rule::{
     CustomMediaCondition, CustomMediaEvaluator, CustomMediaMap, CustomMediaRule, MediaRule,
 };
 pub use self::namespace_rule::NamespaceRule;
+pub use self::navigation_rule::{NavigationCondition, NavigationPhase, NavigationRule};
 pub use self::nested_declarations_rule::NestedDeclarationsRule;
 pub use self::origin::{Origin, OriginSet, OriginSetIterator, PerOrigin, PerOriginIter};
 pub use self::page_rule::{PagePseudoClassFlags, PageRule, PageSelector, PageSelectors};
@@ -384,6 +386,8 @@ pub enum CssRule {
     /// the selector when they appear inside a region-chain descendant.
     Region(Arc<RegionRule>),
     Supports(Arc<SupportsRule>),
+    /// `@navigation <condition> { … }` (CSS View Transitions 2, two-phase cross-document navigation).
+    Navigation(Arc<NavigationRule>),
     /// CSS Conditional 5 §3.1 — `@when <when-condition> { … }`. The
     /// rule contributes its body to the cascade iff its branch is the
     /// active member of its `@when` / `@else` chain. Chain membership
@@ -461,6 +465,9 @@ impl CssRule {
                 arc.unconditional_shallow_size_of(ops) + arc.size_of(guard, ops)
             },
             CssRule::Supports(ref arc) => {
+                arc.unconditional_shallow_size_of(ops) + arc.size_of(guard, ops)
+            },
+            CssRule::Navigation(ref arc) => {
                 arc.unconditional_shallow_size_of(ops) + arc.size_of(guard, ops)
             },
             CssRule::When(ref arc) => {
@@ -557,6 +564,7 @@ pub enum CssRuleRef<'a> {
     /// moegoe Family 17 — `@region <selector> { … }` reference.
     Region(&'a RegionRule),
     Supports(&'a SupportsRule),
+    Navigation(&'a NavigationRule),
     /// CSS Conditional 5 §3.1 — `@when` rule reference.
     When(&'a WhenRule),
     /// CSS Conditional 5 §3.2 — `@else` rule reference.
@@ -596,6 +604,7 @@ impl<'a> From<&'a CssRule> for CssRuleRef<'a> {
             CssRule::ViewTransition(r) => CssRuleRef::ViewTransition(r.as_ref()),
             CssRule::Region(r) => CssRuleRef::Region(r.as_ref()),
             CssRule::Supports(r) => CssRuleRef::Supports(r.as_ref()),
+            CssRule::Navigation(r) => CssRuleRef::Navigation(r.as_ref()),
             CssRule::When(r) => CssRuleRef::When(r.as_ref()),
             CssRule::Else(r) => CssRuleRef::Else(r.as_ref()),
             CssRule::Page(r) => CssRuleRef::Page(r.as_ref()),
@@ -686,6 +695,8 @@ pub enum CssRuleType {
     FunctionDeclarations = 32,
     // https://drafts.csswg.org/css-view-transitions-2/#cssviewtransitionrule
     ViewTransition = 33,
+    // CSS View Transitions 2, two-phase cross-document navigation: `@navigation`.
+    Navigation = 34,
 }
 
 impl CssRuleType {
@@ -779,6 +790,7 @@ impl CssRule {
             CssRule::Region(_) => CssRuleType::Region,
             CssRule::Namespace(_) => CssRuleType::Namespace,
             CssRule::Supports(_) => CssRuleType::Supports,
+            CssRule::Navigation(_) => CssRuleType::Navigation,
             CssRule::When(_) => CssRuleType::When,
             CssRule::Else(_) => CssRuleType::Else,
             CssRule::Page(_) => CssRuleType::Page,
@@ -938,6 +950,9 @@ impl DeepCloneWithLock for CssRule {
             CssRule::Supports(ref arc) => {
                 CssRule::Supports(Arc::new(arc.deep_clone_with_lock(lock, guard)))
             },
+            CssRule::Navigation(ref arc) => {
+                CssRule::Navigation(Arc::new(arc.deep_clone_with_lock(lock, guard)))
+            },
             CssRule::When(ref arc) => {
                 CssRule::When(Arc::new(arc.deep_clone_with_lock(lock, guard)))
             },
@@ -1006,6 +1021,7 @@ impl ToCssWithGuard for CssRule {
             CssRule::Media(ref rule) => rule.to_css(guard, dest),
             CssRule::CustomMedia(ref rule) => rule.to_css(guard, dest),
             CssRule::Supports(ref rule) => rule.to_css(guard, dest),
+            CssRule::Navigation(ref rule) => rule.to_css(guard, dest),
             CssRule::When(ref rule) => rule.to_css(guard, dest),
             CssRule::Else(ref rule) => rule.to_css(guard, dest),
             CssRule::Page(ref lock) => lock.read_with(guard).to_css(guard, dest),

@@ -4717,6 +4717,11 @@ impl CascadeData {
                     // @media rules referencing it being handled.
                     continue;
                 },
+                CssRule::Navigation(..) => {
+                    // The navigation phase is no media feature: a caller of
+                    // `Device::set_navigation_phase` forces the stylesheets dirty.
+                    continue;
+                },
                 CssRule::Import(ref lock) => {
                     let import_rule = lock.read_with(guard);
                     let effective_now = match import_rule.stylesheet.media(guard) {

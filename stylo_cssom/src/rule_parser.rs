@@ -306,7 +306,8 @@ pub const fn cssom_rule_interface_name_for_grammar(
         RuleGrammar::FunctionDeclarations => CssomRuleInterfaceName::FunctionDeclarations,
         RuleGrammar::ColorProfile => CssomRuleInterfaceName::ColorProfile,
         RuleGrammar::ViewTransition => CssomRuleInterfaceName::ViewTransition,
-        RuleGrammar::When
+        RuleGrammar::Navigation
+        | RuleGrammar::When
         | RuleGrammar::Else
         | RuleGrammar::Document
         | RuleGrammar::Region
@@ -1060,6 +1061,7 @@ impl ParsedCssRule {
                     ),
                 },
             },
+            CssRule::Navigation(rule) => grouping_rule(rule.rules.read_with(guard)),
             CssRule::When(rule) => grouping_rule(rule.rules.read_with(guard)),
             CssRule::Else(rule) => grouping_rule(rule.rules.read_with(guard)),
             CssRule::StartingStyle(rule) => grouping_rule(rule.rules.read_with(guard)),
@@ -1813,6 +1815,7 @@ pub const fn stylo_rule_grammar(rule: &CssRule) -> stylo_cssom_model::RuleGramma
         CssRule::ViewTransition(_) => RuleGrammar::ViewTransition,
         CssRule::Region(_) => RuleGrammar::Region,
         CssRule::Supports(_) => RuleGrammar::Supports,
+        CssRule::Navigation(_) => RuleGrammar::Navigation,
         CssRule::When(_) => RuleGrammar::When,
         CssRule::Else(_) => RuleGrammar::Else,
         CssRule::Page(_) => RuleGrammar::Page,
@@ -4875,6 +4878,7 @@ mod tests {
             CssRule::ViewTransition(_) => "ViewTransition",
             CssRule::Region(_) => "Region",
             CssRule::Supports(_) => "Supports",
+            CssRule::Navigation(_) => "Navigation",
             CssRule::When(_) => "When",
             CssRule::Else(_) => "Else",
             CssRule::Page(_) => "Page",
@@ -4920,6 +4924,12 @@ mod tests {
                 "auto",
                 &[],
                 "@view-transition { navigation: auto; }",
+            ),
+            (
+                "@view-transition { navigation: PREVIEW }",
+                "preview",
+                &[],
+                "@view-transition { navigation: preview; }",
             ),
             (
                 "@view-transition { navigation: none !important }",
@@ -5100,6 +5110,7 @@ mod tests {
                 "@supports selector(:has(*)) { a { color: red } }",
                 "Supports",
             ),
+            ("@navigation (preview) { a { color: red } }", "Navigation"),
             (
                 "@property --size { syntax: '<length>'; inherits: false; initial-value: 1px }",
                 "Property",
@@ -5140,6 +5151,26 @@ mod tests {
                 "the current Servo configuration must reject {css}"
             );
         }
+    }
+
+    #[test]
+    fn navigation_rules_take_only_the_preview_condition() {
+        crate::context::initialise_required_servo_style_prefs();
+        let css = "@navigation (PREVIEW) { html { color: blue } } @navigation (other) {} \
+                   @navigation preview {} @navigation (preview) and (preview) {}";
+        let (stylesheet, lock) =
+            crate::context::parse_stylesheet_fragment(css, style::stylesheets::Origin::Author);
+        let guard = lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules.read_with(&guard);
+        let [rule @ CssRule::Navigation(_)] = rules.0.as_slice() else {
+            panic!("only the first rule is valid");
+        };
+
+        assert_eq!(
+            rule.to_css_string(&guard),
+            "@navigation (preview) {\n  html { color: blue; }\n}"
+        );
     }
 
     #[test]

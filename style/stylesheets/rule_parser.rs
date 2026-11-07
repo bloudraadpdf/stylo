@@ -27,6 +27,7 @@ use crate::stylesheets::import_rule::{
 };
 use crate::stylesheets::keyframes_rule::parse_keyframe_list;
 use crate::stylesheets::layer_rule::{LayerBlockRule, LayerName, LayerStatementRule};
+use crate::stylesheets::navigation_rule::{NavigationCondition, NavigationRule};
 use crate::stylesheets::scope_rule::{ScopeBounds, ScopeRule};
 use crate::stylesheets::supports_rule::SupportsCondition;
 use crate::stylesheets::when_rule::{ChainConditions, ElseRule, WhenCondition, WhenRule};
@@ -278,6 +279,8 @@ pub enum AtRulePrelude {
     Container(Arc<ContainerConditions>),
     /// An @supports rule, with its conditional
     Supports(SupportsCondition),
+    /// An `@navigation` rule prelude, with its condition.
+    Navigation(NavigationCondition),
     /// A @keyframes rule, with its animation name and vendor prefix if exists.
     Keyframes(KeyframesName, Option<VendorPrefix>),
     /// A @page rule prelude, with its page name if it exists.
@@ -345,6 +348,7 @@ impl AtRulePrelude {
             Self::CustomMedia(..) => "custom-media",
             Self::Container(..) => "container",
             Self::Supports(..) => "supports",
+            Self::Navigation(..) => "navigation",
             Self::Keyframes(..) => "keyframes",
             Self::Page(..) => "page",
             Self::Property(..) => "property",
@@ -598,6 +602,7 @@ impl<'a, 'i> NestedRuleParser<'a, 'i> {
             | AtRulePrelude::CustomMedia(..)
             | AtRulePrelude::Scope(..)
             | AtRulePrelude::StartingStyle
+            | AtRulePrelude::Navigation(..)
             | AtRulePrelude::When(..)
             | AtRulePrelude::Else(..) => true,
 
@@ -790,6 +795,7 @@ impl<'a, 'i> AtRuleParser<'i> for NestedRuleParser<'a, 'i> {
                 let cond = SupportsCondition::parse(input)?;
                 AtRulePrelude::Supports(cond)
             },
+            "navigation" => AtRulePrelude::Navigation(NavigationCondition::parse(input)?),
             // CSS Conditional 5 §3.1 — `@when <when-condition> { … }`.
             // The condition mixes `supports(...)` and `media(...)`
             // functional leaves with `not` / `and` / `or` combinators.
@@ -1023,6 +1029,11 @@ impl<'a, 'i> AtRuleParser<'i> for NestedRuleParser<'a, 'i> {
                     source_location,
                 }))
             },
+            AtRulePrelude::Navigation(condition) => CssRule::Navigation(Arc::new(NavigationRule {
+                condition,
+                rules: self.parse_nested_rules(input, CssRuleType::Navigation),
+                source_location,
+            })),
             AtRulePrelude::Keyframes(name, vendor_prefix) => {
                 self.nest_for_rule(CssRuleType::Keyframe, |p| {
                     let top = &mut **p;

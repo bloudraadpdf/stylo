@@ -25,6 +25,8 @@ pub enum ViewTransitionNavigation {
     Auto,
     /// `none`.
     None,
+    /// `preview`: the rule of the preview transition of a two-phase cross-document navigation.
+    Preview,
 }
 
 impl ToCss for ViewTransitionNavigation {
@@ -32,6 +34,7 @@ impl ToCss for ViewTransitionNavigation {
         dest.write_str(match self {
             Self::Auto => "auto",
             Self::None => "none",
+            Self::Preview => "preview",
         })
     }
 }
@@ -206,6 +209,7 @@ impl<'a, 'i> DeclarationParser<'i> for ViewTransitionRuleParser<'a> {
                 let navigation = match_ignore_ascii_case! { &ident,
                     "auto" => ViewTransitionNavigation::Auto,
                     "none" => ViewTransitionNavigation::None,
+                    "preview" => ViewTransitionNavigation::Preview,
                     _ => return Err(location.new_custom_error(StyleParseErrorKind::UnspecifiedError)),
                 };
                 input.expect_exhausted()?;

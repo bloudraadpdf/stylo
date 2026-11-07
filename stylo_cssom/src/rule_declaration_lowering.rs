@@ -205,6 +205,7 @@ fn native_children(
         CssRule::Scope(rule) => rule.rules.clone(),
         CssRule::StartingStyle(rule) => rule.rules.clone(),
         CssRule::Document(rule) => rule.rules.clone(),
+        CssRule::Navigation(rule) => rule.rules.clone(),
         CssRule::When(rule) => rule.rules.clone(),
         CssRule::Else(rule) => rule.rules.clone(),
         _ => return None,

@@ -247,6 +247,7 @@ pub enum RuleGrammar {
     FunctionDeclarations,
     ColorProfile,
     ViewTransition,
+    Navigation,
     When,
     Else,
     Document,
@@ -1244,8 +1245,8 @@ rule_nodes! {
     LayerStatement => LayerStatement, Scope => Scope, StartingStyle => StartingStyle,
     PositionTry => PositionTry, NestedDeclarations => NestedDeclarations,
     Function => Function, FunctionDeclarations => FunctionDeclarations,
-    ColorProfile => ColorProfile, ViewTransition => ViewTransition, When => When, Else => Else,
-    Document => Document,
+    ColorProfile => ColorProfile, ViewTransition => ViewTransition, Navigation => Navigation,
+    When => When, Else => Else, Document => Document,
     CustomMedia => CustomMedia, Region => Region, Footnote => Footnote,
     Sidenote => Sidenote, BdColour => BdColour, Unknown => Unknown,
 }
@@ -1263,6 +1264,7 @@ impl RuleNode {
                 | RuleGrammar::LayerBlock
                 | RuleGrammar::Scope
                 | RuleGrammar::StartingStyle
+                | RuleGrammar::Navigation
                 | RuleGrammar::When
                 | RuleGrammar::Else
                 | RuleGrammar::Keyframes
@@ -1310,6 +1312,7 @@ impl RuleNode {
             RuleGrammar::FunctionDeclarations => Self::FunctionDeclarations(payload),
             RuleGrammar::ColorProfile => Self::ColorProfile(payload),
             RuleGrammar::ViewTransition => Self::ViewTransition(payload),
+            RuleGrammar::Navigation => Self::Navigation(payload),
             RuleGrammar::When => Self::When(payload),
             RuleGrammar::Else => Self::Else(payload),
             RuleGrammar::Document => Self::Document(payload),
@@ -1944,6 +1947,7 @@ const fn grammar_name(grammar: RuleGrammar) -> &'static str {
         RuleGrammar::Function => "function",
         RuleGrammar::ColorProfile => "color-profile",
         RuleGrammar::ViewTransition => "view-transition",
+        RuleGrammar::Navigation => "navigation",
         RuleGrammar::When => "when",
         RuleGrammar::Else => "else",
         RuleGrammar::Document => "document",
@@ -3011,6 +3015,7 @@ fn serialise_cssom_group(
         | RuleGrammar::LayerBlock
         | RuleGrammar::Scope
         | RuleGrammar::StartingStyle
+        | RuleGrammar::Navigation
         | RuleGrammar::When
         | RuleGrammar::Else
         | RuleGrammar::Keyframes => true,

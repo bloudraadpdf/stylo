@@ -8,7 +8,9 @@ use crate::context::QuirksMode;
 use crate::derives::*;
 use crate::media_queries::Device;
 use crate::shared_lock::SharedRwLockReadGuard;
-use crate::stylesheets::{CustomMediaMap, DocumentRule, ElseRule, ImportRule, MediaRule, WhenRule};
+use crate::stylesheets::{
+    CustomMediaMap, DocumentRule, ElseRule, ImportRule, MediaRule, NavigationRule, WhenRule,
+};
 use crate::stylesheets::{NestedRuleIterationCondition, StylesheetContents, SupportsRule};
 use rustc_hash::FxHashSet;
 
@@ -134,6 +136,11 @@ impl NestedRuleIterationCondition for PotentiallyEffectiveMediaRules {
     ) -> bool {
         use crate::stylesheets::EffectiveRules;
         EffectiveRules::process_supports(guard, device, quirks_mode, rule)
+    }
+
+    fn process_navigation(device: &Device, rule: &NavigationRule) -> bool {
+        use crate::stylesheets::EffectiveRules;
+        EffectiveRules::process_navigation(device, rule)
     }
 
     /// CSS Conditional 5 §3.1 — descend into `@when` if its branch

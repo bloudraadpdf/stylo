@@ -359,6 +359,7 @@ impl SanitizationKind {
             CssRule::Media(..) |
             CssRule::CustomMedia(..) |
             CssRule::Supports(..) |
+            CssRule::Navigation(..) |
             CssRule::When(..) |
             CssRule::Else(..) |
             CssRule::Import(..) |

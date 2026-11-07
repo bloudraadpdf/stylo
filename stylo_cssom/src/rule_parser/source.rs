@@ -77,6 +77,7 @@ pub(super) fn location(rule: &CssRule, guard: &SharedRwLockReadGuard<'_>) -> Sou
         CssRule::ViewTransition(rule) => rule.source_location,
         CssRule::Region(rule) => rule.source_location,
         CssRule::Supports(rule) => rule.source_location,
+        CssRule::Navigation(rule) => rule.source_location,
         CssRule::When(rule) => rule.source_location,
         CssRule::Else(rule) => rule.source_location,
         CssRule::Page(rule) => rule.read_with(guard).source_location,

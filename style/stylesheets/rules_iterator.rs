@@ -9,7 +9,7 @@ use crate::media_queries::Device;
 use crate::shared_lock::SharedRwLockReadGuard;
 use crate::stylesheets::{
     CssRule, CssRuleRef, CustomMediaEvaluator, CustomMediaMap, DocumentRule, ElseRule, ImportRule,
-    MediaRule, SupportsRule, WhenRule,
+    MediaRule, NavigationRule, SupportsRule, WhenRule,
 };
 use smallvec::SmallVec;
 use std::ops::Deref;
@@ -143,6 +143,13 @@ where
                 }
                 Some(supports_rule.rules.read_with(guard).0.iter())
             },
+            CssRule::Navigation(ref navigation_rule) => {
+                if !C::process_navigation(device, navigation_rule) {
+                    *effective = false;
+                    return None;
+                }
+                Some(navigation_rule.rules.read_with(guard).0.iter())
+            },
             CssRule::When(ref when_rule) => {
                 if !C::process_when(guard, device, quirks_mode, custom_media_map, when_rule) {
                     *effective = false;
@@ -248,6 +255,9 @@ pub trait NestedRuleIterationCondition {
         rule: &SupportsRule,
     ) -> bool;
 
+    /// Whether we should process the nested rules in a given `@navigation` rule.
+    fn process_navigation(device: &Device, rule: &NavigationRule) -> bool;
+
     /// Whether we should process the nested rules in a given
     /// `@when` rule. CSS Conditional 5 §3.1 — the rule contributes
     /// iff its branch is the active member of its chain.
@@ -298,6 +308,9 @@ impl EffectiveRules {
             },
             CssRuleRef::Supports(supports_rule) => {
                 Self::process_supports(guard, device, quirks_mode, supports_rule)
+            },
+            CssRuleRef::Navigation(navigation_rule) => {
+                Self::process_navigation(device, navigation_rule)
             },
             CssRuleRef::When(when_rule) => {
                 Self::process_when(guard, device, quirks_mode, custom_media_map, when_rule)
@@ -360,6 +373,10 @@ impl NestedRuleIterationCondition for EffectiveRules {
         rule.enabled
     }
 
+    fn process_navigation(device: &Device, rule: &NavigationRule) -> bool {
+        rule.condition.matches(device.navigation_phase())
+    }
+
     fn process_when(
         guard: &SharedRwLockReadGuard,
         device: &Device,
@@ -420,6 +437,10 @@ impl NestedRuleIterationCondition for AllRules {
         _: QuirksMode,
         _: &SupportsRule,
     ) -> bool {
+        true
+    }
+
+    fn process_navigation(_: &Device, _: &NavigationRule) -> bool {
         true
     }
 

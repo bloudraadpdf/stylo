@@ -15,6 +15,7 @@ use crate::properties::style_structs::Font;
 use crate::properties::ComputedValues;
 use crate::queries::feature::{AllowsRanges, Evaluator, FeatureFlags, QueryFeatureDescription};
 use crate::queries::values::{Orientation, PrefersColorScheme};
+use crate::stylesheets::NavigationPhase;
 use crate::values::computed::bd_gaps::{GapRuleList, GapRuleWidth};
 use crate::values::computed::border::{BorderSideWidth, LineWidthKeywords};
 use crate::values::computed::font::{FontFamilyList, GenericFontFamily};
@@ -162,6 +163,9 @@ pub struct Device {
     /// Whether the user prefers light mode or dark mode
     #[ignore_malloc_size_of = "Pure stack type"]
     prefers_color_scheme: PrefersColorScheme,
+    /// The navigation phase of the document, which `@navigation` rules query.
+    #[ignore_malloc_size_of = "Pure stack type"]
+    navigation_phase: NavigationPhase,
     /// The CssEnvironment object responsible of getting CSS environment
     /// variables.
     environment: CssEnvironment,
@@ -224,6 +228,7 @@ impl Device {
             used_font_metrics: AtomicBool::new(false),
             used_viewport_units: AtomicBool::new(false),
             prefers_color_scheme,
+            navigation_phase: NavigationPhase::Idle,
             environment: CssEnvironment::default(),
             font_metrics_provider,
             default_computed_values,
@@ -699,6 +704,19 @@ impl Device {
     /// Returns the color scheme of this [`Device`].
     pub fn color_scheme(&self) -> PrefersColorScheme {
         self.prefers_color_scheme
+    }
+
+    /// Set the [`NavigationPhase`] of this [`Device`].
+    ///
+    /// Note that this does not update any associated `Stylist`. For this you must call
+    /// `Stylist::force_stylesheet_origins_dirty`.
+    pub fn set_navigation_phase(&mut self, phase: NavigationPhase) {
+        self.navigation_phase = phase;
+    }
+
+    /// Returns the [`NavigationPhase`] of this [`Device`].
+    pub fn navigation_phase(&self) -> NavigationPhase {
+        self.navigation_phase
     }
 
     pub(crate) fn is_dark_color_scheme(&self, color_scheme: ColorSchemeFlags) -> bool {
