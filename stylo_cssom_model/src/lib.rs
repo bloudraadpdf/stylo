@@ -1341,7 +1341,11 @@ impl StyleState {
             .checked_add(1)
             .expect("declaration revision space exhausted");
         let mut candidate = update.candidate;
-        candidate.recontextualize_urls();
+        // A CSSOM mutation retains the other declarations and their URL parse
+        // contexts. Raw attribute replacement parses every value anew.
+        if candidate.provenance == StylePresentationProvenance::RawIngress {
+            candidate.recontextualize_urls();
+        }
         record.declarations = candidate.declarations;
         record.presentation = candidate.presentation;
         record.provenance = candidate.provenance;
@@ -1479,9 +1483,8 @@ impl StyleState {
                 document: self.document,
                 base_url: base_url.clone(),
             };
-            for declaration in Arc::make_mut(&mut record.declarations) {
-                declaration.recontextualize_urls(&base_url);
-            }
+            // A changed document base applies to subsequent parses, not to
+            // URL values already present in the declaration block.
             record.revision = record
                 .revision
                 .checked_add(1)
@@ -3416,9 +3419,26 @@ mod tests {
         fork.recontextualize_inline_attributes(Arc::from("https://example.test/fork/"));
         assert_eq!(
             copied.declarations().as_ref(),
-            &[declaration("https://example.test/fork/")]
+            &[declaration("https://example.test/source/")]
         );
         assert_eq!(original.declarations().as_ref(), values.as_ref());
+        let retained = copied.declarations();
+        let update = fork
+            .prepare_dom_update(
+                copied,
+                copied.slot(),
+                InlineDeclarationCandidate::canonical(
+                    copied.context(),
+                    "background-image: url(image.png);",
+                    retained,
+                ),
+            )
+            .unwrap();
+        fork.commit_dom_update(update).unwrap();
+        assert_eq!(
+            copied.declarations().as_ref(),
+            &[declaration("https://example.test/source/")]
+        );
         let update = fork
             .prepare_dom_update(copied, copied.slot(), raw(fork.document(), None))
             .unwrap();

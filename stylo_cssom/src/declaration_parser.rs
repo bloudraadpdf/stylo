@@ -782,13 +782,17 @@ pub fn stylo_inline_style_block(
         let Ok(id) = PropertyId::parse_enabled_for_all_content(declaration.name()) else {
             continue;
         };
+        let retained_url_data: Option<UrlExtraData> = declaration
+            .source_base_url()
+            .and_then(|base| url::Url::parse(base).ok())
+            .map(Into::into);
         let mut declarations = SourcePropertyDeclaration::default();
         if parse_one_declaration_into(
             &mut declarations,
             id,
             declaration.value(),
             Origin::Author,
-            url_data,
+            retained_url_data.as_ref().unwrap_or(url_data),
             None,
             ParsingMode::DEFAULT,
             selectors::matching::QuirksMode::NoQuirks,
@@ -1242,6 +1246,10 @@ pub fn stylo_rule_declaration_block(
         } else {
             CssomDeclarationPriority::Normal
         };
+        let retained_url_data: Option<UrlExtraData> = declaration
+            .source_base_url()
+            .and_then(|base| url::Url::parse(base).ok())
+            .map(Into::into);
         if declaration.pending_substitution().is_some() {
             let (retained, importance) = pending.restore(declaration)?;
             let _ = parsed.0.push(retained, importance);
@@ -1251,7 +1259,7 @@ pub fn stylo_rule_declaration_block(
             declaration.value(),
             importance,
             context.rule_type(),
-            &ABOUT_BLANK.clone().into(),
+            retained_url_data.as_ref().unwrap_or(&ABOUT_BLANK.clone().into()),
             &namespaces,
         ) {
             return None;

@@ -738,6 +738,7 @@ pub struct RuleDeclaration {
     name: RuleDeclarationName,
     value: RuleDeclarationValue,
     important: bool,
+    source_base_url: Option<Arc<str>>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -806,6 +807,7 @@ impl RuleDeclaration {
             name: RuleDeclarationName::new(name.into()),
             value: RuleDeclarationValue::Serialized(value.into()),
             important: false,
+            source_base_url: None,
         }
     }
 
@@ -831,7 +833,21 @@ impl RuleDeclaration {
                 base_url: base_url.into(),
             }),
             important: false,
+            source_base_url: None,
         })
+    }
+
+    /// Retains the parse context of a projected declaration without changing
+    /// its specified serialization (including fragment-only URL values).
+    #[must_use]
+    pub fn with_source_base_url(mut self, base_url: impl Into<Arc<str>>) -> Self {
+        self.source_base_url = Some(base_url.into());
+        self
+    }
+
+    #[must_use]
+    pub fn source_base_url(&self) -> Option<&str> {
+        self.source_base_url.as_deref()
     }
 
     #[must_use]

@@ -78,6 +78,8 @@ pub fn project_inline_style_declaration(
     declaration: &stylo_cssom_model::SpecifiedDeclaration,
     url_data: &UrlExtraData,
 ) -> Vec<stylo_cssom_model::RuleDeclaration> {
+    let source_base = specified_value_url_base(&declaration.value)
+        .or_else(|| declaration.shorthand_value.as_ref().and_then(specified_value_url_base));
     if let Some(source) = declaration
         .shorthand_source
         .filter(|source| source.has_pending_substitution())
@@ -92,7 +94,7 @@ pub fn project_inline_style_declaration(
                 property.schema().name,
                 source.property(),
                 projected_specified_style_value_text(value),
-                url_data.as_str(),
+                source_base.unwrap_or_else(|| url_data.as_str()),
             )
             .expect("a pending inline longhand must belong to its source shorthand")
             .with_importance(declaration.importance == stylo_cssom_model::Importance::Important),
@@ -101,10 +103,34 @@ pub fn project_inline_style_declaration(
     project_inline_compatibility_declaration(declaration)
         .into_iter()
         .map(|(property, value, importance)| {
-            stylo_cssom_model::RuleDeclaration::new(property, value)
-                .with_importance(importance == stylo_cssom_model::Importance::Important)
+            let projected = stylo_cssom_model::RuleDeclaration::new(property, value)
+                .with_importance(importance == stylo_cssom_model::Importance::Important);
+            match source_base {
+                Some(base) => projected.with_source_base_url(base),
+                None => projected,
+            }
         })
         .collect()
+}
+
+// Each parsed longhand retains the context in which its URL tokens were read.
+// Shorthand synthesis is only a CSSOM serialization operation; cascade
+// projection still consumes each of these original longhands independently.
+fn specified_value_url_base(value: &stylo_cssom_model::SpecifiedStyleValue) -> Option<&str> {
+    use stylo_cssom_model::{SpecifiedComponentValue as Component, SpecifiedStyleValue as Value};
+    fn component_base(value: &Component) -> Option<&str> {
+        match value {
+            Component::Url { source, .. } => Some(&source.base_url),
+            Component::Function { arguments, .. } => arguments.iter().find_map(component_base),
+            Component::Block { values, .. } => values.iter().find_map(component_base),
+            _ => None,
+        }
+    }
+    match value {
+        Value::Components(values) => values.iter().find_map(component_base),
+        Value::List { values, .. } => values.iter().find_map(specified_value_url_base),
+        _ => None,
+    }
 }
 
 fn project_inline_compatibility_declaration(
@@ -430,6 +456,26 @@ mod inline_compatibility_projection_tests {
             .iter()
             .flat_map(|declaration| project_inline_style_declaration(declaration, &url_data))
             .collect()
+    }
+
+    #[test]
+    fn inline_url_projection_retains_each_declarations_parse_base() {
+        let old_base = "https://example.test/old/";
+        let current_base = "https://example.test/new/";
+        let current: style::stylesheets::UrlExtraData = url::Url::parse(current_base).unwrap().into();
+        for (source, expected_value) in [
+            ("background-image:url(./)", "url(\"./\")"),
+            ("background-image:url(#local)", "url(\"#local\")"),
+        ] {
+            let retained = crate::declaration_parser::parse_inline_style_declarations(source, old_base.into());
+            let assigned = crate::declaration_parser::parse_inline_style_declarations(source, current_base.into());
+            for (declarations, expected_base) in [(&retained, old_base), (&assigned, current_base)] {
+                let projected = project_inline_style_declaration(&declarations[0], &current);
+                assert_eq!(projected[0].source_base_url(), Some(expected_base));
+                assert_eq!(projected[0].value(), expected_value);
+                assert_eq!(projected_specified_property_value(declarations, "background-image").as_deref(), Some(expected_value));
+            }
+        }
     }
 
     #[test]
