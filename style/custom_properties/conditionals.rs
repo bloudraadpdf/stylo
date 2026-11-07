@@ -112,6 +112,15 @@ pub(super) fn condition_names(value: &VariableValue) -> Vec<Name> {
             }
         }
     }
+    for name in &mut names {
+        if let Some((_, private)) = value
+            .private_names
+            .iter()
+            .find(|(original, _)| original == name)
+        {
+            *name = private.clone();
+        }
+    }
     names
 }
 
@@ -123,11 +132,23 @@ pub(super) fn condition_values(value: &VariableValue) -> Vec<VariableValue> {
         };
         for ConditionalBranch { condition, .. } in &**branches {
             let mut input = ParserInput::new(&value.css[condition.start..condition.end]);
-            if let Ok(condition) = VariableValue::parse(
+            if let Ok(mut condition) = VariableValue::parse(
                 &mut Parser::new(&mut input),
                 &value.url_data,
                 &Namespaces::default(),
             ) {
+                condition.private_names = value.private_names.clone();
+                for reference in &mut condition.references.refs {
+                    if let SubstitutionFunction::Var(ref mut name) = reference.function {
+                        if let Some((_, private)) = value
+                            .private_names
+                            .iter()
+                            .find(|(original, _)| original == name)
+                        {
+                            *name = private.clone();
+                        }
+                    }
+                }
                 values.extend(condition_values(&condition));
                 values.push(condition);
             }
@@ -156,6 +177,10 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
                 &Namespaces::default(),
             )
             .ok();
+            let condition = condition.map(|mut condition| {
+                condition.private_names = self.private_names.clone();
+                condition
+            });
             let condition = condition
                 .as_ref()
                 .and_then(|condition| self.substitute_value(condition, frame).ok());

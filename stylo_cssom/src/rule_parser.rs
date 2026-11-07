@@ -201,6 +201,11 @@ impl CssomRuleInterfaceName {
             "color-profile" => Self::ColorProfile,
             "view-transition" => Self::ViewTransition,
             "function" => Self::Function,
+            "mixin" => Self::Mixin,
+            "apply" => Self::Apply,
+            "contents" => Self::Contents,
+            "result" => Self::Result,
+            "private" => Self::Private,
             _ => Self::CssRule,
         }
     }
@@ -2771,6 +2776,11 @@ fn starts_with_typed_rule_at_keyword(css: &str) -> bool {
             "starting-style",
             "position-try",
             "function",
+            "mixin",
+            "apply",
+            "contents",
+            "result",
+            "private",
             "color-profile",
             "when",
             "else",
@@ -6499,11 +6509,7 @@ mod mixin_cssom_tests {
             CssomDeclarationPriority::Normal,
         )
         .unwrap();
-        assert!(
-            changed
-                .serialization()
-                .contains("--x <length>: 20px;")
-        );
+        assert!(changed.serialization().contains("--x <length>: 20px;"));
         assert!(
             mutate_non_style_rule_declaration(
                 &changed,
@@ -6518,11 +6524,7 @@ mod mixin_cssom_tests {
             "--x <length>: 30px; --bad <length>: red; --y: green;",
         )
         .unwrap();
-        assert!(
-            changed
-                .serialization()
-                .contains("--x <length>: 30px;")
-        );
+        assert!(changed.serialization().contains("--x <length>: 30px;"));
         assert_eq!(
             changed
                 .payload()
@@ -6532,6 +6534,13 @@ mod mixin_cssom_tests {
                 .len(),
             2
         );
+    }
+
+    #[test]
+    fn invalid_mixin_preludes_are_not_retained_as_unknown_rules() {
+        let css = "@mixin --m(--x: red !important) { @result { color: var(--x); } }";
+        assert!(ParsedCssRule::parse(css).is_none());
+        assert!(!ParsedCssRule::retain_scanned_rule(css));
     }
 
     #[test]

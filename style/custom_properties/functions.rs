@@ -7,8 +7,8 @@
 //! <https://drafts.csswg.org/css-mixins-1/#evaluating-custom-functions>
 
 use super::{
-    compute_value, Name, NonCustomReferences, Substitution, SubstitutionFunction, Substitutor,
-    VariableValue,
+    Name, NonCustomReferences, Substitution, SubstitutionFunction, Substitutor, VariableValue,
+    compute_value,
 };
 use crate::computed_value_flags::ComputedValueFlags;
 use crate::dom::{TElement, TNode, TShadowRoot};
@@ -482,6 +482,16 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
             }
             binding = current.caller;
         }
+        let private = binding
+            .is_none()
+            .then(|| {
+                self.private_names
+                    .iter()
+                    .find(|(original, _)| original == name)
+                    .map(|(_, private)| private.clone())
+            })
+            .flatten();
+        let name = private.as_ref().unwrap_or(name);
         let registration = match binding {
             Some(index) => self.calls.frames[index].function.registration(name).clone(),
             None => self.stylist.get_custom_property_registration(name).clone(),
@@ -780,6 +790,7 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
 mod tests {
     use super::super::{AttrTaintedRange, DeferredCustomProperties, VariableValue};
     use super::super::{CustomPropertiesBuilder, DeferFontRelativeCustomPropertyResolution};
+    use crate::Atom;
     use crate::applicable_declarations::CascadePriority;
     use crate::context::QuirksMode;
     use crate::dom::{AttributeProvider, AttributeTracker, ExpandedAttributeName};
@@ -791,10 +802,9 @@ mod tests {
     use crate::stylesheets::layer_rule::LayerOrder;
     use crate::stylesheets::{CssRule, DocumentStyleSheet, StylesheetInDocument};
     use crate::stylist::Stylist;
+    use crate::test_support::{BoolPrefGuard, pref_lock};
     use crate::test_support::{parse_stylesheet, test_device};
-    use crate::test_support::{pref_lock, BoolPrefGuard};
     use crate::values::computed::Context;
-    use crate::Atom;
     use servo_arc::Arc;
 
     struct Attributes(&'static [(&'static str, &'static str)]);

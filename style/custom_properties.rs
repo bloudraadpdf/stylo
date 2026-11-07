@@ -6,6 +6,7 @@
 //!
 //! [custom]: https://drafts.csswg.org/css-variables/
 
+use crate::Atom;
 use crate::applicable_declarations::CascadePriority;
 use crate::custom_properties_map::CustomPropertiesMap;
 use crate::derives::*;
@@ -17,7 +18,7 @@ use crate::properties::{
 };
 use crate::properties_and_values::{
     registry::PropertyRegistrationData,
-    syntax::{data_type::DependentDataTypes, Descriptor},
+    syntax::{Descriptor, data_type::DependentDataTypes},
     value::{
         AllowComputationallyDependent, ComputedValue as ComputedRegisteredValue,
         SpecifiedValue as SpecifiedRegisteredValue,
@@ -27,11 +28,10 @@ use crate::rule_tree::CascadeLevel;
 use crate::selector_map::{PrecomputedHashMap, PrecomputedHashSet};
 use crate::stylesheets::{Namespaces, UrlExtraData};
 use crate::stylist::Stylist;
+use crate::values::DashedIdent;
 use crate::values::computed::{self, ToComputedValue};
 use crate::values::generics::calc::SortKey as AttrUnit;
 use crate::values::specified::{AttrName, FontRelativeLength};
-use crate::values::DashedIdent;
-use crate::Atom;
 use cssparser::{
     CowRcStr, Delimiter, Parser, ParserInput, SourcePosition, Token, TokenSerializationType,
 };
@@ -50,8 +50,8 @@ mod conditionals;
 mod functions;
 
 pub use self::functions::{
-    document_function_scope, CallingElement, CustomFunction, ElementCallSite, FunctionBodyItem,
-    FunctionScope,
+    CallingElement, CustomFunction, ElementCallSite, FunctionBodyItem, FunctionScope,
+    document_function_scope,
 };
 
 /// CSS env-1 §3 paged-media environment variables, in CSS pixels.
@@ -394,6 +394,9 @@ pub struct VariableValue {
     /// var(), env(), attr() or non-custom property (e.g. through `em`) references.
     references: References,
 
+    /// Lexical names used when attr() or if() parses additional tokens at computed-value time.
+    private_names: ThinVec<(Name, Name)>,
+
     /// The ranges of `css` that `attr()` substitution produced.
     attr_tainted: ThinVec<AttrTaintedRange>,
 }
@@ -423,10 +426,12 @@ pub fn compute_variable_value(
     compute_value(&value.css, &value.url_data, registration, computed_context).ok()
 }
 
-// For all purposes, we want values to be considered equal if their css text is equal.
+// Identical authored tokens can refer to different unobservable mixin bindings.
 impl PartialEq for VariableValue {
     fn eq(&self, other: &Self) -> bool {
         self.css == other.css
+            && self.references == other.references
+            && self.private_names == other.private_names
     }
 }
 
@@ -747,6 +752,10 @@ pub fn is_private_name(name: &Name) -> bool {
 impl VariableValue {
     /// Rename lexical references without changing the retained authored token stream.
     pub fn rename_private_references(&mut self, names: &std::collections::HashMap<Name, Name>) {
+        self.private_names = names
+            .iter()
+            .map(|(name, private)| (name.clone(), private.clone()))
+            .collect();
         for reference in &mut self.references.refs {
             if let SubstitutionFunction::Var(ref mut name) = reference.function {
                 if let Some(private) = names.get(name) {
@@ -835,6 +844,7 @@ impl VariableValue {
             url_data: url_data.clone(),
             references: Default::default(),
             attr_tainted: ThinVec::new(),
+            private_names: ThinVec::new(),
         }
     }
 
@@ -853,6 +863,7 @@ impl VariableValue {
             last_token_type,
             references: Default::default(),
             attr_tainted: ThinVec::new(),
+            private_names: ThinVec::new(),
         }
     }
 
@@ -943,6 +954,7 @@ impl VariableValue {
             last_token_type,
             references,
             attr_tainted: ThinVec::new(),
+            private_names: ThinVec::new(),
         })
     }
 
@@ -1017,6 +1029,7 @@ impl VariableValue {
             last_token_type: token_type,
             references: Default::default(),
             attr_tainted: ThinVec::new(),
+            private_names: ThinVec::new(),
         }
     }
 
@@ -2823,6 +2836,7 @@ impl<'a> Substitution<'a> {
                     url_data: url_data.clone(),
                     references: Default::default(),
                     attr_tainted: self.attr_tainted,
+                    private_names: ThinVec::new(),
                 },
             )));
         }
@@ -2893,6 +2907,7 @@ struct Substitutor<'a, 'b, 't> {
     environment_resolution: EnvironmentResolutionMode,
     attribute_tracker: &'a mut AttributeTracker<'t>,
     calls: functions::FunctionCalls<'a>,
+    private_names: ThinVec<(Name, Name)>,
 }
 
 type ReferenceIter<'a> = std::iter::Peekable<std::slice::Iter<'a, SubstitutionFunctionReference>>;
@@ -2913,6 +2928,7 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
             environment_resolution,
             attribute_tracker,
             calls: functions::FunctionCalls::new(level),
+            private_names: ThinVec::new(),
         }
     }
 
@@ -2925,8 +2941,9 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
     where
         'a: 'v,
     {
+        let previous = std::mem::replace(&mut self.private_names, value.private_names.clone());
         let mut references = value.references.refs.iter().peekable();
-        self.chunk(
+        let result = self.chunk(
             &value.css,
             0,
             value.css.len(),
@@ -2935,7 +2952,9 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
             &value.url_data,
             frame,
             &mut references,
-        )
+        );
+        self.private_names = previous;
+        result
     }
 
     /// The value of `var(name)` seen from `frame`.
@@ -2943,6 +2962,11 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
         if let Some(value) = self.frame_variable(frame, name) {
             return value.map(Substitution::from_value);
         }
+        let name = self
+            .private_names
+            .iter()
+            .find(|(original, _)| original == name)
+            .map_or(name, |(_, private)| private);
         let registration = self.stylist.get_custom_property_registration(name);
         self.custom_properties
             .get(registration, name)
@@ -3172,12 +3196,13 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
                                 Some(Substitution::from_value(value))
                             },
                             AttributeType::Type(syntax) => {
-                                let value = VariableValue::parse(
+                                let mut value = VariableValue::parse(
                                     &mut parser,
                                     url_data,
                                     &Namespaces::default(),
                                 )
                                 .ok()?;
+                                value.private_names = self.private_names.clone();
                                 let value = self.substitute_value(&value, frame).ok()?;
                                 let mut input = ParserInput::new(&value.css);
                                 let mut parser = Parser::new(&mut input);
@@ -3322,7 +3347,7 @@ pub fn substitute_with_environment_resolution<'a>(
 mod tests {
     use super::*;
     use crate::stylesheets::UrlExtraData;
-    use crate::test_support::{pref_lock, BoolPrefGuard};
+    use crate::test_support::{BoolPrefGuard, pref_lock};
     use crate::{Namespace, Prefix};
     use cssparser::{Parser, ParserInput};
     use url::Url;
