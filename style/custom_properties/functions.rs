@@ -500,7 +500,11 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
             .variable(frame, name)
             .map(|value| value.css.into_owned());
         let Some(value) = value else {
-            return current.as_deref() != initial.as_ref().map(|value| value.css.as_str());
+            return current.as_deref()
+                != registration
+                    .initial_value
+                    .as_ref()
+                    .map(|value| value.css.as_str());
         };
         let queried = match keyword(&value.css) {
             Some(CSSWideKeyword::Initial) => initial,
@@ -1023,6 +1027,11 @@ mod tests {
                 "typed parameter",
                 "@function --f(--c <color>) { result: if(style(--c: red): PASS; else: FAIL); } \
                  #t { --actual: --f(#f00); --expected: PASS; }",
+            ),
+            (
+                "boolean query of an argument",
+                "@function --f(--x) { result: if(style(--x): PASS; else: FAIL); } \
+                 #t { --x: var(--x); --actual: --f(3px); --expected: PASS; }",
             ),
             (
                 "typed caller parameter",
