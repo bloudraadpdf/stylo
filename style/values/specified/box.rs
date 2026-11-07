@@ -1605,7 +1605,7 @@ bitflags! {
     }
 }
 
-fn change_bits_for_longhand(longhand: LonghandId) -> WillChangeBits {
+pub(crate) fn change_bits_for_longhand(longhand: LonghandId) -> WillChangeBits {
     match longhand {
         LonghandId::Opacity => WillChangeBits::OPACITY | WillChangeBits::BACKDROP_ROOT,
         LonghandId::Contain => WillChangeBits::CONTAIN,

@@ -469,6 +469,12 @@ where
         &mut attribute_tracker,
     );
 
+    if !declarations.animated_will_change.is_empty() {
+        let mut will_change = context.builder.get_box().clone_will_change();
+        will_change.bits |= declarations.animated_will_change;
+        context.builder.mutate_box().set_will_change(will_change);
+    }
+
     if !attribute_tracker.references.is_empty() {
         context.builder.attribute_references = Some(attribute_tracker.finalize());
     }
@@ -846,6 +852,7 @@ struct Declaration<'a> {
 /// The set of property declarations from our rules.
 #[derive(Default)]
 struct Declarations<'a> {
+    animated_will_change: specified::WillChangeBits,
     /// Whether we have any prioritary property. This is just a minor optimization.
     has_prioritary_properties: bool,
     /// A list of all the applicable longhand declarations.
@@ -884,6 +891,12 @@ impl<'a> Declarations<'a> {
         rule_identity: usize,
         id: LonghandId,
     ) {
+        if matches!(
+            priority.cascade_level(),
+            CascadeLevel::Animations | CascadeLevel::Transitions
+        ) {
+            self.animated_will_change |= specified::box_::change_bits_for_longhand(id);
+        }
         if let Some(id) = PrioritaryPropertyId::from_longhand(id) {
             self.note_prioritary_property(id);
         }
