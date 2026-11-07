@@ -170,6 +170,7 @@ pub struct StyleSheetAttachmentCandidate {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StyleSheetSourceContext {
+    pub origin_clean: bool,
     pub kind: StyleSheetSourceKind,
     pub origin: StyleOrigin,
     pub document: Option<StyleDocumentHandle>,
@@ -182,6 +183,7 @@ impl StyleSheetSourceContext {
     #[must_use]
     pub fn inline(document: StyleDocumentHandle, origin: StyleOrigin, base_url: Arc<str>) -> Self {
         Self {
+            origin_clean: true,
             kind: StyleSheetSourceKind::Inline,
             origin,
             document: Some(document),
@@ -194,6 +196,7 @@ impl StyleSheetSourceContext {
     #[must_use]
     pub const fn constructed(origin: StyleOrigin) -> Self {
         Self {
+            origin_clean: true,
             kind: StyleSheetSourceKind::Constructed,
             origin,
             document: None,
@@ -210,6 +213,7 @@ impl StyleSheetSourceContext {
         base_url: Arc<str>,
     ) -> Self {
         Self {
+            origin_clean: true,
             kind: StyleSheetSourceKind::Constructed,
             origin,
             document: Some(document),

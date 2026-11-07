@@ -1952,6 +1952,7 @@ mod tests {
             .expect("the stylesheet must bind");
         let replacement = StyleSheetCandidate::new(
             StyleSheetSourceContext {
+                origin_clean: true,
                 kind: StyleSheetSourceKind::Linked,
                 origin: StyleOrigin::Author,
                 document: Some(document),
@@ -2023,6 +2024,7 @@ mod tests {
         let linked = state
             .create_stylesheet(StyleSheetCandidate::new(
                 StyleSheetSourceContext {
+                    origin_clean: true,
                     kind: StyleSheetSourceKind::Linked,
                     origin: StyleOrigin::Author,
                     document: Some(document),
@@ -2288,6 +2290,7 @@ mod tests {
         let child = state
             .create_stylesheet(StyleSheetCandidate::new(
                 StyleSheetSourceContext {
+                    origin_clean: true,
                     kind: StyleSheetSourceKind::Imported,
                     origin: StyleOrigin::Author,
                     document: Some(document),
@@ -2495,6 +2498,7 @@ mod tests {
         let imported = |selector, colour| {
             StyleSheetCandidate::new(
                 StyleSheetSourceContext {
+                    origin_clean: true,
                     kind: StyleSheetSourceKind::Imported,
                     origin: StyleOrigin::Author,
                     document: Some(document),
@@ -2596,6 +2600,7 @@ mod tests {
             )
             .expect("source import binds");
         let source = StyleSheetSourceContext {
+            origin_clean: true,
             kind: StyleSheetSourceKind::Imported,
             origin: StyleOrigin::Author,
             document: Some(document),
@@ -2666,6 +2671,7 @@ mod tests {
         let child_candidate = || {
             StyleSheetCandidate::new(
                 StyleSheetSourceContext {
+                    origin_clean: true,
                     kind: StyleSheetSourceKind::Imported,
                     origin: StyleOrigin::Author,
                     document: Some(document),
@@ -2729,6 +2735,7 @@ mod tests {
                 .expect("import CSSOM data must match import grammar")
         };
         let imported_source = |url: &'static str| StyleSheetSourceContext {
+            origin_clean: true,
             kind: StyleSheetSourceKind::Imported,
             origin: StyleOrigin::Author,
             document: Some(document),
@@ -2846,6 +2853,7 @@ mod tests {
         let child = StyleSheetGraphCandidate::new(
             StyleSheetCandidate::new(
                 StyleSheetSourceContext {
+                    origin_clean: true,
                     kind: StyleSheetSourceKind::Imported,
                     origin: StyleOrigin::Author,
                     document: Some(document),
@@ -3076,6 +3084,7 @@ mod tests {
         let child = state
             .create_stylesheet(StyleSheetCandidate::new(
                 StyleSheetSourceContext {
+                    origin_clean: false,
                     kind: StyleSheetSourceKind::Imported,
                     origin: StyleOrigin::Author,
                     document: Some(document),
@@ -3123,6 +3132,9 @@ mod tests {
 
         assert_ne!(copied_parent.handle(), parent.handle());
         assert_ne!(copied_child.handle(), child.handle());
+        assert!(!child.source().origin_clean);
+        assert!(!copied_child.source().origin_clean);
+        assert!(copied_parent.source().origin_clean);
         assert_ne!(copied_rule.handle(), source_rule.handle());
         assert_ne!(copied_binding.handle(), source_binding.handle());
         assert_eq!(copied_binding.parent_sheet(), copied_parent.handle());

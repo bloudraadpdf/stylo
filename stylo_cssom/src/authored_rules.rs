@@ -107,6 +107,7 @@ impl ParsedStylesheetGraph {
             .linked_source()
             .expect("a loaded imported stylesheet graph must retain its decoded source");
         let source = stylo_cssom_model::StyleSheetSourceContext {
+            origin_clean: stylesheet.origin_clean(),
             kind: stylo_cssom_model::StyleSheetSourceKind::Imported,
             origin: stylo_cssom_model::StyleOrigin::Author,
             document: Some(document),
@@ -146,6 +147,7 @@ impl ParsedStylesheetGraph {
 
 #[derive(Clone, Debug)]
 struct ParsedLinkedStylesheetSource {
+    origin_clean: bool,
     url: String,
     encoding: stylo_cssom_model::CssEncoding,
 }
@@ -313,8 +315,25 @@ impl ParsedStylesheet {
                 &crate::CssStylesheetBaseUrl::from_absolute(base),
             );
         }
-        self.linked_source = Some(ParsedLinkedStylesheetSource { url, encoding });
+        self.linked_source = Some(ParsedLinkedStylesheetSource {
+            url,
+            encoding,
+            origin_clean: true,
+        });
         self
+    }
+
+    pub fn with_origin_clean(mut self, origin_clean: bool) -> Self {
+        if let Some(source) = self.linked_source.as_mut() {
+            source.origin_clean = origin_clean;
+        }
+        self
+    }
+
+    pub fn origin_clean(&self) -> bool {
+        self.linked_source
+            .as_ref()
+            .is_none_or(|source| source.origin_clean)
     }
 
     pub fn linked_source(&self) -> Option<(&str, stylo_cssom_model::CssEncoding)> {
@@ -2547,5 +2566,21 @@ mod tests {
         let rules = import_urls("@badat-rule { @import 'nested.css'; } @import 'green.css';");
 
         assert_eq!(rules, ["green.css"]);
+    }
+}
+
+#[cfg(test)]
+mod origin_clean_tests {
+    #[test]
+    fn linked_source_taint_survives_rule_edits_and_cloning() {
+        let encoding = stylo_cssom_model::CssEncoding::new("UTF-8").expect("UTF-8 encoding");
+        let mut sheet = super::ParsedStylesheet::parse("a { color:red }")
+            .expect("valid CSS")
+            .with_linked_source("https://other.test/style.css".to_owned(), encoding)
+            .with_origin_clean(false);
+        sheet.insert_rule(1, "b {}").expect("insert rule");
+        let cloned = sheet.clone();
+        assert!(!cloned.origin_clean());
+        assert!(super::ParsedStylesheet::default().origin_clean());
     }
 }
