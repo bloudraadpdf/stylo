@@ -857,3 +857,21 @@ fn view_timeline_insets_participate_in_zoom_inheritance() {
     assert!(!properties.contains(super::LonghandId::ViewTimelineAxis));
     assert!(!properties.contains(super::LonghandId::ViewTimelineName));
 }
+
+#[test]
+fn scroll_padding_edges_participate_in_zoom_inheritance() {
+    use super::LonghandId;
+    let properties = super::LonghandIdSet::zoom_dependent();
+    for property in [
+        LonghandId::ScrollPaddingTop,
+        LonghandId::ScrollPaddingRight,
+        LonghandId::ScrollPaddingBottom,
+        LonghandId::ScrollPaddingLeft,
+        LonghandId::ScrollPaddingBlockStart,
+        LonghandId::ScrollPaddingBlockEnd,
+        LonghandId::ScrollPaddingInlineStart,
+        LonghandId::ScrollPaddingInlineEnd,
+    ] {
+        assert!(properties.contains(property), "{property:?}");
+    }
+}

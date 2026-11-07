@@ -543,6 +543,7 @@ class Longhand(Property):
             "NonNegativeLengthOrNumber",
             "NonNegativeLengthOrNumberRect",
             "NonNegativeLengthPercentage",
+            "NonNegativeLengthPercentageOrAuto",
             "NonNegativeLengthPercentageOrNormal",
             "Perspective",
             "Position",
