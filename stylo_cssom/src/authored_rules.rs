@@ -769,10 +769,9 @@ impl ValidatedCssRule {
         if authored.len() != 1 {
             return None;
         }
-        let source = css.trim_start();
-        matches!(source.as_bytes().first(), Some(b'>' | b'+' | b'~'))
-            .then(|| Self::parse_text(&format!("& {source}")))
-            .flatten()
+        let parent = crate::rule_parser::ParsedCssRule::parse(&format!("* {{ {css} }}"))?;
+        let [child] = parent.nested_rules()? else { return None; };
+        Some(Self { node: child.to_rule_node() })
     }
 
     pub fn parse_page_child(input: crate::rule_parser::RuleInput<'_>) -> Option<Self> {
@@ -1666,6 +1665,18 @@ mod tests {
                 ValidatedCssRule::parse(crate::rule_parser::RuleInput::new(css)).is_none(),
                 "{css}"
             );
+        }
+    }
+
+    #[test]
+    fn nested_rule_insertion_uses_the_parent_grammar() {
+        for css in ["@private { --x: red; }", "@apply --example;"] {
+            let input = crate::rule_parser::RuleInput::new(css);
+            assert!(ValidatedCssRule::parse(input).is_none());
+            assert!(ValidatedCssRule::parse_parent_dependent(crate::rule_parser::RuleInput::new(css)).is_some());
+        }
+        for css in ["@mixin --example {}", "@font-face { font-family: example; }"] {
+            assert!(ValidatedCssRule::parse_parent_dependent(crate::rule_parser::RuleInput::new(css)).is_none());
         }
     }
 
