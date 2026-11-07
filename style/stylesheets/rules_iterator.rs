@@ -96,6 +96,7 @@ where
             | CssRule::NestedDeclarations(_)
             | CssRule::FunctionDeclarations(_)
             | CssRule::PositionTry(_) => None,
+            CssRule::Mixin(ref rule) => rule.rules.as_ref().map(|r| r.read_with(guard).0.iter()),
             CssRule::Function(ref function_rule) => {
                 Some(function_rule.rules.read_with(guard).0.iter())
             },

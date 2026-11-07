@@ -244,6 +244,11 @@ pub enum RuleGrammar {
     PositionTry,
     NestedDeclarations,
     Function,
+    Mixin,
+    Apply,
+    Contents,
+    Result,
+    Private,
     FunctionDeclarations,
     ColorProfile,
     ViewTransition,
@@ -257,6 +262,15 @@ pub enum RuleGrammar {
     Sidenote,
     BdColour,
     Unknown,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RuleMixinKind {
+    Definition,
+    Apply,
+    Contents,
+    Result,
+    Private,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -557,6 +571,11 @@ pub enum RuleCssomData {
         navigation: Arc<str>,
         types: Arc<[Arc<str>]>,
     },
+    Mixin {
+        kind: RuleMixinKind,
+        name: Option<Arc<str>>,
+        parameters: Arc<[RuleFunctionParameter]>,
+    },
     Function {
         name: Arc<str>,
         parameters: Arc<[RuleFunctionParameter]>,
@@ -604,6 +623,13 @@ impl RuleCssomData {
             Self::Property { .. } => RuleGrammar::Property,
             Self::PositionTry { .. } => RuleGrammar::PositionTry,
             Self::ViewTransition { .. } => RuleGrammar::ViewTransition,
+            Self::Mixin { kind, .. } => match kind {
+                RuleMixinKind::Definition => RuleGrammar::Mixin,
+                RuleMixinKind::Apply => RuleGrammar::Apply,
+                RuleMixinKind::Contents => RuleGrammar::Contents,
+                RuleMixinKind::Result => RuleGrammar::Result,
+                RuleMixinKind::Private => RuleGrammar::Private,
+            },
             Self::Function { .. } => RuleGrammar::Function,
             Self::Margin { .. } => RuleGrammar::Margin,
             Self::Page { .. } => RuleGrammar::Page,
@@ -704,6 +730,7 @@ pub enum RuleDeclarationDomain {
     PositionTry,
     Nested,
     FunctionDescriptors,
+    Private,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1244,6 +1271,7 @@ rule_nodes! {
     Margin => Margin, Page => Page, Property => Property, LayerBlock => LayerBlock,
     LayerStatement => LayerStatement, Scope => Scope, StartingStyle => StartingStyle,
     PositionTry => PositionTry, NestedDeclarations => NestedDeclarations,
+    Mixin => Mixin, Apply => Apply, Contents => Contents, Result => Result, Private => Private,
     Function => Function, FunctionDeclarations => FunctionDeclarations,
     ColorProfile => ColorProfile, ViewTransition => ViewTransition, Navigation => Navigation,
     When => When, Else => Else, Document => Document,
@@ -1269,6 +1297,11 @@ impl RuleNode {
                 | RuleGrammar::Else
                 | RuleGrammar::Keyframes
                 | RuleGrammar::Function
+                | RuleGrammar::Mixin
+                | RuleGrammar::Apply
+                | RuleGrammar::Contents
+                | RuleGrammar::Result
+                | RuleGrammar::Private
         )
     }
 
@@ -1309,6 +1342,12 @@ impl RuleNode {
             RuleGrammar::PositionTry => Self::PositionTry(payload),
             RuleGrammar::NestedDeclarations => Self::NestedDeclarations(payload),
             RuleGrammar::Function => Self::Function(payload),
+            RuleGrammar::Mixin => Self::Mixin(payload),
+            RuleGrammar::Apply => Self::Apply(payload),
+            RuleGrammar::Contents => Self::Contents(payload),
+            RuleGrammar::Result => Self::Result(payload),
+            RuleGrammar::Private => Self::Private(payload),
+
             RuleGrammar::FunctionDeclarations => Self::FunctionDeclarations(payload),
             RuleGrammar::ColorProfile => Self::ColorProfile(payload),
             RuleGrammar::ViewTransition => Self::ViewTransition(payload),
@@ -1945,6 +1984,12 @@ const fn grammar_name(grammar: RuleGrammar) -> &'static str {
         RuleGrammar::StartingStyle => "starting-style",
         RuleGrammar::PositionTry => "position-try",
         RuleGrammar::Function => "function",
+        RuleGrammar::Mixin => "mixin",
+        RuleGrammar::Apply => "apply",
+        RuleGrammar::Contents => "contents",
+        RuleGrammar::Result => "result",
+        RuleGrammar::Private => "private",
+
         RuleGrammar::ColorProfile => "color-profile",
         RuleGrammar::ViewTransition => "view-transition",
         RuleGrammar::Navigation => "navigation",
@@ -3008,7 +3053,7 @@ fn serialise_cssom_group(
     let header = header.as_str();
     let body = declarations.map_or("", RuleDeclarationBlock::serialization);
     let multiline = match grammar {
-        RuleGrammar::Style => !children.is_empty(),
+        RuleGrammar::Style | RuleGrammar::Private => !children.is_empty(),
         RuleGrammar::Media
         | RuleGrammar::Supports
         | RuleGrammar::Container
@@ -3018,7 +3063,9 @@ fn serialise_cssom_group(
         | RuleGrammar::Navigation
         | RuleGrammar::When
         | RuleGrammar::Else
-        | RuleGrammar::Keyframes => true,
+        | RuleGrammar::Keyframes
+        | RuleGrammar::Mixin
+        | RuleGrammar::Result => true,
         _ => false,
     };
     if !multiline {

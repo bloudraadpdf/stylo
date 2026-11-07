@@ -20,6 +20,7 @@ pub mod layer_rule;
 mod loader;
 mod margin_rule;
 mod media_rule;
+pub mod mixin_rule;
 mod namespace_rule;
 mod navigation_rule;
 mod nested_declarations_rule;
@@ -83,6 +84,7 @@ pub use self::margin_rule::{MarginRule, MarginRuleType};
 pub use self::media_rule::{
     CustomMediaCondition, CustomMediaEvaluator, CustomMediaMap, CustomMediaRule, MediaRule,
 };
+pub use self::mixin_rule::{MixinRule, MixinRuleKind};
 pub use self::namespace_rule::NamespaceRule;
 pub use self::navigation_rule::{NavigationCondition, NavigationPhase, NavigationRule};
 pub use self::nested_declarations_rule::NestedDeclarationsRule;
@@ -168,7 +170,9 @@ impl From<::url::Url> for UrlExtraData {
 #[cfg(not(feature = "gecko"))]
 impl ToShmem for UrlExtraData {
     fn to_shmem(&self, _builder: &mut SharedMemoryBuilder) -> to_shmem::Result<Self> {
-        unimplemented!("If servo wants to share stylesheets across processes, ToShmem for Url must be implemented");
+        unimplemented!(
+            "If servo wants to share stylesheets across processes, ToShmem for Url must be implemented"
+        );
     }
 }
 
@@ -409,6 +413,7 @@ pub enum CssRule {
     PositionTry(Arc<Locked<PositionTryRule>>),
     NestedDeclarations(Arc<Locked<NestedDeclarationsRule>>),
     Function(Arc<FunctionRule>),
+    Mixin(Arc<MixinRule>),
     FunctionDeclarations(Arc<FunctionDeclarationsRule>),
 }
 
@@ -504,6 +509,7 @@ impl CssRule {
                     + arc.rules.unconditional_shallow_size_of(ops)
                     + arc.rules.read_with(guard).size_of(guard, ops)
             },
+            CssRule::Mixin(ref arc) => arc.unconditional_shallow_size_of(ops),
             CssRule::FunctionDeclarations(ref arc) => arc.unconditional_shallow_size_of(ops),
         }
     }
@@ -579,6 +585,7 @@ pub enum CssRuleRef<'a> {
     PositionTry(&'a LockedPositionTryRule),
     NestedDeclarations(&'a LockedNestedDeclarationsRule),
     Function(&'a FunctionRule),
+    Mixin(&'a MixinRule),
     FunctionDeclarations(&'a FunctionDeclarationsRule),
 }
 
@@ -616,6 +623,7 @@ impl<'a> From<&'a CssRule> for CssRuleRef<'a> {
             CssRule::StartingStyle(r) => CssRuleRef::StartingStyle(r.as_ref()),
             CssRule::PositionTry(r) => CssRuleRef::PositionTry(r.as_ref()),
             CssRule::NestedDeclarations(r) => CssRuleRef::NestedDeclarations(r.as_ref()),
+            CssRule::Mixin(r) => CssRuleRef::Mixin(r.as_ref()),
             CssRule::Function(r) => CssRuleRef::Function(r.as_ref()),
             CssRule::FunctionDeclarations(r) => CssRuleRef::FunctionDeclarations(r.as_ref()),
         }
@@ -697,6 +705,11 @@ pub enum CssRuleType {
     ViewTransition = 33,
     // CSS View Transitions 2, two-phase cross-document navigation: `@navigation`.
     Navigation = 34,
+    Mixin = 35,
+    Apply = 36,
+    Contents = 37,
+    Result = 38,
+    Private = 39,
 }
 
 impl CssRuleType {
@@ -803,6 +816,7 @@ impl CssRule {
             CssRule::StartingStyle(_) => CssRuleType::StartingStyle,
             CssRule::PositionTry(_) => CssRuleType::PositionTry,
             CssRule::NestedDeclarations(_) => CssRuleType::NestedDeclarations,
+            CssRule::Mixin(ref r) => r.prelude.kind.rule_type(),
             CssRule::Function(_) => CssRuleType::Function,
             CssRule::FunctionDeclarations(_) => CssRuleType::FunctionDeclarations,
         }
@@ -994,6 +1008,9 @@ impl DeepCloneWithLock for CssRule {
             CssRule::Function(ref arc) => {
                 CssRule::Function(Arc::new(arc.deep_clone_with_lock(lock, guard)))
             },
+            CssRule::Mixin(ref arc) => {
+                CssRule::Mixin(Arc::new(arc.deep_clone_with_lock(lock, guard)))
+            },
             CssRule::FunctionDeclarations(ref arc) => CssRule::FunctionDeclarations(arc.clone()),
         }
     }
@@ -1034,6 +1051,7 @@ impl ToCssWithGuard for CssRule {
             CssRule::StartingStyle(ref rule) => rule.to_css(guard, dest),
             CssRule::PositionTry(ref lock) => lock.read_with(guard).to_css(guard, dest),
             CssRule::NestedDeclarations(ref lock) => lock.read_with(guard).to_css(guard, dest),
+            CssRule::Mixin(ref rule) => rule.to_css(guard, dest),
             CssRule::Function(ref rule) => rule.to_css(guard, dest),
             CssRule::FunctionDeclarations(ref rule) => rule.to_css(guard, dest),
         }

@@ -389,6 +389,7 @@ impl SanitizationKind {
             CssRule::ViewTransition(..) |
             CssRule::Region(..) |
             CssRule::Property(..) |
+            CssRule::Mixin(..) |
             CssRule::Function(..) |
             CssRule::FunctionDeclarations(..) |
             CssRule::FontFeatureValues(..) |

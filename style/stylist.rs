@@ -4,7 +4,8 @@
 
 //! Selector matching.
 
-use crate::AllocErr;
+mod mixins;
+
 use crate::applicable_declarations::{
     ApplicableDeclarationBlock, ApplicableDeclarationList, CascadePriority, ScopeProximity,
 };
@@ -16,8 +17,8 @@ use crate::dom::TElement;
 #[cfg(feature = "gecko")]
 use crate::gecko_bindings::structs::{ServoStyleSetSizes, StyleRuleInclusion};
 use crate::invalidation::element::invalidation_map::{
-    AdditionalRelativeSelectorInvalidationMap, Dependency, DependencyInvalidationKind,
-    InvalidationMap, ScopeDependencyInvalidationKind, note_selector_for_invalidation,
+    note_selector_for_invalidation, AdditionalRelativeSelectorInvalidationMap, Dependency,
+    DependencyInvalidationKind, InvalidationMap, ScopeDependencyInvalidationKind,
 };
 use crate::invalidation::media_queries::{
     EffectiveMediaQueryResults, MediaListKey, ToMediaListKey,
@@ -27,7 +28,7 @@ use crate::media_queries::Device;
 use crate::properties::StyleBuilder;
 use crate::properties::{
     self, AnimationDeclarations, CascadeMode, ComputedValues, FirstLineReparenting,
-    PropertyDeclarationBlock,
+    PropertyDeclaration, PropertyDeclarationBlock,
 };
 use crate::properties_and_values::registry::{
     PropertyRegistration, PropertyRegistrationData, ScriptRegistry as CustomPropertyScriptRegistry,
@@ -46,8 +47,8 @@ use crate::stylesheets::import_rule::{ImportLayer, ImportScope};
 use crate::stylesheets::keyframes_rule::KeyframesAnimation;
 use crate::stylesheets::layer_rule::{LayerName, LayerOrder};
 use crate::stylesheets::scope_rule::{
-    ImplicitScopeRoot, ScopeBounds, ScopeRootCandidate, ScopeSubjectMap, ScopeTarget,
     collect_scope_roots, element_is_outside_of_scope, scope_selector_list_is_trivial,
+    ImplicitScopeRoot, ScopeBounds, ScopeRootCandidate, ScopeSubjectMap, ScopeTarget,
 };
 use crate::stylesheets::{
     CounterStyleRule, CssRule, CssRuleRef, EffectiveRulesIterator, FontFaceRule,
@@ -58,7 +59,8 @@ use crate::stylesheets::{
 use crate::stylesheets::{CustomMediaEvaluator, CustomMediaMap};
 use crate::values::specified::position::PositionTryFallbacksItem;
 use crate::values::specified::position::PositionTryFallbacksTryTactic;
-use crate::values::{AtomIdent, computed};
+use crate::values::{computed, AtomIdent};
+use crate::AllocErr;
 use crate::{Atom, LocalName, Namespace, ShrinkIfNeeded, WeakAtom};
 use dom::{DocumentState, ElementState};
 #[cfg(feature = "gecko")]
@@ -68,8 +70,8 @@ use rustc_hash::FxHashMap;
 use selectors::attr::{CaseSensitivity, NamespaceConstraint};
 use selectors::bloom::BloomFilter;
 use selectors::matching::{
-    MatchingContext, MatchingMode, NeedsSelectorFlags, SelectorCaches, matches_selector,
-    selector_may_match,
+    matches_selector, selector_may_match, MatchingContext, MatchingMode, NeedsSelectorFlags,
+    SelectorCaches,
 };
 use selectors::matching::{MatchingForInvalidation, VisitedHandlingMode};
 use selectors::parser::{
@@ -635,7 +637,8 @@ pub struct Stylist {
     /// registrations of the author cascade data, which knows no shadow tree.
     /// <https://drafts.css-houdini.org/css-properties-values-api-1/#determining-registration>
     #[cfg_attr(feature = "servo", ignore_malloc_size_of = "Arc")]
-    author_custom_property_registrations: Option<PrecomputedHashMap<Atom, Arc<PropertyRegistration>>>,
+    author_custom_property_registrations:
+        Option<PrecomputedHashMap<Atom, Arc<PropertyRegistration>>>,
 
     /// The total number of times the stylist has been rebuilt.
     num_rebuilds: usize,
@@ -981,12 +984,17 @@ impl Stylist {
         &mut self,
         registrations: PrecomputedHashMap<Atom, Arc<PropertyRegistration>>,
     ) {
-        let unchanged = self.author_custom_property_registrations.as_ref().is_some_and(|previous| {
-            previous.len() == registrations.len()
-                && registrations.iter().all(|(name, registration)| {
-                    previous.get(name).is_some_and(|previous| Arc::ptr_eq(previous, registration))
-                })
-        });
+        let unchanged = self
+            .author_custom_property_registrations
+            .as_ref()
+            .is_some_and(|previous| {
+                previous.len() == registrations.len()
+                    && registrations.iter().all(|(name, registration)| {
+                        previous
+                            .get(name)
+                            .is_some_and(|previous| Arc::ptr_eq(previous, registration))
+                    })
+            });
         if unchanged {
             return;
         }
@@ -1013,6 +1021,47 @@ impl Stylist {
             old_data,
             difference,
         )
+    }
+
+    /// Rebuild shadow styles against nearest-first ancestor mixin environments.
+    /// Expansion depends on tree scope, so the ordinary sheet-only cache cannot
+    /// share these results between roots with different inherited definitions.
+    pub fn rebuild_author_data_with_parent_mixins<S>(
+        &mut self,
+        old_data: &CascadeData,
+        collection: SheetCollectionFlusher<S>,
+        guard: &SharedRwLockReadGuard,
+        difference: &mut CascadeDataDifference,
+        parents: &[&CascadeData],
+    ) -> Result<Option<Arc<CascadeData>>, AllocErr>
+    where
+        S: StylesheetInDocument + PartialEq + 'static,
+    {
+        let document_mixins = &self.cascade_data.borrow_for_origin(Origin::Author).mixins;
+        if document_mixins.is_empty()
+            && parents.iter().all(|parent| parent.mixins.is_empty())
+            && old_data.inherited_mixins.is_empty()
+        {
+            return self.rebuild_author_data(old_data, collection, guard, difference);
+        }
+        let mut data = CascadeData::new();
+        data.inherited_mixins = document_mixins.clone();
+        for parent in parents.iter().rev() {
+            data.inherited_mixins.extend(
+                parent
+                    .mixins
+                    .iter()
+                    .map(|(name, rule)| (name.clone(), rule.clone())),
+            );
+        }
+        data.rebuild(
+            &self.device,
+            self.quirks_mode,
+            collection.force_full_rebuild(),
+            guard,
+            difference,
+        )?;
+        Ok(Some(Arc::new(data)))
     }
 
     /// Iterate over the extra data in origin order.
@@ -3334,6 +3383,28 @@ pub struct CascadeData {
     #[ignore_malloc_size_of = "Arc"]
     custom_functions: LayerOrderedMap<Arc<CustomFunction>>,
 
+    /// Tree-scoped authored mixins, collected before any application is expanded.
+    #[ignore_malloc_size_of = "Arc"]
+    mixins: FxHashMap<Atom, Arc<crate::stylesheets::MixinRule>>,
+    #[ignore_malloc_size_of = "Arc"]
+    inherited_mixins: FxHashMap<Atom, Arc<crate::stylesheets::MixinRule>>,
+    mixin_priorities: FxHashMap<Atom, Vec<usize>>,
+    mixin_layer_order: FxHashMap<LayerName, usize>,
+    /// Active definitions, for finite expansion of recursive mixins.
+    mixin_stack: Vec<Atom>,
+    #[ignore_malloc_size_of = "lexical expansion data"]
+    mixin_names: std::collections::HashMap<Atom, Atom>,
+    #[ignore_malloc_size_of = "lexical expansion data"]
+    mixin_locals: Vec<crate::properties::CustomDeclaration>,
+    #[ignore_malloc_size_of = "lexical expansion data"]
+    mixin_call_environments: Vec<(
+        std::collections::HashMap<Atom, Atom>,
+        Vec<crate::properties::CustomDeclaration>,
+    )>,
+    /// Contents supplied by the active call sites; None means use fallback.
+    #[ignore_malloc_size_of = "Arc"]
+    mixin_contents: Vec<Option<Arc<crate::shared_lock::Locked<crate::stylesheets::CssRules>>>>,
+
     /// Custom media query registrations.
     custom_media: CustomMediaMap,
 
@@ -3420,6 +3491,15 @@ impl CascadeData {
             animations: Default::default(),
             custom_property_registrations: Default::default(),
             custom_functions: Default::default(),
+            mixins: Default::default(),
+            inherited_mixins: Default::default(),
+            mixin_priorities: Default::default(),
+            mixin_layer_order: Default::default(),
+            mixin_stack: Vec::new(),
+            mixin_names: Default::default(),
+            mixin_locals: Vec::new(),
+            mixin_call_environments: Vec::new(),
+            mixin_contents: Vec::new(),
             custom_media: Default::default(),
             layer_id: Default::default(),
             layers: smallvec::smallvec![CascadeLayer::root()],
@@ -3450,6 +3530,29 @@ impl CascadeData {
             return Ok(());
         }
 
+        let had_mixins = !self.mixins.is_empty();
+        self.mixins = self.inherited_mixins.clone();
+        self.mixin_priorities.clear();
+        self.mixin_layer_order.clear();
+        for stylesheet in collection.sheets() {
+            if stylesheet.enabled()
+                && stylesheet.is_effective_for_device(device, &self.custom_media, guard)
+            {
+                self.collect_mixins(
+                    stylesheet.contents(guard).rules(guard).iter(),
+                    device,
+                    quirks_mode,
+                    guard,
+                );
+            }
+        }
+        // Appended or removed definitions can change applications in previously
+        // committed sheets, so expansion requires rebuilding the whole scope.
+        let collection = if had_mixins || !self.mixins.is_empty() {
+            collection.force_full_rebuild()
+        } else {
+            collection
+        };
         let validity = collection.data_validity();
 
         let mut old_position_try_data = LayerOrderedMap::default();
@@ -3892,11 +3995,9 @@ impl CascadeData {
                 }
             }
 
-            debug_assert!(
-                !pseudo_elements
-                    .iter()
-                    .any(|p| p.is_precomputed() || p.is_unknown_webkit_pseudo_element())
-            );
+            debug_assert!(!pseudo_elements
+                .iter()
+                .any(|p| p.is_precomputed() || p.is_unknown_webkit_pseudo_element()));
 
             let selector = match ancestor_selectors {
                 Some(ref s) => selector.replace_parent_selector(&s),
@@ -4192,9 +4293,28 @@ impl CascadeData {
             // ones, and are always effective, so we can skip some checks.
             let mut handled = true;
             let mut list_for_nested_rules = None;
+            let mut private_names_before_rule = None;
             match *rule {
                 CssRule::Style(ref locked) => {
                     let style_rule = locked.read_with(guard);
+                    if let Some(ref children) = style_rule.rules {
+                        static NEXT_PRIVATE: std::sync::atomic::AtomicUsize =
+                            std::sync::atomic::AtomicUsize::new(1);
+                        let id = NEXT_PRIVATE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        let mut names = std::collections::HashMap::new();
+                        self.collect_private_names(
+                            children.read_with(guard).0.iter(),
+                            device,
+                            quirks_mode,
+                            guard,
+                            &mut names,
+                            id,
+                        );
+                        if !names.is_empty() {
+                            private_names_before_rule = Some(self.mixin_names.clone());
+                            self.mixin_names.extend(names);
+                        }
+                    }
                     let has_nested_rules = style_rule.rules.is_some();
                     let mut replaced_selectors = ReplacedSelectors::new();
                     let ancestor_selectors = containing_rule_state.ancestor_selector_lists.last();
@@ -4205,7 +4325,7 @@ impl CascadeData {
                         .then(|| Vec::new());
                     self.add_styles(
                         &style_rule.selectors,
-                        &style_rule.block,
+                        &self.mixin_block(&style_rule.block, guard),
                         ancestor_selectors,
                         containing_rule_state,
                         if collect_replaced_selectors {
@@ -4238,7 +4358,7 @@ impl CascadeData {
                     if let Some(ref ancestor_selectors) =
                         containing_rule_state.ancestor_selector_lists.last()
                     {
-                        let decls = &rule.read_with(guard).block;
+                        let decls = self.mixin_block(&rule.read_with(guard).block, guard);
                         let selectors = match containing_rule_state.nested_declarations_context {
                             NestedDeclarationsContext::Style => ancestor_selectors,
                             NestedDeclarationsContext::Scope => &*IMPLICIT_SCOPE,
@@ -4248,7 +4368,7 @@ impl CascadeData {
                             .then(|| Vec::new());
                         self.add_styles(
                             selectors,
-                            decls,
+                            &decls,
                             /* ancestor_selectors = */ None,
                             containing_rule_state,
                             /* replaced_selectors = */ None,
@@ -4283,6 +4403,21 @@ impl CascadeData {
                         containing_rule_state.layer_id,
                         compare_keyframes_in_same_layer,
                     )?;
+                },
+                CssRule::Mixin(ref rule) => {
+                    self.add_mixin_rule(
+                        rule,
+                        device,
+                        quirks_mode,
+                        stylesheet,
+                        sheet_index,
+                        guard,
+                        rebuild_kind,
+                        containing_rule_state,
+                        precomputed_pseudo_element_decls.as_deref_mut(),
+                        difference.as_deref_mut(),
+                    )?;
+                    continue;
                 },
                 CssRule::Function(ref rule) => {
                     let body = self.function_body(
@@ -4362,6 +4497,9 @@ impl CascadeData {
             }
 
             if handled {
+                if let Some(names) = private_names_before_rule {
+                    self.mixin_names = names;
+                }
                 // Assert that there are no children, and that the rule is
                 // effective.
                 if cfg!(debug_assertions) {
@@ -4594,6 +4732,9 @@ impl CascadeData {
                         .extend(dependency_vector);
                 }
             }
+            if let Some(names) = private_names_before_rule {
+                self.mixin_names = names;
+            }
         }
 
         Ok(())
@@ -4702,6 +4843,7 @@ impl CascadeData {
                 | CssRule::Region(..)
                 | CssRule::Page(..)
                 | CssRule::Property(..)
+                | CssRule::Mixin(..)
                 | CssRule::Function(..)
                 | CssRule::FunctionDeclarations(..)
                 | CssRule::Document(..)
@@ -4789,33 +4931,37 @@ impl CascadeData {
         element: &E,
         context: &mut MatchingContext<E::Impl>,
     ) -> [bool; 2] {
-        [VisitedHandlingMode::AllLinksUnvisited, VisitedHandlingMode::RelevantLinkVisited].map(|mode| {
-        context.with_visited_handling_mode(mode, |context| {
-        let matches = |context: &mut MatchingContext<E::Impl>| {
-            matches_selector(
-                &rule.selector,
-                rule.selector_offset,
-                Some(&rule.hashes),
-                element,
-                context,
-            )
-        };
-        if rule.scope_condition_id == ScopeConditionId::none() {
-            return matches(context);
-        }
+        [
+            VisitedHandlingMode::AllLinksUnvisited,
+            VisitedHandlingMode::RelevantLinkVisited,
+        ]
+        .map(|mode| {
+            context.with_visited_handling_mode(mode, |context| {
+                let matches = |context: &mut MatchingContext<E::Impl>| {
+                    matches_selector(
+                        &rule.selector,
+                        rule.selector_offset,
+                        Some(&rule.hashes),
+                        element,
+                        context,
+                    )
+                };
+                if rule.scope_condition_id == ScopeConditionId::none() {
+                    return matches(context);
+                }
 
-        let roots = scope_root_candidates(
-            &self.scope_conditions,
-            rule.scope_condition_id,
-            element,
-            rule.selector.is_part(),
-            &self.scope_subject_map,
-            context,
-        );
-        roots.candidates.into_iter().any(|candidate| {
-            context.nest_for_scope(Some(candidate.root), |context| matches(context))
-        })
-        })
+                let roots = scope_root_candidates(
+                    &self.scope_conditions,
+                    rule.scope_condition_id,
+                    element,
+                    rule.selector.is_part(),
+                    &self.scope_subject_map,
+                    context,
+                );
+                roots.candidates.into_iter().any(|candidate| {
+                    context.nest_for_scope(Some(candidate.root), |context| matches(context))
+                })
+            })
         })
     }
 

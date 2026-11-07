@@ -91,7 +91,7 @@ impl FunctionPrelude {
     }
 }
 
-fn parse_parameters<'i>(
+pub(crate) fn parse_parameters<'i>(
     context: &ParserContext,
     input: &mut Parser<'i, '_>,
 ) -> Result<Box<[FunctionParameter]>, ParseError<'i>> {
@@ -111,7 +111,7 @@ fn parse_parameters<'i>(
     Ok(parameters.into_boxed_slice())
 }
 
-fn parse_parameter<'i>(
+pub(crate) fn parse_parameter<'i>(
     context: &ParserContext,
     input: &mut Parser<'i, '_>,
 ) -> Result<FunctionParameter, ParseError<'i>> {

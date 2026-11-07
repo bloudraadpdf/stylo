@@ -51,7 +51,7 @@ use crate::stylesheets::Origin;
 use crate::stylist::Stylist;
 use crate::values::{computed, serialize_atom_name};
 use arrayvec::{ArrayVec, Drain as ArrayVecDrain};
-use cssparser::{Parser, ParserInput, match_ignore_ascii_case};
+use cssparser::{match_ignore_ascii_case, Parser, ParserInput};
 use rustc_hash::FxHashMap;
 use servo_arc::Arc;
 use std::{
@@ -188,7 +188,7 @@ pub struct VariableDeclaration {
 
 /// A custom property declaration value is either an unparsed value or a CSS
 /// wide-keyword.
-#[derive(Clone, PartialEq, ToCss, ToShmem)]
+#[derive(Clone, Debug, PartialEq, ToCss, ToShmem)]
 pub enum CustomDeclarationValue {
     /// An unparsed value.
     Unparsed(Arc<custom_properties::SpecifiedValue>),
@@ -199,7 +199,7 @@ pub enum CustomDeclarationValue {
 }
 
 /// A custom property declaration with the property name and the declared value.
-#[derive(Clone, PartialEq, ToCss, ToShmem, MallocSizeOf, ToTyped)]
+#[derive(Clone, Debug, PartialEq, ToCss, ToShmem, MallocSizeOf, ToTyped)]
 pub struct CustomDeclaration {
     /// The name of the custom property.
     #[css(skip)]
@@ -859,6 +859,36 @@ fn parse_non_custom_property_declaration_value_into<'i>(
 }
 
 impl PropertyDeclaration {
+    /// Apply a lexical private-property environment to this declaration.
+    pub fn rename_private_properties(
+        &mut self,
+        names: &std::collections::HashMap<custom_properties::Name, custom_properties::Name>,
+    ) {
+        match self {
+            Self::Custom(declaration) => {
+                let mut declaration = declaration.clone();
+                if let Some(private) = names.get(&declaration.name) {
+                    declaration.name = private.clone();
+                }
+                if let CustomDeclarationValue::Unparsed(ref value) = declaration.value {
+                    let mut value = (**value).clone();
+                    value.rename_private_references(names);
+                    declaration.value = CustomDeclarationValue::Unparsed(Arc::new(value));
+                }
+                *self = Self::Custom(declaration);
+            },
+            Self::WithVariables(declaration) => {
+                let mut value = UnparsedValue {
+                    variable_value: declaration.value.variable_value.clone(),
+                    from_shorthand: declaration.value.from_shorthand,
+                };
+                value.variable_value.rename_private_references(names);
+                declaration.value = Arc::new(value);
+            },
+            _ => {},
+        }
+    }
+
     /// Whether an automatic grid repetition contains a non-fixed track size.
     pub fn uses_intrinsic_grid_repetition(&self) -> bool {
         use crate::values::generics::grid::{GridTemplateComponent, TrackListValue};

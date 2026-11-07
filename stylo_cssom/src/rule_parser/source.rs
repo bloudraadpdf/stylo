@@ -89,6 +89,7 @@ pub(super) fn location(rule: &CssRule, guard: &SharedRwLockReadGuard<'_>) -> Sou
         CssRule::StartingStyle(rule) => rule.source_location,
         CssRule::PositionTry(rule) => rule.read_with(guard).source_location,
         CssRule::NestedDeclarations(rule) => rule.read_with(guard).source_location,
+        CssRule::Mixin(rule) => rule.source_location,
         CssRule::Function(rule) => rule.source_location,
         CssRule::FunctionDeclarations(rule) => rule.source_location,
     }

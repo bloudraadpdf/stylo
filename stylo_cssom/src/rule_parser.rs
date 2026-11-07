@@ -140,6 +140,12 @@ cssom_rule_interface_names! {
     PositionTry => "CSSPositionTryRule",
     NestedDeclarations => "CSSNestedDeclarations",
     Function => "CSSFunctionRule",
+    Mixin => "CSSMixinRule",
+    Apply => "CSSApplyRule",
+    Contents => "CSSContentsRule",
+    Result => "CSSResultRule",
+    Private => "CSSPrivateRule",
+
     FunctionDeclarations => "CSSFunctionDeclarations",
     ColorProfile => "CSSColorProfileRule",
     ViewTransition => "CSSViewTransitionRule",
@@ -151,6 +157,7 @@ pub enum CssomRuleInterfaceParent {
     CssRule,
     GroupingRule,
     ConditionRule,
+    StyleRule,
 }
 
 impl CssomRuleInterfaceName {
@@ -201,11 +208,16 @@ impl CssomRuleInterfaceName {
     pub const fn parent(self) -> CssomRuleInterfaceParent {
         match self {
             Self::CssRule => CssomRuleInterfaceParent::None,
+            Self::Private => CssomRuleInterfaceParent::StyleRule,
             Self::Style
             | Self::Page
             | Self::LayerBlock
             | Self::Scope
             | Self::StartingStyle
+            | Self::Mixin
+            | Self::Apply
+            | Self::Contents
+            | Self::Result
             | Self::Function => CssomRuleInterfaceParent::GroupingRule,
             Self::Media | Self::Supports | Self::Container => {
                 CssomRuleInterfaceParent::ConditionRule
@@ -255,6 +267,11 @@ impl CssomRuleInterfaceName {
             | Self::StartingStyle
             | Self::PositionTry
             | Self::NestedDeclarations
+            | Self::Mixin
+            | Self::Apply
+            | Self::Contents
+            | Self::Result
+            | Self::Private
             | Self::Function
             | Self::FunctionDeclarations
             | Self::ColorProfile
@@ -303,6 +320,12 @@ pub const fn cssom_rule_interface_name_for_grammar(
         RuleGrammar::PositionTry => CssomRuleInterfaceName::PositionTry,
         RuleGrammar::NestedDeclarations => CssomRuleInterfaceName::NestedDeclarations,
         RuleGrammar::Function => CssomRuleInterfaceName::Function,
+        RuleGrammar::Mixin => CssomRuleInterfaceName::Mixin,
+        RuleGrammar::Apply => CssomRuleInterfaceName::Apply,
+        RuleGrammar::Contents => CssomRuleInterfaceName::Contents,
+        RuleGrammar::Result => CssomRuleInterfaceName::Result,
+        RuleGrammar::Private => CssomRuleInterfaceName::Private,
+
         RuleGrammar::FunctionDeclarations => CssomRuleInterfaceName::FunctionDeclarations,
         RuleGrammar::ColorProfile => CssomRuleInterfaceName::ColorProfile,
         RuleGrammar::ViewTransition => CssomRuleInterfaceName::ViewTransition,
@@ -403,9 +426,21 @@ enum ParsedCssRuleKind {
     CounterStyle(CanonicalCounterStyleRule),
     Property(CanonicalPropertyRule),
     PositionTry(CanonicalPositionTryRule),
+    Mixin(CanonicalMixinRule),
     Function(CanonicalFunctionRule),
     FunctionDeclarations(CanonicalCssDeclarationBlock),
     Other,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct CanonicalMixinRule {
+    has_block: bool,
+    declarations: Option<CanonicalCssDeclarationBlock>,
+    header: String,
+    kind: stylo_cssom_model::RuleMixinKind,
+    name: Option<String>,
+    parameters: Box<[stylo_cssom_model::RuleFunctionParameter]>,
+    grouping: CanonicalCssGroupingRule,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1158,6 +1193,66 @@ impl ParsedCssRule {
                     declarations: canonical_position_try_declarations(rule.block.read_with(guard)),
                 })
             },
+            CssRule::Mixin(rule) => ParsedCssRuleKind::Mixin(CanonicalMixinRule {
+                has_block: rule.rules.is_some(),
+                declarations: (rule.prelude.kind
+                    == style::stylesheets::mixin_rule::MixinRuleKind::Private)
+                    .then(|| CanonicalCssDeclarationBlock {
+                        serialization: rule.prelude.private_declarations_css(),
+                        declarations: rule
+                            .prelude
+                            .parameters
+                            .iter()
+                            .filter_map(|parameter| {
+                                Some(stylo_cssom_model::RuleDeclaration::new(
+                                    format!("--{}", parameter.name),
+                                    parameter.default.as_ref()?.css_text(),
+                                ))
+                            })
+                            .collect(),
+                        shorthand_values: Box::new([]),
+                    }),
+                header: rule.prelude.to_css_string(),
+                kind: match rule.prelude.kind {
+                    style::stylesheets::mixin_rule::MixinRuleKind::Definition => {
+                        stylo_cssom_model::RuleMixinKind::Definition
+                    },
+                    style::stylesheets::mixin_rule::MixinRuleKind::Apply => {
+                        stylo_cssom_model::RuleMixinKind::Apply
+                    },
+                    style::stylesheets::mixin_rule::MixinRuleKind::Contents => {
+                        stylo_cssom_model::RuleMixinKind::Contents
+                    },
+                    style::stylesheets::mixin_rule::MixinRuleKind::Result => {
+                        stylo_cssom_model::RuleMixinKind::Result
+                    },
+                    style::stylesheets::mixin_rule::MixinRuleKind::Private => {
+                        stylo_cssom_model::RuleMixinKind::Private
+                    },
+                },
+                name: rule.prelude.name.as_ref().map(|name| name.0.to_string()),
+                parameters: rule
+                    .prelude
+                    .parameters
+                    .iter()
+                    .map(|parameter| {
+                        stylo_cssom_model::RuleFunctionParameter::new(
+                            format!("--{}", parameter.name),
+                            parameter.syntax.to_css_string(),
+                            parameter.default.as_ref().map(|value| value.css_text()),
+                        )
+                    })
+                    .collect(),
+                grouping: CanonicalCssGroupingRule {
+                    nested_rules: rule
+                        .rules
+                        .as_ref()
+                        .map(|rules| {
+                            canonical_nested_rules(rules.read_with(guard), guard, authored)
+                        })
+                        .unwrap_or_default(),
+                },
+            }),
             CssRule::Function(rule) => ParsedCssRuleKind::Function(CanonicalFunctionRule {
                 header: rule.to_css_string(),
                 name: rule.name.0.to_string(),
@@ -1353,6 +1448,11 @@ impl ParsedCssRule {
             ParsedCssRuleKind::PositionTry(rule) => RuleCssomData::PositionTry {
                 name: rule.name.as_str().into(),
             },
+            ParsedCssRuleKind::Mixin(rule) => RuleCssomData::Mixin {
+                kind: rule.kind,
+                name: rule.name.as_deref().map(Into::into),
+                parameters: rule.parameters.clone().into(),
+            },
             ParsedCssRuleKind::Function(rule) => RuleCssomData::Function {
                 name: rule.name.as_str().into(),
                 parameters: rule.parameters.iter().cloned().collect(),
@@ -1407,6 +1507,7 @@ impl ParsedCssRule {
             ParsedCssRuleKind::FunctionDeclarations(_) => {
                 stylo_cssom_model::RuleDeclarationDomain::FunctionDescriptors
             },
+            ParsedCssRuleKind::Mixin(_) => stylo_cssom_model::RuleDeclarationDomain::Private,
             ParsedCssRuleKind::Function(_)
             | ParsedCssRuleKind::Keyframes(_)
             | ParsedCssRuleKind::Namespace(_)
@@ -1455,6 +1556,7 @@ impl ParsedCssRule {
 
     fn declarations(&self) -> Option<&CanonicalCssDeclarationBlock> {
         match &self.kind {
+            ParsedCssRuleKind::Mixin(rule) => rule.declarations.as_ref(),
             ParsedCssRuleKind::Keyframe(rule) => Some(&rule.declarations),
             ParsedCssRuleKind::Style(rule) => Some(&rule.declarations),
             ParsedCssRuleKind::FontFace(block)
@@ -1518,6 +1620,7 @@ impl ParsedCssRule {
             ParsedCssRuleKind::LayerBlock(rule) => &rule.grouping.nested_rules,
             ParsedCssRuleKind::Scope(rule) => &rule.grouping.nested_rules,
             ParsedCssRuleKind::Page(rule) => &rule.nested_rules,
+            ParsedCssRuleKind::Mixin(rule) => &rule.grouping.nested_rules,
             ParsedCssRuleKind::Function(rule) => &rule.grouping.nested_rules,
             _ => return None,
         })
@@ -1563,6 +1666,7 @@ impl ParsedCssRule {
                 CanonicalPageSelector::Anonymous => "@page".to_owned(),
                 CanonicalPageSelector::Named(selector) => format!("@page {selector}"),
             },
+            ParsedCssRuleKind::Mixin(rule) if rule.has_block => rule.header.clone(),
             ParsedCssRuleKind::Function(rule) => rule.header.clone(),
             _ => return None,
         };
@@ -1792,7 +1896,7 @@ impl ParsedCssRule {
     }
 }
 
-pub const fn stylo_rule_grammar(rule: &CssRule) -> stylo_cssom_model::RuleGrammar {
+pub fn stylo_rule_grammar(rule: &CssRule) -> stylo_cssom_model::RuleGrammar {
     use stylo_cssom_model::RuleGrammar;
 
     match rule {
@@ -1827,6 +1931,13 @@ pub const fn stylo_rule_grammar(rule: &CssRule) -> stylo_cssom_model::RuleGramma
         CssRule::StartingStyle(_) => RuleGrammar::StartingStyle,
         CssRule::PositionTry(_) => RuleGrammar::PositionTry,
         CssRule::NestedDeclarations(_) => RuleGrammar::NestedDeclarations,
+        CssRule::Mixin(rule) => match rule.prelude.kind {
+            style::stylesheets::mixin_rule::MixinRuleKind::Definition => RuleGrammar::Mixin,
+            style::stylesheets::mixin_rule::MixinRuleKind::Apply => RuleGrammar::Apply,
+            style::stylesheets::mixin_rule::MixinRuleKind::Contents => RuleGrammar::Contents,
+            style::stylesheets::mixin_rule::MixinRuleKind::Result => RuleGrammar::Result,
+            style::stylesheets::mixin_rule::MixinRuleKind::Private => RuleGrammar::Private,
+        },
         CssRule::Function(_) => RuleGrammar::Function,
         CssRule::FunctionDeclarations(_) => RuleGrammar::FunctionDeclarations,
     }
@@ -2223,6 +2334,7 @@ pub const fn rule_node_exposes_style(node: &stylo_cssom_model::RuleNode) -> bool
             | stylo_cssom_model::RuleGrammar::Margin
             | stylo_cssom_model::RuleGrammar::PositionTry
             | stylo_cssom_model::RuleGrammar::FunctionDeclarations
+            | stylo_cssom_model::RuleGrammar::Private
     )
 }
 
@@ -2276,6 +2388,7 @@ pub fn replace_rule_selector_in_context(
         | RuleCssomData::Property { .. }
         | RuleCssomData::PositionTry { .. }
         | RuleCssomData::ViewTransition { .. }
+        | RuleCssomData::Mixin { .. }
         | RuleCssomData::Function { .. }
         | RuleCssomData::Margin { .. }
         | RuleCssomData::LayerBlock { .. }
@@ -2311,7 +2424,8 @@ pub fn mutate_non_style_rule_declaration(
                 | RuleDeclarationDomain::Keyframe
                 | RuleDeclarationDomain::PositionTry
                 | RuleDeclarationDomain::Nested
-                | RuleDeclarationDomain::FunctionDescriptors => unreachable!(),
+                | RuleDeclarationDomain::FunctionDescriptors
+                | RuleDeclarationDomain::Private => unreachable!(),
             };
             crate::declaration_parser::mutate_rule_declaration_block(
                 block, property, value, priority, context,
@@ -2357,6 +2471,33 @@ pub fn mutate_non_style_rule_declaration(
                 priority,
                 crate::declaration_parser::CssomDeclarationContext::Style,
             )?
+        },
+        RuleDeclarationDomain::Private => {
+            let name = property.trim();
+            if !name.starts_with("--") || (!value.is_empty() && !is_single_css_value(value)) {
+                return None;
+            }
+            let Some(stylo_cssom_model::RuleCssomData::Mixin { parameters, .. }) =
+                node.cssom_data()
+            else {
+                return None;
+            };
+            let mut declarations = parameters
+                .iter()
+                .filter(|parameter| parameter.name() != name)
+                .map(|parameter| {
+                    format!(
+                        "{} type({}): {};",
+                        parameter.name(),
+                        parameter.syntax(),
+                        parameter.default_value().unwrap_or("")
+                    )
+                })
+                .collect::<Vec<_>>();
+            if !value.is_empty() {
+                declarations.push(format!("{name}: {value};"));
+            }
+            return replace_private_declarations(node, &declarations.join(" "));
         },
         RuleDeclarationDomain::FunctionDescriptors => {
             let name = property.trim();
@@ -2409,6 +2550,21 @@ pub fn replace_position_try_rule_declarations(
     Some(node.clone().with_cssom_declaration_block(block))
 }
 
+pub fn replace_private_declarations(
+    node: &stylo_cssom_model::RuleNode,
+    declarations: &str,
+) -> Option<stylo_cssom_model::RuleNode> {
+    if node.grammar() != stylo_cssom_model::RuleGrammar::Private {
+        return None;
+    }
+    let parsed = ParsedCssRule::parse(&format!("* {{ @private {{ {declarations} }} }}"))?;
+    let private = parsed.nested_rules()?.first()?.to_rule_node();
+    let block = private.payload().declaration_block()?.clone();
+    node.clone()
+        .with_cssom_declaration_block(block)
+        .with_cssom_data(private.cssom_data()?.clone())
+}
+
 pub fn replace_function_declarations(
     node: &stylo_cssom_model::RuleNode,
     declarations: &str,
@@ -2457,7 +2613,8 @@ pub fn replace_page_or_margin_rule_declarations(
         | RuleDeclarationDomain::Keyframe
         | RuleDeclarationDomain::PositionTry
         | RuleDeclarationDomain::Nested
-        | RuleDeclarationDomain::FunctionDescriptors => return None,
+        | RuleDeclarationDomain::FunctionDescriptors
+        | RuleDeclarationDomain::Private => return None,
     };
     let block = parsed.to_rule_node().payload().declaration_block()?.clone();
     Some(node.clone().with_cssom_declaration_block(block))
@@ -2486,6 +2643,19 @@ fn interface_name_for_rule(rule: &CssRule) -> CssomRuleInterfaceName {
         CssRule::StartingStyle(_) => CssomRuleInterfaceName::StartingStyle,
         CssRule::PositionTry(_) => CssomRuleInterfaceName::PositionTry,
         CssRule::NestedDeclarations(_) => CssomRuleInterfaceName::NestedDeclarations,
+        CssRule::Mixin(rule) => match rule.prelude.kind {
+            style::stylesheets::mixin_rule::MixinRuleKind::Definition => {
+                CssomRuleInterfaceName::Mixin
+            },
+            style::stylesheets::mixin_rule::MixinRuleKind::Apply => CssomRuleInterfaceName::Apply,
+            style::stylesheets::mixin_rule::MixinRuleKind::Contents => {
+                CssomRuleInterfaceName::Contents
+            },
+            style::stylesheets::mixin_rule::MixinRuleKind::Result => CssomRuleInterfaceName::Result,
+            style::stylesheets::mixin_rule::MixinRuleKind::Private => {
+                CssomRuleInterfaceName::Private
+            },
+        },
         CssRule::Function(_) => CssomRuleInterfaceName::Function,
         CssRule::FunctionDeclarations(_) => CssomRuleInterfaceName::FunctionDeclarations,
         CssRule::ColorProfile(_) => CssomRuleInterfaceName::ColorProfile,
@@ -3070,7 +3240,9 @@ mod tests {
             PropertyDeclaration::TextAlignLast(value) => PropertyDeclaration::TextAlignLast(*value),
             PropertyDeclaration::TextAnchor(value) => PropertyDeclaration::TextAnchor(*value),
             PropertyDeclaration::TextAutospace(value) => PropertyDeclaration::TextAutospace(*value),
-            PropertyDeclaration::TextAutospaceSize(value) => PropertyDeclaration::TextAutospaceSize(value.clone()),
+            PropertyDeclaration::TextAutospaceSize(value) => {
+                PropertyDeclaration::TextAutospaceSize(value.clone())
+            },
             PropertyDeclaration::TextBoxEdge(value) => PropertyDeclaration::TextBoxEdge(*value),
             PropertyDeclaration::TextDecorationLine(value) => {
                 PropertyDeclaration::TextDecorationLine(*value)
@@ -4890,6 +5062,7 @@ mod tests {
             CssRule::StartingStyle(_) => "StartingStyle",
             CssRule::PositionTry(_) => "PositionTry",
             CssRule::NestedDeclarations(_) => "NestedDeclarations",
+            CssRule::Mixin(_) => "Mixin",
             CssRule::Function(_) => "Function",
             CssRule::FunctionDeclarations(_) => "FunctionDeclarations",
         }
@@ -5035,6 +5208,12 @@ mod tests {
                 Parent::CssRule,
             ),
             (Name::Function, "CSSFunctionRule", Parent::GroupingRule),
+            (Name::Mixin, "CSSMixinRule", Parent::GroupingRule),
+            (Name::Apply, "CSSApplyRule", Parent::GroupingRule),
+            (Name::Contents, "CSSContentsRule", Parent::GroupingRule),
+            (Name::Result, "CSSResultRule", Parent::GroupingRule),
+            (Name::Private, "CSSPrivateRule", Parent::StyleRule),
+
             (
                 Name::FunctionDeclarations,
                 "CSSFunctionDeclarations",
@@ -6254,6 +6433,51 @@ mod tests {
                 .unwrap()
                 .serialization(),
             "--x: 1px; result: 3px; --y: 2px;"
+        );
+    }
+}
+
+#[cfg(test)]
+mod mixin_cssom_tests {
+    use super::*;
+
+    #[test]
+    fn mixin_rules_retain_typed_children_and_parameters() {
+        let parsed = ParsedCssRule::parse(
+            "@mixin --example(--width <length>: 2px) { @result { width: var(--width); } }",
+        )
+        .unwrap();
+        let node = parsed.to_rule_node();
+        assert_eq!(node.grammar(), stylo_cssom_model::RuleGrammar::Mixin);
+        let Some(stylo_cssom_model::RuleCssomData::Mixin { parameters, .. }) = node.cssom_data()
+        else {
+            panic!("typed mixin metadata");
+        };
+        assert_eq!(parameters[0].name(), "--width");
+        assert_eq!(parameters[0].default_value(), Some("2px"));
+        assert_eq!(
+            parsed.nested_rules().unwrap()[0].grammar(),
+            stylo_cssom_model::RuleGrammar::Result
+        );
+    }
+
+    #[test]
+    fn private_declarations_are_separate_from_nested_rules() {
+        let parsed = ParsedCssRule::parse(
+            "div { @private { --size <length>: 3px; @media all { color: red; } } }",
+        )
+        .unwrap();
+        let private = &parsed.nested_rules().unwrap()[0];
+        assert_eq!(private.grammar(), stylo_cssom_model::RuleGrammar::Private);
+        assert_eq!(private.nested_rules().unwrap().len(), 1);
+        let node = private.to_rule_node();
+        assert_eq!(
+            node.payload().declaration_block().unwrap().declarations()[0].value(),
+            "3px"
+        );
+        assert_eq!(
+            private.interface_name().parent(),
+            CssomRuleInterfaceParent::StyleRule
         );
     }
 }

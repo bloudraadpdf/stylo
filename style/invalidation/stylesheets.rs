@@ -678,6 +678,7 @@ impl StylesheetInvalidationSet {
             CounterStyle(..)
             | Property(..)
             | Function(..)
+            | Mixin(..)
             | FontFeatureValues(..)
             | FontPaletteValues(..) => {
                 debug!(" > Found unsupported rule, marking the whole subtree invalid.");

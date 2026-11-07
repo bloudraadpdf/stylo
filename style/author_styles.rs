@@ -48,6 +48,27 @@ where
         }
     }
 
+    /// Flush a shadow scope using nearest-first ancestor shadow mixin data.
+    pub fn flush_with_parent_mixins(
+        &mut self,
+        stylist: &mut Stylist,
+        guard: &SharedRwLockReadGuard,
+        parents: &[Arc<CascadeData>],
+    ) -> StylesheetInvalidationSet {
+        let (flusher, mut invalidations) = self.stylesheets.flush();
+        let parents: Vec<_> = parents.iter().map(|data| &**data).collect();
+        if let Ok(Some(data)) = stylist.rebuild_author_data_with_parent_mixins(
+            &self.data,
+            flusher.sheets,
+            guard,
+            &mut invalidations.cascade_data_difference,
+            &parents,
+        ) {
+            self.data = data;
+        }
+        invalidations
+    }
+
     /// Flush the pending sheet changes, updating `data` as appropriate.
     #[inline]
     pub fn flush(

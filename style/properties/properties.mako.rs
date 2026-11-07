@@ -425,7 +425,13 @@ impl NonCustomPropertyId {
 
     /// Returns whether a given rule allows a given property.
     #[inline]
-    pub fn allowed_in_rule(self, rule_types: CssRuleTypes) -> bool {
+    pub fn allowed_in_rule(self, mut rule_types: CssRuleTypes) -> bool {
+        // Expansion blocks have the declaration grammar of nested style rules.
+        if rule_types.contains(CssRuleType::Result) ||
+           rule_types.contains(CssRuleType::Apply) ||
+           rule_types.contains(CssRuleType::Contents) {
+            rule_types.insert(CssRuleType::Style);
+        }
         debug_assert!(
             rule_types.contains(CssRuleType::Keyframe) ||
             rule_types.contains(CssRuleType::Page) ||

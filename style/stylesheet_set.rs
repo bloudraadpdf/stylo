@@ -117,6 +117,13 @@ impl<'a, S> SheetCollectionFlusher<'a, S>
 where
     S: StylesheetInDocument + PartialEq + 'static,
 {
+    /// Rebuild every sheet when an inherited lexical mixin environment changes.
+    pub fn force_full_rebuild(mut self) -> Self {
+        self.validity = DataValidity::FullyInvalid;
+        self.dirty = true;
+        self
+    }
+
     /// Whether the collection was originally dirty.
     #[inline]
     pub fn dirty(&self) -> bool {

@@ -198,6 +198,11 @@ impl<T: fmt::Debug> fmt::Debug for Locked<T> {
 }
 
 impl<T> Locked<T> {
+    /// Protect a derived object with the same lock as this authored object.
+    pub fn wrap_related<U>(&self, data: U) -> Locked<U> {
+        self.shared_lock.wrap(data)
+    }
+
     #[cfg(feature = "gecko")]
     #[inline]
     fn is_read_only_lock(&self) -> bool {

@@ -6,7 +6,6 @@
 //!
 //! [custom]: https://drafts.csswg.org/css-variables/
 
-use crate::Atom;
 use crate::applicable_declarations::CascadePriority;
 use crate::custom_properties_map::CustomPropertiesMap;
 use crate::derives::*;
@@ -18,7 +17,7 @@ use crate::properties::{
 };
 use crate::properties_and_values::{
     registry::PropertyRegistrationData,
-    syntax::{Descriptor, data_type::DependentDataTypes},
+    syntax::{data_type::DependentDataTypes, Descriptor},
     value::{
         AllowComputationallyDependent, ComputedValue as ComputedRegisteredValue,
         SpecifiedValue as SpecifiedRegisteredValue,
@@ -28,10 +27,11 @@ use crate::rule_tree::CascadeLevel;
 use crate::selector_map::{PrecomputedHashMap, PrecomputedHashSet};
 use crate::stylesheets::{Namespaces, UrlExtraData};
 use crate::stylist::Stylist;
-use crate::values::DashedIdent;
 use crate::values::computed::{self, ToComputedValue};
 use crate::values::generics::calc::SortKey as AttrUnit;
 use crate::values::specified::{AttrName, FontRelativeLength};
+use crate::values::DashedIdent;
+use crate::Atom;
 use cssparser::{
     CowRcStr, Delimiter, Parser, ParserInput, SourcePosition, Token, TokenSerializationType,
 };
@@ -50,8 +50,8 @@ mod conditionals;
 mod functions;
 
 pub use self::functions::{
-    CallingElement, CustomFunction, ElementCallSite, FunctionBodyItem, FunctionScope,
-    document_function_scope,
+    document_function_scope, CallingElement, CustomFunction, ElementCallSite, FunctionBodyItem,
+    FunctionScope,
 };
 
 /// CSS env-1 §3 paged-media environment variables, in CSS pixels.
@@ -738,7 +738,95 @@ impl References {
     }
 }
 
+/// Whether this name belongs to an unobservable lexical private property.
+/// CSS tokenization replaces NUL, so authored identifiers cannot create these names.
+pub fn is_private_name(name: &Name) -> bool {
+    name.as_ref().starts_with('\0')
+}
+
 impl VariableValue {
+    /// Rename lexical references without changing the retained authored token stream.
+    pub fn rename_private_references(&mut self, names: &std::collections::HashMap<Name, Name>) {
+        for reference in &mut self.references.refs {
+            if let SubstitutionFunction::Var(ref mut name) = reference.function {
+                if let Some(private) = names.get(name) {
+                    *name = private.clone();
+                }
+            }
+        }
+    }
+
+    /// Construct an unobservable function call from already validated argument values.
+    pub fn private_function_call(
+        name: Atom,
+        arguments: &[Arc<VariableValue>],
+        url_data: &UrlExtraData,
+    ) -> Option<Self> {
+        let css = format!(
+            "--internal({})",
+            arguments
+                .iter()
+                .map(|value| format!("{{{}}}", value.css))
+                .collect::<Vec<_>>()
+                .join(",")
+        );
+        let mut input = cssparser::ParserInput::new(&css);
+        let mut input = cssparser::Parser::new(&mut input);
+        let mut value = Self::parse(&mut input, url_data, &Namespaces::default()).ok()?;
+        if let SubstitutionFunction::Function {
+            name: ref mut function,
+            ..
+        } = value.references.refs.first_mut()?.function
+        {
+            function.0 = name;
+        }
+        for (target, source) in value.references.refs.iter_mut().skip(1).zip(
+            arguments
+                .iter()
+                .flat_map(|argument| argument.references.refs.iter()),
+        ) {
+            match (&mut target.function, &source.function) {
+                (SubstitutionFunction::Var(target), SubstitutionFunction::Var(source)) => {
+                    *target = source.clone()
+                },
+                (
+                    SubstitutionFunction::Function { name: target, .. },
+                    SubstitutionFunction::Function { name: source, .. },
+                ) => *target = source.clone(),
+                _ => {},
+            }
+        }
+        Some(value)
+    }
+
+    /// Construct a variable reference using an unforgeable name, retaining valid CSS offsets.
+    pub fn private_variable_reference(name: Name, url_data: &UrlExtraData) -> Self {
+        let mut input = cssparser::ParserInput::new("var(--internal)");
+        let mut input = cssparser::Parser::new(&mut input);
+        let mut value = Self::parse(&mut input, url_data, &Namespaces::default()).unwrap();
+        value.references.refs[0].function = SubstitutionFunction::Var(name);
+        value
+    }
+
+    /// The already parsed arguments of a single dashed function invocation.
+    pub fn function_arguments(&self) -> Option<Vec<Arc<VariableValue>>> {
+        let reference = self.references.refs.first()?;
+        let SubstitutionFunction::Function { ref arguments, .. } = reference.function else {
+            return None;
+        };
+        arguments
+            .iter()
+            .map(|argument| {
+                let mut input =
+                    cssparser::ParserInput::new(&self.css[argument.start..argument.end]);
+                let mut input = cssparser::Parser::new(&mut input);
+                Self::parse(&mut input, &self.url_data, &Namespaces::default())
+                    .ok()
+                    .map(Arc::new)
+            })
+            .collect()
+    }
+
     fn empty(url_data: &UrlExtraData) -> Self {
         Self {
             css: String::new(),
@@ -3234,7 +3322,7 @@ pub fn substitute_with_environment_resolution<'a>(
 mod tests {
     use super::*;
     use crate::stylesheets::UrlExtraData;
-    use crate::test_support::{BoolPrefGuard, pref_lock};
+    use crate::test_support::{pref_lock, BoolPrefGuard};
     use crate::{Namespace, Prefix};
     use cssparser::{Parser, ParserInput};
     use url::Url;

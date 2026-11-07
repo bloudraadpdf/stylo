@@ -131,7 +131,9 @@ fn native_declarations(
         RuleDeclarationDomain::Keyframe => CssomDeclarationContext::Keyframe,
         RuleDeclarationDomain::Page => CssomDeclarationContext::Page,
         RuleDeclarationDomain::Margin => CssomDeclarationContext::Margin,
-        RuleDeclarationDomain::FontFaceDescriptor | RuleDeclarationDomain::FunctionDescriptors => {
+        RuleDeclarationDomain::FontFaceDescriptor
+        | RuleDeclarationDomain::FunctionDescriptors
+        | RuleDeclarationDomain::Private => {
             return Err(DeclarationLoweringError::DeclarationContext);
         },
     };

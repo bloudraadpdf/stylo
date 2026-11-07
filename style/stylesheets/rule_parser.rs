@@ -12,9 +12,9 @@ use crate::font_face::parse_font_face_block;
 use crate::media_queries::MediaList;
 use crate::parser::{Parse, ParserContext};
 use crate::properties::declaration_block::{
-    DeclarationParserState, PropertyDeclarationBlock, parse_property_declaration_list,
+    parse_property_declaration_list, DeclarationParserState, PropertyDeclarationBlock,
 };
-use crate::properties_and_values::rule::{PropertyRuleName, parse_property_block};
+use crate::properties_and_values::rule::{parse_property_block, PropertyRuleName};
 use crate::selector_parser::{SelectorImpl, SelectorParser};
 use crate::shared_lock::{Locked, SharedRwLock};
 use crate::str::starts_with_ignore_ascii_case;
@@ -27,6 +27,7 @@ use crate::stylesheets::import_rule::{
 };
 use crate::stylesheets::keyframes_rule::parse_keyframe_list;
 use crate::stylesheets::layer_rule::{LayerBlockRule, LayerName, LayerStatementRule};
+use crate::stylesheets::mixin_rule::{MixinPrelude, MixinRule, MixinRuleKind};
 use crate::stylesheets::navigation_rule::{NavigationCondition, NavigationRule};
 use crate::stylesheets::scope_rule::{ScopeBounds, ScopeRule};
 use crate::stylesheets::supports_rule::SupportsCondition;
@@ -42,9 +43,9 @@ use crate::values::computed::font::FamilyName;
 use crate::values::{CssUrl, CustomIdent, DashedIdent, KeyframesName};
 use crate::{Atom, Namespace, Prefix};
 use cssparser::{
-    AtRuleParser, BasicParseError, BasicParseErrorKind, CowRcStr, DeclarationParser, Parser,
-    ParserState, QualifiedRuleParser, RuleBodyItemParser, RuleBodyParser, SourcePosition,
-    match_ignore_ascii_case,
+    match_ignore_ascii_case, AtRuleParser, BasicParseError, BasicParseErrorKind, CowRcStr,
+    DeclarationParser, Parser, ParserState, QualifiedRuleParser, RuleBodyItemParser,
+    RuleBodyParser, SourcePosition,
 };
 use selectors::parser::{ParseRelative, SelectorList};
 use servo_arc::Arc;
@@ -162,7 +163,12 @@ impl<'a, 'i> TopLevelRuleParser<'a, 'i> {
             CssRuleType::Style.bit()
                 | CssRuleType::Page.bit()
                 | CssRuleType::Scope.bit()
-                | CssRuleType::Function.bit(),
+                | CssRuleType::Function.bit()
+                | CssRuleType::Mixin.bit()
+                | CssRuleType::Result.bit()
+                | CssRuleType::Contents.bit()
+                | CssRuleType::Apply.bit()
+                | CssRuleType::Private.bit(),
         )
     }
 
@@ -289,6 +295,8 @@ pub enum AtRulePrelude {
     Property(PropertyRuleName),
     /// A @function rule prelude.
     Function(FunctionPrelude),
+    /// A mixin-family rule.
+    Mixin(MixinPrelude),
     /// A @document rule, with its conditional.
     Document(DocumentCondition),
     /// A @import rule prelude.
@@ -353,6 +361,7 @@ impl AtRulePrelude {
             Self::Page(..) => "page",
             Self::Property(..) => "property",
             Self::Function(..) => "function",
+            Self::Mixin(ref prelude) => prelude.kind.keyword(),
             Self::Document(..) => "-moz-document",
             Self::Import(..) => "import",
             Self::Margin(..) => "margin",
@@ -585,6 +594,36 @@ impl<'a, 'i> NestedRuleParser<'a, 'i> {
     //     of style rules: any at-rule whose body contains style rules can be nested inside of a
     //     style rule as well.
     fn at_rule_allowed(&self, prelude: &AtRulePrelude) -> bool {
+        let types = self.context.nesting_context.rule_types;
+        let in_mixin = types.contains(CssRuleType::Mixin);
+        let in_result = types.contains(CssRuleType::Result);
+        if let AtRulePrelude::Mixin(header) = prelude {
+            return match header.kind {
+                MixinRuleKind::Definition => {
+                    !self.in_style_or_page_rule() && !in_mixin && !self.in_function_rule()
+                },
+                MixinRuleKind::Result => in_mixin && !in_result,
+                MixinRuleKind::Contents => in_mixin && in_result,
+                MixinRuleKind::Apply | MixinRuleKind::Private => {
+                    self.in_style_rule()
+                        || in_result
+                        || types.contains(CssRuleType::Apply)
+                        || types.contains(CssRuleType::Contents)
+                },
+            };
+        }
+        if types.contains(CssRuleType::Private) || (in_mixin && !in_result) {
+            return matches!(
+                prelude,
+                AtRulePrelude::Media(..)
+                    | AtRulePrelude::Supports(..)
+                    | AtRulePrelude::Container(..)
+            );
+        }
+        if in_mixin && matches!(prelude, AtRulePrelude::Layer(..)) {
+            return false;
+        }
+
         if self.in_function_rule() {
             return matches!(
                 prelude,
@@ -621,6 +660,7 @@ impl<'a, 'i> NestedRuleParser<'a, 'i> {
             | AtRulePrelude::ColorProfile(..)
             | AtRulePrelude::ViewTransition
             | AtRulePrelude::Region(..) => !self.in_style_or_page_rule(),
+            AtRulePrelude::Mixin(..) => unreachable!(),
             AtRulePrelude::Margin(..) | AtRulePrelude::Footnote | AtRulePrelude::Sidenote(..) => {
                 self.in_page_rule()
             },
@@ -632,6 +672,48 @@ impl<'a, 'i> NestedRuleParser<'a, 'i> {
         let r = cb(self);
         self.context.nesting_context.restore(old);
         r
+    }
+
+    fn parse_private(
+        &mut self,
+        input: &mut Parser<'i, '_>,
+    ) -> (
+        Box<[crate::stylesheets::function_rule::FunctionParameter]>,
+        Arc<Locked<CssRules>>,
+    ) {
+        self.nest_for_rule(CssRuleType::Private, |parser| {
+            let mut rules = std::mem::take(&mut parser.rules);
+            let mut declarations: Vec<crate::stylesheets::function_rule::FunctionParameter> =
+                Vec::new();
+            while !input.is_exhausted() {
+                let state = input.state();
+                let at_rule = matches!(input.next(), Ok(cssparser::Token::AtKeyword(_)));
+                input.reset(&state);
+                if at_rule {
+                    let _ = RuleBodyParser::new(input, parser).next();
+                } else {
+                    let declaration =
+                        input.parse_until_after(cssparser::Delimiter::Semicolon, |input| {
+                            crate::stylesheets::function_rule::parse_parameter(
+                                &parser.context,
+                                input,
+                            )
+                        });
+                    if let Ok(declaration) = declaration {
+                        if declaration.default.is_some() {
+                            declarations.retain(|old| old.name != declaration.name);
+                            declarations.push(declaration);
+                        }
+                    }
+                }
+            }
+            parser.flush_declarations();
+            std::mem::swap(&mut parser.rules, &mut rules);
+            (
+                declarations.into_boxed_slice(),
+                CssRules::new(rules, &parser.shared_lock),
+            )
+        })
     }
 
     fn parse_nested_rules(
@@ -912,6 +994,16 @@ impl<'a, 'i> AtRuleParser<'i> for NestedRuleParser<'a, 'i> {
                 })?;
                 AtRulePrelude::Property(PropertyRuleName(Atom::from(name)))
             },
+            "mixin" | "apply" | "contents" | "result" | "private" => {
+                let kind = match_ignore_ascii_case! { &*name,
+                    "mixin" => MixinRuleKind::Definition,
+                    "apply" => MixinRuleKind::Apply,
+                    "contents" => MixinRuleKind::Contents,
+                    "result" => MixinRuleKind::Result,
+                    _ => MixinRuleKind::Private,
+                };
+                AtRulePrelude::Mixin(MixinPrelude::parse(kind, &self.context, input)?)
+            },
             "function" => {
                 AtRulePrelude::Function(FunctionPrelude::parse(&self.context, input)?)
             },
@@ -1073,6 +1165,20 @@ impl<'a, 'i> AtRuleParser<'i> for NestedRuleParser<'a, 'i> {
                 let rule_data = parse_property_block(&p.context, input, name, source_location)?;
                 Ok::<CssRule, ParseError<'i>>(CssRule::Property(Arc::new(rule_data)))
             })?,
+            AtRulePrelude::Mixin(mut prelude) => {
+                let rules = if prelude.kind == MixinRuleKind::Private {
+                    let (declarations, rules) = self.parse_private(input);
+                    prelude.parameters = declarations;
+                    rules
+                } else {
+                    self.parse_nested_rules(input, prelude.kind.rule_type())
+                };
+                CssRule::Mixin(Arc::new(MixinRule {
+                    prelude,
+                    rules: Some(rules),
+                    source_location,
+                }))
+            },
             AtRulePrelude::Function(prelude) => CssRule::Function(Arc::new(FunctionRule::new(
                 prelude,
                 self.parse_nested_rules(input, CssRuleType::Function),
@@ -1318,11 +1424,23 @@ impl<'a, 'i> AtRuleParser<'i> for NestedRuleParser<'a, 'i> {
         prelude: AtRulePrelude,
         start: &ParserState,
     ) -> Result<(), ()> {
-        if self.in_style_rule() || self.in_function_rule() {
+        if !self.at_rule_allowed(&prelude)
+            || ((self.in_style_rule() || self.in_function_rule())
+                && !matches!(prelude, AtRulePrelude::Mixin(..)))
+        {
             return Err(());
         }
         let source_location = start.source_location();
         let rule = match prelude {
+            AtRulePrelude::Mixin(prelude)
+                if matches!(prelude.kind, MixinRuleKind::Apply | MixinRuleKind::Contents) =>
+            {
+                CssRule::Mixin(Arc::new(MixinRule {
+                    prelude,
+                    rules: None,
+                    source_location,
+                }))
+            },
             AtRulePrelude::CustomMedia(name, condition) => {
                 CssRule::CustomMedia(Arc::new(CustomMediaRule {
                     name,
@@ -1356,7 +1474,11 @@ impl<'a, 'i> QualifiedRuleParser<'i> for NestedRuleParser<'a, 'i> {
         &mut self,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self::Prelude, ParseError<'i>> {
-        if self.in_function_rule() {
+        let types = self.context.nesting_context.rule_types;
+        if self.in_function_rule()
+            || types.contains(CssRuleType::Private)
+            || (types.contains(CssRuleType::Mixin) && !types.contains(CssRuleType::Result))
+        {
             return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
         }
         let selector_parser = SelectorParser {
@@ -1411,7 +1533,13 @@ impl<'a, 'i> DeclarationParser<'i> for NestedRuleParser<'a, 'i> {
         declaration_start: &ParserState,
     ) -> Result<(), ParseError<'i>> {
         let top = &mut **self;
-        if top.in_function_rule() {
+        let types = top.context.nesting_context.rule_types;
+        if types.contains(CssRuleType::Private) && !name.starts_with("--") {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+        if top.in_function_rule()
+            || (types.contains(CssRuleType::Mixin) && !types.contains(CssRuleType::Result))
+        {
             let descriptor = FunctionDescriptor::parse(&top.context, name, input)?;
             top.function_declarations
                 .get_or_insert_with(|| FunctionDeclarationsRule {

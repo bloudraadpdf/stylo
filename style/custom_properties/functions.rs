@@ -7,8 +7,8 @@
 //! <https://drafts.csswg.org/css-mixins-1/#evaluating-custom-functions>
 
 use super::{
-    Name, NonCustomReferences, Substitution, SubstitutionFunction, Substitutor, VariableValue,
-    compute_value,
+    compute_value, Name, NonCustomReferences, Substitution, SubstitutionFunction, Substitutor,
+    VariableValue,
 };
 use crate::computed_value_flags::ComputedValueFlags;
 use crate::dom::{TElement, TNode, TShadowRoot};
@@ -42,7 +42,7 @@ struct Parameter {
 }
 
 /// An item of a compiled function body.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum FunctionBodyItem {
     /// A local variable or the `result` descriptor.
     Descriptor(FunctionDescriptor),
@@ -780,7 +780,6 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
 mod tests {
     use super::super::{AttrTaintedRange, DeferredCustomProperties, VariableValue};
     use super::super::{CustomPropertiesBuilder, DeferFontRelativeCustomPropertyResolution};
-    use crate::Atom;
     use crate::applicable_declarations::CascadePriority;
     use crate::context::QuirksMode;
     use crate::dom::{AttributeProvider, AttributeTracker, ExpandedAttributeName};
@@ -792,9 +791,10 @@ mod tests {
     use crate::stylesheets::layer_rule::LayerOrder;
     use crate::stylesheets::{CssRule, DocumentStyleSheet, StylesheetInDocument};
     use crate::stylist::Stylist;
-    use crate::test_support::{BoolPrefGuard, pref_lock};
     use crate::test_support::{parse_stylesheet, test_device};
+    use crate::test_support::{pref_lock, BoolPrefGuard};
     use crate::values::computed::Context;
+    use crate::Atom;
     use servo_arc::Arc;
 
     struct Attributes(&'static [(&'static str, &'static str)]);

@@ -27,7 +27,10 @@ impl NestingContext {
     fn parse_relative_for(rule_type: CssRuleType) -> ParseRelative {
         match rule_type {
             CssRuleType::Scope => ParseRelative::ForScope,
-            CssRuleType::Style => ParseRelative::ForNesting,
+            CssRuleType::Style
+            | CssRuleType::Result
+            | CssRuleType::Apply
+            | CssRuleType::Contents => ParseRelative::ForNesting,
             _ => ParseRelative::No,
         }
     }

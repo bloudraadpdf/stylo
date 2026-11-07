@@ -6,7 +6,9 @@ pub use calibrated_color::{CalGrayParams, CalRgbParams, CalibratedColour, LabPar
 
 mod error;
 mod parser_api;
-pub use parser_api::{SyntaxBlockKind, SyntaxBodyKind, SyntaxOptions, SyntaxParseError, SyntaxRule, SyntaxValue};
+pub use parser_api::{
+    SyntaxBlockKind, SyntaxBodyKind, SyntaxOptions, SyntaxParseError, SyntaxRule, SyntaxValue,
+};
 mod resource_url;
 pub use error::CssomStylesheetError;
 pub use resource_url::{
@@ -89,11 +91,12 @@ pub use stylesheet_graph::{
     RuleFunctionParameter, RuleGrammar, RuleGraphError, RuleGroupHeader, RuleHandle,
     RuleImportCorsMode, RuleImportLayer, RuleImportPrelude, RuleImportReferrerPolicy,
     RuleImportRequest, RuleImportScope, RuleKeyframeSelector, RuleLease, RuleListHandle,
-    RuleListLease, RuleMutationRevision, RuleNamespaceContext, RuleNode, RuleSourceStamp,
-    StyleOrigin, StyleShadowScopeHandle, StyleSheetAttachmentCandidate, StyleSheetAttachmentHandle,
-    StyleSheetAttachmentLease, StyleSheetAttachmentOwner, StyleSheetCandidate,
-    StyleSheetGraphCandidate, StyleSheetHandle, StyleSheetImportCandidate, StyleSheetLease,
-    StyleSheetSourceContext, StyleSheetSourceKind, StyleTreeScopeHandle, TypedRulePayload,
+    RuleListLease, RuleMixinKind, RuleMutationRevision, RuleNamespaceContext, RuleNode,
+    RuleSourceStamp, StyleOrigin, StyleShadowScopeHandle, StyleSheetAttachmentCandidate,
+    StyleSheetAttachmentHandle, StyleSheetAttachmentLease, StyleSheetAttachmentOwner,
+    StyleSheetCandidate, StyleSheetGraphCandidate, StyleSheetHandle, StyleSheetImportCandidate,
+    StyleSheetLease, StyleSheetSourceContext, StyleSheetSourceKind, StyleTreeScopeHandle,
+    TypedRulePayload,
 };
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
