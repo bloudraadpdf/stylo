@@ -776,9 +776,10 @@ impl Animation {
             self, other
         );
 
-        // NB: We shall not touch the started_at field, since we don't want to
-        // restart the animation.
+        // Preserve playback time, not the old active-interval boundary. CSS
+        // Animations 1 requires changed delays to apply from the original start.
         let old_started_at = self.started_at;
+        let old_delay = self.delay;
         let old_duration = self.duration;
         let old_direction = self.current_direction;
         let old_state = self.state.clone();
@@ -786,7 +787,8 @@ impl Animation {
 
         *self = other.clone();
 
-        self.started_at = old_started_at;
+        let delay_change = self.delay - old_delay;
+        self.started_at = old_started_at + delay_change;
         self.current_direction = old_direction;
 
         // Don't update the iteration count, just the iteration limit.
@@ -817,11 +819,21 @@ impl Animation {
         // If we're pausing the animation, compute the progress value.
         match (&mut self.state, &old_state) {
             (&mut Pending, &Paused(progress)) => {
-                self.started_at = now - (self.duration * progress);
+                self.started_at = now - (old_duration * progress - delay_change);
             },
-            (&mut Paused(ref mut new), &Paused(old)) => *new = old,
+            (&mut Paused(ref mut new), &Paused(old)) => {
+                *new = if self.duration == 0.0 {
+                    0.0
+                } else {
+                    (old_duration * old - delay_change) / self.duration
+                };
+            },
             (&mut Paused(ref mut progress), &Running) => {
-                *progress = (now - old_started_at) / old_duration
+                *progress = if self.duration == 0.0 {
+                    0.0
+                } else {
+                    (now - self.started_at) / self.duration
+                };
             },
             _ => {},
         }
@@ -2159,6 +2171,35 @@ mod tests {
             duration,
             ..pending_animation()
         }
+    }
+
+    #[test]
+    fn changing_animation_delay_preserves_playback_time_and_moves_active_progress() {
+        let mut existing = named_animation("colorize", 10.0, 100000.0);
+        existing.state = AnimationState::Running;
+        let mut updated = named_animation("colorize", 20.0 - 50000.0, 100000.0);
+        updated.delay = -50000.0;
+        existing.update_from_other(&updated, 20.0);
+        assert_eq!(existing.started_at, 10.0 - 50000.0);
+        assert_eq!(existing.state, AnimationState::Running);
+        assert_eq!((20.0 - existing.started_at) / existing.duration, 0.5001);
+        updated.delay = 100.0;
+        existing.update_from_other(&updated, 20.0);
+        assert_eq!(existing.started_at, 110.0);
+    }
+
+    #[test]
+    fn changing_delay_on_a_paused_animation_adjusts_its_held_active_time() {
+        let mut existing = named_animation("paused", 10.0, 100.0);
+        existing.state = AnimationState::Paused(0.25);
+        let mut updated = named_animation("paused", 1000.0, 100.0);
+        updated.delay = -50.0;
+        updated.state = AnimationState::Paused(0.0);
+        existing.update_from_other(&updated, 1000.0);
+        assert_eq!(existing.state, AnimationState::Paused(0.75));
+        updated.state = AnimationState::Pending;
+        existing.update_from_other(&updated, 2000.0);
+        assert_eq!(existing.started_at, 1925.0);
     }
 
     #[test]
