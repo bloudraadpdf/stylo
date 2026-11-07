@@ -24,17 +24,17 @@ pub(super) fn parse_branches<'i>(
     while !input.is_exhausted() {
         input.skip_whitespace();
         let start = input.position();
-        let end = loop {
-            let position = input.position();
+        loop {
             match input.next()? {
-                Token::Colon => break position,
+                Token::Colon => break,
                 Token::Semicolon => {
                     return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
                 },
                 _ => {},
             }
-        };
-        let css = input.slice(start..end).trim_ascii_end();
+        }
+        let css = input.slice_from(start);
+        let css = css[..css.len() - 1].trim_ascii_end();
         let (first_token_type, last_token_type) = token_types(css);
         let start = start.byte_index() - input_start.byte_index();
         let condition = FunctionArgument {
