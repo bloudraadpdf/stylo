@@ -4833,6 +4833,12 @@ mod tests {
             PropertyDeclaration::WebkitTextFillColor(value) => {
                 PropertyDeclaration::WebkitTextFillColor(value.clone())
             },
+            PropertyDeclaration::WebkitTextStrokeColor(value) => {
+                PropertyDeclaration::WebkitTextStrokeColor(value.clone())
+            },
+            PropertyDeclaration::WebkitTextStrokeWidth(value) => {
+                PropertyDeclaration::WebkitTextStrokeWidth(value.clone())
+            },
             PropertyDeclaration::D(value) => PropertyDeclaration::D(value.clone()),
             PropertyDeclaration::X(value) => PropertyDeclaration::X(value.clone()),
             PropertyDeclaration::Y(value) => PropertyDeclaration::Y(value.clone()),

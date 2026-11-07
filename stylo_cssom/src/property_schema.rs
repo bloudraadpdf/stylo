@@ -25,6 +25,17 @@ fn webkit_text_fill_color_has_computed_color_reification() {
 }
 
 #[test]
+fn webkit_text_stroke_retains_native_longhand_expansion() {
+    let row = property_schema("-webkit-text-stroke").unwrap();
+    assert_eq!(row.shorthand_expansion, &["-webkit-text-stroke-width", "-webkit-text-stroke-color"]);
+    for name in row.shorthand_expansion {
+        let longhand = property_schema(name).unwrap();
+        assert_eq!(longhand.name, *name);
+        assert_eq!(longhand.inheritedness, stylo_cssom_model::Inheritedness::Inherited);
+    }
+}
+
+#[test]
 fn wrap_inside_is_a_reset_standard_longhand() {
     let row = property_schema("wrap-inside").expect("wrap-inside is a supported longhand");
     assert_eq!(row.inheritedness, stylo_cssom_model::Inheritedness::Reset);
