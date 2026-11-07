@@ -2181,7 +2181,7 @@ bitflags! {
 )]
 #[css(bitflags(
     single = "none",
-    mixed = "block-start,block-end,inline-start,inline-end,block,inline",
+    mixed = "block,inline,block-start,block-end,inline-start,inline-end",
     overlapping_bits
 ))]
 #[repr(C)]
@@ -3695,5 +3695,28 @@ fn custom_layout_display_retains_identifier_and_outer_mode() {
         "layout(foo) flex",
     ] {
         assert!(parse_box_test_value::<Display>(input).is_err(), "{input}");
+    }
+}
+
+#[cfg(test)]
+mod margin_trim_serialization_tests {
+    use super::MarginTrim;
+    use style_traits::ToCss as _;
+
+    #[test]
+    fn margin_trim_serializes_complete_axes_with_the_shortest_keyword() {
+        for (value, expected) in [
+            (MarginTrim::NONE, "none"),
+            (MarginTrim::BLOCK_START, "block-start"),
+            (MarginTrim::BLOCK_START | MarginTrim::BLOCK_END, "block"),
+            (MarginTrim::INLINE_START | MarginTrim::INLINE_END, "inline"),
+            (MarginTrim::BLOCK | MarginTrim::INLINE, "block inline"),
+            (
+                MarginTrim::BLOCK | MarginTrim::INLINE_END,
+                "block inline-end",
+            ),
+        ] {
+            assert_eq!(value.to_css_string(), expected);
+        }
     }
 }

@@ -401,8 +401,8 @@ affects = "paint"
 rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [background-position-x]
-type = "position::HorizontalPosition"
-initial = "computed::LengthPercentage::zero_percent()"
+type = "position::BackgroundPositionHorizontal"
+initial = "computed::position::BackgroundPositionHorizontal::zero()"
 struct = "background"
 initial_specified_value = "SpecifiedValue::initial_specified_value()"
 spec = "https://drafts.csswg.org/css-backgrounds-4/#propdef-background-position-x"
@@ -412,8 +412,8 @@ affects = "paint"
 rule_types_allowed = ["style", "keyframe", "page", "scope"]
 
 [background-position-y]
-type = "position::VerticalPosition"
-initial = "computed::LengthPercentage::zero_percent()"
+type = "position::BackgroundPositionVertical"
+initial = "computed::position::BackgroundPositionVertical::zero()"
 struct = "background"
 initial_specified_value = "SpecifiedValue::initial_specified_value()"
 spec = "https://drafts.csswg.org/css-backgrounds-4/#propdef-background-position-y"

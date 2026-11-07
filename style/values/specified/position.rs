@@ -896,11 +896,8 @@ impl Parse for SpecifiedDashedIdentAndOrTryTactic {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        let (ident, try_tactic) = parse_name_and_or_try_tactic(
-            context,
-            input,
-            <DashedIdentOrFunction as Parse>::parse,
-        )?;
+        let (ident, try_tactic) =
+            parse_name_and_or_try_tactic(context, input, <DashedIdentOrFunction as Parse>::parse)?;
         Ok(Self { ident, try_tactic })
     }
 }
@@ -1936,7 +1933,9 @@ impl PositionAreaQuery {
         self_wm: WritingMode,
     ) -> [Option<PositionAreaTrack>; 2] {
         let (first_axis, first) = self.first.to_physical(cb_wm, self_wm, LogicalAxis::Block);
-        let (second_axis, second) = self.second().to_physical(cb_wm, self_wm, LogicalAxis::Inline);
+        let (second_axis, second) = self
+            .second()
+            .to_physical(cb_wm, self_wm, LogicalAxis::Inline);
         let first_is_horizontal = match (first_axis, second_axis) {
             (PositionAreaAxis::Horizontal, _) | (_, PositionAreaAxis::Vertical) => true,
             (PositionAreaAxis::Vertical, _) | (_, PositionAreaAxis::Horizontal) => false,
@@ -2982,5 +2981,89 @@ impl Parse for AnchorFunction {
                 fallback: fallback.into(),
             })
         })
+    }
+}
+
+/// A specified background component with a separately preserved computed origin.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToShmem)]
+pub struct BackgroundPositionComponent<S>(pub PositionComponent<PositionKeyword<S>>);
+impl<S: Side + ToCss> ToCss for BackgroundPositionComponent<S> {
+    fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        self.0.to_css(dest)
+    }
+}
+
+/// Horizontal background-position component.
+pub type BackgroundPositionHorizontal = BackgroundPositionComponent<HorizontalPositionKeyword>;
+/// Vertical background-position component.
+pub type BackgroundPositionVertical = BackgroundPositionComponent<VerticalPositionKeyword>;
+
+impl<S: Side + Parse> Parse for BackgroundPositionComponent<S> {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        PositionComponent::parse(context, input).map(Self)
+    }
+}
+
+impl<S: Side> BackgroundPositionComponent<S> {
+    /// The physical initial edge.
+    pub fn initial_specified_value() -> Self {
+        Self(PositionComponent::initial_specified_value())
+    }
+}
+
+impl<S: Side> From<PositionComponent<PositionKeyword<S>>> for BackgroundPositionComponent<S> {
+    fn from(value: PositionComponent<PositionKeyword<S>>) -> Self {
+        Self(value)
+    }
+}
+
+impl<S: Side> ToComputedValue for BackgroundPositionComponent<S> {
+    type ComputedValue = crate::values::computed::position::BackgroundPosition;
+    fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
+        use crate::values::computed::position::BackgroundPositionOrigin as Origin;
+        let logical = match &self.0 {
+            PositionComponent::Side(
+                keyword @ (PositionKeyword::Start | PositionKeyword::End),
+                offset,
+            ) => {
+                let origin = match (S::AXIS, matches!(keyword, PositionKeyword::Start)) {
+                    (PhysicalAxis::Horizontal, true) => Origin::XStart,
+                    (PhysicalAxis::Horizontal, false) => Origin::XEnd,
+                    (PhysicalAxis::Vertical, true) => Origin::YStart,
+                    (PhysicalAxis::Vertical, false) => Origin::YEnd,
+                };
+                Some((
+                    origin,
+                    offset
+                        .as_ref()
+                        .map(|value| value.to_computed_value(context)),
+                ))
+            },
+            _ => None,
+        };
+        Self::ComputedValue {
+            physical: self.0.to_computed_value(context),
+            logical,
+        }
+    }
+    fn from_computed_value(computed: &Self::ComputedValue) -> Self {
+        use crate::values::computed::position::BackgroundPositionOrigin as Origin;
+        if let Some((origin, offset)) = &computed.logical {
+            let keyword = match origin {
+                Origin::XStart | Origin::YStart => PositionKeyword::Start,
+                Origin::XEnd | Origin::YEnd => PositionKeyword::End,
+            };
+            Self(PositionComponent::Side(
+                keyword,
+                offset.as_ref().map(ToComputedValue::from_computed_value),
+            ))
+        } else {
+            Self(PositionComponent::Length(
+                ToComputedValue::from_computed_value(&computed.physical),
+            ))
+        }
     }
 }

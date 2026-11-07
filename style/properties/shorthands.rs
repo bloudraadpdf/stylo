@@ -3587,8 +3587,8 @@ pub mod background_position {
 
         input.parse_comma_separated(|input| {
             let value = Position::parse_three_value_quirky(context, input, AllowQuirks::Yes)?;
-            position_x.push(value.horizontal);
-            position_y.push(value.vertical);
+            position_x.push(value.horizontal.into());
+            position_y.push(value.vertical.into());
             any = true;
             Ok(())
         })?;
@@ -3613,8 +3613,8 @@ pub mod background_position {
             }
             for i in 0..len {
                 Position {
-                    horizontal: self.background_position_x.0[i].clone(),
-                    vertical: self.background_position_y.0[i].clone(),
+                    horizontal: self.background_position_x.0[i].0.clone(),
+                    vertical: self.background_position_y.0[i].0.clone(),
                 }
                 .to_css(dest)?;
 
@@ -3750,11 +3750,11 @@ pub mod background {
                 origin = Some(Origin::BorderBox);
             }
             if let Some(position) = position {
-                background_position_x.push(position.horizontal);
-                background_position_y.push(position.vertical);
+                background_position_x.push(position.horizontal.into());
+                background_position_y.push(position.vertical.into());
             } else {
-                background_position_x.push(PositionComponent::zero());
-                background_position_y.push(PositionComponent::zero());
+                background_position_x.push(PositionComponent::zero().into());
+                background_position_y.push(PositionComponent::zero().into());
             }
             if let Some(bg_image) = image {
                 background_image.push(bg_image);
@@ -3842,8 +3842,8 @@ pub mod background {
 
             for i in 0..len {
                 let image = &self.background_image.0[i];
-                let position_x = &self.background_position_x.0[i];
-                let position_y = &self.background_position_y.0[i];
+                let position_x = &self.background_position_x.0[i].0;
+                let position_y = &self.background_position_y.0[i].0;
                 let repeat = &self.background_repeat.0[i];
                 let size = &self.background_size.0[i];
                 let attachment = &self.background_attachment.0[i];

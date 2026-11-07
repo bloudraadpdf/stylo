@@ -442,6 +442,47 @@ impl CrossFade {
         cors_mode: CorsMode,
         flags: ParseImageFlags,
     ) -> Result<Self, ParseError<'i>> {
+        // Accept the original two-image/progress form as a parse-time compatibility syntax.
+        if let Ok(legacy) = input.try_parse(|input| {
+            let first = Image::parse_with_cors_mode(
+                context,
+                input,
+                cors_mode,
+                flags | ParseImageFlags::FORBID_NONE,
+            )?;
+            input.expect_comma()?;
+            let second = Image::parse_with_cors_mode(
+                context,
+                input,
+                cors_mode,
+                flags | ParseImageFlags::FORBID_NONE,
+            )?;
+            input.expect_comma()?;
+            let progress = NumberOrPercentage::parse_with_clamping_mode(
+                context,
+                input,
+                style_traits::values::specified::AllowedNumericType::ZeroToOne,
+            )?
+            .to_percentage();
+            input.expect_exhausted()?;
+            let mut first_weight = progress.clone();
+            first_weight.reverse();
+            Ok::<_, ParseError<'i>>(Self {
+                elements: vec![
+                    CrossFadeElement {
+                        image: CrossFadeImage::Image(first),
+                        percent: Some(first_weight).into(),
+                    },
+                    CrossFadeElement {
+                        image: CrossFadeImage::Image(second),
+                        percent: Some(progress).into(),
+                    },
+                ]
+                .into(),
+            })
+        }) {
+            return Ok(legacy);
+        }
         let elements = crate::OwnedSlice::from(input.parse_comma_separated(|input| {
             CrossFadeElement::parse(context, input, cors_mode, flags)
         })?);
@@ -1527,6 +1568,34 @@ mod image_tests {
     #[test]
     fn servo_accepts_standard_cross_fade_images() {
         parse_image("cross-fade(25% red, url('green.png'), blue)");
+    }
+
+    #[test]
+    fn legacy_cross_fade_projects_into_standard_weighted_images() {
+        for (progress, first, second) in [
+            ("0", "100%", "0%"),
+            ("0.25", "75%", "25%"),
+            ("50%", "50%", "50%"),
+            ("1", "0%", "100%"),
+        ] {
+            assert_eq!(
+                parse_image(&format!("cross-fade(url(a.png), url(b.png), {progress})"))
+                    .to_css_string(),
+                parse_image(&format!(
+                    "cross-fade(url(a.png) {first}, url(b.png) {second})"
+                ))
+                .to_css_string(),
+            );
+        }
+        parse_image("cross-fade(url(a.png), url(b.png), calc(0.25 + 0.25))");
+        parse_image("cross-fade(url(a.png), url(b.png), url(c.png))");
+        for invalid in [
+            "cross-fade(url(a.png), url(b.png), -0.1)",
+            "cross-fade(url(a.png), url(b.png), 1.1)",
+            "cross-fade(url(a.png), url(b.png), 0.5, url(c.png))",
+        ] {
+            assert!(image_result(invalid).is_err(), "{invalid}");
+        }
     }
 
     #[test]

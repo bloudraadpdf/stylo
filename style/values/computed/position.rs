@@ -19,13 +19,14 @@ use crate::values::generics::position::{
     GenericInset, Position as GenericPosition, PositionComponent as GenericPositionComponent,
     PositionOrAuto as GenericPositionOrAuto, ZIndex as GenericZIndex,
 };
-use crate::values::specified::position::{AnchorNameIdent, AnchorScopeKeyword, PositionAnchorKeyword};
+use crate::values::specified::position::{
+    AnchorNameIdent, AnchorScopeKeyword, PositionAnchorKeyword,
+};
 pub use crate::values::specified::position::{
-    DashedIdentAndOrTryTactic, GridAutoFlow, GridLanesDirection,
-    GridLanesDirectionAxis, GridTemplateAreas, MasonryAutoFlow, PositionArea,
-    PositionAreaAxis, PositionAreaKeyword, PositionAreaType, PositionTryFallbacks,
-    PositionTryFallbacksTryTactic, PositionTryFallbacksTryTacticKeyword, PositionTryOrder,
-    PositionVisibility,
+    DashedIdentAndOrTryTactic, GridAutoFlow, GridLanesDirection, GridLanesDirectionAxis,
+    GridTemplateAreas, MasonryAutoFlow, PositionArea, PositionAreaAxis, PositionAreaKeyword,
+    PositionAreaType, PositionTryFallbacks, PositionTryFallbacksTryTactic,
+    PositionTryFallbacksTryTacticKeyword, PositionTryOrder, PositionVisibility,
 };
 use crate::Zero;
 use std::fmt::{self, Write};
@@ -166,17 +167,23 @@ impl crate::values::computed::length_percentage::ToAnchorCalcNode for Inset {
         };
         match self {
             Self::Auto => Err(()),
-            Self::LengthPercentage(lp) | Self::AnchorContainingCalcFunction(lp) => Ok(lp.to_calc_node()),
-            Self::AnchorFunction(function) => Ok(CalcNode::Anchor(Box::new(GenericAnchorFunction {
-                target_element: function.target_element.clone(),
-                side: match function.side {
-                    GenericAnchorSide::Keyword(keyword) => GenericAnchorSide::Keyword(keyword),
-                    GenericAnchorSide::Percentage(percentage) => GenericAnchorSide::Percentage(Box::new(
-                        CalcNode::Leaf(CalcLengthPercentageLeaf::Percentage(percentage)),
-                    )),
-                },
-                fallback: fallback_calc_node(function.fallback.as_ref())?,
-            }))),
+            Self::LengthPercentage(lp) | Self::AnchorContainingCalcFunction(lp) => {
+                Ok(lp.to_calc_node())
+            },
+            Self::AnchorFunction(function) => {
+                Ok(CalcNode::Anchor(Box::new(GenericAnchorFunction {
+                    target_element: function.target_element.clone(),
+                    side: match function.side {
+                        GenericAnchorSide::Keyword(keyword) => GenericAnchorSide::Keyword(keyword),
+                        GenericAnchorSide::Percentage(percentage) => {
+                            GenericAnchorSide::Percentage(Box::new(CalcNode::Leaf(
+                                CalcLengthPercentageLeaf::Percentage(percentage),
+                            )))
+                        },
+                    },
+                    fallback: fallback_calc_node(function.fallback.as_ref())?,
+                })))
+            },
             Self::AnchorSizeFunction(function) => anchor_size_calc_node(&**function),
         }
     }
@@ -228,8 +235,14 @@ fn substitute_anchor_functions(
             return;
         }
         let fallback = match node {
-            CalcNode::Anchor(function) => function.fallback.as_ref().map(|fallback| (**fallback).clone()),
-            CalcNode::AnchorSize(function) => function.fallback.as_ref().map(|fallback| (**fallback).clone()),
+            CalcNode::Anchor(function) => function
+                .fallback
+                .as_ref()
+                .map(|fallback| (**fallback).clone()),
+            CalcNode::AnchorSize(function) => function
+                .fallback
+                .as_ref()
+                .map(|fallback| (**fallback).clone()),
             _ => return,
         };
         outcome = match resolve(node) {
@@ -315,7 +328,11 @@ impl AnchorLayoutBase {
 pub trait ResolveAnchors: Sized {
     /// The value with its anchor functions replaced by the length that layout resolved for them in `property`.
     /// The cascade keeps the replaced value as the base for layout.
-    fn resolve_anchors(self, property: crate::properties::LonghandId, context: &mut Context) -> Self;
+    fn resolve_anchors(
+        self,
+        property: crate::properties::LonghandId,
+        context: &mut Context,
+    ) -> Self;
 }
 
 fn physical_side(property: crate::properties::LonghandId) -> Option<PhysicalSide> {
@@ -329,12 +346,16 @@ fn physical_side(property: crate::properties::LonghandId) -> Option<PhysicalSide
     })
 }
 
-fn physical_axis(property: crate::properties::LonghandId) -> Option<crate::logical_geometry::PhysicalAxis> {
+fn physical_axis(
+    property: crate::properties::LonghandId,
+) -> Option<crate::logical_geometry::PhysicalAxis> {
     use crate::logical_geometry::PhysicalAxis;
     use crate::properties::LonghandId;
     Some(match property {
         LonghandId::Width | LonghandId::MinWidth | LonghandId::MaxWidth => PhysicalAxis::Horizontal,
-        LonghandId::Height | LonghandId::MinHeight | LonghandId::MaxHeight => PhysicalAxis::Vertical,
+        LonghandId::Height | LonghandId::MinHeight | LonghandId::MaxHeight => {
+            PhysicalAxis::Vertical
+        },
         _ => return None,
     })
 }
@@ -350,19 +371,31 @@ fn replaced<T>(
         .builder
         .anchor_layout_base
         .values
-        .push(AnchorBaseValue { property, value: base });
+        .push(AnchorBaseValue {
+            property,
+            value: base,
+        });
     resolved
 }
 
 impl ResolveAnchors for Inset {
-    fn resolve_anchors(self, property: crate::properties::LonghandId, context: &mut Context) -> Self {
+    fn resolve_anchors(
+        self,
+        property: crate::properties::LonghandId,
+        context: &mut Context,
+    ) -> Self {
         if matches!(self, Self::Auto | Self::LengthPercentage(_)) {
             return self;
         }
         let Some(side) = physical_side(property) else {
             return self;
         };
-        match resolve_anchor_functions(&self, AnchorProperty::Inset(side), context, AllowedNumericType::All) {
+        match resolve_anchor_functions(
+            &self,
+            AnchorProperty::Inset(side),
+            context,
+            AllowedNumericType::All,
+        ) {
             Ok(resolved) => replaced(
                 context,
                 property,
@@ -375,19 +408,33 @@ impl ResolveAnchors for Inset {
 }
 
 impl ResolveAnchors for crate::values::computed::Size {
-    fn resolve_anchors(self, property: crate::properties::LonghandId, context: &mut Context) -> Self {
-        if !matches!(self, Self::AnchorSizeFunction(_) | Self::AnchorContainingCalcFunction(_)) {
+    fn resolve_anchors(
+        self,
+        property: crate::properties::LonghandId,
+        context: &mut Context,
+    ) -> Self {
+        if !matches!(
+            self,
+            Self::AnchorSizeFunction(_) | Self::AnchorContainingCalcFunction(_)
+        ) {
             return self;
         }
         let Some(axis) = physical_axis(property) else {
             return self;
         };
-        match resolve_anchor_functions(&self, AnchorProperty::Size(axis), context, AllowedNumericType::NonNegative) {
+        match resolve_anchor_functions(
+            &self,
+            AnchorProperty::Size(axis),
+            context,
+            AllowedNumericType::NonNegative,
+        ) {
             Ok(resolved) => replaced(
                 context,
                 property,
                 AnchorBase::Size(self),
-                resolved.map_or(Self::Auto, |length| Self::LengthPercentage(generics::NonNegative(length))),
+                resolved.map_or(Self::Auto, |length| {
+                    Self::LengthPercentage(generics::NonNegative(length))
+                }),
             ),
             Err(()) => self,
         }
@@ -395,20 +442,33 @@ impl ResolveAnchors for crate::values::computed::Size {
 }
 
 impl ResolveAnchors for crate::values::computed::MaxSize {
-    fn resolve_anchors(self, property: crate::properties::LonghandId, context: &mut Context) -> Self {
-        if !matches!(self, Self::AnchorSizeFunction(_) | Self::AnchorContainingCalcFunction(_)) {
+    fn resolve_anchors(
+        self,
+        property: crate::properties::LonghandId,
+        context: &mut Context,
+    ) -> Self {
+        if !matches!(
+            self,
+            Self::AnchorSizeFunction(_) | Self::AnchorContainingCalcFunction(_)
+        ) {
             return self;
         }
         let Some(axis) = physical_axis(property) else {
             return self;
         };
-        match resolve_anchor_functions(&self, AnchorProperty::MaxSize(axis), context, AllowedNumericType::NonNegative)
-        {
+        match resolve_anchor_functions(
+            &self,
+            AnchorProperty::MaxSize(axis),
+            context,
+            AllowedNumericType::NonNegative,
+        ) {
             Ok(resolved) => replaced(
                 context,
                 property,
                 AnchorBase::MaxSize(self),
-                resolved.map_or(Self::None, |length| Self::LengthPercentage(generics::NonNegative(length))),
+                resolved.map_or(Self::None, |length| {
+                    Self::LengthPercentage(generics::NonNegative(length))
+                }),
             ),
             Err(()) => self,
         }
@@ -416,14 +476,26 @@ impl ResolveAnchors for crate::values::computed::MaxSize {
 }
 
 impl ResolveAnchors for crate::values::computed::Margin {
-    fn resolve_anchors(self, property: crate::properties::LonghandId, context: &mut Context) -> Self {
-        if !matches!(self, Self::AnchorSizeFunction(_) | Self::AnchorContainingCalcFunction(_)) {
+    fn resolve_anchors(
+        self,
+        property: crate::properties::LonghandId,
+        context: &mut Context,
+    ) -> Self {
+        if !matches!(
+            self,
+            Self::AnchorSizeFunction(_) | Self::AnchorContainingCalcFunction(_)
+        ) {
             return self;
         }
         let Some(side) = physical_side(property) else {
             return self;
         };
-        match resolve_anchor_functions(&self, AnchorProperty::Margin(side), context, AllowedNumericType::All) {
+        match resolve_anchor_functions(
+            &self,
+            AnchorProperty::Margin(side),
+            context,
+            AllowedNumericType::All,
+        ) {
             Ok(resolved) => replaced(
                 context,
                 property,
@@ -729,5 +801,97 @@ mod masonry_slack_tests {
             .animate(&percentage, Procedure::Interpolate { progress: 0.0 })
             .unwrap();
         assert_eq!(sampled.to_css_string(), "calc(0% + 10px)");
+    }
+}
+
+/// A flow-relative origin retained by a computed background-position component.
+#[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, ToCss, ToResolvedValue, ToShmem, ToTyped)]
+pub enum BackgroundPositionOrigin {
+    /// Horizontal flow-relative start.
+    XStart,
+    /// Horizontal flow-relative end.
+    XEnd,
+    /// Vertical flow-relative start.
+    YStart,
+    /// Vertical flow-relative end.
+    YEnd,
+}
+
+/// CSS Backgrounds 4 retains logical origin keywords in computed values while
+/// providing a physical offset for painting and interpolation.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToResolvedValue, ToTyped)]
+pub struct BackgroundPosition {
+    /// The physical offset after writing-mode resolution.
+    pub physical: LengthPercentage,
+    /// A logical origin and its computed optional offset.
+    pub logical: Option<(BackgroundPositionOrigin, Option<LengthPercentage>)>,
+}
+
+/// Computed horizontal background position.
+pub type BackgroundPositionHorizontal = BackgroundPosition;
+/// Computed vertical background position.
+pub type BackgroundPositionVertical = BackgroundPosition;
+
+impl BackgroundPosition {
+    /// The initial background offset.
+    pub fn zero() -> Self {
+        Self {
+            physical: LengthPercentage::zero_percent(),
+            logical: None,
+        }
+    }
+}
+
+impl ToCss for BackgroundPosition {
+    fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        if let Some((origin, offset)) = &self.logical {
+            origin.to_css(dest)?;
+            if let Some(offset) = offset {
+                dest.write_char(' ')?;
+                offset.to_css(dest)?;
+            }
+            Ok(())
+        } else {
+            self.physical.to_css(dest)
+        }
+    }
+}
+
+impl crate::values::animated::ToAnimatedValue for BackgroundPosition {
+    type AnimatedValue = LengthPercentage;
+    fn to_animated_value(self, _: &crate::values::animated::Context) -> Self::AnimatedValue {
+        self.physical
+    }
+    fn from_animated_value(physical: Self::AnimatedValue) -> Self {
+        Self {
+            physical,
+            logical: None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod background_position_serialization_tests {
+    use super::*;
+    #[test]
+    fn logical_background_origins_survive_computed_serialization() {
+        for (origin, expected) in [
+            (BackgroundPositionOrigin::XStart, "x-start"),
+            (BackgroundPositionOrigin::XEnd, "x-end"),
+            (BackgroundPositionOrigin::YStart, "y-start"),
+            (BackgroundPositionOrigin::YEnd, "y-end"),
+        ] {
+            let value = BackgroundPosition {
+                physical: LengthPercentage::zero_percent(),
+                logical: Some((origin, None)),
+            };
+            assert_eq!(value.to_css_string(), expected);
+            let offset = BackgroundPosition {
+                physical: LengthPercentage::zero_percent(),
+                logical: Some((origin, Some(LengthPercentage::new_percent(Percentage(0.2))))),
+            };
+            assert_eq!(offset.to_css_string(), format!("{expected} 20%"));
+        }
+        assert_eq!(BackgroundPosition::zero().to_css_string(), "0%");
     }
 }
