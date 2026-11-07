@@ -35,6 +35,9 @@ pub(super) fn parse_branches<'i>(
         }
         let css = input.slice_from(start);
         let css = css[..css.len() - 1].trim_ascii_end();
+        if css.is_empty() {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
         let (first_token_type, last_token_type) = token_types(css);
         let start = start.byte_index() - input_start.byte_index();
         let condition = FunctionArgument {
@@ -56,6 +59,9 @@ pub(super) fn parse_branches<'i>(
         if !input.is_exhausted() {
             input.expect_semicolon()?;
         }
+    }
+    if branches.is_empty() {
+        return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
     }
     Ok(branches.into_boxed_slice())
 }

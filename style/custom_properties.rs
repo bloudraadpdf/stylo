@@ -3258,6 +3258,29 @@ mod tests {
     }
 
     #[test]
+    fn conditional_arguments_require_a_branch_and_a_condition() {
+        let url_data = UrlExtraData::from(Url::parse("https://example.invalid/").unwrap());
+        for css in ["if()", "if( )", "if(: green)", "if(else: green; : red)"] {
+            let mut input = ParserInput::new(css);
+            assert!(
+                Parser::new(&mut input)
+                    .parse_entirely(|input| {
+                        VariableValue::parse(input, &url_data, &Namespaces::default())
+                    })
+                    .is_err(),
+                "{css}"
+            );
+        }
+        for css in [
+            "if(else:)",
+            "if(else: green;)",
+            "if(style(--x: 1): green; else: red)",
+        ] {
+            parse_value(css, &Namespaces::default());
+        }
+    }
+
+    #[test]
     fn attr_references_store_expanded_names() {
         let mut namespaces = Namespaces::default();
         namespaces.prefixes.insert(
