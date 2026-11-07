@@ -314,35 +314,39 @@ impl FunctionDependencies {
         let mut free = Vec::new();
         let mut inherited = Vec::new();
         for value in function.values() {
-            free.extend(super::conditionals::condition_names(value));
-            self.non_custom_references |= value.references.non_custom_references;
-            self.any_attr |= value.references.any_attr;
-            free.extend(
-                value
-                    .references
-                    .refs
-                    .iter()
-                    .filter_map(|reference| reference.function.variable_name().cloned()),
-            );
-            for reference in &value.references.refs {
-                if let SubstitutionFunction::Inherit(ref arguments) = reference.function {
-                    if let Some(argument) = arguments.first() {
-                        let mut input = ParserInput::new(&value.css[argument.start..argument.end]);
-                        let name = Parser::new(&mut input).parse_entirely(|input| {
-                            let name = input.expect_ident()?;
-                            super::parse_name(name)
-                                .map(crate::Atom::from)
-                                .map_err(|()| input.new_error_for_next_token::<()>())
-                        });
-                        if let Ok(name) = name {
-                            inherited.push(name);
+            let conditions = super::conditionals::condition_values(value);
+            for value in std::iter::once(value).chain(conditions.iter()) {
+                free.extend(super::conditionals::condition_names(value));
+                self.non_custom_references |= value.references.non_custom_references;
+                self.any_attr |= value.references.any_attr;
+                free.extend(
+                    value
+                        .references
+                        .refs
+                        .iter()
+                        .filter_map(|reference| reference.function.variable_name().cloned()),
+                );
+                for reference in &value.references.refs {
+                    if let SubstitutionFunction::Inherit(ref arguments) = reference.function {
+                        if let Some(argument) = arguments.first() {
+                            let mut input =
+                                ParserInput::new(&value.css[argument.start..argument.end]);
+                            let name = Parser::new(&mut input).parse_entirely(|input| {
+                                let name = input.expect_ident()?;
+                                super::parse_name(name)
+                                    .map(crate::Atom::from)
+                                    .map_err(|()| input.new_error_for_next_token::<()>())
+                            });
+                            if let Ok(name) = name {
+                                inherited.push(name);
+                            }
                         }
                     }
                 }
-            }
-            for name in calls(value) {
-                if let Some((called, offset)) = lookup(scope, offset, name) {
-                    free.extend(self.collect(called, scope, offset, visiting));
+                for name in calls(value) {
+                    if let Some((called, offset)) = lookup(scope, offset, name) {
+                        free.extend(self.collect(called, scope, offset, visiting));
+                    }
                 }
             }
         }
@@ -1009,6 +1013,11 @@ mod tests {
                 "queried value",
                 "@function --f() { --x: 3px; result: if(style(--y: var(--x)): PASS; else: FAIL); } \
                  #t { --y: 3px; --actual: --f(); --expected: PASS; }",
+            ),
+            (
+                "condition dependencies resolve first",
+                "@function --f() { result: if(style(--y: var(--x)): PASS; else: FAIL); } \
+                 #t { --actual: --f(); --x: var(--source); --source: 3px; --y: 3px; --expected: PASS; }",
             ),
             (
                 "typed parameter",

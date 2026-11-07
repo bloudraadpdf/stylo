@@ -109,6 +109,27 @@ pub(super) fn condition_names(value: &VariableValue) -> Vec<Name> {
     names
 }
 
+pub(super) fn condition_values(value: &VariableValue) -> Vec<VariableValue> {
+    let mut values = Vec::new();
+    for reference in &value.references.refs {
+        let SubstitutionFunction::If(branches) = &reference.function else {
+            continue;
+        };
+        for ConditionalBranch { condition, .. } in &**branches {
+            let mut input = ParserInput::new(&value.css[condition.start..condition.end]);
+            if let Ok(condition) = VariableValue::parse(
+                &mut Parser::new(&mut input),
+                &value.url_data,
+                &Namespaces::default(),
+            ) {
+                values.extend(condition_values(&condition));
+                values.push(condition);
+            }
+        }
+    }
+    values
+}
+
 impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
     pub(super) fn conditional<'v>(
         &mut self,
