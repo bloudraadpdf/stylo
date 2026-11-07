@@ -3407,7 +3407,7 @@ mod tests {
         assert_eq!(
             *name,
             AttrName::Resolved {
-                prefix: Prefix::from("value"),
+                prefix: Some(Prefix::from("value")),
                 namespace: Namespace::from("https://example.invalid/value"),
                 local_name: Atom::from("colour"),
             }

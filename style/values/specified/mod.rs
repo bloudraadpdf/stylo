@@ -1377,8 +1377,9 @@ pub enum AttrSyntax {
 pub enum AttrName {
     /// A name whose namespace prefix was absent, empty, or bound.
     Resolved {
-        /// The authored namespace prefix, retained for serialization.
-        prefix: Prefix,
+        /// `None` means no namespace syntax was authored; `Some(empty)`
+        /// preserves an explicit null namespace (`|name`) for serialization.
+        prefix: Option<Prefix>,
         /// The expanded namespace URL.
         namespace: Namespace,
         /// The case-sensitive local name.
@@ -1411,7 +1412,7 @@ impl AttrName {
                 token => return Err(location.new_unexpected_token_error(token.clone())),
             };
             return Ok(Self::Resolved {
-                prefix: Prefix::default(),
+                prefix: Some(Prefix::default()),
                 namespace: Namespace::default(),
                 local_name,
             });
@@ -1421,7 +1422,7 @@ impl AttrName {
         if !matches!(input.next_including_whitespace(), Ok(Token::Delim('|'))) {
             input.reset(&after_name);
             return Ok(Self::Resolved {
-                prefix: Prefix::default(),
+                prefix: None,
                 namespace: Namespace::default(),
                 local_name: Atom::from(prefix.as_ref()),
             });
@@ -1434,7 +1435,7 @@ impl AttrName {
         let prefix = Prefix::from(prefix.as_ref());
         Ok(match namespaces.prefixes.get(&prefix) {
             Some(namespace) => Self::Resolved {
-                prefix,
+                prefix: Some(prefix),
                 namespace: namespace.clone(),
                 local_name,
             },
@@ -1473,13 +1474,15 @@ impl AttrName {
         let (prefix, local_name) = match self {
             Self::Resolved {
                 prefix, local_name, ..
-            }
-            | Self::UnresolvedNamespace {
+            } => (prefix.as_ref(), local_name),
+            Self::UnresolvedNamespace {
                 prefix, local_name, ..
-            } => (prefix, local_name),
+            } => (Some(prefix), local_name),
         };
-        if !prefix.is_empty() {
-            serialize_atom_identifier(prefix, dest)?;
+        if let Some(prefix) = prefix {
+            if !prefix.is_empty() {
+                serialize_atom_identifier(prefix, dest)?;
+            }
             dest.write_char('|')?;
         }
         serialize_atom_identifier(local_name, dest)
@@ -1745,6 +1748,20 @@ mod tests {
     use ::url::Url;
     use cssparser::ParserInput;
     use style_traits::{ParsingMode, ToCss};
+
+    #[test]
+    fn specified_attr_retains_explicit_null_namespace() {
+        for (source, expected) in [
+            ("attr(bar)", "attr(bar)"),
+            ("attr(|bar)", "attr(|bar)"),
+            ("attr( |bar )", "attr(|bar)"),
+            ("attr(|bar, \"fallback\")", "attr(|bar, \"fallback\")"),
+        ] {
+            let value = parse_attr(source);
+            assert_eq!(value.to_css_string(), expected);
+            assert_eq!(value.name.expanded_name(), parse_attr("attr(bar)").name.expanded_name());
+        }
+    }
 
     fn parse_attr(css: &str) -> Attr {
         let url_data = UrlExtraData::from(Url::parse("https://example.invalid/").unwrap());
