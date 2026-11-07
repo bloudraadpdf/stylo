@@ -1351,11 +1351,11 @@ pub fn rule_declaration_from_stylo(
 
 pub fn parse_nested_rule_declarations(
     css: &str,
-) -> Option<Box<[stylo_cssom_model::RuleDeclaration]>> {
+) -> Option<stylo_cssom_model::RuleDeclarationBlock> {
     let block = parse_cssom_declaration_block(css, CssomDeclarationContext::Style);
     let block =
         rule_declaration_block_from_cssom(&block, stylo_cssom_model::RuleDeclarationDomain::Nested);
-    (!block.declarations().is_empty()).then(|| block.declarations().to_vec().into_boxed_slice())
+    (!block.declarations().is_empty()).then_some(block)
 }
 
 #[must_use]

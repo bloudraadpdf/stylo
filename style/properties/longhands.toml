@@ -824,6 +824,7 @@ affects = "paint"
 
 [column-count]
 type = "ColumnCount"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
 initial = "computed::ColumnCount::Auto"
 struct = "column"
 initial_specified_value = "specified::ColumnCount::Auto"

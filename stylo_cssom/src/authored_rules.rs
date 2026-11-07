@@ -544,8 +544,10 @@ pub fn parse_scope_rule_node(source: &str) -> Option<stylo_cssom_model::RuleNode
 }
 
 pub fn parse_nested_declarations_rule_node(source: &str) -> Option<stylo_cssom_model::RuleNode> {
-    crate::declaration_parser::parse_nested_rule_declarations(source)
-        .map(stylo_cssom_model::RuleNode::nested_declarations)
+    crate::declaration_parser::parse_nested_rule_declarations(source).map(|block| {
+        stylo_cssom_model::RuleNode::nested_declarations(block.declarations().to_vec())
+            .with_cssom_declaration_block(block)
+    })
 }
 
 #[must_use]

@@ -1544,8 +1544,8 @@ impl ParsedCssRule {
                 cssom_declaration_value(&rule.declarations, property)
             },
             ParsedCssRuleKind::Style(rule) => cssom_declaration_value(&rule.declarations, property),
+            ParsedCssRuleKind::NestedDeclarations(block) => cssom_declaration_value(block, property),
             ParsedCssRuleKind::FontFace(block)
-            | ParsedCssRuleKind::NestedDeclarations(block)
             | ParsedCssRuleKind::FunctionDeclarations(block) => block.property_value(property),
             ParsedCssRuleKind::Page(rule) => cssom_declaration_value(&rule.declarations, property),
             ParsedCssRuleKind::Margin(rule) => {
@@ -2726,15 +2726,7 @@ fn canonical_page_declaration_block(authored_body: &str) -> CanonicalCssDeclarat
             continue;
         }
         let page = crate::declaration_parser::parse_cssom_declaration_block(declaration, context);
-        let accepted = if page.as_typed().is_empty() {
-            crate::declaration_parser::parse_cssom_declaration_block(
-                declaration,
-                crate::declaration_parser::CssomDeclarationContext::Margin,
-            )
-        } else {
-            page
-        };
-        crate::declaration_parser::cssom_declaration_merge(&mut block, &accepted);
+        crate::declaration_parser::cssom_declaration_merge(&mut block, &page);
     }
     let _ = crate::declaration_parser::cssom_declaration_remove_property(
         &mut block,
@@ -3106,7 +3098,7 @@ mod tests {
             },
             PropertyDeclaration::Continue(value) => PropertyDeclaration::Continue(*value),
             PropertyDeclaration::Direction(value) => PropertyDeclaration::Direction(*value),
-            PropertyDeclaration::Display(value) => PropertyDeclaration::Display(*value),
+            PropertyDeclaration::Display(value) => PropertyDeclaration::Display(value.clone()),
             PropertyDeclaration::DominantBaseline(value) => {
                 PropertyDeclaration::DominantBaseline(*value)
             },
@@ -6223,6 +6215,40 @@ mod tests {
                     r#"@import url("child.css" cross-origin(use-credentials) integrity("sha256-fixture") referrer-policy(no-referrer)) layer(foo.bar) supports(display: grid){suffix};"#
                 ),
             );
+        }
+    }
+
+    #[test]
+    fn scoped_page_cssom_preserves_page_grammar() {
+        for css in [
+            "@page { display: grid; size: 100px 200px; margin-left: 7px; column-count: 2; }",
+            "@scope (:root) { @page { display: grid; size: 100px 200px; margin-left: 7px; column-count: 2; } }",
+        ] {
+            let parsed = ParsedCssRule::parse(css).unwrap();
+            let page = parsed.nested_rules().and_then(|rules| rules.first()).unwrap_or(&parsed);
+            assert_eq!(page.declaration_value("display"), None);
+            assert_eq!(page.declaration_value("column-count").as_deref(), Some("2"));
+            assert_eq!(page.declaration_value("size").as_deref(), Some("100px 200px"));
+            assert_eq!(page.declaration_value("margin-left").as_deref(), Some("7px"));
+        }
+    }
+
+    #[test]
+    fn inserted_nested_declarations_retain_shorthand_serialisations() {
+        let rule = crate::parse_nested_declarations_input(super::RuleInput::new(
+            "animation: none; place-self: center; border-collapse: collapse; --border-model: collapse;",
+        )).unwrap();
+        let block = rule.payload().declaration_block().unwrap();
+        assert!(block.shorthand_values().iter().any(|declaration|
+            declaration.name() == "place-self" && declaration.value() == "center"
+        ));
+        for (name, value) in [
+            ("animation-name", "none"), ("align-self", "center"), ("justify-self", "center"),
+            ("border-collapse", "collapse"), ("--border-model", "collapse"),
+        ] {
+            assert!(block.declarations().iter().any(|declaration|
+                declaration.name() == name && declaration.value() == value
+            ), "{name}");
         }
     }
 
