@@ -141,6 +141,17 @@ pub fn selector_targets_pseudo_element(source: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn unknown_webkit_pseudo_elements_parse_and_serialize_in_lowercase() {
+        for source in ["::-WEBKIT-unknown", "::-webkit-unknown:hover", "::-webkit-unknown:focus"] {
+            let parsed = super::parse_selector(source).unwrap();
+            assert_eq!(super::serialize_selector_list(&parsed), source.to_ascii_lowercase());
+            assert!(super::parse_dom_selector(source).unwrap().slice().is_empty());
+        }
+        for source in ["::-webkit", "::-webkit-unknown()"] {
+            assert!(super::parse_selector(source).is_err());
+        }
+    }
     use super::{parse_dom_selector, selector_targets_pseudo_element};
 
     #[test]

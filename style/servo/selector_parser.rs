@@ -200,10 +200,11 @@ pub enum PseudoElement {
     ServoAnonymousTableRow,
     ServoTableGrid,
     ServoTableWrapper,
+    UnknownWebkit(Atom),
 }
 
 /// The count of all pseudo-elements.
-pub const PSEUDO_COUNT: usize = PseudoElement::ServoTableWrapper.index() + 1;
+pub const PSEUDO_COUNT: usize = PseudoElement::ServoTableWrapper.index() + 2;
 
 impl ToCss for PseudoElement {
     fn to_css<W>(&self, dest: &mut W) -> fmt::Result
@@ -212,6 +213,10 @@ impl ToCss for PseudoElement {
     {
         use self::PseudoElement::*;
         dest.write_str(match *self {
+            UnknownWebkit(ref name) => {
+                dest.write_str("::")?;
+                return cssparser::serialize_identifier(name, dest);
+            },
             After => "::after",
             Before => "::before",
             Selection => "::selection",
@@ -456,6 +461,7 @@ impl PseudoElement {
             Self::ServoAnonymousTableRow => 45,
             Self::ServoTableGrid => 46,
             Self::ServoTableWrapper => 47,
+            Self::UnknownWebkit(_) => 48,
         }
     }
 
@@ -486,7 +492,7 @@ impl PseudoElement {
     /// Whether this is an unknown ::-webkit- pseudo-element.
     #[inline]
     pub fn is_unknown_webkit_pseudo_element(&self) -> bool {
-        false
+        matches!(self, Self::UnknownWebkit(_))
     }
 
     /// Whether this pseudo-element is the ::marker pseudo.
@@ -599,6 +605,7 @@ impl PseudoElement {
             | PseudoElement::FirstLetter
             | PseudoElement::FirstLine => PseudoElementCascadeType::Eager,
             PseudoElement::Backdrop
+            | PseudoElement::UnknownWebkit(_)
             | PseudoElement::PickerIcon
             | PseudoElement::GrammarError
             | PseudoElement::SpellingError
@@ -651,6 +658,7 @@ impl PseudoElement {
     /// classes `classes`.
     pub fn matches_selector(&self, selector: &Self, classes: &[Atom]) -> bool {
         match selector {
+            Self::UnknownWebkit(_) => false,
             Self::ViewTransitionSelector(selector) => selector.matches(self, classes),
             _ => selector == self,
         }
@@ -683,6 +691,9 @@ impl PseudoElement {
     /// Whether this pseudo-element should actually exist if it has
     /// the given styles.
     pub fn should_exist(&self, style: &ComputedValues) -> bool {
+        if self.is_unknown_webkit_pseudo_element() {
+            return false;
+        }
         let display = style.get_box().clone_display();
         if display == Display::None {
             return false;
@@ -1081,7 +1092,7 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
         let pseudo_class = match_ignore_ascii_case! { &name,
             "active" => NonTSPseudoClass::Active,
             "any-link" => NonTSPseudoClass::AnyLink,
-            "autofill" => NonTSPseudoClass::Autofill,
+            "autofill" | "-webkit-autofill" => NonTSPseudoClass::Autofill,
             "checked" => NonTSPseudoClass::Checked,
             "current" => NonTSPseudoClass::Current,
             "default" => NonTSPseudoClass::Default,
@@ -1265,7 +1276,14 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
                 }
                 ServoTableWrapper
             },
-            _ => return Err(location.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(name.clone())))
+            _ => {
+                let lower = name.to_ascii_lowercase();
+                if lower.starts_with("-webkit-") {
+                    UnknownWebkit(Atom::from(lower))
+                } else {
+                    return Err(location.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(name.clone())))
+                }
+            }
 
         };
 
