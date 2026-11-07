@@ -3744,6 +3744,11 @@ pub mod background {
                     clip = Some(background_clip::single_value::SpecifiedValue::from(origin));
                 }
             }
+            // A clip-only keyword implies a border-box positioning area
+            // (CSS Backgrounds 4, the background shorthand).
+            if origin.is_none() && clip.is_some() {
+                origin = Some(Origin::BorderBox);
+            }
             if let Some(position) = position {
                 background_position_x.push(position.horizontal);
                 background_position_y.push(position.vertical);
@@ -3879,7 +3884,11 @@ pub mod background {
                     writer.item(attachment)?;
                 }
 
-                if *origin != Origin::PaddingBox || *clip != Clip::BorderBox {
+                let clip_only =
+                    !matches!(clip, Clip::BorderBox | Clip::PaddingBox | Clip::ContentBox);
+                if clip_only && *origin == Origin::BorderBox {
+                    writer.item(clip)?;
+                } else if *origin != Origin::PaddingBox || *clip != Clip::BorderBox {
                     writer.item(origin)?;
                     if *clip != From::from(*origin) {
                         writer.item(clip)?;
@@ -6803,6 +6812,49 @@ pub mod box_shadow {
                 layers.iter().map(|v| v.4).collect::<Vec<_>>().into(),
             ),
         })
+    }
+
+    /// Legacy CSSOM shadow-list serialization, using the typed longhand lists.
+    /// Resolved shadows omit non-painting offsets and expose all four lengths.
+    pub fn computed_to_css(
+        style: &crate::properties::ComputedValues,
+        resolve_colors: bool,
+    ) -> String {
+        use crate::values::computed;
+        let effects = style.get_effects();
+        let colors = &effects.box_shadow_color.0;
+        let blurs = &effects.box_shadow_blur.0;
+        let spreads = &effects.box_shadow_spread.0;
+        let positions = &effects.box_shadow_position.0;
+        let mut shadows = Vec::new();
+        for (index, offset) in effects.box_shadow_offset.0.iter().enumerate() {
+            let computed::BoxShadowOffset::Offset(x, y) = offset else {
+                continue;
+            };
+            let color = &colors[index % colors.len()];
+            shadows.push(
+                computed::BoxShadow {
+                    base: computed::SimpleShadow {
+                        color: if resolve_colors {
+                            computed::Color::Absolute(style.resolve_color(color))
+                        } else {
+                            color.clone()
+                        },
+                        horizontal: *x,
+                        vertical: *y,
+                        blur: blurs[index % blurs.len()],
+                    },
+                    spread: spreads[index % spreads.len()],
+                    inset: positions[index % positions.len()] == BoxShadowPosition::Inset,
+                }
+                .to_css_string(),
+            );
+        }
+        if shadows.is_empty() {
+            "none".into()
+        } else {
+            shadows.join(", ")
+        }
     }
 
     impl ToCss for LonghandsToSerialize<'_> {

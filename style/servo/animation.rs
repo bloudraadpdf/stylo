@@ -28,6 +28,11 @@ use crate::style_resolver::{PrimaryStyle, StyleResolverForElement};
 use crate::stylesheets::keyframes_rule::{KeyframesAnimation, KeyframesStep, KeyframesStepValue};
 use crate::stylesheets::layer_rule::LayerOrder;
 use crate::values::animated::Procedure;
+#[cfg(feature = "servo")]
+use crate::values::animated::{
+    box_shadow::{AnimatedBoxShadowList, COMPONENTS as SHADOW_COMPONENTS},
+    Animate,
+};
 use crate::values::computed::TimingFunction;
 use crate::values::generics::easing::BeforeFlag;
 use crate::values::specified::TransitionBehavior;
@@ -83,6 +88,8 @@ pub struct PropertyAnimation {
 
     /// The `interpolate-size` that applies to this animation.
     interpolate_size: InterpolateSize,
+    #[cfg(feature = "servo")]
+    shadow: Option<(AnimatedBoxShadowList, AnimatedBoxShadowList)>,
 }
 
 impl PropertyAnimation {
@@ -98,6 +105,15 @@ impl PropertyAnimation {
         to: &AnimationValue,
         procedure: Procedure,
     ) -> Result<AnimationValue, ()> {
+        #[cfg(feature = "servo")]
+        if let Some((ref left, ref right)) = self.shadow {
+            let sample = left.animate(right, procedure)?;
+            return sample
+                .components()
+                .into_iter()
+                .find(|value| value.id() == from.id())
+                .ok_or(());
+        }
         from.animate_with_interpolate_size(to, procedure, self.interpolate_size)
     }
 
@@ -112,14 +128,15 @@ impl PropertyAnimation {
     fn calculate_value(&self, progress: f64, before_flag: BeforeFlag) -> AnimationValue {
         let progress = self.timing_function_output(progress, before_flag);
         let procedure = Procedure::Interpolate { progress };
-        self.animate(&self.from, &self.to, procedure).unwrap_or_else(|()| {
-            // Fall back to discrete interpolation
-            if progress < 0.5 {
-                self.from.clone()
-            } else {
-                self.to.clone()
-            }
-        })
+        self.animate(&self.from, &self.to, procedure)
+            .unwrap_or_else(|()| {
+                // Fall back to discrete interpolation
+                if progress < 0.5 {
+                    self.from.clone()
+                } else {
+                    self.to.clone()
+                }
+            })
     }
 }
 
@@ -492,12 +509,57 @@ impl Animation {
             .cloned()
             .or_else(|| AnimationValue::from_computed_values(property, &self.cascade_style))
             .expect("an animated property must have an underlying value");
-        ComputedKeyframe::composite(keyframe.composition, &underlying, value, self.interpolate_size())
+        ComputedKeyframe::composite(
+            keyframe.composition,
+            &underlying,
+            value,
+            self.interpolate_size(),
+        )
+    }
+
+    #[cfg(feature = "servo")]
+    fn composited_shadow(
+        &self,
+        keyframe: &ComputedKeyframe,
+        map: &AnimationValueMap,
+    ) -> Option<AnimatedBoxShadowList> {
+        if !SHADOW_COMPONENTS.iter().all(|id| {
+            keyframe
+                .values
+                .iter()
+                .any(|value| value.id() == PropertyDeclarationId::Longhand(*id))
+        }) {
+            return None;
+        }
+        let keyframe_values = keyframe
+            .values
+            .iter()
+            .map(|value| (value.id().to_owned(), value.clone()))
+            .collect();
+        let value = AnimatedBoxShadowList::from_computed_values(
+            &self.cascade_style,
+            Some(&keyframe_values),
+        );
+        let underlying =
+            AnimatedBoxShadowList::from_computed_values(&self.cascade_style, Some(map));
+        match keyframe.composition {
+            AnimationComposition::Replace => Some(value),
+            AnimationComposition::Add => {
+                Some(underlying.animate(&value, Procedure::Add).unwrap_or(value))
+            },
+            AnimationComposition::Accumulate => Some(
+                underlying
+                    .animate(&value, Procedure::Accumulate { count: 1 })
+                    .unwrap_or(value),
+            ),
+        }
     }
 
     /// CSS Values 5 §11.3: an animation uses the `interpolate-size` of its non-animated style.
     fn interpolate_size(&self) -> InterpolateSize {
-        self.cascade_style.get_inherited_box().clone_interpolate_size()
+        self.cascade_style
+            .get_inherited_box()
+            .clone_interpolate_size()
     }
 
     /// Given the current time, advances this animation to the next iteration,
@@ -833,7 +895,21 @@ impl Animation {
         // If we only need to take into account one keyframe, then exit early
         // in order to avoid doing more work.
         let mut add_declarations_to_map = |keyframe: &ComputedKeyframe| {
+            #[cfg(feature = "servo")]
+            let shadow = self.composited_shadow(keyframe, map);
+            #[cfg(feature = "servo")]
+            if let Some(ref shadow) = shadow {
+                for value in shadow.components() {
+                    map.insert(value.id().to_owned(), value);
+                }
+            }
             for value in keyframe.values.iter() {
+                #[cfg(feature = "servo")]
+                if shadow.is_some()
+                    && matches!(value.id(), PropertyDeclarationId::Longhand(id) if SHADOW_COMPONENTS.contains(&id))
+                {
+                    continue;
+                }
                 let value = self.composited_keyframe_value(keyframe, value, map);
                 map.insert(value.id().to_owned(), value.clone());
             }
@@ -857,7 +933,35 @@ impl Animation {
             - prev_keyframe.start_percentage as f64)
             / percentage_between_keyframes;
 
+        #[cfg(feature = "servo")]
+        let shadow_sampled = if let (Some(from), Some(to)) = (
+            self.composited_shadow(prev_keyframe, map),
+            self.composited_shadow(next_keyframe, map),
+        ) {
+            let epsilon = 1.0 / (200.0 * duration_between_keyframes);
+            let progress = prev_keyframe.timing_function.calculate_output(
+                progress_between_keyframes,
+                before_flag,
+                epsilon,
+            );
+            let sample = from
+                .animate(&to, Procedure::Interpolate { progress })
+                .unwrap_or_else(|_| if progress < 0.5 { from } else { to });
+            for value in sample.components() {
+                map.insert(value.id().to_owned(), value);
+            }
+            true
+        } else {
+            false
+        };
+
         for (from, to) in prev_keyframe.values.iter().zip(next_keyframe.values.iter()) {
+            #[cfg(feature = "servo")]
+            if shadow_sampled
+                && matches!(from.id(), PropertyDeclarationId::Longhand(id) if SHADOW_COMPONENTS.contains(&id))
+            {
+                continue;
+            }
             let from = self.composited_keyframe_value(prev_keyframe, from, map);
             let to = self.composited_keyframe_value(next_keyframe, to, map);
             let animation = PropertyAnimation {
@@ -866,6 +970,8 @@ impl Animation {
                 timing_function: prev_keyframe.timing_function.clone(),
                 duration: duration_between_keyframes as f64,
                 interpolate_size: self.interpolate_size(),
+                #[cfg(feature = "servo")]
+                shadow: None,
             };
 
             let value = animation.calculate_value(progress_between_keyframes, before_flag);
@@ -939,6 +1045,7 @@ impl Transition {
         to: AnimationValue,
         timing_function: &TimingFunction,
         interpolate_size: InterpolateSize,
+        #[cfg(feature = "servo")] shadow: Option<(AnimatedBoxShadowList, AnimatedBoxShadowList)>,
     ) -> Self {
         let property_animation = PropertyAnimation {
             from: from.clone(),
@@ -946,6 +1053,8 @@ impl Transition {
             timing_function: timing_function.clone(),
             duration,
             interpolate_size,
+            #[cfg(feature = "servo")]
+            shadow,
         };
         static NEXT_TRANSITION_ID: AtomicU64 = AtomicU64::new(0);
         let id = NEXT_TRANSITION_ID
@@ -1025,7 +1134,20 @@ impl Transition {
         let procedure = Procedure::Interpolate {
             progress: timing_function_output,
         };
-        match replaced_animation.animate(&replaced_animation.from, &replaced_animation.to, procedure) {
+        #[cfg(feature = "servo")]
+        if let (Some((left, right)), Some((new_start, _))) = (
+            &replaced_animation.shadow,
+            &mut self.property_animation.shadow,
+        ) {
+            if let Ok(sample) = left.animate(right, procedure) {
+                *new_start = sample;
+            }
+        }
+        match replaced_animation.animate(
+            &replaced_animation.from,
+            &replaced_animation.to,
+            procedure,
+        ) {
             Ok(new_start) => self.property_animation.from = new_start,
             Err(..) => {},
         }
@@ -1282,6 +1404,7 @@ impl ElementAnimationSet {
     ) {
         let style = new_style.get_ui();
         let interpolate_size = new_style.get_inherited_box().clone_interpolate_size();
+        #[cfg(not(feature = "servo"))]
         let interpolable = |from: &AnimationValue, to: &AnimationValue| {
             from.animate_with_interpolate_size(
                 to,
@@ -1303,6 +1426,52 @@ impl ElementAnimationSet {
             return;
         };
 
+        #[cfg(feature = "servo")]
+        let shadow = {
+            use crate::values::computed::TransitionProperty;
+            let coordinated = matches!(style.transition_property_at(index), TransitionProperty::NonCustom(id)
+                if matches!(id.longhand_or_shorthand(), Err(crate::properties::ShorthandId::All | crate::properties::ShorthandId::BoxShadow)));
+            match property_declaration_id {
+                PropertyDeclarationId::Longhand(id)
+                    if coordinated && SHADOW_COMPONENTS.contains(id) =>
+                {
+                    Some((
+                        AnimatedBoxShadowList::from_computed_values(old_style, None),
+                        AnimatedBoxShadowList::from_computed_values(new_style, None),
+                    ))
+                },
+                _ => None,
+            }
+        };
+        #[cfg(feature = "servo")]
+        let (from, to) = if let Some((ref left, ref right)) = shadow {
+            let component = |list: &AnimatedBoxShadowList| {
+                list.components()
+                    .into_iter()
+                    .find(|value| value.id() == *property_declaration_id)
+                    .unwrap()
+            };
+            (component(left), component(right))
+        } else {
+            (from, to)
+        };
+        #[cfg(feature = "servo")]
+        let interpolable = |from: &AnimationValue, to: &AnimationValue| {
+            shadow.as_ref().map_or_else(
+                || {
+                    from.animate_with_interpolate_size(
+                        to,
+                        Procedure::Interpolate { progress: 0.5 },
+                        interpolate_size,
+                    )
+                    .is_ok()
+                },
+                |(left, right)| {
+                    left.animate(right, Procedure::Interpolate { progress: 0.5 })
+                        .is_ok()
+                },
+            )
+        };
         let timing_function = style.transition_timing_function_mod(index);
         let duration = style.transition_duration_mod(index).seconds() as f64;
         let delay = style.transition_delay_mod(index).seconds() as f64;
@@ -1364,6 +1533,8 @@ impl ElementAnimationSet {
                 to,
                 &timing_function,
                 interpolate_size,
+                #[cfg(feature = "servo")]
+                shadow.clone(),
             ));
             self.dirty = true;
             return;
@@ -1440,6 +1611,8 @@ impl ElementAnimationSet {
                     to,
                     &timing_function,
                     interpolate_size,
+                    #[cfg(feature = "servo")]
+                    shadow.clone(),
                 );
 
                 // This function takes care of applying all of the modifications to the transition
@@ -1472,6 +1645,8 @@ impl ElementAnimationSet {
                 to,
                 &timing_function,
                 interpolate_size,
+                #[cfg(feature = "servo")]
+                shadow.clone(),
             ));
             self.dirty = true;
         }
@@ -1884,6 +2059,57 @@ mod tests {
     use crate::values::animated::{Animate, Procedure};
     use crate::Atom;
 
+    #[cfg(feature = "servo")]
+    #[test]
+    fn coordinated_shadow_transition_samples_transparent_padding_for_every_component() {
+        use crate::properties::{longhands, LonghandId, PropertyDeclarationId};
+        use crate::values::animated::box_shadow::AnimatedBoxShadowList;
+        use crate::values::computed::{BoxShadowOffset, Length};
+        let initial = ComputedValues::initial_values_with_font_override(Font::initial_values());
+        let mut target = initial.clone();
+        AnimationValue::BoxShadowOffset(longhands::box_shadow_offset::computed_value::OwnedList(
+            [BoxShadowOffset::Offset(
+                Length::new(20.0),
+                Length::new(40.0),
+            )]
+            .into_iter()
+            .collect(),
+        ))
+        .set_in_style_for_servo(servo_arc::Arc::make_mut(&mut target));
+        let from = AnimatedBoxShadowList::from_computed_values(&initial, None);
+        let to = AnimatedBoxShadowList::from_computed_values(&target, None);
+        let expected = from
+            .animate(&to, Procedure::Interpolate { progress: 0.25 })
+            .unwrap();
+        for ((from_value, to_value), expected) in from
+            .components()
+            .into_iter()
+            .zip(to.components())
+            .zip(expected.components())
+        {
+            let animation = super::PropertyAnimation {
+                from: from_value,
+                to: to_value,
+                timing_function: super::TimingFunction::Keyword(
+                    crate::values::generics::easing::TimingKeyword::Linear,
+                ),
+                duration: 1.0,
+                interpolate_size: InterpolateSize::NumericOnly,
+                shadow: Some((from.clone(), to.clone())),
+            };
+            assert_eq!(
+                animation.calculate_value(0.25, super::BeforeFlag::Unset),
+                expected
+            );
+        }
+        let values = expected.components();
+        let color = values
+            .iter()
+            .find(|value| value.id() == PropertyDeclarationId::Longhand(LonghandId::BoxShadowColor))
+            .unwrap();
+        assert_ne!(color, &to.components()[0]);
+    }
+
     #[test]
     fn transition_identity_survives_cloning_and_seeking_but_not_replacement() {
         let create = || {
@@ -1897,6 +2123,8 @@ mod tests {
                     crate::values::generics::easing::TimingKeyword::Linear,
                 ),
                 InterpolateSize::NumericOnly,
+                #[cfg(feature = "servo")]
+                None,
             )
         };
         let original = create();
@@ -2201,6 +2429,8 @@ mod tests {
             timing_function: ComputedTimingFunction::Steps(1, StepPosition::JumpStart),
             duration: 1.,
             interpolate_size: InterpolateSize::NumericOnly,
+            #[cfg(feature = "servo")]
+            shadow: None,
         };
         assert_eq!(
             animation.calculate_value(0., BeforeFlag::Unset),

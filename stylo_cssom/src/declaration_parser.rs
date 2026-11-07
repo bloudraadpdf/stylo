@@ -386,7 +386,17 @@ fn inline_native_declarations(
             .and_then(|property| inline_style_cssom_property_schema(&property))
             .filter(|schema| inline_shorthand_serializes(schema));
         let shorthand_value = shorthand
-            .and_then(|schema| inline_style_get_property_value(&block, schema.name))
+            .and_then(|schema| {
+                let canonical = inline_style_get_property_value(&block, schema.name)?;
+                let authored_value = authored.split_once(':')?.1;
+                Some(
+                    legacy_shadow_serialization(
+                        schema.name,
+                        split_inline_declaration_importance(authored_value).0,
+                    )
+                    .unwrap_or(canonical),
+                )
+            })
             .and_then(|value| specified_style_value_from_css(&value, base_url));
         let mut parsed =
             specified_declarations_from_inline_style_block(&block, base_url.clone()).to_vec();
@@ -633,12 +643,10 @@ pub fn parse_inline_style_property_declarations(
         // Servo expands system fonts to available platform defaults, so the
         // native shorthand serialization no longer contains the specified
         // keyword. Keep the parsed source for specified CSSOM serialization.
-        let shorthand_value = if shorthand.name == "font"
-            && is_system_font_keyword(value.trim())
-        {
+        let shorthand_value = if shorthand.name == "font" && is_system_font_keyword(value.trim()) {
             value.trim().to_ascii_lowercase()
         } else {
-            backing_value
+            legacy_shadow_serialization(shorthand.name, value).unwrap_or(backing_value)
         };
         let value = specified_style_value_from_css(&shorthand_value, base_url)?;
         for declaration in &mut declarations {
@@ -657,6 +665,27 @@ pub fn parse_inline_style_property_declarations(
         }
     }
     Some(declarations)
+}
+
+// CSSOM §6.7.2 preserves backwards-compatible serialization: explicitly
+// specified zero blur/spread components survive the conversion to longhands.
+fn legacy_shadow_serialization(property: &str, value: &str) -> Option<String> {
+    if property != "box-shadow" {
+        return None;
+    }
+    use style_traits::ToCss;
+    let shadows = parse_fragment_with(value, |context, input| {
+        input.parse_comma_separated(|input| {
+            style::values::specified::BoxShadow::parse(context, input)
+        })
+    })?;
+    Some(
+        shadows
+            .iter()
+            .map(ToCss::to_css_string)
+            .collect::<Vec<_>>()
+            .join(", "),
+    )
 }
 
 pub(crate) fn is_system_font_keyword(value: &str) -> bool {
@@ -1127,8 +1156,7 @@ pub fn mutate_rule_declaration_block(
     if property.is_empty() {
         return None;
     }
-    let mut parsed =
-        CssomDeclarationBlock(stylo_rule_declaration_block(block, context)?, context);
+    let mut parsed = CssomDeclarationBlock(stylo_rule_declaration_block(block, context)?, context);
     let namespaces = stylo_namespaces(block.namespaces());
     let url_data = ABOUT_BLANK.clone().into();
     if value.is_empty() {
@@ -1525,6 +1553,115 @@ pub fn inline_style_declarations_with_importance(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn background_clip_only_keywords_set_and_serialize_the_border_box_origin() {
+        for value in [
+            "border-area",
+            "border-area text",
+            "text",
+            "border-area border-box",
+        ] {
+            let block = parse_inline_style_block(&format!("background:{value}"));
+            assert_eq!(
+                inline_style_get_property_value(&block, "background-origin").as_deref(),
+                Some("border-box")
+            );
+            let expected = if value == "border-area border-box" {
+                "border-area"
+            } else {
+                value
+            };
+            assert_eq!(
+                inline_style_get_property_value(&block, "background").as_deref(),
+                Some(expected)
+            );
+        }
+        let block = parse_inline_style_block("background:padding-box border-area");
+        assert_eq!(
+            inline_style_get_property_value(&block, "background").as_deref(),
+            Some("padding-box border-area")
+        );
+    }
+
+    #[test]
+    fn cross_fade_percentage_range_rejects_literals_and_keeps_calculations() {
+        for value in [
+            "cross-fade(101% red, green)",
+            "cross-fade(red 101%, green)",
+            "cross-fade(-1% red, green)",
+        ] {
+            assert!(
+                inline_style_get_property_value(
+                    &parse_inline_style_block(&format!("background-image:{value}")),
+                    "background-image"
+                )
+                .is_none(),
+                "{value}"
+            );
+        }
+        for value in [
+            "cross-fade(100% red, green)",
+            "cross-fade(0% red, green)",
+            "cross-fade(calc(101%) red, green)",
+        ] {
+            assert!(
+                inline_style_get_property_value(
+                    &parse_inline_style_block(&format!("background-image:{value}")),
+                    "background-image"
+                )
+                .is_some(),
+                "{value}"
+            );
+        }
+    }
+
+    #[test]
+    fn box_shadow_keeps_authored_zero_lengths_in_both_cssom_entry_points() {
+        for (authored, expected) in [
+            ("inset green 4px -4px 0", "green 4px -4px 0px inset"),
+            ("green 4px -4px 0 0", "green 4px -4px 0px 0px"),
+            ("1px 2px, red 3px 4px 0", "1px 2px, red 3px 4px 0px"),
+        ] {
+            let declarations = parse_inline_style_property_declarations(
+                "box-shadow",
+                authored,
+                CssomDeclarationPriority::Normal,
+                &Arc::from("about:blank"),
+            )
+            .unwrap();
+            assert_eq!(
+                crate::specified::projected_specified_property_value(&declarations, "box-shadow")
+                    .as_deref(),
+                Some(expected)
+            );
+            let declarations = parse_inline_style_declarations(
+                &format!("box-shadow:{authored} !important"),
+                "about:blank".into(),
+            );
+            assert_eq!(
+                crate::specified::projected_specified_property_value(&declarations, "box-shadow")
+                    .as_deref(),
+                Some(expected)
+            );
+        }
+    }
+
+    #[test]
+    fn box_shadow_none_layers_keep_the_borders_four_grammar() {
+        let declarations = parse_inline_style_property_declarations(
+            "box-shadow",
+            "none, red 1px 2px",
+            CssomDeclarationPriority::Normal,
+            &Arc::from("about:blank"),
+        )
+        .unwrap();
+        assert_eq!(
+            crate::specified::projected_specified_property_value(&declarations, "box-shadow")
+                .as_deref(),
+            Some("none, red 1px 2px")
+        );
+    }
+
     #[test]
     fn page_background_image_resolutions_remain_typed() {
         for property in ["image-resolution", "-bd-image-resolution"] {
@@ -2250,7 +2387,9 @@ mod tests {
                 "{keyword}"
             );
             for declaration in &declarations {
-                let stylo_cssom_model::SpecifiedPropertyName::Standard(property) = declaration.property else {
+                let stylo_cssom_model::SpecifiedPropertyName::Standard(property) =
+                    declaration.property
+                else {
                     panic!("system font shorthand must expand to standard longhands");
                 };
                 let name = property.schema().name;
@@ -2265,7 +2404,14 @@ mod tests {
 
     #[test]
     fn replacing_one_system_font_longhand_clears_the_font_shorthand() {
-        for keyword in ["caption", "icon", "menu", "message-box", "small-caption", "status-bar"] {
+        for keyword in [
+            "caption",
+            "icon",
+            "menu",
+            "message-box",
+            "small-caption",
+            "status-bar",
+        ] {
             let mut declarations = parse_inline_style_property_declarations(
                 "font",
                 keyword,

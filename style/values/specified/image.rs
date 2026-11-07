@@ -19,9 +19,9 @@ use crate::values::generics::image::{GenericImageImage, GenericImageSrc};
 use crate::values::generics::image::{GradientFlags, PaintWorklet};
 use crate::values::generics::position::Position as GenericPosition;
 use crate::values::generics::NonNegative;
+use crate::values::specified::effects::SpecifiedFilter;
 use crate::values::specified::position::{HorizontalPositionKeyword, VerticalPositionKeyword};
 use crate::values::specified::position::{Position, PositionComponent, PositionKeyword, Side};
-use crate::values::specified::effects::SpecifiedFilter;
 use crate::values::specified::url::SpecifiedUrl;
 use crate::values::specified::{
     Angle, AngleOrPercentage, Color, Length, LengthPercentage, NonNegativeLength,
@@ -43,7 +43,8 @@ fn gradient_color_interpolation_method_enabled() -> bool {
 
 /// Specified values for an image according to CSS-IMAGES.
 /// <https://drafts.csswg.org/css-images/#image-values>
-pub type Image = generic::Image<Gradient, SpecifiedUrl, Color, Percentage, Resolution, SpecifiedFilter>;
+pub type Image =
+    generic::Image<Gradient, SpecifiedUrl, Color, Percentage, Resolution, SpecifiedFilter>;
 
 // Images should remain small, see https://github.com/servo/servo/pull/18430
 size_of_test!(Image, 16);
@@ -453,14 +454,11 @@ impl CrossFadeElement {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Option<Percentage> {
-        // We clamp our values here as this is the way that Safari and Chrome's
-        // implementation handle out-of-bounds percentages but whether or not
-        // this behavior follows the specification is still being discussed.
-        // See: <https://github.com/w3c/csswg-drafts/issues/5333>
+        // CSS Images 4 requires a percentage in [0, 100]. The typed parser
+        // rejects out-of-range literals and defers calc() clamping as usual.
         input
-            .try_parse(|input| Percentage::parse_non_negative(context, input))
+            .try_parse(|input| Percentage::parse_zero_to_a_hundred(context, input))
             .ok()
-            .map(|p| p.clamp_to_hundred())
     }
 
     /// <cf-image> = <percentage>? && [ <image> | <color> ]

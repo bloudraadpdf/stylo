@@ -19,6 +19,8 @@ use app_units::Au;
 use smallvec::SmallVec;
 use std::cmp;
 
+#[cfg(feature = "servo")]
+pub mod box_shadow;
 pub mod color;
 pub mod effects;
 mod font;
