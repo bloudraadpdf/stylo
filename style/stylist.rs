@@ -1960,7 +1960,7 @@ impl Stylist {
                         self.quirks_mode,
                         Some(&mut relevant_attributes),
                         |selector_and_hashes| {
-                            selectors_matched.push(data.matches_revalidation_selector(
+                            selectors_matched.extend(data.matches_revalidation_selector(
                                 selector_and_hashes,
                                 &element,
                                 matching_context,
@@ -1981,7 +1981,7 @@ impl Stylist {
                 self.quirks_mode,
                 Some(&mut relevant_attributes),
                 |selector_and_hashes| {
-                    selectors_matched.push(data.matches_revalidation_selector(
+                    selectors_matched.extend(data.matches_revalidation_selector(
                         selector_and_hashes,
                         &element,
                         &mut matching_context,
@@ -4788,7 +4788,9 @@ impl CascadeData {
         rule: &RevalidationSelectorAndHashes,
         element: &E,
         context: &mut MatchingContext<E::Impl>,
-    ) -> bool {
+    ) -> [bool; 2] {
+        [VisitedHandlingMode::AllLinksUnvisited, VisitedHandlingMode::RelevantLinkVisited].map(|mode| {
+        context.with_visited_handling_mode(mode, |context| {
         let matches = |context: &mut MatchingContext<E::Impl>| {
             matches_selector(
                 &rule.selector,
@@ -4812,6 +4814,8 @@ impl CascadeData {
         );
         roots.candidates.into_iter().any(|candidate| {
             context.nest_for_scope(Some(candidate.root), |context| matches(context))
+        })
+        })
         })
     }
 

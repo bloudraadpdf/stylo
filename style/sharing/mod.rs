@@ -133,7 +133,7 @@ impl OpaqueComputedValues {
 ///
 #[derive(Debug, Default)]
 pub struct RevalidationResult {
-    /// A bit for each selector matched. This is sound because we guarantee we look up into the
+    /// Unvisited and visited match bits for each selector. This is sound because we guarantee we look up into the
     /// same buckets via the pre-revalidation checks and relevant_attributes.
     pub selectors_matched: SmallBitVec,
     /// The set of attributes of this element that were relevant for its style.
