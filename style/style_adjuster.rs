@@ -772,7 +772,6 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
     /// Do ruby-related style adjustments, which include:
     /// * propagate the line break suppression flag,
     /// * inlinify block descendants,
-    /// * suppress border and padding for ruby level containers,
     /// * correct unicode-bidi.
     fn adjust_for_ruby<E>(&mut self, element: Option<E>)
     where
@@ -795,15 +794,6 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
                 }
             }
         }
-        // Suppress border and padding for ruby level containers.
-        // This is actually not part of the spec. It is currently unspecified
-        // how border and padding should be handled for ruby level container,
-        // and suppressing them here make it easier for layout to handle.
-        if self_display.is_ruby_level_container() {
-            self.style.reset_border_struct();
-            self.style.reset_padding_struct();
-        }
-
         // Force bidi isolation on all internal ruby boxes and ruby container
         // per spec https://drafts.csswg.org/css-ruby-1/#bidi
         if self_display.is_ruby_type() {
