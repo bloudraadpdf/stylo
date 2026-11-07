@@ -2569,6 +2569,82 @@ mod tests {
     }
 
     #[test]
+    fn pending_import_keeps_its_child_identity_when_the_graph_loads() {
+        let document = StyleDocumentHandle::allocate();
+        let mut state = StyleState::new(document);
+        let import = RuleNode::authored(RuleGrammar::Import, "@import url(child.css);", [])
+            .with_cssom_data(RuleCssomData::Import {
+                request: import_request("child.css"),
+            })
+            .expect("import data matches its grammar");
+        let parent = state
+            .create_stylesheet(StyleSheetCandidate::new(
+                StyleSheetSourceContext::inline(
+                    document,
+                    StyleOrigin::Author,
+                    Arc::from("https://example.test/"),
+                ),
+                [import],
+            ))
+            .expect("parent sheet binds");
+        let rule = parent.top_list().rule(0).expect("import rule exists");
+        let binding = state
+            .bind_import(
+                &rule,
+                ImportBindingContext::Source,
+                "https://example.test/child.css",
+            )
+            .expect("source import binds");
+        let source = StyleSheetSourceContext {
+            kind: StyleSheetSourceKind::Imported,
+            origin: StyleOrigin::Author,
+            document: Some(document),
+            source_url: Some(Arc::from("https://example.test/child.css")),
+            base_url: Some(Arc::from("https://example.test/")),
+            encoding: None,
+        };
+        let child = state
+            .associate_pending_import(&binding, StyleSheetCandidate::new(source.clone(), []))
+            .expect("pending import owns an empty child");
+        assert_eq!(binding.state(), ImportBindingLoadState::Pending);
+        assert!(binding.loaded_child().is_none());
+        assert!(
+            binding
+                .associated_child()
+                .is_some_and(|sheet| sheet.same_cell(&child))
+        );
+        assert_eq!(child.top_list().len(), 0);
+        let mut redirected = source;
+        redirected.base_url = Some(Arc::from("https://example.test/redirected/"));
+        let candidate = StyleSheetGraphCandidate::new(
+            StyleSheetCandidate::new(redirected, [RuleNode::style("a", "color: green")]),
+            [],
+        );
+        state
+            .complete_import_graph(&binding, candidate)
+            .expect("loaded graph fills the same child");
+        assert!(
+            binding
+                .loaded_child()
+                .is_some_and(|sheet| sheet.same_cell(&child))
+        );
+        assert_eq!(
+            binding.state(),
+            ImportBindingLoadState::Loaded(child.handle())
+        );
+        assert_eq!(child.top_list().len(), 1);
+        assert_eq!(
+            child.source().base_url.as_deref(),
+            Some("https://example.test/redirected/")
+        );
+        state
+            .fail_import(&binding)
+            .expect("failed import detaches its associated child");
+        assert!(binding.associated_child().is_none());
+        assert!(state.stylesheet(child.handle()).is_none());
+    }
+
+    #[test]
     fn import_completion_replaces_only_its_previous_loaded_child() {
         let document = StyleDocumentHandle::allocate();
         let mut state = StyleState::new(document);

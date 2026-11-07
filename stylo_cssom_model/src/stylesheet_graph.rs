@@ -2689,6 +2689,16 @@ impl ImportBindingLease {
 
     #[must_use]
     pub fn loaded_child(&self) -> Option<StyleSheetLease> {
+        let record = self.0.lock().expect("import binding cell mutex poisoned");
+        if matches!(record.state, ImportBindingLoadState::Loaded(_)) {
+            record.loaded_child.clone()
+        } else {
+            None
+        }
+    }
+
+    #[must_use]
+    pub fn associated_child(&self) -> Option<StyleSheetLease> {
         self.0
             .lock()
             .expect("import binding cell mutex poisoned")
@@ -3772,6 +3782,46 @@ impl StyleState {
         drop(rule_record);
         self.advance_stylesheet_revision(parent_sheet)?;
         Ok(binding)
+    }
+
+    pub fn associate_pending_import(
+        &mut self,
+        binding: &ImportBindingLease,
+        candidate: StyleSheetCandidate,
+    ) -> Result<StyleSheetLease, RuleGraphError> {
+        {
+            let record = self.live_import_binding(binding)?;
+            if let Some(child) = &record.loaded_child {
+                return Ok(child.clone());
+            }
+            if record.state != ImportBindingLoadState::Pending
+                || candidate.source.kind != StyleSheetSourceKind::Imported
+            {
+                return Err(RuleGraphError::WrongImportBinding);
+            }
+        }
+        let child = self.create_stylesheet(candidate)?;
+        self.live_import_binding(binding)?.loaded_child = Some(child.clone());
+        Ok(child)
+    }
+
+    pub fn complete_import_graph(
+        &mut self,
+        binding: &ImportBindingLease,
+        candidate: StyleSheetGraphCandidate,
+    ) -> Result<(), RuleGraphError> {
+        drop(self.live_import_binding(binding)?);
+        self.validate_stylesheet_graph_candidate(&candidate)?;
+        let child = if let Some(child) = binding.associated_child() {
+            let (sheet, imports) = candidate.into_parts();
+            let update = self.prepare_rebind_stylesheet(&child, sheet)?;
+            self.commit_rule_graph_update(update)?;
+            self.bind_stylesheet_import_candidates(&child, imports)?;
+            child
+        } else {
+            self.create_stylesheet_graph(candidate)?
+        };
+        self.complete_import(binding, &child)
     }
 
     pub fn complete_import(
