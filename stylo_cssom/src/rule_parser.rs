@@ -117,6 +117,7 @@ macro_rules! cssom_rule_interface_names {
 
 cssom_rule_interface_names! {
     CssRule => "CSSRule",
+    GroupingRule => "CSSGroupingRule",
     Style => "CSSStyleRule",
     Namespace => "CSSNamespaceRule",
     Import => "CSSImportRule",
@@ -172,6 +173,7 @@ impl CssomRuleInterfaceName {
             "custom-media" => Self::CustomMedia,
             "supports" => Self::Supports,
             "container" => Self::Container,
+            "navigation" => Self::GroupingRule,
             "font-face" => Self::FontFace,
             "font-feature-values" => Self::FontFeatureValues,
             "font-palette-values" => Self::FontPaletteValues,
@@ -214,6 +216,7 @@ impl CssomRuleInterfaceName {
         match self {
             Self::CssRule => CssomRuleInterfaceParent::None,
             Self::Private => CssomRuleInterfaceParent::StyleRule,
+            Self::GroupingRule => CssomRuleInterfaceParent::CssRule,
             Self::Style
             | Self::Page
             | Self::LayerBlock
@@ -262,6 +265,7 @@ impl CssomRuleInterfaceName {
             Self::Margin => Some(CssomLegacyRuleType::Margin),
             Self::Page => Some(CssomLegacyRuleType::Page),
             Self::CssRule
+            | Self::GroupingRule
             | Self::CustomMedia
             | Self::Container
             | Self::FontPaletteValues
@@ -334,8 +338,8 @@ pub const fn cssom_rule_interface_name_for_grammar(
         RuleGrammar::FunctionDeclarations => CssomRuleInterfaceName::FunctionDeclarations,
         RuleGrammar::ColorProfile => CssomRuleInterfaceName::ColorProfile,
         RuleGrammar::ViewTransition => CssomRuleInterfaceName::ViewTransition,
-        RuleGrammar::Navigation
-        | RuleGrammar::When
+        RuleGrammar::Navigation => CssomRuleInterfaceName::GroupingRule,
+        RuleGrammar::When
         | RuleGrammar::Else
         | RuleGrammar::Document
         | RuleGrammar::Region
@@ -2686,6 +2690,7 @@ fn interface_name_for_rule(rule: &CssRule) -> CssomRuleInterfaceName {
         CssRule::FunctionDeclarations(_) => CssomRuleInterfaceName::FunctionDeclarations,
         CssRule::ColorProfile(_) => CssomRuleInterfaceName::ColorProfile,
         CssRule::ViewTransition(_) => CssomRuleInterfaceName::ViewTransition,
+        CssRule::Navigation(_) => CssomRuleInterfaceName::GroupingRule,
         _ => CssomRuleInterfaceName::CssRule,
     }
 }
@@ -5196,6 +5201,7 @@ mod tests {
 
         let expected = [
             (Name::CssRule, "CSSRule", Parent::None),
+            (Name::GroupingRule, "CSSGroupingRule", Parent::CssRule),
             (Name::Style, "CSSStyleRule", Parent::GroupingRule),
             (Name::Namespace, "CSSNamespaceRule", Parent::CssRule),
             (Name::Import, "CSSImportRule", Parent::CssRule),
@@ -5395,6 +5401,11 @@ mod tests {
         let parsed =
             ParsedCssRule::parse("@navigation (at: --foo) { @keyframes --k {} @mixin --m() {} }")
                 .expect("navigation locations must retain typed nested rules");
+        assert_eq!(parsed.interface_name(), CssomRuleInterfaceName::GroupingRule);
+        assert_eq!(
+            super::cssom_rule_interface_name_for_grammar(parsed.to_rule_node().grammar()),
+            CssomRuleInterfaceName::GroupingRule,
+        );
         assert_eq!(parsed.nested_rules().unwrap().len(), 2);
     }
 
