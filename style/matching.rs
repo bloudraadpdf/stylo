@@ -685,10 +685,27 @@ trait PrivateMatchMethods: TElement {
         };
 
         let old_style = old_styles.pseudos.get(&pseudo_element).cloned();
+        let starting_style = if style.get_ui().specifies_transitions()
+            && !style.clone_display().is_none()
+            && old_style
+                .as_ref()
+                .is_none_or(|old| old.clone_display().is_none())
+        {
+            StyleResolverForElement::new(
+                *self,
+                context,
+                RuleInclusion::All,
+                PseudoElementResolution::IfApplicable,
+            )
+            .resolve_pseudo_starting_style(&pseudo_element, &new_resolved_styles.primary)
+            .filter(|style| !style.clone_display().is_none())
+        } else {
+            None
+        };
         self.process_animations_for_style(
             context,
             &old_style,
-            old_style.as_ref(),
+            starting_style.as_ref().or(old_style.as_ref()),
             &style,
             AnimationCascadeTarget::Pseudo {
                 pseudo: &pseudo_element,

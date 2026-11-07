@@ -521,6 +521,7 @@ where
             &originating_element_style.style.0,
             pseudo,
             VisitedHandlingMode::AllLinksUnvisited,
+            IncludeStartingStyle::No,
         )?;
 
         let mut visited_rules = None;
@@ -530,6 +531,7 @@ where
                     &originating_element_style.style.0,
                     pseudo,
                     VisitedHandlingMode::RelevantLinkVisited,
+                    IncludeStartingStyle::No,
                 )
                 .map(|results| {
                     flags |= results.flags;
@@ -615,6 +617,7 @@ where
         originating_element_style: &ComputedValues,
         pseudo_element: &PseudoElement,
         visited_handling: VisitedHandlingMode,
+        include_starting_style: IncludeStartingStyle,
     ) -> Option<MatchingResults> {
         debug!(
             "Match pseudo {:?} for {:?}, visited: {:?}",
@@ -641,7 +644,7 @@ where
             Some(bloom_filter),
             selector_caches,
             visited_handling,
-            IncludeStartingStyle::No,
+            include_starting_style,
             self.context.shared.quirks_mode(),
             NeedsSelectorFlags::Yes,
             MatchingForInvalidation::No,
@@ -672,8 +675,47 @@ where
         Some(MatchingResults {
             rule_node,
             flags: matching_context.extra_data.cascade_input_flags,
-            has_starting_style: false, // We don't care.
+            has_starting_style: matching_context.has_starting_style,
         })
+    }
+
+    /// Resolve the starting style of the eager pseudo-element `pseudo`: its after-change style with
+    /// @starting-style rules applied, inheriting from the after-change style of the originating
+    /// element (CSS Transitions 2 §3.3). `None` when no @starting-style rule matches.
+    pub fn resolve_pseudo_starting_style(
+        &mut self,
+        pseudo: &PseudoElement,
+        originating_element_style: &PrimaryStyle,
+    ) -> Option<Arc<ComputedValues>> {
+        let originating_after_change =
+            self.after_change_style(&originating_element_style.style.0);
+        let originating: &ComputedValues = originating_after_change
+            .as_ref()
+            .unwrap_or(&originating_element_style.style.0);
+        let MatchingResults {
+            rule_node,
+            flags,
+            has_starting_style,
+        } = self.match_pseudo(
+            originating,
+            pseudo,
+            VisitedHandlingMode::AllLinksUnvisited,
+            IncludeStartingStyle::Yes,
+        )?;
+        if !has_starting_style {
+            return None;
+        }
+        let style = self.cascade_style_and_visited(
+            CascadeInputs {
+                rules: Some(rule_node),
+                visited_rules: None,
+                flags,
+            },
+            Some(originating),
+            layout_parent_style_for_pseudo(originating_element_style, Some(originating)),
+            Some(pseudo),
+        );
+        Some(style.0)
     }
 
     /// Resolve the starting style.
