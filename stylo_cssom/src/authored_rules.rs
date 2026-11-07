@@ -1340,6 +1340,22 @@ fn project_import(import: &ImportRule, guard: &SharedRwLockReadGuard) -> ValidIm
     }
 }
 
+/// Update the parsing base of pending substitutions without interpreting custom
+/// property tokens. Relative URLs in those tokens resolve at their use site.
+#[must_use]
+pub fn project_stylesheet_pending_contexts(
+    rules: &[stylo_cssom_model::RuleNode],
+    base_url: &crate::CssStylesheetBaseUrl,
+) -> Vec<stylo_cssom_model::RuleNode> {
+    crate::author_rule_projection::map_rule_sources(rules, &mut |rule| {
+        crate::author_rule_projection::map_pending_declarations(
+            rule.clone(),
+            str::to_owned,
+            Some(base_url.as_str()),
+        )
+    })
+}
+
 #[must_use]
 pub fn project_stylesheet_rule_urls(
     rules: &[stylo_cssom_model::RuleNode],
@@ -2049,6 +2065,30 @@ mod tests {
                 .projection_serialization()
                 .contains("https://example.test/support/font.otf")
         );
+    }
+
+    #[test]
+    fn pending_context_projection_preserves_unresolved_custom_property_urls() {
+        let parsed = ParsedStylesheet::parse("p { --image:url(image.svg); background:var(--image) }").unwrap();
+        let base = crate::CssStylesheetBaseUrl::from_absolute(
+            Url::parse("https://consumer.test/b/style.css").unwrap(),
+        );
+        let projected = project_stylesheet_pending_contexts(parsed.rule_nodes(), &base);
+        assert_eq!(projected[0].projection_serialization(), parsed.rule_nodes()[0].projection_serialization());
+        let original = parsed.rule_nodes()[0].payload().declaration_block().unwrap();
+        let block = projected[0].payload().declaration_block().unwrap();
+        for (before, after) in original.declarations().iter().zip(block.declarations()) {
+            if let Some(pending) = before.pending_substitution() {
+                let updated = after.pending_substitution().unwrap();
+                assert_eq!(updated.base_url(), base.as_str());
+                assert_eq!(updated.tokens(), pending.tokens());
+                assert_eq!(updated.shorthand(), pending.shorthand());
+            } else {
+                assert_eq!(before, after);
+            }
+        }
+        assert!(block.declarations().iter().any(|declaration| declaration.matches_name("--image")));
+        assert!(block.declarations().iter().any(|declaration| declaration.pending_substitution().is_some()));
     }
 
     #[test]
