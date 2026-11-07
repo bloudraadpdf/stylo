@@ -4064,7 +4064,19 @@ mod tests {
             PropertyDeclaration::BorderSpacing(value) => {
                 PropertyDeclaration::BorderSpacing(value.clone())
             },
-            PropertyDeclaration::BoxShadow(value) => PropertyDeclaration::BoxShadow(value.clone()),
+            PropertyDeclaration::BoxShadowColor(value) => PropertyDeclaration::BoxShadowColor(value.clone()),
+            PropertyDeclaration::BoxShadowOffset(value) => PropertyDeclaration::BoxShadowOffset(value.clone()),
+            PropertyDeclaration::BoxShadowBlur(value) => PropertyDeclaration::BoxShadowBlur(value.clone()),
+            PropertyDeclaration::BoxShadowSpread(value) => PropertyDeclaration::BoxShadowSpread(value.clone()),
+            PropertyDeclaration::BoxShadowPosition(value) => PropertyDeclaration::BoxShadowPosition(value.clone()),
+            PropertyDeclaration::BorderTopClip(value) => PropertyDeclaration::BorderTopClip(value.clone()),
+            PropertyDeclaration::BorderRightClip(value) => PropertyDeclaration::BorderRightClip(value.clone()),
+            PropertyDeclaration::BorderBottomClip(value) => PropertyDeclaration::BorderBottomClip(value.clone()),
+            PropertyDeclaration::BorderLeftClip(value) => PropertyDeclaration::BorderLeftClip(value.clone()),
+            PropertyDeclaration::BorderBlockStartClip(value) => PropertyDeclaration::BorderBlockStartClip(value.clone()),
+            PropertyDeclaration::BorderBlockEndClip(value) => PropertyDeclaration::BorderBlockEndClip(value.clone()),
+            PropertyDeclaration::BorderInlineStartClip(value) => PropertyDeclaration::BorderInlineStartClip(value.clone()),
+            PropertyDeclaration::BorderInlineEndClip(value) => PropertyDeclaration::BorderInlineEndClip(value.clone()),
             PropertyDeclaration::CaretColor(value) => {
                 PropertyDeclaration::CaretColor(value.clone())
             },
