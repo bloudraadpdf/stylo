@@ -2872,14 +2872,22 @@ impl RuleLease {
     }
 
     fn unlink(&self) {
-        let mut record = self.0.lock().expect("rule cell mutex poisoned");
-        record.parent_list = None;
-        record.parent_stylesheet = None;
-        if let Some(list) = &record.nested_list {
-            list.0
-                .lock()
-                .expect("rule-list cell mutex poisoned")
-                .cssom_parent_sheet = None;
+        self.0.lock().expect("rule cell mutex poisoned").parent_list = None;
+        self.unlink_stylesheet();
+    }
+
+    fn unlink_stylesheet(&self) {
+        let nested = {
+            let mut record = self.0.lock().expect("rule cell mutex poisoned");
+            record.parent_stylesheet = None;
+            record.nested_list.clone()
+        };
+        if let Some(list) = nested {
+            let mut record = list.0.lock().expect("rule-list cell mutex poisoned");
+            record.cssom_parent_sheet = None;
+            for child in &record.rules {
+                child.unlink_stylesheet();
+            }
         }
     }
     #[must_use]
