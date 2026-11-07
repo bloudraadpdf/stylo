@@ -781,6 +781,7 @@ pub enum NonTSPseudoClass {
     Link,
     Modal,
     Muted,
+    VolumeLocked,
     MozMeterOptimum,
     MozMeterSubOptimum,
     MozMeterSubSubOptimum,
@@ -914,6 +915,7 @@ impl ToCss for NonTSPseudoClass {
             Self::Link => ":link",
             Self::Modal => ":modal",
             Self::Muted => ":muted",
+            Self::VolumeLocked => ":volume-locked",
             Self::MozMeterOptimum => ":-moz-meter-optimum",
             Self::MozMeterSubOptimum => ":-moz-meter-sub-optimum",
             Self::MozMeterSubSubOptimum => ":-moz-meter-sub-sub-optimum",
@@ -997,7 +999,8 @@ impl NonTSPseudoClass {
             | Self::ServoNonZeroBorder
             | Self::TargetAfter
             | Self::TargetBefore
-            | Self::TargetCurrent => ElementState::empty(),
+            | Self::TargetCurrent
+            | Self::VolumeLocked => ElementState::empty(),
         }
     }
 
@@ -1114,6 +1117,7 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             "link" => NonTSPseudoClass::Link,
             "modal" => NonTSPseudoClass::Modal,
             "muted" => NonTSPseudoClass::Muted,
+            "volume-locked" => NonTSPseudoClass::VolumeLocked,
             "open" => NonTSPseudoClass::Open,
             "optional" => NonTSPseudoClass::Optional,
             "out-of-range" => NonTSPseudoClass::OutOfRange,
