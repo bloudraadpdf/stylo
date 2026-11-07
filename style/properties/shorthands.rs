@@ -2388,7 +2388,6 @@ pub mod white_space {
     }
 }
 
-#[cfg(feature = "gecko")]
 pub mod _webkit_text_stroke {
     pub use crate::properties::shorthands_generated::_webkit_text_stroke::*;
 

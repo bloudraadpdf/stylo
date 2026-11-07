@@ -38,6 +38,15 @@ fn assert_serialization(name: &str, input: &str, expected: Option<&str>) {
 }
 
 #[test]
+fn text_stroke_preserves_fractional_widths_and_expands_the_shorthand() {
+    assert_serialization("-webkit-text-stroke-width", "0.1px", Some("0.1px"));
+    assert_serialization("-webkit-text-stroke-width", "-1px", None);
+    let declaration = block("-webkit-text-stroke:0.5px lime");
+    assert_eq!(serialized_value(&declaration, "-webkit-text-stroke-width"), "0.5px");
+    assert_eq!(serialized_value(&declaration, "-webkit-text-stroke-color"), "lime");
+}
+
+#[test]
 fn text_justify_applies_to_first_line_and_first_letter() {
     for restriction in [
         super::PropertyFlags::APPLIES_TO_FIRST_LINE,
