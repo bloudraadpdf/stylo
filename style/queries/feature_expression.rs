@@ -5,6 +5,7 @@
 //! Parsing for query feature expressions, like `(foo: bar)` or
 //! `(width >= 400px)`.
 
+use super::anchored::FallbackQuery;
 use super::feature::{Evaluator, QueryFeatureDescription};
 use super::feature::{FeatureFlags, KeywordDiscriminant};
 use super::style_feature::StyleQueryContainer;
@@ -33,6 +34,8 @@ pub enum FeatureType {
     Style,
     /// We're parsing a scroll-state feature, inside a container `scroll-state()` query.
     ScrollState,
+    /// We're parsing an anchored feature, inside a container `anchored()` query.
+    Anchored,
 }
 
 impl FeatureType {
@@ -42,6 +45,7 @@ impl FeatureType {
         #[cfg(feature = "servo")]
         use crate::servo::media_queries::MEDIA_FEATURES;
 
+        use super::anchored::ANCHORED_FEATURES;
         use super::scroll_state::SCROLL_STATE_FEATURES;
         use crate::stylesheets::container_rule::CONTAINER_FEATURES;
 
@@ -50,6 +54,7 @@ impl FeatureType {
             FeatureType::Container => &CONTAINER_FEATURES,
             FeatureType::Style => &[],
             FeatureType::ScrollState => &SCROLL_STATE_FEATURES,
+            FeatureType::Anchored => &ANCHORED_FEATURES,
         }
     }
 
@@ -725,6 +730,9 @@ impl QueryFeatureExpression {
                     .map(|v| *expect!(Enumerated, v));
                 return evaluator(context, computed);
             },
+            Evaluator::Fallback(eval) => {
+                return eval(context, kind.non_ranged_value().map(|v| expect!(Fallback, v)));
+            },
             Evaluator::BoolInteger(eval) => {
                 let computed = kind
                     .non_ranged_value()
@@ -755,6 +763,8 @@ pub enum QueryExpressionValue {
     /// An enumerated value, defined by the variant keyword table in the
     /// feature's `mData` member.
     Enumerated(KeywordDiscriminant),
+    /// A position option applied from `position-try-fallbacks`.
+    Fallback(FallbackQuery),
     /// A container feature value with `var()`, `attr()` or `env()`, substituted against the query
     /// container.
     Unparsed(#[ignore_malloc_size_of = "Arc"] Arc<SpecifiedValue>),
@@ -776,6 +786,7 @@ impl QueryExpressionValue {
                 Evaluator::Enumerated { serializer, .. } => dest.write_str(&*serializer(value)),
                 _ => unreachable!(),
             },
+            QueryExpressionValue::Fallback(ref value) => value.to_css(dest),
             QueryExpressionValue::Unparsed(ref value) => value.to_css(dest),
         }
     }
@@ -843,6 +854,9 @@ impl QueryExpressionValue {
             },
             Evaluator::Enumerated { parser, .. } => {
                 QueryExpressionValue::Enumerated(parser(context, input)?)
+            },
+            Evaluator::Fallback(..) => {
+                QueryExpressionValue::Fallback(FallbackQuery::parse(context, input)?)
             },
         })
     }

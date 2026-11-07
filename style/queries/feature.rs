@@ -4,6 +4,7 @@
 
 //! Query features.
 
+use super::anchored::FallbackQuery;
 use crate::derives::*;
 use crate::parser::ParserContext;
 use crate::values::computed::{self, CSSPixelLength, Ratio, Resolution};
@@ -45,6 +46,8 @@ pub enum Evaluator {
     OptionalNumberRatio(QueryFeatureGetter<Option<Ratio>>),
     /// A resolution.
     Resolution(QueryFeatureGetter<Resolution>),
+    /// A position option applied from `position-try-fallbacks`.
+    Fallback(fn(&computed::Context, Option<&FallbackQuery>) -> KleeneValue),
     /// A keyword value.
     Enumerated {
         /// The parser to get a discriminant given a string.
@@ -128,6 +131,8 @@ bitflags! {
         const GENERAL_ENCLOSED = 1 << 8;
         /// The feature requires a scroll-state container.
         const CONTAINER_REQUIRES_SCROLL_STATE = 1 << 9;
+        /// The feature requires an anchored container.
+        const CONTAINER_REQUIRES_ANCHORED = 1 << 10;
     }
 }
 

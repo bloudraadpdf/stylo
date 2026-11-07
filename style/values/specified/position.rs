@@ -859,38 +859,67 @@ pub struct SpecifiedDashedIdentAndOrTryTactic {
     pub try_tactic: PositionTryFallbacksTryTactic,
 }
 
+/// Parses `<name> || <try-tactic>`, where `name` parses the name.
+fn parse_name_and_or_try_tactic<'i, 't, N>(
+    context: &ParserContext,
+    input: &mut Parser<'i, 't>,
+    name: fn(&ParserContext, &mut Parser<'i, 't>) -> Result<N, ParseError<'i>>,
+) -> Result<(Option<N>, PositionTryFallbacksTryTactic), ParseError<'i>> {
+    let mut ident = None;
+    let mut try_tactic = PositionTryFallbacksTryTactic::default();
+    loop {
+        if ident.is_none() {
+            if let Ok(parsed) = input.try_parse(|i| name(context, i)) {
+                ident = Some(parsed);
+                continue;
+            }
+        }
+        if try_tactic.is_empty() {
+            if let Ok(parsed) =
+                input.try_parse(|i| PositionTryFallbacksTryTactic::parse(context, i))
+            {
+                try_tactic = parsed;
+                continue;
+            }
+        }
+        break;
+    }
+
+    if ident.is_none() && try_tactic.is_empty() {
+        return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+    }
+    Ok((ident, try_tactic))
+}
+
 impl Parse for SpecifiedDashedIdentAndOrTryTactic {
     fn parse<'i, 't>(
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        let mut result = Self {
-            ident: None,
-            try_tactic: PositionTryFallbacksTryTactic::default(),
-        };
+        let (ident, try_tactic) = parse_name_and_or_try_tactic(
+            context,
+            input,
+            <DashedIdentOrFunction as Parse>::parse,
+        )?;
+        Ok(Self { ident, try_tactic })
+    }
+}
 
-        loop {
-            if result.ident.is_none() {
-                if let Ok(ident) = input.try_parse(|i| DashedIdentOrFunction::parse(context, i)) {
-                    result.ident = Some(ident);
-                    continue;
-                }
-            }
-            if result.try_tactic.is_empty() {
-                if let Ok(try_tactic) =
-                    input.try_parse(|i| PositionTryFallbacksTryTactic::parse(context, i))
-                {
-                    result.try_tactic = try_tactic;
-                    continue;
-                }
-            }
-            break;
-        }
-
-        if result.ident.is_none() && result.try_tactic.is_empty() {
-            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
-        }
-        Ok(result)
+/// Parses the `<dashed-ident> || <try-tactic>` of a `fallback` container query feature, whose name
+/// is a plain `<dashed-ident>`.
+///
+/// https://drafts.csswg.org/css-anchor-position-2/#descdef-container-fallback
+impl Parse for DashedIdentAndOrTryTactic {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        let (ident, try_tactic) =
+            parse_name_and_or_try_tactic(context, input, <DashedIdent as Parse>::parse)?;
+        Ok(Self {
+            ident: ident.unwrap_or_else(DashedIdent::empty),
+            try_tactic,
+        })
     }
 }
 
@@ -1795,6 +1824,150 @@ impl Parse for PositionArea {
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
         Self::parse_internal(context, input, /* allow_none = */ true)
+    }
+}
+
+/// A keyword of a `<position-area-query>`.
+///
+/// https://drafts.csswg.org/css-anchor-position-2/#typedef-position-area-query
+#[derive(Clone, Copy, Debug, Eq, MallocSizeOf, PartialEq, ToCss, ToShmem)]
+pub enum PositionAreaQueryKeyword {
+    /// `any`, which matches any tracks of its axis.
+    Any,
+    /// A `<position-area>` keyword other than `none`.
+    Area(PositionAreaKeyword),
+}
+
+impl PositionAreaQueryKeyword {
+    fn parse<'i>(input: &mut Parser<'i, '_>) -> Result<Self, ParseError<'i>> {
+        if input.try_parse(|i| i.expect_ident_matching("any")).is_ok() {
+            return Ok(Self::Any);
+        }
+        let location = input.current_source_location();
+        match PositionAreaKeyword::parse(input)? {
+            PositionAreaKeyword::None => {
+                Err(location.new_custom_error(StyleParseErrorKind::UnspecifiedError))
+            },
+            keyword => Ok(Self::Area(keyword)),
+        }
+    }
+
+    /// The keyword this one combines and assigns axes as: `any` is ambiguous about its axis, as
+    /// `center` is.
+    fn grammar_keyword(self) -> PositionAreaKeyword {
+        match self {
+            Self::Any => PositionAreaKeyword::Center,
+            Self::Area(keyword) => keyword,
+        }
+    }
+
+    /// The physical axis and the track of this keyword, which infers `inferred_axis`; `any` has no
+    /// track.
+    fn to_physical(
+        self,
+        cb_wm: WritingMode,
+        self_wm: WritingMode,
+        inferred_axis: LogicalAxis,
+    ) -> (PositionAreaAxis, Option<PositionAreaTrack>) {
+        match self {
+            Self::Any => (PositionAreaAxis::None, None),
+            Self::Area(keyword) => {
+                let keyword = keyword.to_physical(cb_wm, self_wm, inferred_axis);
+                (keyword.axis(), keyword.track())
+            },
+        }
+    }
+}
+
+/// A `<position-area-query>`: the `<position-area>` grammar with `any` added to every production.
+///
+/// https://drafts.csswg.org/css-anchor-position-2/#typedef-position-area-query
+#[derive(Clone, Copy, Debug, Eq, MallocSizeOf, PartialEq, ToCss, ToShmem)]
+pub struct PositionAreaQuery {
+    first: PositionAreaQueryKeyword,
+    second: Option<PositionAreaQueryKeyword>,
+}
+
+impl Parse for PositionAreaQuery {
+    fn parse<'i, 't>(
+        _: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        let first = PositionAreaQueryKeyword::parse(input)?;
+        let location = input.current_source_location();
+        let second = input.try_parse(PositionAreaQueryKeyword::parse).ok();
+        if let Some(second) = second {
+            let area = PositionArea {
+                first: first.grammar_keyword(),
+                second: second.grammar_keyword(),
+            };
+            if area.get_type() == PositionAreaType::None {
+                return Err(location.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+            }
+        }
+        Ok(Self { first, second })
+    }
+}
+
+impl PositionAreaQuery {
+    /// The second keyword: as given or, after a single keyword, `any` when the keyword is
+    /// unambiguous about its axis, else the keyword again.
+    fn second(&self) -> PositionAreaQueryKeyword {
+        self.second.unwrap_or(match self.first {
+            PositionAreaQueryKeyword::Area(keyword)
+                if !matches!(
+                    keyword.axis(),
+                    PositionAreaAxis::Inferred | PositionAreaAxis::None
+                ) =>
+            {
+                PositionAreaQueryKeyword::Any
+            },
+            first => first,
+        })
+    }
+
+    /// The tracks of the horizontal and the vertical axis. As in `PositionArea::to_physical`, an
+    /// inferred keyword takes the block axis in the first place and the inline axis in the second;
+    /// an axis-less keyword takes the axis that the other keyword leaves, or the block axis in the
+    /// first place when both are axis-less.
+    fn physical_tracks(
+        &self,
+        cb_wm: WritingMode,
+        self_wm: WritingMode,
+    ) -> [Option<PositionAreaTrack>; 2] {
+        let (first_axis, first) = self.first.to_physical(cb_wm, self_wm, LogicalAxis::Block);
+        let (second_axis, second) = self.second().to_physical(cb_wm, self_wm, LogicalAxis::Inline);
+        let first_is_horizontal = match (first_axis, second_axis) {
+            (PositionAreaAxis::Horizontal, _) | (_, PositionAreaAxis::Vertical) => true,
+            (PositionAreaAxis::Vertical, _) | (_, PositionAreaAxis::Horizontal) => false,
+            _ => cb_wm.is_vertical(),
+        };
+        if first_is_horizontal {
+            [first, second]
+        } else {
+            [second, first]
+        }
+    }
+
+    /// Whether `area`, of an element in writing mode `self_wm` with a containing block in writing
+    /// mode `cb_wm`, is the physical area of this query, where `any` matches any tracks of its
+    /// axis.
+    pub fn matches(
+        &self,
+        mut area: PositionArea,
+        cb_wm: WritingMode,
+        self_wm: WritingMode,
+    ) -> bool {
+        area.make_missing_second_explicit();
+        let applied = Self {
+            first: PositionAreaQueryKeyword::Area(area.first),
+            second: Some(PositionAreaQueryKeyword::Area(area.second)),
+        }
+        .physical_tracks(cb_wm, self_wm);
+        self.physical_tracks(cb_wm, self_wm)
+            .iter()
+            .zip(applied)
+            .all(|(queried, applied)| queried.is_none() || *queried == applied)
     }
 }
 

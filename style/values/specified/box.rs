@@ -2042,16 +2042,17 @@ pub enum ContentVisibility {
 )]
 #[css(bitflags(
     single = "normal",
-    mixed = "size,inline-size,scroll-state",
+    mixed = "size,inline-size,scroll-state,anchored",
     validate_mixed = "Self::validate_mixed_flags",
 ))]
 #[repr(C)]
 /// Specified keyword values for the container-type property.
-/// Spec: normal | [ [ size | inline-size ] || scroll-state ]
+/// Spec: normal | [ [ size | inline-size ] || scroll-state || anchored ]
 ///
 /// Container Queries are moved from css-contain-3 to css-conditional-5 in August 2022:
 /// https://drafts.csswg.org/css-contain-3/#container-type
 /// https://drafts.csswg.org/css-conditional-5/#container-type
+/// https://drafts.csswg.org/css-anchor-position-2/#container-type-anchored
 pub struct ContainerType(u8);
 bitflags! {
     impl ContainerType: u8 {
@@ -2063,6 +2064,8 @@ bitflags! {
         const SIZE = 1 << 1;
         /// The `scroll-state` variant.
         const SCROLL_STATE = 1 << 2;
+        /// The `anchored` variant.
+        const ANCHORED = 1 << 3;
     }
 }
 

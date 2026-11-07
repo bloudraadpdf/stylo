@@ -534,7 +534,7 @@ impl<'a> Context<'a> {
             in_container_query: true,
             quirks_mode,
             for_smil_animation: false,
-            container_info: container.map(|c| c.info),
+            container_info: container.map(|c| c.info.clone()),
             style_container: container.map(|c| StyleContainer {
                 parent_style: c
                     .element

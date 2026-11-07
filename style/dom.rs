@@ -977,6 +977,14 @@ pub trait TElement:
     /// last snapshotted after layout.
     fn query_container_scroll_state(&self) -> crate::queries::scroll_state::ContainerScrollState;
 
+    /// The position option that layout applied to the element, for the anchored container queries of its
+    /// descendants (CSS Anchor Positioning 2 §2.3.1).
+    fn query_container_position_option(
+        &self,
+    ) -> Option<crate::queries::anchored::AppliedPositionOption> {
+        None
+    }
+
     /// The index into `position-try-fallbacks` of the position option that layout chose for the element, or for its
     /// pseudo-element `pseudo`, which applies to its computed style (CSS Anchor Positioning 1 §6, style & layout
     /// interleaving). Asked only for a style with position options.

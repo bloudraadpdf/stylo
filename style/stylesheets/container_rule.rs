@@ -12,6 +12,7 @@ use crate::dom::TElement;
 use crate::logical_geometry::{LogicalSize, WritingMode};
 use crate::parser::ParserContext;
 use crate::properties::ComputedValues;
+use crate::queries::anchored::AnchoredFallback;
 use crate::queries::feature::{AllowsRanges, Evaluator, FeatureFlags, QueryFeatureDescription};
 use crate::queries::scroll_state::ContainerScrollState;
 use crate::queries::values::Orientation;
@@ -334,6 +335,12 @@ impl ContainerCondition {
         if scroll_state && !container_type.intersects(ContainerType::SCROLL_STATE) {
             return TraversalResult::InProgress;
         }
+        let anchored = self
+            .flags
+            .contains(FeatureFlags::CONTAINER_REQUIRES_ANCHORED);
+        if anchored && !container_type.intersects(ContainerType::ANCHORED) {
+            return TraversalResult::InProgress;
+        }
 
         // Filter by container-name.
         if let Some(name) = self.name() {
@@ -351,6 +358,13 @@ impl ContainerCondition {
         } else {
             ContainerScrollState::default()
         };
+        let anchored_fallback = if anchored {
+            potential_container
+                .query_container_position_option()
+                .and_then(|option| AnchoredFallback::new(style, option))
+        } else {
+            None
+        };
         let style = style.to_arc();
         TraversalResult::Done(ContainerLookupResult {
             element: potential_container,
@@ -358,6 +372,7 @@ impl ContainerCondition {
                 size,
                 wm,
                 scroll_state,
+                anchored_fallback,
             },
             style,
         })
@@ -440,11 +455,12 @@ impl ContainerCondition {
 }
 
 /// Information needed to evaluate an individual container query.
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct ContainerInfo {
     size: Size2D<Option<Au>>,
     wm: WritingMode,
     scroll_state: ContainerScrollState,
+    anchored_fallback: Option<AnchoredFallback>,
 }
 
 impl ContainerInfo {
@@ -458,6 +474,10 @@ impl ContainerInfo {
 
     pub(crate) fn scroll_state(&self) -> ContainerScrollState {
         self.scroll_state
+    }
+
+    pub(crate) fn anchored_fallback(&self) -> Option<&AnchoredFallback> {
+        self.anchored_fallback.as_ref()
     }
 }
 
@@ -799,19 +819,27 @@ impl<'a> ContainerSizeQuery<'a> {
 #[cfg(all(test, feature = "servo"))]
 mod tests {
     use super::*;
+    use crate::parser::Parse;
     use crate::test_support::{author_parser_context, pref_lock, test_url_data, BoolPrefGuard};
     use cssparser::ParserInput;
 
-    fn parse(query: &str) -> ContainerConditions {
+    fn parse_with<T>(
+        source: &str,
+        parse: for<'i, 't> fn(&ParserContext, &mut Parser<'i, 't>) -> Result<T, ParseError<'i>>,
+    ) -> Option<T> {
         let _lock = pref_lock().lock().unwrap();
         let _style_queries = BoolPrefGuard::set("layout.css.style-queries.enabled", true);
         let _scroll_state = BoolPrefGuard::set("layout.css.scroll-state.enabled", true);
         let url_data = test_url_data();
         let context = author_parser_context(&url_data);
-        let mut input = ParserInput::new(query);
+        let mut input = ParserInput::new(source);
         Parser::new(&mut input)
-            .parse_entirely(|input| ContainerConditions::parse(&context, input))
-            .unwrap()
+            .parse_entirely(|input| parse(&context, input))
+            .ok()
+    }
+
+    fn parse(query: &str) -> ContainerConditions {
+        parse_with(query, ContainerConditions::parse).unwrap()
     }
 
     #[test]
@@ -899,6 +927,91 @@ mod tests {
             "scroll-state(style(stuck: top))",
             "style(scroll-state(stuck: top))",
             "scroll-state(--foo)",
+        ] {
+            let conditions = parse(query);
+            let condition = conditions.iter().next().unwrap();
+            assert!(
+                condition.flags.contains(FeatureFlags::GENERAL_ENCLOSED),
+                "{query}"
+            );
+        }
+    }
+
+    #[test]
+    fn container_type_combines_anchored_with_the_other_types() {
+        for (value, expected) in [
+            ("anchored", Some("anchored")),
+            ("anchored size", Some("size anchored")),
+            ("anchored inline-size", Some("inline-size anchored")),
+            ("anchored scroll-state size", Some("size scroll-state anchored")),
+            ("anchored anchored", None),
+            ("normal anchored", None),
+        ] {
+            assert_eq!(
+                parse_with(value, <ContainerType as Parse>::parse)
+                    .map(|container_type| container_type.to_css_string())
+                    .as_deref(),
+                expected,
+                "{value}"
+            );
+        }
+    }
+
+    #[test]
+    fn anchored_queries_serialize_bare_features_and_conditions() {
+        for (query, expected) in [
+            ("anchored(        fallback:--foo)", "anchored(fallback: --foo)"),
+            ("ANChoreD(fallback:    )", "ANChoreD(fallback:    )"),
+            ("anchoRed(fallback)", "anchored(fallback)"),
+            (
+                "anchored(  ( fallback: flip-INLINE) OR ( FALLBACK : --bar  ) )",
+                "anchored((fallback: flip-inline) or (fallback: --bar))",
+            ),
+            ("anchored (fallback: top right)", "anchored (fallback: top right)"),
+            (
+                "anchored(fallback: flip-block --bar)",
+                "anchored(fallback: --bar flip-block)",
+            ),
+            ("anchored(fallback: any span-bottom)", "anchored(fallback: any span-bottom)"),
+        ] {
+            assert_eq!(parse(query).to_css_string(), expected);
+        }
+    }
+
+    #[test]
+    fn anchored_features_require_an_anchored_container() {
+        for query in [
+            "anchored(fallback)",
+            "anchored(fallback: none)",
+            "(anchored(fallback: inline-start block-end))",
+            "anchored(not ((fallback: --foo) or (fallback: --bar flip-inline)))",
+            "anchored(fallback: flip-x flip-y flip-start flip-block flip-inline)",
+            "anchored(fallback: any)",
+            "anchored(fallback: any any)",
+            "anchored(fallback: any top)",
+            "anchored(fallback: center any)",
+            "anchored(fallback: any self-start)",
+            "anchored(fallback: inline-end any)",
+        ] {
+            let conditions = parse(query);
+            let flags = conditions.iter().next().unwrap().flags;
+            assert!(
+                flags.contains(FeatureFlags::CONTAINER_REQUIRES_ANCHORED)
+                    && !flags.contains(FeatureFlags::GENERAL_ENCLOSED),
+                "{query}"
+            );
+        }
+        for query in [
+            "anchored(fallback < none)",
+            "anchored((fallback = none))",
+            "anchored(fallback: 0)",
+            "anchored(fallback: 1)",
+            "anchored(style(fallback: top left))",
+            "style(anchored(fallback: --foo))",
+            "anchored(fallback:)",
+            "anchored(fallback: x-self-start)",
+            "anchored(fallback: any none)",
+            "anchored(fallback: top bottom)",
         ] {
             let conditions = parse(query);
             let condition = conditions.iter().next().unwrap();
