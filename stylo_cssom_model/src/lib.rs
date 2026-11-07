@@ -2708,7 +2708,16 @@ mod tests {
             root.serialise_projection(ImportBindingContext::Source),
             "p { color: green; }"
         );
-        let projected = root.projection_nodes(ImportBindingContext::Source);
+        let mut source_bases = Vec::new();
+        let projected = root.projection_nodes_with_source(
+            ImportBindingContext::Source,
+            &mut |source, rule| {
+                source_bases.push(source.base_url.clone());
+                rule
+            },
+        );
+        assert_eq!(source_bases, [Some(Arc::from("https://example.test/loaded.css"))]);
+        assert_ne!(source_bases[0], root.source().base_url);
         assert_eq!(projected.len(), 1);
         assert_eq!(projected[0].grammar(), RuleGrammar::Style);
         assert_eq!(

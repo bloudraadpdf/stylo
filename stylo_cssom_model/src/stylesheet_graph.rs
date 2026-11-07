@@ -2438,18 +2438,31 @@ impl StyleSheetLease {
 
     #[must_use]
     pub fn projection_nodes(&self, context: ImportBindingContext) -> Vec<RuleNode> {
-        self.projection_nodes_with_stack(context, &mut Vec::new())
+        self.projection_nodes_with_source(context, &mut |_, rule| rule)
+    }
+
+    /// Project each rule using its owning sheet's source before imports are
+    /// flattened. Imported sheets retain their own URL and encoding context.
+    #[must_use]
+    pub fn projection_nodes_with_source(
+        &self,
+        context: ImportBindingContext,
+        project: &mut impl FnMut(&StyleSheetSourceContext, RuleNode) -> RuleNode,
+    ) -> Vec<RuleNode> {
+        self.projection_nodes_with_stack(context, &mut Vec::new(), project)
     }
 
     fn projection_nodes_with_stack(
         &self,
         context: ImportBindingContext,
         stack: &mut Vec<StyleSheetHandle>,
+        project: &mut impl FnMut(&StyleSheetSourceContext, RuleNode) -> RuleNode,
     ) -> Vec<RuleNode> {
         if self.disabled() || stack.contains(&self.handle()) {
             return Vec::new();
         }
         stack.push(self.handle());
+        let source = self.source();
         let top = self.top_list();
         let mut projected = Vec::new();
         for index in 0..top.len() {
@@ -2458,10 +2471,11 @@ impl StyleSheetLease {
             };
             let node = rule.node();
             let Some(RuleCssomData::Import { request }) = node.cssom_data() else {
-                projected.push(
+                projected.push(project(
+                    &source,
                     rule.snapshot()
                         .with_projection_serialization(rule.projection_serialization()),
-                );
+                ));
                 continue;
             };
             let child = rule
@@ -2473,7 +2487,7 @@ impl StyleSheetLease {
                 continue;
             }
             let mut rules = child.map_or_else(Vec::new, |child| {
-                child.projection_nodes_with_stack(ImportBindingContext::Source, stack)
+                child.projection_nodes_with_stack(ImportBindingContext::Source, stack, project)
             });
             if let Some(scope) = request.scope() {
                 rules = vec![RuleNode::imported_scope(scope, rules)];
