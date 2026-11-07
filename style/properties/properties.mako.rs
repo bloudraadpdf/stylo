@@ -454,11 +454,18 @@ impl NonCustomPropertyId {
             0,
             % endfor
         ];
-        MAP[self.0 as usize] & rule_types.bits() != 0
+        let allowed = MAP[self.0 as usize];
+        // Margin and footnote boxes share page-box properties, not page descriptors.
+        let page_boxes = CssRuleType::Margin.bit() | CssRuleType::Footnote.bit() | CssRuleType::Sidenote.bit();
+        let shared_page_property = CssRuleType::Style.bit() | CssRuleType::Page.bit();
+        if rule_types.bits() & page_boxes != 0 && allowed & shared_page_property == shared_page_property {
+            return true;
+        }
+        allowed & rule_types.bits() != 0
     }
 
     pub(super) fn allowed_in(self, context: &ParserContext) -> bool {
-        if !self.allowed_in_rule(context.rule_types()) {
+        if !self.allowed_in_rule(context.declaration_rule_types()) {
             return false;
         }
 

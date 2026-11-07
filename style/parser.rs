@@ -21,9 +21,29 @@ pub struct NestingContext {
     pub rule_types: CssRuleTypes,
     /// Whether or not parsing relative selector syntax should be allowed.
     pub parse_relative: ParseRelative,
+    /// The innermost rule that supplies a property declaration grammar.
+    declaration_rule_type: Option<CssRuleType>,
 }
 
 impl NestingContext {
+    fn declaration_rule_for(rule_type: CssRuleType) -> Option<CssRuleType> {
+        match rule_type {
+            CssRuleType::Scope
+            | CssRuleType::Style
+            | CssRuleType::NestedDeclarations
+            | CssRuleType::Result
+            | CssRuleType::Apply
+            | CssRuleType::Contents => Some(CssRuleType::Style),
+            CssRuleType::Keyframe
+            | CssRuleType::PositionTry
+            | CssRuleType::Page
+            | CssRuleType::Margin
+            | CssRuleType::Footnote
+            | CssRuleType::Sidenote => Some(rule_type),
+            _ => None,
+        }
+    }
+
     fn parse_relative_for(rule_type: CssRuleType) -> ParseRelative {
         match rule_type {
             CssRuleType::Scope => ParseRelative::ForScope,
@@ -37,8 +57,29 @@ impl NestingContext {
 
     /// Create a new nesting context.
     pub fn new(rule_types: CssRuleTypes, parse_nested_rule_type: Option<CssRuleType>) -> Self {
+        // CSSOM insertion supplies ancestor kinds rather than an ordered stack.
+        // Restricted declaration rules cannot contain style or scope rules;
+        // page margin rules are the only nested restricted declaration grammar.
+        let declaration_rule_type = [
+            CssRuleType::Margin,
+            CssRuleType::Footnote,
+            CssRuleType::Sidenote,
+            CssRuleType::PositionTry,
+            CssRuleType::Keyframe,
+            CssRuleType::Page,
+            CssRuleType::Style,
+            CssRuleType::Scope,
+            CssRuleType::NestedDeclarations,
+            CssRuleType::Result,
+            CssRuleType::Apply,
+            CssRuleType::Contents,
+        ]
+        .into_iter()
+        .find(|kind| rule_types.contains(*kind))
+        .and_then(Self::declaration_rule_for);
         Self {
             rule_types,
+            declaration_rule_type,
             parse_relative: parse_nested_rule_type
                 .map_or(ParseRelative::No, Self::parse_relative_for),
         }
@@ -48,6 +89,7 @@ impl NestingContext {
     pub fn new_from_rule(rule_type: Option<CssRuleType>) -> Self {
         Self {
             rule_types: rule_type.map(CssRuleTypes::from).unwrap_or_default(),
+            declaration_rule_type: rule_type.and_then(Self::declaration_rule_for),
             parse_relative: rule_type
                 .map(Self::parse_relative_for)
                 .unwrap_or(ParseRelative::No),
@@ -58,6 +100,9 @@ impl NestingContext {
     pub fn save(&mut self, rule_type: CssRuleType) -> Self {
         let old = *self;
         self.rule_types.insert(rule_type);
+        if let Some(kind) = Self::declaration_rule_for(rule_type) {
+            self.declaration_rule_type = Some(kind);
+        }
         let new_parse_relative = Self::parse_relative_for(rule_type);
         if new_parse_relative != ParseRelative::No {
             self.parse_relative = new_parse_relative;
@@ -172,6 +217,14 @@ impl<'a> ParserContext<'a> {
             .nesting_context
             .rule_types
             .intersects(CssRuleTypes::IMPORTANT_FORBIDDEN)
+    }
+
+    /// Rule grammar used to admit property declarations, independently of ancestors.
+    pub fn declaration_rule_types(&self) -> CssRuleTypes {
+        self.nesting_context
+            .declaration_rule_type
+            .map(CssRuleTypes::from)
+            .unwrap_or_default()
     }
 
     /// Get the rule type, which assumes that one is available.

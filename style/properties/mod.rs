@@ -553,8 +553,7 @@ impl PropertyId {
             // Custom properties are allowed everywhere, except `position-try`.
             None => {
                 return !context
-                    .nesting_context
-                    .rule_types
+                    .declaration_rule_types()
                     .contains(CssRuleType::PositionTry);
             },
             Some(id) => id,
