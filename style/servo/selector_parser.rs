@@ -336,7 +336,10 @@ impl ::selectors::parser::PseudoElement for PseudoElement {
     /// `:focus-within` applies to each pseudo-element that `:focus` applies to (Selectors 4 §9.5) and to a
     /// ::scroll-marker-group with a focused ::scroll-marker (CSS Overflow 5 §3.3.2).
     fn accepts_focus_within_pseudo_class(&self) -> bool {
-        matches!(self, Self::ScrollMarkerGroup | Self::ScrollMarker | Self::ScrollButton(_))
+        matches!(
+            self,
+            Self::ScrollMarkerGroup | Self::ScrollMarker | Self::ScrollButton(_)
+        )
     }
 
     /// `:current` represents the focused match of `::search-text` (CSS Pseudo 4 §3.1).
@@ -391,8 +394,12 @@ impl PseudoElement {
     /// Whether the pseudo-element generates a box outside the box of its originating element: ::scroll-marker-group
     /// and ::scroll-button() generate sibling boxes, except on the root element, whose box contains them (CSS Overflow 5
     /// §3.1.4, §3.2; CSS Conditional 5 §5).
-    pub fn generates_box_outside_originating_element(&self, originating_element_is_root: bool) -> bool {
-        matches!(self, Self::ScrollMarkerGroup | Self::ScrollButton(_)) && !originating_element_is_root
+    pub fn generates_box_outside_originating_element(
+        &self,
+        originating_element_is_root: bool,
+    ) -> bool {
+        matches!(self, Self::ScrollMarkerGroup | Self::ScrollButton(_))
+            && !originating_element_is_root
     }
 
     /// Gets the canonical index of this eagerly-cascaded pseudo-element.
@@ -580,7 +587,8 @@ impl PseudoElement {
     /// so each is an item of an item container that is its layout parent (CSS Overflow 5 §3.1.4, §3.2).
     #[inline]
     pub fn skip_item_display_fixup(&self) -> bool {
-        !self.is_before_or_after() && !matches!(self, Self::ScrollMarkerGroup | Self::ScrollButton(_))
+        !self.is_before_or_after()
+            && !matches!(self, Self::ScrollMarkerGroup | Self::ScrollButton(_))
     }
 
     /// Whether this pseudo-element is precomputed.
@@ -1081,6 +1089,10 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
         true
     }
 
+    fn parse_has_slotted(&self) -> bool {
+        true
+    }
+
     #[inline]
     fn parse_parent_selector(&self) -> bool {
         true
@@ -1399,7 +1411,9 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             ViewTransitionPseudoKind::Old => PseudoElement::ViewTransitionOld(argument),
             ViewTransitionPseudoKind::New if root => PseudoElement::ViewTransitionNewRoot,
             ViewTransitionPseudoKind::New => PseudoElement::ViewTransitionNew(argument),
-            ViewTransitionPseudoKind::GroupChildren => PseudoElement::ViewTransitionGroupChildren(argument),
+            ViewTransitionPseudoKind::GroupChildren => {
+                PseudoElement::ViewTransitionGroupChildren(argument)
+            },
         })
     }
 

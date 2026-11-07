@@ -365,6 +365,11 @@ pub trait Parser<'i> {
         false
     }
 
+    /// Whether to parse the unmerged CSSWG functional slot-query proposal.
+    fn parse_has_slotted(&self) -> bool {
+        false
+    }
+
     /// Whether to parse the '&' delimiter as a parent selector.
     fn parse_parent_selector(&self) -> bool {
         false
@@ -1300,6 +1305,7 @@ impl<Impl: SelectorImpl> Selector<Impl> {
                 LocalName(..)
                 | ID(..)
                 | Class(..)
+                | ClassPrefix(..)
                 | AttributeInNoNamespaceExists { .. }
                 | AttributeInNoNamespace { .. }
                 | AttributeOther(..)
@@ -1379,6 +1385,13 @@ impl<Impl: SelectorImpl> Selector<Impl> {
                     forbidden_flags,
                 ))),
                 HostContext(ref selector) => HostContext(replace_parent_on_selector(
+                    selector,
+                    parent,
+                    &mut specificity,
+                    &mut flags,
+                    forbidden_flags,
+                )),
+                HasSlotted(ref selector) => HasSlotted(replace_parent_on_selector(
                     selector,
                     parent,
                     &mut specificity,
@@ -2166,6 +2179,7 @@ pub enum Component<Impl: SelectorImpl> {
 
     ID(#[cfg_attr(feature = "to_shmem", shmem(field_bound))] Impl::Identifier),
     Class(#[cfg_attr(feature = "to_shmem", shmem(field_bound))] Impl::Identifier),
+    ClassPrefix(#[cfg_attr(feature = "to_shmem", shmem(field_bound))] Impl::Identifier),
 
     AttributeInNoNamespaceExists {
         #[cfg_attr(feature = "to_shmem", shmem(field_bound))]
@@ -2222,6 +2236,8 @@ pub enum Component<Impl: SelectorImpl> {
     ///
     /// See https://github.com/w3c/csswg-drafts/issues/2158
     Slotted(Selector<Impl>),
+    /// Experimental functional slot query (CSSWG unmerged proposal #10586).
+    HasSlotted(Selector<Impl>),
     /// The `::part` pseudo-element.
     ///   https://drafts.csswg.org/css-shadow-parts/#part
     Part(#[cfg_attr(feature = "to_shmem", shmem(field_bound))] Box<[Impl::Identifier]>),
@@ -2333,8 +2349,18 @@ impl<Impl: SelectorImpl> Component<Impl> {
         }
 
         match *self {
-            Slotted(ref selector) => {
+            Slotted(ref selector) | HasSlotted(ref selector) => {
                 if !selector.visit(visitor) {
+                    return false;
+                }
+            },
+            ClassPrefix(..) => {
+                let name = Impl::LocalName::from("class");
+                if !visitor.visit_attribute_selector(
+                    &NamespaceConstraint::Specific(&namespace_empty_string::<Impl>()),
+                    &name,
+                    &name,
+                ) {
                     return false;
                 }
             },
@@ -2719,6 +2745,11 @@ impl<Impl: SelectorImpl> ToCss for Component<Impl> {
                 dest.write_char('.')?;
                 s.to_css(dest)
             },
+            ClassPrefix(ref s) => {
+                dest.write_char('.')?;
+                s.to_css(dest)?;
+                dest.write_char('*')
+            },
             LocalName(ref s) => s.to_css(dest),
             ExplicitUniversalType => dest.write_char('*'),
 
@@ -2773,6 +2804,11 @@ impl<Impl: SelectorImpl> ToCss for Component<Impl> {
             },
             HostContext(ref selector) => {
                 dest.write_str(":host-context(")?;
+                selector.to_css(dest)?;
+                dest.write_char(')')
+            },
+            HasSlotted(ref selector) => {
+                dest.write_str(":has-slotted(")?;
                 selector.to_css(dest)?;
                 dest.write_char(')')
             },
@@ -3602,6 +3638,23 @@ where
         "is" if parser.parse_is_and_where() => return parse_is_where(parser, input, state, Component::Is),
         "where" if parser.parse_is_and_where() => return parse_is_where(parser, input, state, Component::Where),
         "has" if parser.parse_has() => return parse_has(parser, input, state),
+        "has-slotted" if parser.parse_has_slotted() => {
+            if !state.allows_tree_structural_pseudo_classes() {
+                return Err(input.new_custom_error(SelectorParseErrorKind::InvalidState));
+            }
+            // Restrict only this argument's outer selector. Nested :has()
+            // arguments keep their own relative-selector grammar.
+            let selector = parse_selector(
+                parser,
+                input,
+                (state - SelectorParsingState::DISALLOW_COMBINATORS) | SelectorParsingState::DISALLOW_PSEUDOS,
+                ParseRelative::No,
+            )?;
+            if selector.iter_raw_match_order().any(|component| matches!(component, Component::Combinator(_))) {
+                return Err(input.new_custom_error(SelectorParseErrorKind::InvalidState));
+            }
+            return Ok(Component::HasSlotted(selector));
+        },
         "host" => {
             if !state.allows_tree_structural_pseudo_classes() {
                 return Err(input.new_custom_error(SelectorParseErrorKind::InvalidState));
@@ -3730,13 +3783,24 @@ where
                 Component::ParentSelector
             } else {
                 let class = match *input.next_including_whitespace()? {
-                    Token::Ident(ref class) => class,
+                    Token::Ident(ref class) => class.clone(),
                     ref t => {
                         let e = SelectorParseErrorKind::ClassNeedsIdent(t.clone());
                         return Err(location.new_custom_error(e));
                     },
                 };
-                Component::Class(class.as_ref().into())
+                let prefix = class.ends_with('-')
+                    && input
+                        .try_parse(|input| match input.next_including_whitespace()?.clone() {
+                            Token::Delim('*') => Ok(()),
+                            token => Err(input.new_basic_unexpected_token_error(token)),
+                        })
+                        .is_ok();
+                if prefix {
+                    Component::ClassPrefix(class.as_ref().into())
+                } else {
+                    Component::Class(class.as_ref().into())
+                }
             })
         },
         Token::SquareBracketBlock => {
@@ -3859,7 +3923,10 @@ where
 {
     let after_current_pseudo = state.intersects(SelectorParsingState::AFTER_CURRENT_PSEUDO);
     let after_user_action_pseudo = state.intersects(SelectorParsingState::AFTER_USER_ACTION_PSEUDO);
-    if !state.allows_non_functional_pseudo_classes() && !after_current_pseudo && !after_user_action_pseudo {
+    if !state.allows_non_functional_pseudo_classes()
+        && !after_current_pseudo
+        && !after_user_action_pseudo
+    {
         return Err(location.new_custom_error(SelectorParseErrorKind::InvalidState));
     }
 
@@ -3908,7 +3975,8 @@ where
         && !pseudo_class.is_user_action_state()
         && !(state.intersects(SelectorParsingState::AFTER_ENABLEABLE_PSEUDO)
             && pseudo_class.is_enabled_or_disabled())
-        && !(state.intersects(SelectorParsingState::AFTER_FOCUS_WITHIN_PSEUDO) && pseudo_class.is_focus_within())
+        && !(state.intersects(SelectorParsingState::AFTER_FOCUS_WITHIN_PSEUDO)
+            && pseudo_class.is_focus_within())
     {
         return Err(location.new_custom_error(SelectorParseErrorKind::InvalidState));
     }
@@ -4118,6 +4186,10 @@ pub mod tests {
             true
         }
 
+        fn parse_has_slotted(&self) -> bool {
+            true
+        }
+
         fn parse_parent_selector(&self) -> bool {
             true
         }
@@ -4211,6 +4283,28 @@ pub mod tests {
         }
     }
 
+    #[test]
+    fn class_prefix_syntax_serialization_and_specificity() {
+        for css in [
+            ".foo-*",
+            ".foo--*",
+            "p.foo-*.bar-*",
+            ":not(.foo-*)",
+            ".foo- *",
+        ] {
+            assert!(parse(css).is_ok(), "{css}");
+        }
+        let selector = parse(".foo-*").unwrap();
+        assert_eq!(selector.slice()[0].specificity(), specificity(0, 1, 0));
+        assert!(matches!(
+            selector.slice()[0].iter_raw_match_order().next(),
+            Some(Component::ClassPrefix(_))
+        ));
+        for css in [".foo*", ".foo-**", ".-*", ".*"] {
+            assert!(parse(css).is_err(), "{css}");
+        }
+    }
+
     fn parse<'i>(
         input: &'i str,
     ) -> Result<SelectorList<DummySelectorImpl>, SelectorParseError<'i>> {
@@ -4229,6 +4323,27 @@ pub mod tests {
         expected: Option<&'a str>,
     ) -> Result<SelectorList<DummySelectorImpl>, SelectorParseError<'i>> {
         parse_ns_expected(input, &DummyParser::default(), expected)
+    }
+
+    #[test]
+    fn functional_has_slotted_uses_compound_grammar_and_argument_specificity() {
+        for selector in [
+            ":has-slotted(div)",
+            ":has-slotted(div:has(> span))",
+            ":has-slotted(.item):hover",
+        ] {
+            assert!(parse_expected(selector, None).is_ok(), "{selector}");
+        }
+        for selector in [
+            ":has-slotted()",
+            ":has-slotted(div + div)",
+            ":has-slotted(div > span)",
+            ":has-slotted(div,span)",
+        ] {
+            assert!(parse_expected(selector, None).is_err(), "{selector}");
+        }
+        let parsed = parse_expected(":has-slotted(#item.ready)", None).unwrap();
+        assert_eq!(parsed.slice()[0].specificity(), specificity(1, 2, 0));
     }
 
     fn parse_relative_expected<'i, 'a>(
@@ -4963,7 +5078,10 @@ pub mod tests {
         let mut iter = selectors.slice()[0].iter();
         for _ in &mut iter {}
         iter.next_sequence();
-        assert_eq!(crate::matching::compound_matches_featureless_host(&mut iter, false), MatchesFeaturelessHost::Never);
+        assert_eq!(
+            crate::matching::compound_matches_featureless_host(&mut iter, false),
+            MatchesFeaturelessHost::Never
+        );
 
         let selectors = parse(":host:has(.match)").unwrap();
         assert_eq!(

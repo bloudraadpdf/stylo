@@ -6,7 +6,7 @@ use crate::attr::{
     AttrSelectorOperation, AttrSelectorWithOptionalNamespace, CaseSensitivity, NamespaceConstraint,
     ParsedAttrSelectorOperation, ParsedCaseSensitivity,
 };
-use crate::bloom::{BLOOM_HASH_MASK, BloomFilter};
+use crate::bloom::{BloomFilter, BLOOM_HASH_MASK};
 use crate::kleene_value::KleeneValue;
 use crate::parser::{
     AncestorHashes, Combinator, Component, LocalName, MatchesFeaturelessHost, NthSelectorData,
@@ -800,11 +800,9 @@ fn assigned_slot<E>(element: &E, context: &MatchingContext<E::Impl>) -> Option<E
 where
     E: Element,
 {
-    debug_assert!(
-        element
-            .assigned_slot()
-            .map_or(true, |s| s.is_html_slot_element())
-    );
+    debug_assert!(element
+        .assigned_slot()
+        .map_or(true, |s| s.is_html_slot_element()));
     let scope = context.current_host?;
     let mut current_slot = element.assigned_slot()?;
     while current_slot.containing_shadow_host().unwrap().opaque() != scope {
@@ -1279,6 +1277,9 @@ where
         Component::Class(ref class) => {
             element.has_class(class, context.shared.classes_and_ids_case_sensitivity())
         },
+        Component::ClassPrefix(ref prefix) => {
+            element.has_class_prefix(prefix, context.shared.classes_and_ids_case_sensitivity())
+        },
         Component::LocalName(ref local_name) => matches_local_name(element, local_name),
         Component::AttributeInNoNamespaceExists {
             ref local_name,
@@ -1304,6 +1305,22 @@ where
         Component::Part(ref parts) => matches_part(element, parts, &mut context.shared),
         Component::Slotted(ref selector) => {
             return matches_slotted(element, selector, &mut context.shared, rightmost);
+        },
+        Component::HasSlotted(ref selector) => {
+            if !element.is_html_slot_element() || element.containing_shadow_host().is_none() {
+                return KleeneValue::False;
+            }
+            return context.shared.nest(|context| {
+                let mut result = KleeneValue::False;
+                for assigned in element.flattened_assigned_elements() {
+                    result |=
+                        matches_complex_selector(selector.iter(), &assigned, context, rightmost);
+                    if result == KleeneValue::True {
+                        break;
+                    }
+                }
+                result
+            });
         },
         Component::PseudoElement(ref pseudo) => {
             element.match_pseudo_element(pseudo, context.shared)

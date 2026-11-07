@@ -4,8 +4,8 @@ use style::{
     properties::PropertyDeclarationBlock,
     shared_lock::{SharedRwLockReadGuard, ToCssWithGuard},
     stylesheets::{
-        CssRule, CssRules, FontPaletteValuesRule, MarginRule, Origin, PageRule,
         container_rule::{ContainerCondition, ContainerConditions},
+        CssRule, CssRules, FontPaletteValuesRule, MarginRule, Origin, PageRule,
     },
 };
 use style_traits::{CssWriter, ToCss};
@@ -17,11 +17,11 @@ mod keyframes;
 mod native_common_properties;
 mod source;
 pub use font_feature_values::{font_feature_values_node, replace_font_feature_family};
-use keyframes::{CanonicalKeyframeRule, CanonicalKeyframesRule};
 pub use keyframes::{
     parse_keyframe_rule, parse_keyframe_selector, replace_keyframe_declarations,
     replace_keyframe_selector, replace_keyframes_name, serialize_keyframe_selector,
 };
+use keyframes::{CanonicalKeyframeRule, CanonicalKeyframesRule};
 pub use source::{forgiving_rule_sources, stylesheet_parser_input};
 
 #[derive(Clone, Copy, Debug)]
@@ -117,6 +117,7 @@ macro_rules! cssom_rule_interface_names {
 
 cssom_rule_interface_names! {
     CssRule => "CSSRule",
+    GroupingRule => "CSSGroupingRule",
     Style => "CSSStyleRule",
     Namespace => "CSSNamespaceRule",
     Import => "CSSImportRule",
@@ -172,6 +173,7 @@ impl CssomRuleInterfaceName {
             "custom-media" => Self::CustomMedia,
             "supports" => Self::Supports,
             "container" => Self::Container,
+            "navigation" => Self::GroupingRule,
             "font-face" => Self::FontFace,
             "font-feature-values" => Self::FontFeatureValues,
             "font-palette-values" => Self::FontPaletteValues,
@@ -214,6 +216,7 @@ impl CssomRuleInterfaceName {
         match self {
             Self::CssRule => CssomRuleInterfaceParent::None,
             Self::Private => CssomRuleInterfaceParent::StyleRule,
+            Self::GroupingRule => CssomRuleInterfaceParent::CssRule,
             Self::Style
             | Self::Page
             | Self::LayerBlock
@@ -262,6 +265,7 @@ impl CssomRuleInterfaceName {
             Self::Margin => Some(CssomLegacyRuleType::Margin),
             Self::Page => Some(CssomLegacyRuleType::Page),
             Self::CssRule
+            | Self::GroupingRule
             | Self::CustomMedia
             | Self::Container
             | Self::FontPaletteValues
@@ -334,8 +338,8 @@ pub const fn cssom_rule_interface_name_for_grammar(
         RuleGrammar::FunctionDeclarations => CssomRuleInterfaceName::FunctionDeclarations,
         RuleGrammar::ColorProfile => CssomRuleInterfaceName::ColorProfile,
         RuleGrammar::ViewTransition => CssomRuleInterfaceName::ViewTransition,
-        RuleGrammar::Navigation
-        | RuleGrammar::When
+        RuleGrammar::Navigation => CssomRuleInterfaceName::GroupingRule,
+        RuleGrammar::When
         | RuleGrammar::Else
         | RuleGrammar::Document
         | RuleGrammar::Region
@@ -2686,6 +2690,7 @@ fn interface_name_for_rule(rule: &CssRule) -> CssomRuleInterfaceName {
         CssRule::FunctionDeclarations(_) => CssomRuleInterfaceName::FunctionDeclarations,
         CssRule::ColorProfile(_) => CssomRuleInterfaceName::ColorProfile,
         CssRule::ViewTransition(_) => CssomRuleInterfaceName::ViewTransition,
+        CssRule::Navigation(_) => CssomRuleInterfaceName::GroupingRule,
         _ => CssomRuleInterfaceName::CssRule,
     }
 }
@@ -5196,6 +5201,7 @@ mod tests {
 
         let expected = [
             (Name::CssRule, "CSSRule", Parent::None),
+            (Name::GroupingRule, "CSSGroupingRule", Parent::CssRule),
             (Name::Style, "CSSStyleRule", Parent::GroupingRule),
             (Name::Namespace, "CSSNamespaceRule", Parent::CssRule),
             (Name::Import, "CSSImportRule", Parent::CssRule),
@@ -5363,23 +5369,44 @@ mod tests {
     }
 
     #[test]
-    fn navigation_rules_take_only_the_preview_condition() {
+    fn navigation_conditions_preserve_typed_locations_and_future_syntax() {
         crate::context::initialise_required_servo_style_prefs();
         let css = "@navigation (PREVIEW) { html { color: blue } } @navigation (other) {} \
-                   @navigation preview {} @navigation (preview) and (preview) {}";
+                   @navigation preview {} @navigation (at: --foo) and not (to: --bar) {} \
+                   @navigation (at: --foo) or (from: url('/old')) {} \
+                   @navigation not future(feature) {}";
         let (stylesheet, lock) =
             crate::context::parse_stylesheet_fragment(css, style::stylesheets::Origin::Author);
         let guard = lock.read();
         let contents = stylesheet.contents.read_with(&guard);
         let rules = contents.rules.read_with(&guard);
-        let [rule @ CssRule::Navigation(_)] = rules.0.as_slice() else {
-            panic!("only the first rule is valid");
-        };
-
+        assert_eq!(rules.0.len(), 4);
         assert_eq!(
-            rule.to_css_string(&guard),
+            rules.0[0].to_css_string(&guard),
             "@navigation (preview) {\n  html { color: blue; }\n}"
         );
+        assert!(rules.0[2]
+            .to_css_string(&guard)
+            .starts_with("@navigation (at: --foo) or (from: url("));
+        for (index, expected) in [false, false, false, true].into_iter().enumerate() {
+            let CssRule::Navigation(rule) = &rules.0[index] else {
+                panic!("navigation rule")
+            };
+            assert_eq!(
+                rule.condition
+                    .matches(style::stylesheets::NavigationPhase::Idle),
+                expected
+            );
+        }
+        let parsed =
+            ParsedCssRule::parse("@navigation (at: --foo) { @keyframes --k {} @mixin --m() {} }")
+                .expect("navigation locations must retain typed nested rules");
+        assert_eq!(parsed.interface_name(), CssomRuleInterfaceName::GroupingRule);
+        assert_eq!(
+            super::cssom_rule_interface_name_for_grammar(parsed.to_rule_node().grammar()),
+            CssomRuleInterfaceName::GroupingRule,
+        );
+        assert_eq!(parsed.nested_rules().unwrap().len(), 2);
     }
 
     #[test]
@@ -5530,11 +5557,9 @@ mod tests {
         )
         .unwrap()
         .to_rule_node();
-        assert!(
-            rule.payload().nested()[0]
-                .serialization()
-                .contains("old: 1;")
-        );
+        assert!(rule.payload().nested()[0]
+            .serialization()
+            .contains("old: 1;"));
     }
 
     #[test]
@@ -5554,35 +5579,27 @@ mod tests {
             .declaration_block()
             .expect("the font-face declaration block remains typed")
             .declarations();
-        assert!(
-            declarations
-                .iter()
-                .any(|declaration| declaration.name() == "unicode-range"
-                    && declaration.value() == "U+A0-AF")
-        );
-        assert!(
-            declarations
-                .iter()
-                .any(|declaration| declaration.name() == "src")
-        );
-        assert!(
-            super::mutate_non_style_rule_declaration(
-                &updated,
-                "unicode-range",
-                "u+efg",
-                crate::declaration_parser::CssomDeclarationPriority::Normal,
-            )
-            .is_none()
-        );
-        assert!(
-            super::mutate_non_style_rule_declaration(
-                &updated,
-                "unicode-range",
-                "U+20; src: url(injected.ttf)",
-                crate::declaration_parser::CssomDeclarationPriority::Normal,
-            )
-            .is_none()
-        );
+        assert!(declarations
+            .iter()
+            .any(|declaration| declaration.name() == "unicode-range"
+                && declaration.value() == "U+A0-AF"));
+        assert!(declarations
+            .iter()
+            .any(|declaration| declaration.name() == "src"));
+        assert!(super::mutate_non_style_rule_declaration(
+            &updated,
+            "unicode-range",
+            "u+efg",
+            crate::declaration_parser::CssomDeclarationPriority::Normal,
+        )
+        .is_none());
+        assert!(super::mutate_non_style_rule_declaration(
+            &updated,
+            "unicode-range",
+            "U+20; src: url(injected.ttf)",
+            crate::declaration_parser::CssomDeclarationPriority::Normal,
+        )
+        .is_none());
         let removed = super::mutate_non_style_rule_declaration(
             &updated,
             "unicode-range",
@@ -5595,16 +5612,12 @@ mod tests {
             .declaration_block()
             .expect("the font-face declaration block remains typed")
             .declarations();
-        assert!(
-            !declarations
-                .iter()
-                .any(|declaration| declaration.name() == "unicode-range")
-        );
-        assert!(
-            declarations
-                .iter()
-                .any(|declaration| declaration.name() == "src")
-        );
+        assert!(!declarations
+            .iter()
+            .any(|declaration| declaration.name() == "unicode-range"));
+        assert!(declarations
+            .iter()
+            .any(|declaration| declaration.name() == "src"));
     }
 
     #[test]
@@ -5860,14 +5873,12 @@ mod tests {
             crate::declaration_parser::CssomDeclarationPriority::Normal,
         )
         .expect("removing a shorthand keeps a valid page rule");
-        assert!(
-            removed
-                .payload()
-                .declaration_block()
-                .expect("the page declaration block remains typed")
-                .declarations()
-                .is_empty()
-        );
+        assert!(removed
+            .payload()
+            .declaration_block()
+            .expect("the page declaration block remains typed")
+            .declarations()
+            .is_empty());
         assert!(rule.with_page_selector_text("1").is_none());
         assert!(rule.with_page_selector_text("--a").is_none());
         assert_eq!(
@@ -6225,10 +6236,13 @@ mod tests {
                 && declaration.value() == "green"
                 && declaration.important()
         }));
-        assert!(
-            super::mutate_non_style_rule_declaration(&changed, "color", "invalid-colour", Normal)
-                .is_none()
-        );
+        assert!(super::mutate_non_style_rule_declaration(
+            &changed,
+            "color",
+            "invalid-colour",
+            Normal
+        )
+        .is_none());
 
         let removed = super::mutate_non_style_rule_declaration(&changed, "color", "", Normal)
             .expect("nested declaration removal must use the same grammar");
@@ -6510,15 +6524,13 @@ mod mixin_cssom_tests {
         )
         .unwrap();
         assert!(changed.serialization().contains("--x <length>: 20px;"));
-        assert!(
-            mutate_non_style_rule_declaration(
-                &changed,
-                "--x",
-                "red",
-                CssomDeclarationPriority::Normal
-            )
-            .is_none()
-        );
+        assert!(mutate_non_style_rule_declaration(
+            &changed,
+            "--x",
+            "red",
+            CssomDeclarationPriority::Normal
+        )
+        .is_none());
         let changed = replace_private_declarations(
             &changed,
             "--x <length>: 30px; --bad <length>: red; --y: green;",
