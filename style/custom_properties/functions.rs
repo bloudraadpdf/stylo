@@ -314,6 +314,7 @@ impl FunctionDependencies {
         let mut free = Vec::new();
         let mut inherited = Vec::new();
         for value in function.values() {
+            free.extend(super::conditionals::condition_names(value));
             self.non_custom_references |= value.references.non_custom_references;
             self.any_attr |= value.references.any_attr;
             free.extend(
@@ -458,6 +459,64 @@ fn owned(substitution: Substitution, url_data: &UrlExtraData) -> VariableValue {
 }
 
 impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
+    pub(super) fn style_query(
+        &mut self,
+        frame: Option<usize>,
+        name: &Name,
+        value: Option<&VariableValue>,
+    ) -> bool {
+        let mut binding = frame;
+        while let Some(index) = binding {
+            let current = &self.calls.frames[index];
+            if current.function.parameter(name).is_some()
+                || current
+                    .locals
+                    .as_ref()
+                    .is_some_and(|locals| locals.iter().any(|(local, _)| *local == name))
+            {
+                break;
+            }
+            binding = current.caller;
+        }
+        let registration = match binding {
+            Some(index) => self.calls.frames[index].function.registration(name).clone(),
+            None => self.stylist.get_custom_property_registration(name).clone(),
+        };
+        let initial = match binding {
+            Some(index) => self.calls.frames[index]
+                .function
+                .parameter(name)
+                .and_then(|parameter| self.calls.frames[index].parameters[parameter].clone()),
+            None => registration
+                .initial_value
+                .as_ref()
+                .map(|value| (**value).clone()),
+        };
+        let current = self
+            .variable(frame, name)
+            .map(|value| value.css.into_owned());
+        let Some(value) = value else {
+            return current.as_deref() != initial.as_ref().map(|value| value.css.as_str());
+        };
+        let queried = match keyword(&value.css) {
+            Some(CSSWideKeyword::Initial) => initial,
+            Some(CSSWideKeyword::Inherit) => self
+                .inherit_function(frame, name)
+                .map(|inherited| owned(inherited, &value.url_data)),
+            Some(CSSWideKeyword::Unset) if frame.is_some() => None,
+            Some(CSSWideKeyword::Unset) if registration.inherits() => self
+                .inherit_function(frame, name)
+                .map(|inherited| owned(inherited, &value.url_data)),
+            Some(CSSWideKeyword::Unset) => initial,
+            Some(_) => return false,
+            None => self
+                .substitute_value(value, frame)
+                .ok()
+                .and_then(|value_result| self.typed(&registration, value_result, &value.url_data)),
+        };
+        current.as_deref() == queried.as_ref().map(|value| value.css.as_str())
+    }
+
     pub(super) fn inherit_function(
         &mut self,
         frame: Option<usize>,
@@ -774,6 +833,7 @@ mod tests {
     ) -> ([Option<VariableValue>; N], Option<DeferredCustomProperties>) {
         let _guard = pref_lock().lock().unwrap();
         let _attr_pref = BoolPrefGuard::set("layout.css.attr.enabled", true);
+        let _style_pref = BoolPrefGuard::set("layout.css.style-queries.enabled", true);
         let sheet = Arc::new(parse_stylesheet(css));
         let mut stylist = Stylist::new(test_device(), QuirksMode::NoQuirks);
         let guard = sheet.shared_lock.read();
@@ -933,6 +993,58 @@ mod tests {
                 "{}-wrapped list argument",
                 "@function --f(--x, --y) { result: var(--x) | var(--y); } \
                  #t { --actual: --f({1px, 2px}, 3px); --expected: 1px, 2px | 3px; }",
+            ),
+        ]);
+    }
+
+    #[test]
+    fn conditional_values_use_local_registrations_and_substitution() {
+        assert_templates(&[
+            (
+                "local value",
+                "@function --f() { --x: 3px; result: if(style(--x: 3px): PASS; else: FAIL); } \
+                 #t { --x: 5px; --actual: --f(); --expected: PASS; }",
+            ),
+            (
+                "queried value",
+                "@function --f() { --x: 3px; result: if(style(--y: var(--x)): PASS; else: FAIL); } \
+                 #t { --y: 3px; --actual: --f(); --expected: PASS; }",
+            ),
+            (
+                "typed parameter",
+                "@function --f(--c <color>) { result: if(style(--c: red): PASS; else: FAIL); } \
+                 #t { --actual: --f(#f00); --expected: PASS; }",
+            ),
+            (
+                "typed caller parameter",
+                "@function --f(--c <color>) { result: --g(); } \
+                 @function --g() { result: if(style(--c: red): PASS; else: FAIL); } \
+                 #t { --actual: --f(#f00); --expected: PASS; }",
+            ),
+            (
+                "initial argument",
+                "@function --f(--c: green) { result: if(style(--c: initial): PASS; else: FAIL); } \
+                 #t { --actual: --f(); --expected: PASS; }",
+            ),
+            (
+                "invalid query value",
+                "@function --f() { result: if(style(--c: initial): PASS; else: FAIL); } \
+                 #t { --actual: --f(); --expected: PASS; }",
+            ),
+            (
+                "cyclic query",
+                "@function --f() { --x: if(style(--x): FAIL; else: FAIL); result: var(--x, PASS); } \
+                 #t { --actual: --f(); --expected: PASS; }",
+            ),
+            (
+                "unused branch does not cycle",
+                "@function --f() { --x: if(else: PASS; else: var(--x)); result: var(--x); } \
+                 #t { --actual: --f(); --expected: PASS; }",
+            ),
+            (
+                "supports and media",
+                "@function --f() { result: if(supports(color: green) and media(width > 0px): PASS; else: FAIL); } \
+                 #t { --actual: --f(); --expected: PASS; }",
             ),
         ]);
     }

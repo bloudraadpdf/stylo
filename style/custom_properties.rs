@@ -46,6 +46,7 @@ use std::{cmp, num};
 use style_traits::{CssWriter, ParseError, StyleParseErrorKind, ToCss};
 use thin_vec::ThinVec;
 
+mod conditionals;
 mod functions;
 
 pub use self::functions::{
@@ -654,6 +655,7 @@ enum AttributeType {
 enum SubstitutionFunction {
     Var(Name),
     Inherit(Box<[FunctionArgument]>),
+    If(Box<[[FunctionArgument; 2]]>),
     Env(Name),
     Attr {
         name: AttrName,
@@ -679,7 +681,11 @@ impl SubstitutionFunction {
     fn variable_name(&self) -> Option<&Name> {
         match self {
             Self::Var(name) => Some(name),
-            Self::Inherit(_) | Self::Env(_) | Self::Attr { .. } | Self::Function { .. } => None,
+            Self::Inherit(_)
+            | Self::If(_)
+            | Self::Env(_)
+            | Self::Attr { .. }
+            | Self::Function { .. } => None,
         }
     }
 
@@ -1037,7 +1043,9 @@ fn parse_declaration_value_block<'i, 't>(
                 return Err(input.new_custom_error(e));
             },
             Token::Function(ref name)
-                if name.starts_with("--") || name.eq_ignore_ascii_case("inherit") =>
+                if name.starts_with("--")
+                    || name.eq_ignore_ascii_case("inherit")
+                    || name.eq_ignore_ascii_case("if") =>
             {
                 let our_ref_index = references.refs.len();
                 let start = token_start.byte_index() - input_start.byte_index();
@@ -1047,8 +1055,10 @@ fn parse_declaration_value_block<'i, 't>(
                             name: DashedIdent(Atom::from(name.as_ref())),
                             arguments: Box::default(),
                         }
-                    } else {
+                    } else if name.eq_ignore_ascii_case("inherit") {
                         SubstitutionFunction::Inherit(Box::default())
+                    } else {
+                        SubstitutionFunction::If(Box::default())
                     },
                     start,
                     end: start,
@@ -1058,6 +1068,42 @@ fn parse_declaration_value_block<'i, 't>(
                 });
                 let mut input_end_position = None;
                 let parsed_arguments = input.parse_nested_block(|input| {
+                    if name.eq_ignore_ascii_case("if") {
+                        let branches = conditionals::parse_branches(
+                            input,
+                            input_start,
+                            namespaces,
+                            references,
+                            missing_closing_characters,
+                        )?;
+                        references.refs[our_ref_index].function =
+                            SubstitutionFunction::If(branches);
+                        input_end_position = Some(input.position());
+                        return Ok(Box::default());
+                    }
+                    if name.eq_ignore_ascii_case("inherit") {
+                        let mut arguments = Vec::new();
+                        loop {
+                            arguments.push(input.parse_until_before(
+                                Delimiter::Comma,
+                                |input| {
+                                    parse_substitution_argument(
+                                        input,
+                                        input_start,
+                                        namespaces,
+                                        references,
+                                        missing_closing_characters,
+                                    )
+                                },
+                            )?);
+                            if input.is_exhausted() {
+                                break;
+                            }
+                            input.expect_comma()?;
+                        }
+                        input_end_position = Some(input.position());
+                        return Ok(arguments.into_boxed_slice());
+                    }
                     let arguments = parse_function_arguments(
                         input,
                         input_start,
@@ -1086,6 +1132,7 @@ fn parse_declaration_value_block<'i, 't>(
                         *arguments = parsed_arguments;
                         references.any_var = true;
                     },
+                    SubstitutionFunction::If(_) => references.any_var = true,
                     _ => unreachable!(),
                 }
             },
@@ -1340,6 +1387,26 @@ fn parse_function_argument_value<'i, 't>(
     references: &mut References,
     missing_closing_characters: &mut String,
 ) -> Result<FunctionArgument, ParseError<'i>> {
+    let argument = parse_substitution_argument(
+        input,
+        input_start,
+        namespaces,
+        references,
+        missing_closing_characters,
+    )?;
+    if argument.start == argument.end {
+        return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+    }
+    Ok(argument)
+}
+
+fn parse_substitution_argument<'i, 't>(
+    input: &mut Parser<'i, 't>,
+    input_start: SourcePosition,
+    namespaces: &Namespaces,
+    references: &mut References,
+    missing_closing_characters: &mut String,
+) -> Result<FunctionArgument, ParseError<'i>> {
     input.skip_whitespace();
     let start = input.position();
     parse_declaration_value(
@@ -1351,9 +1418,6 @@ fn parse_function_argument_value<'i, 't>(
     )?;
     input.expect_exhausted()?;
     let css = input.slice_from(start).trim_ascii_end();
-    if css.is_empty() {
-        return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
-    }
     let (first_token_type, last_token_type) = token_types(css);
     let start = start.byte_index() - input_start.byte_index();
     Ok(FunctionArgument {
@@ -2839,6 +2903,9 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
         };
         let substitution: Option<_> = match &reference.function {
             SubstitutionFunction::Var(name) => self.variable(frame, name),
+            SubstitutionFunction::If(branches) => {
+                Some(self.conditional(css, url_data, branches, frame, references)?)
+            },
             SubstitutionFunction::Inherit(arguments) => {
                 let [name, fallback @ ..] = &**arguments else {
                     return Err(());

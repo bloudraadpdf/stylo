@@ -810,9 +810,9 @@ fn parse_non_custom_property_declaration_value_into<'i>(
     input.reset(&start);
     input.look_for_arbitrary_substitution_functions(
         if static_prefs::pref!("layout.css.attr.enabled") {
-            &["var", "env", "attr", "inherit"]
+            &["var", "env", "attr", "inherit", "if"]
         } else {
-            &["var", "env", "inherit"]
+            &["var", "env", "inherit", "if"]
         },
     );
 
