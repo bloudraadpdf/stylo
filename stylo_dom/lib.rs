@@ -155,6 +155,10 @@ bitflags! {
         const SEEKING = 1u64 << 58;
         /// <https://html.spec.whatwg.org/multipage/#selector-muted>
         const MUTED = 1u64 << 59;
+        /// Media is playing while awaiting more data.
+        const BUFFERING = 1u64 << 60;
+        /// Media is buffering and has received no data for the stall timeout.
+        const STALLED = 1u64 << 61;
 
         /// Some convenience unions.
         const DIR_STATES = Self::LTR.bits() | Self::RTL.bits();
