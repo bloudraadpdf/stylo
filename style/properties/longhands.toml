@@ -6738,6 +6738,14 @@ has_effect_on_gecko_scrollbars = false
 spec = "https://drafts.csswg.org/css-text-4/#text-autospace-property"
 affects = "layout"
 
+[text-autospace-size]
+type = "Number"
+initial = "0.125"
+struct = "inherited_text"
+animation_type = "normal"
+spec = "https://github.com/w3c/csswg-drafts/issues/8510#issuecomment-6438888621"
+affects = "layout"
+
 [text-spacing-trim]
 struct = "inherited_text"
 spec = "https://drafts.csswg.org/css-text-4/#text-spacing-trim-property"

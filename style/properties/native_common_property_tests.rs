@@ -27,6 +27,19 @@ fn serialized_value(block: &super::PropertyDeclarationBlock, name: &str) -> Stri
     serialized
 }
 
+#[test]
+fn text_autospace_size_accepts_signed_numbers_and_cascades_independently() {
+    for (input, expected) in [("0", "0"), ("0.5", "0.5"), ("-0.25", "-0.25"), ("calc(1 / 7)", "calc(0.142857)")] {
+        assert_serialization("text-autospace-size", input, Some(expected));
+    }
+    for input in ["1px", "25%", "normal"] {
+        assert_serialization("text-autospace-size", input, None);
+    }
+    let declarations = block("text-autospace-size:0.5;text-spacing:none");
+    assert_eq!(serialized_value(&declarations, "text-autospace-size"), "0.5");
+    assert!(!ShorthandId::TextSpacing.longhands().any(|id| id == super::LonghandId::TextAutospaceSize));
+}
+
 fn assert_serialization(name: &str, input: &str, expected: Option<&str>) {
     let block = block(&format!("{name}:{input}"));
     let serialized = serialized_value(&block, name);

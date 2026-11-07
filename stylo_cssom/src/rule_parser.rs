@@ -3067,6 +3067,7 @@ mod tests {
             PropertyDeclaration::TextAlignLast(value) => PropertyDeclaration::TextAlignLast(*value),
             PropertyDeclaration::TextAnchor(value) => PropertyDeclaration::TextAnchor(*value),
             PropertyDeclaration::TextAutospace(value) => PropertyDeclaration::TextAutospace(*value),
+            PropertyDeclaration::TextAutospaceSize(value) => PropertyDeclaration::TextAutospaceSize(value.clone()),
             PropertyDeclaration::TextBoxEdge(value) => PropertyDeclaration::TextBoxEdge(*value),
             PropertyDeclaration::TextDecorationLine(value) => {
                 PropertyDeclaration::TextDecorationLine(*value)
