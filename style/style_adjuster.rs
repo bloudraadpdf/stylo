@@ -10,8 +10,8 @@ use crate::dom::TElement;
 use crate::logical_geometry::PhysicalSide;
 use crate::properties::longhands::display::computed_value::T as Display;
 use crate::properties::longhands::float::computed_value::T as Float;
-use crate::properties::longhands::position::computed_value::T as Position;
 use crate::properties::longhands::list_style_position::computed_value::T as ListStylePosition;
+use crate::properties::longhands::position::computed_value::T as Position;
 #[cfg(feature = "gecko")]
 use crate::properties::longhands::{
     contain::computed_value::T as Contain, container_type::computed_value::T as ContainerType,
@@ -343,7 +343,10 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
         blockify_if!(self.style.is_absolutely_positioned());
         // As in Chromium, so that the layout and size containment of the group apply (CSSWG #11708, #11166).
         #[cfg(feature = "servo")]
-        blockify_if!(self.style.pseudo.is_some_and(|pseudo| pseudo.is_scroll_marker_group()));
+        blockify_if!(self
+            .style
+            .pseudo
+            .is_some_and(|pseudo| pseudo.is_scroll_marker_group()));
 
         if !blockify {
             return;
@@ -748,7 +751,7 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
         }
         match self.style.get_box().clone_display() {
             // Ruby base and text are always non-breakable.
-            Display::RubyBase | Display::RubyText => true,
+            display if display == Display::RubyBase || display == Display::RubyText => true,
             // Ruby base container and text container are breakable.
             // Non-HTML elements may not form ruby base / text container because
             // they may not respect ruby-internal display values, so we can't
@@ -757,8 +760,10 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
             // level container display type, they could also escape from the
             // line break suppression flag while they shouldn't. However, it is
             // generally fine as far as they can't break the line inside them.
-            Display::RubyBaseContainer | Display::RubyTextContainer
-                if element.map_or(true, |e| e.is_html_element()) =>
+            display
+                if (display == Display::RubyBaseContainer
+                    || display == Display::RubyTextContainer)
+                    && element.map_or(true, |e| e.is_html_element()) =>
             {
                 false
             },

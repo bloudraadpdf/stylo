@@ -570,9 +570,11 @@ class Longhand(Property):
             return False
         return self.is_zoom_dependent()
 
-    def specified_is_copy(self):
+    def specified_is_copy(self, engine):
         if self.vector or self.boxed:
             return False
+        if self.predefined_type == "Display":
+            return engine == "gecko"
         if self.predefined_type:
             return self.predefined_type in {
                 # moegoe -bd-* fork extension Copy specified types.
@@ -651,7 +653,6 @@ class Longhand(Property):
                 "ContentVisibility",
                 "ContainerType",
                 "Continue",
-                "Display",
                 "FillRule",
                 "Float",
                 "FloatDefer",
@@ -1016,7 +1017,7 @@ class PropertiesData(object):
                 "name": property.camel_case,
                 "type": property.specified_type(),
                 "doc": "`" + property.name + "`",
-                "copy": property.specified_is_copy(),
+                "copy": property.specified_is_copy(self.engine),
             })
 
         groups = {}

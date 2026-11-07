@@ -924,6 +924,11 @@ trait PrivateMatchMethods: TElement {
             if old_display.is_item_container() != new_display.is_item_container() {
                 return ChildRestyleRequirement::MustCascadeChildren;
             }
+            #[cfg(feature = "servo")]
+            if old_display.layout_name() != new_display.layout_name() {
+                // Different registered layouts can select different childDisplay policies.
+                return ChildRestyleRequirement::MustCascadeChildren;
+            }
             // We may also need to blockify and un-blockify descendants if our
             // display goes from / to display: contents, since the "layout
             // parent style" changes.

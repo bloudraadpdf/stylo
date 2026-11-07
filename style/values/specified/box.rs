@@ -191,6 +191,9 @@ pub enum DisplayInside {
     #[cfg(feature = "gecko")]
     WebkitBox,
     Math,
+    /// Author-defined layout formatting context.
+    #[cfg(feature = "servo")]
+    Layout,
 }
 
 impl DisplayInside {
@@ -257,12 +260,12 @@ impl MathDisplayOutside {
     ToTyped,
 )]
 #[repr(C)]
-pub struct Display(u16);
+pub struct DisplayMode(u16);
 
-/// Gecko-only impl block for Display (shared stuff later in this file):
+/// Gecko-only impl block for DisplayMode (shared stuff later in this file):
 #[allow(missing_docs)]
 #[allow(non_upper_case_globals)]
-impl Display {
+impl DisplayMode {
     // Our u16 bits are used as follows: LOOOOOOOIIIIIIII
     pub const LIST_ITEM_MASK: u16 = 0b1000000000000000;
     pub const OUTSIDE_MASK: u16 = 0b0111111100000000;
@@ -420,7 +423,7 @@ impl Display {
     /// Returns whether this `display` value is a ruby level container.
     pub fn is_ruby_level_container(&self) -> bool {
         match *self {
-            Display::RubyBaseContainer | Display::RubyTextContainer => true,
+            DisplayMode::RubyBaseContainer | DisplayMode::RubyTextContainer => true,
             _ => false,
         }
     }
@@ -450,12 +453,12 @@ impl Display {
     }
 }
 
-/// Shared Display impl for both Gecko and Servo.
-impl Display {
+/// Shared DisplayMode impl for both Gecko and Servo.
+impl DisplayMode {
     /// The initial display value.
     #[inline]
     pub fn inline() -> Self {
-        Display::Inline
+        DisplayMode::Inline
     }
 
     /// Returns whether this `display` value is the display of a flex or
@@ -466,6 +469,8 @@ impl Display {
         match self.inside() {
             DisplayInside::Flex => true,
             DisplayInside::Grid | DisplayInside::GridLanes => true,
+            #[cfg(feature = "servo")]
+            DisplayInside::Layout => true,
             _ => false,
         }
     }
@@ -478,7 +483,7 @@ impl Display {
             return true;
         }
         match *self {
-            Display::Contents | Display::Ruby | Display::RubyBaseContainer => true,
+            DisplayMode::Contents | DisplayMode::Ruby | DisplayMode::RubyBaseContainer => true,
             _ => false,
         }
     }
@@ -489,7 +494,7 @@ impl Display {
     pub fn equivalent_block_display(&self, is_root_element: bool) -> Self {
         // Special handling for `contents` and `list-item`s on the root element.
         if is_root_element && (self.is_contents() || self.is_list_item()) {
-            return Display::Block;
+            return DisplayMode::Block;
         }
 
         match self.outside() {
@@ -501,10 +506,10 @@ impl Display {
                     DisplayInside::FlowRoot => DisplayInside::Flow,
                     inside => inside,
                 };
-                Display::from3(DisplayOutside::Block, inside, self.is_list_item())
+                DisplayMode::from3(DisplayOutside::Block, inside, self.is_list_item())
             },
             DisplayOutside::Block | DisplayOutside::None => *self,
-            _ => Display::Block,
+            _ => DisplayMode::Block,
         }
     }
 
@@ -519,13 +524,13 @@ impl Display {
                     DisplayInside::Flow => DisplayInside::FlowRoot,
                     inside => inside,
                 };
-                Display::from3(DisplayOutside::Inline, inside, self.is_list_item())
+                DisplayMode::from3(DisplayOutside::Inline, inside, self.is_list_item())
             },
             // A run-in is already an inline-level box. Inlinification changes
             // only its outer display type; in particular, `run-in flow` must
             // become `inline flow`, not `inline flow-root`.
             DisplayOutside::RunIn => {
-                Display::from3(DisplayOutside::Inline, self.inside(), self.is_list_item())
+                DisplayMode::from3(DisplayOutside::Inline, self.inside(), self.is_list_item())
             },
             _ => *self,
         }
@@ -535,7 +540,7 @@ impl Display {
     #[inline]
     pub fn is_contents(&self) -> bool {
         match *self {
-            Display::Contents => true,
+            DisplayMode::Contents => true,
             _ => false,
         }
     }
@@ -543,12 +548,12 @@ impl Display {
     /// Returns true if the value is `None`
     #[inline]
     pub fn is_none(&self) -> bool {
-        *self == Display::None
+        *self == DisplayMode::None
     }
 }
 
 enum DisplayKeyword {
-    Full(Display),
+    Full(DisplayMode),
     Inside(DisplayInside),
     Outside(DisplayOutside),
     ListItem,
@@ -558,30 +563,30 @@ impl DisplayKeyword {
     fn parse<'i>(input: &mut Parser<'i, '_>) -> Result<Self, ParseError<'i>> {
         use self::DisplayKeyword::*;
         Ok(try_match_ident_ignore_ascii_case! { input,
-            "none" => Full(Display::None),
-            "contents" => Full(Display::Contents),
-            "inline-block" => Full(Display::InlineBlock),
-            "inline-table" => Full(Display::InlineTable),
-            "-webkit-flex" => Full(Display::Flex),
-            "inline-flex" | "-webkit-inline-flex" => Full(Display::InlineFlex),
-            "inline-grid" if grid_enabled() => Full(Display::InlineGrid),
-            "inline-grid-lanes" if grid_enabled() => Full(Display::InlineGridLanes),
-            "table-caption" => Full(Display::TableCaption),
-            "table-row-group" => Full(Display::TableRowGroup),
-            "table-header-group" => Full(Display::TableHeaderGroup),
-            "table-footer-group" => Full(Display::TableFooterGroup),
-            "table-column" => Full(Display::TableColumn),
-            "table-column-group" => Full(Display::TableColumnGroup),
-            "table-row" => Full(Display::TableRow),
-            "table-cell" => Full(Display::TableCell),
-            "ruby-base" => Full(Display::RubyBase),
-            "ruby-base-container" => Full(Display::RubyBaseContainer),
-            "ruby-text" => Full(Display::RubyText),
-            "ruby-text-container" => Full(Display::RubyTextContainer),
+            "none" => Full(DisplayMode::None),
+            "contents" => Full(DisplayMode::Contents),
+            "inline-block" => Full(DisplayMode::InlineBlock),
+            "inline-table" => Full(DisplayMode::InlineTable),
+            "-webkit-flex" => Full(DisplayMode::Flex),
+            "inline-flex" | "-webkit-inline-flex" => Full(DisplayMode::InlineFlex),
+            "inline-grid" if grid_enabled() => Full(DisplayMode::InlineGrid),
+            "inline-grid-lanes" if grid_enabled() => Full(DisplayMode::InlineGridLanes),
+            "table-caption" => Full(DisplayMode::TableCaption),
+            "table-row-group" => Full(DisplayMode::TableRowGroup),
+            "table-header-group" => Full(DisplayMode::TableHeaderGroup),
+            "table-footer-group" => Full(DisplayMode::TableFooterGroup),
+            "table-column" => Full(DisplayMode::TableColumn),
+            "table-column-group" => Full(DisplayMode::TableColumnGroup),
+            "table-row" => Full(DisplayMode::TableRow),
+            "table-cell" => Full(DisplayMode::TableCell),
+            "ruby-base" => Full(DisplayMode::RubyBase),
+            "ruby-base-container" => Full(DisplayMode::RubyBaseContainer),
+            "ruby-text" => Full(DisplayMode::RubyText),
+            "ruby-text-container" => Full(DisplayMode::RubyTextContainer),
             #[cfg(feature = "gecko")]
-            "-webkit-box" => Full(Display::WebkitBox),
+            "-webkit-box" => Full(DisplayMode::WebkitBox),
             #[cfg(feature = "gecko")]
-            "-webkit-inline-box" => Full(Display::WebkitInlineBox),
+            "-webkit-inline-box" => Full(DisplayMode::WebkitInlineBox),
 
             /// <display-outside> = block | inline | run-in
             /// https://drafts.csswg.org/css-display/#typedef-display-outside
@@ -605,7 +610,7 @@ impl DisplayKeyword {
     }
 }
 
-impl ToCss for Display {
+impl ToCss for DisplayMode {
     fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
     where
         W: fmt::Write,
@@ -613,12 +618,12 @@ impl ToCss for Display {
         let outside = self.outside();
         let inside = self.inside();
         match *self {
-            Display::Block | Display::Inline => outside.to_css(dest),
-            Display::InlineBlock => dest.write_str("inline-block"),
-            Display::RunIn => dest.write_str("run-in"),
+            DisplayMode::Block | DisplayMode::Inline => outside.to_css(dest),
+            DisplayMode::InlineBlock => dest.write_str("inline-block"),
+            DisplayMode::RunIn => dest.write_str("run-in"),
             #[cfg(feature = "gecko")]
-            Display::WebkitInlineBox => dest.write_str("-webkit-inline-box"),
-            Display::TableCaption => dest.write_str("table-caption"),
+            DisplayMode::WebkitInlineBox => dest.write_str("-webkit-inline-box"),
+            DisplayMode::TableCaption => dest.write_str("table-caption"),
             _ => match (outside, inside) {
                 (DisplayOutside::Inline, DisplayInside::Grid) => dest.write_str("inline-grid"),
                 (DisplayOutside::Inline, DisplayInside::GridLanes) => {
@@ -652,11 +657,11 @@ impl ToCss for Display {
     }
 }
 
-impl Parse for Display {
+impl Parse for DisplayMode {
     fn parse<'i, 't>(
         _: &ParserContext,
         input: &mut Parser<'i, 't>,
-    ) -> Result<Display, ParseError<'i>> {
+    ) -> Result<DisplayMode, ParseError<'i>> {
         let mut got_list_item = false;
         let mut inside = None;
         let mut outside = None;
@@ -694,7 +699,238 @@ impl Parse for Display {
             return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
         }
 
-        return Ok(Display::from3(outside, inside, got_list_item));
+        return Ok(DisplayMode::from3(outside, inside, got_list_item));
+    }
+}
+
+/// Gecko retains the compact keyword-only display representation.
+#[cfg(feature = "gecko")]
+pub type Display = DisplayMode;
+
+/// Display's outer/inner modes and the native parsed custom layout identifier.
+#[cfg(feature = "servo")]
+#[derive(
+    Clone,
+    Debug,
+    Eq,
+    Hash,
+    MallocSizeOf,
+    PartialEq,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+pub struct Display {
+    mode: DisplayMode,
+    layout_name: Option<crate::Atom>,
+}
+
+#[cfg(feature = "servo")]
+impl std::ops::Deref for Display {
+    type Target = DisplayMode;
+    fn deref(&self) -> &DisplayMode {
+        &self.mode
+    }
+}
+
+#[cfg(feature = "servo")]
+#[allow(missing_docs, non_upper_case_globals)]
+impl Display {
+    pub const None: Self = Self {
+        mode: DisplayMode::None,
+        layout_name: None,
+    };
+    pub const Contents: Self = Self {
+        mode: DisplayMode::Contents,
+        layout_name: None,
+    };
+    pub const Inline: Self = Self {
+        mode: DisplayMode::Inline,
+        layout_name: None,
+    };
+    pub const InlineBlock: Self = Self {
+        mode: DisplayMode::InlineBlock,
+        layout_name: None,
+    };
+    pub const Block: Self = Self {
+        mode: DisplayMode::Block,
+        layout_name: None,
+    };
+    pub const Flex: Self = Self {
+        mode: DisplayMode::Flex,
+        layout_name: None,
+    };
+    pub const InlineFlex: Self = Self {
+        mode: DisplayMode::InlineFlex,
+        layout_name: None,
+    };
+    pub const Grid: Self = Self {
+        mode: DisplayMode::Grid,
+        layout_name: None,
+    };
+    pub const InlineGrid: Self = Self {
+        mode: DisplayMode::InlineGrid,
+        layout_name: None,
+    };
+    pub const GridLanes: Self = Self {
+        mode: DisplayMode::GridLanes,
+        layout_name: None,
+    };
+    pub const InlineGridLanes: Self = Self {
+        mode: DisplayMode::InlineGridLanes,
+        layout_name: None,
+    };
+    pub const Table: Self = Self {
+        mode: DisplayMode::Table,
+        layout_name: None,
+    };
+    pub const InlineTable: Self = Self {
+        mode: DisplayMode::InlineTable,
+        layout_name: None,
+    };
+    pub const TableCaption: Self = Self {
+        mode: DisplayMode::TableCaption,
+        layout_name: None,
+    };
+    pub const Ruby: Self = Self {
+        mode: DisplayMode::Ruby,
+        layout_name: None,
+    };
+    pub const RunIn: Self = Self {
+        mode: DisplayMode::RunIn,
+        layout_name: None,
+    };
+    pub const TableRowGroup: Self = Self {
+        mode: DisplayMode::TableRowGroup,
+        layout_name: None,
+    };
+    pub const TableHeaderGroup: Self = Self {
+        mode: DisplayMode::TableHeaderGroup,
+        layout_name: None,
+    };
+    pub const TableFooterGroup: Self = Self {
+        mode: DisplayMode::TableFooterGroup,
+        layout_name: None,
+    };
+    pub const TableColumn: Self = Self {
+        mode: DisplayMode::TableColumn,
+        layout_name: None,
+    };
+    pub const TableColumnGroup: Self = Self {
+        mode: DisplayMode::TableColumnGroup,
+        layout_name: None,
+    };
+    pub const TableRow: Self = Self {
+        mode: DisplayMode::TableRow,
+        layout_name: None,
+    };
+    pub const TableCell: Self = Self {
+        mode: DisplayMode::TableCell,
+        layout_name: None,
+    };
+    pub const RubyBase: Self = Self {
+        mode: DisplayMode::RubyBase,
+        layout_name: None,
+    };
+    pub const RubyBaseContainer: Self = Self {
+        mode: DisplayMode::RubyBaseContainer,
+        layout_name: None,
+    };
+    pub const RubyText: Self = Self {
+        mode: DisplayMode::RubyText,
+        layout_name: None,
+    };
+    pub const RubyTextContainer: Self = Self {
+        mode: DisplayMode::RubyTextContainer,
+        layout_name: None,
+    };
+    pub(crate) const fn new(outside: DisplayOutside, inside: DisplayInside) -> Self {
+        Self {
+            mode: DisplayMode::new(outside, inside),
+            layout_name: None,
+        }
+    }
+    pub fn keyword_mode(&self) -> DisplayMode {
+        self.mode
+    }
+    pub fn inline() -> Self {
+        Self::Inline
+    }
+    pub fn layout_name(&self) -> Option<&crate::Atom> {
+        self.layout_name.as_ref()
+    }
+    pub fn equivalent_block_display(&self, is_root_element: bool) -> Self {
+        Self {
+            mode: self.mode.equivalent_block_display(is_root_element),
+            layout_name: self.layout_name.clone(),
+        }
+    }
+    pub fn inlinify(&self) -> Self {
+        Self {
+            mode: self.mode.inlinify(),
+            layout_name: self.layout_name.clone(),
+        }
+    }
+}
+
+#[cfg(feature = "servo")]
+impl ToCss for Display {
+    fn to_css<W: fmt::Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        if let Some(name) = self.layout_name() {
+            if self.outside() != DisplayOutside::Block {
+                self.outside().to_css(dest)?;
+                dest.write_char(' ')?;
+            }
+            dest.write_str("layout(")?;
+            cssparser::serialize_identifier(name, dest)?;
+            dest.write_char(')')
+        } else {
+            self.mode.to_css(dest)
+        }
+    }
+}
+
+#[cfg(feature = "servo")]
+impl Parse for Display {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        // The function is a display-inside component: allow either component order.
+        if let Ok(value) = input.try_parse(|input| {
+            let outside = input
+                .try_parse(|input| match DisplayKeyword::parse(input)? {
+                    DisplayKeyword::Outside(outside) => Ok(outside),
+                    _ => Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError)),
+                })
+                .ok();
+            input.expect_function_matching("layout")?;
+            let name = input.parse_nested_block(|input| {
+                let name = crate::Atom::from(input.expect_ident()?.as_ref());
+                input.expect_exhausted()?;
+                Ok(name)
+            })?;
+            let outside = match outside {
+                Some(outside) => outside,
+                None => input
+                    .try_parse(|input| match DisplayKeyword::parse(input)? {
+                        DisplayKeyword::Outside(outside) => Ok(outside),
+                        _ => Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError)),
+                    })
+                    .unwrap_or(DisplayOutside::Block),
+            };
+            Ok::<_, ParseError<'i>>(Self {
+                mode: DisplayMode::new(outside, DisplayInside::Layout),
+                layout_name: Some(name),
+            })
+        }) {
+            return Ok(value);
+        }
+        DisplayMode::parse(context, input).map(|mode| Self {
+            mode,
+            layout_name: None,
+        })
     }
 }
 
@@ -2209,7 +2445,9 @@ impl ContainerNameItem {
             .try_parse(|input| input.expect_function_matching("ident"))
             .is_ok()
         {
-            return Ok(Self::Function(IdentArg::parse_function_arguments(context, input)?.into()));
+            return Ok(Self::Function(
+                IdentArg::parse_function_arguments(context, input)?.into(),
+            ));
         }
         Ok(Self::Ident(CustomIdent::parse(
             input,
@@ -3419,5 +3657,43 @@ mod overflow_computation_tests {
                 assert_eq!(axis.computed_with_opposite_axis(opposite), computed);
             }
         }
+    }
+}
+
+#[cfg(all(test, feature = "servo"))]
+#[test]
+fn custom_layout_display_retains_identifier_and_outer_mode() {
+    for (input, expected, inline) in [
+        ("layout(MyLayout)", "layout(MyLayout)", false),
+        ("block layout(foo)", "layout(foo)", false),
+        ("inline layout(foo)", "inline layout(foo)", true),
+        ("layout(foo) inline", "inline layout(foo)", true),
+        ("layout(\\66 oo)", "layout(foo)", false),
+        ("layout(initial)", "layout(initial)", false),
+    ] {
+        let value = parse_box_test_value::<Display>(input).unwrap();
+        assert_eq!(value.to_css_string(), expected);
+        assert_eq!(value.outside() == DisplayOutside::Inline, inline);
+        assert!(value.layout_name().is_some());
+        assert!(
+            value.is_item_container(),
+            "default LayoutOptions.childDisplay is block"
+        );
+        assert_eq!(
+            value.equivalent_block_display(false).layout_name(),
+            value.layout_name()
+        );
+        assert_eq!(value.inlinify().layout_name(), value.layout_name());
+    }
+    for input in [
+        "layout()",
+        "layout(foo bar)",
+        "layout(1)",
+        "layout(\"foo\")",
+        "inline-layout(foo)",
+        "list-item layout(foo)",
+        "layout(foo) flex",
+    ] {
+        assert!(parse_box_test_value::<Display>(input).is_err(), "{input}");
     }
 }

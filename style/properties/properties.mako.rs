@@ -1391,7 +1391,7 @@ pub mod style_structs {
                         #[allow(non_snake_case)]
                         #[inline]
                         pub fn set_display(&mut self, v: longhands::display::computed_value::T) {
-                            self.display = v;
+                            self.display = v.clone();
                             self.original_display = v;
                         }
                     % else:
@@ -1487,7 +1487,7 @@ pub mod style_structs {
                     dpy: longhands::display::computed_value::T,
                     is_item_or_root: bool
                 ) {
-                    self.display = dpy;
+                    self.display = dpy.clone();
                     if is_item_or_root {
                         self.original_display = dpy;
                     }

@@ -98,7 +98,7 @@ impl Clone for AnimationValue {
         use self::AnimationValue::*;
 
         <%
-            [copy, others] = [list(g) for _, g in groupby(animated, key=lambda x: not x.specified_is_copy())]
+            [copy, others] = [list(g) for _, g in groupby(animated, key=lambda x: not x.specified_is_copy(engine))]
         %>
 
         let self_tag = unsafe { *(self as *const _ as *const u16) };
