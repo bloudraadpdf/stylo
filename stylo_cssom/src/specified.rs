@@ -1330,6 +1330,16 @@ fn serialize_specified_components(
                 value,
                 stylo_cssom_model::SpecifiedComponentValue::Delimiter(',')
             )
+            && !matches!(
+                (&values[index - 1], value),
+                (
+                    stylo_cssom_model::SpecifiedComponentValue::Ident(_),
+                    stylo_cssom_model::SpecifiedComponentValue::Delimiter('|')
+                ) | (
+                    stylo_cssom_model::SpecifiedComponentValue::Delimiter('|'),
+                    stylo_cssom_model::SpecifiedComponentValue::Ident(_)
+                )
+            )
         {
             css.push(' ');
         }
@@ -1383,5 +1393,48 @@ fn serialize_specified_components(
             stylo_cssom_model::SpecifiedComponentValue::Delimiter(value) => css.push(*value),
             stylo_cssom_model::SpecifiedComponentValue::Operator(value) => css.push_str(value),
         }
+    }
+}
+
+#[cfg(test)]
+mod namespace_component_serialization_tests {
+    #[test]
+    fn specified_attr_namespace_components_round_trip_without_inserted_whitespace() {
+        for (source, expected) in [
+            ("attr(|bar)", "attr(|bar)"),
+            ("attr( |bar )", "attr(|bar)"),
+            ("attr(prefix|bar)", "attr(prefix|bar)"),
+            ("attr(|bar, \"fallback\")", "attr(|bar, \"fallback\")"),
+            ("attr(foo-bar)", "attr(foo-bar)"),
+            ("attr(foo_bar)", "attr(foo_bar)"),
+            (
+                "\"left\" attr(|bar) \"right\"",
+                "\"left\" attr(|bar) \"right\"",
+            ),
+        ] {
+            let declarations = crate::declaration_parser::parse_inline_style_declarations(
+                &format!("content:{source}"),
+                "about:blank".into(),
+            );
+            let serialized = super::projected_specified_property_value(&declarations, "content")
+                .expect("valid content declaration");
+            assert_eq!(serialized, expected, "{source}");
+            let reparsed = crate::declaration_parser::parse_inline_style_declarations(
+                &format!("content:{serialized}"),
+                "about:blank".into(),
+            );
+            assert_eq!(
+                super::projected_specified_property_value(&reparsed, "content").as_deref(),
+                Some(expected)
+            );
+        }
+        let custom = crate::declaration_parser::parse_inline_style_declarations(
+            "--tokens:left | right",
+            "about:blank".into(),
+        );
+        assert_eq!(
+            super::projected_specified_property_value(&custom, "--tokens").as_deref(),
+            Some("left | right")
+        );
     }
 }
