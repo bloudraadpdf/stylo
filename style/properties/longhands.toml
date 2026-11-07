@@ -342,7 +342,7 @@ initial_specified_value = "specified::TimingFunction::ease()"
 vector = { need_index = true }
 animation_type = "none"
 extra_prefixes = ["moz:layout.css.prefixes.animations", "webkit"]
-spec = "https://drafts.csswg.org/css-transitions/#propdef-animation-timing-function"
+spec = "https://drafts.csswg.org/css-animations-1/#propdef-animation-timing-function"
 affects = ""
 
 [appearance]

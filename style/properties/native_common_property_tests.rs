@@ -52,6 +52,28 @@ fn text_justify_applies_to_first_line_and_first_letter() {
 }
 
 #[test]
+fn animation_longhands_apply_to_first_line_and_first_letter() {
+    for restriction in [
+        super::PropertyFlags::APPLIES_TO_FIRST_LINE,
+        super::PropertyFlags::APPLIES_TO_FIRST_LETTER,
+    ] {
+        for id in [
+            super::LonghandId::AnimationName,
+            super::LonghandId::AnimationDuration,
+            super::LonghandId::AnimationTimingFunction,
+            super::LonghandId::AnimationDelay,
+            super::LonghandId::AnimationIterationCount,
+            super::LonghandId::AnimationDirection,
+            super::LonghandId::AnimationFillMode,
+            super::LonghandId::AnimationPlayState,
+            super::LonghandId::AnimationComposition,
+        ] {
+            assert!(id.flags().contains(restriction), "{id:?}");
+        }
+    }
+}
+
+#[test]
 fn sizing_shorthands_expand_both_axes_and_css_wide_values() {
     for prefix in ["", "min-", "max-"] {
         let name = format!("{prefix}size");
