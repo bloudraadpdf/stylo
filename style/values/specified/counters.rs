@@ -1093,6 +1093,8 @@ mod tests {
     #[cfg(feature = "servo")]
     #[test]
     fn alt_text_takes_counters_and_predefined_names_match_in_any_case() {
+        let _guard = pref_lock().lock().unwrap();
+        let _alt_text_pref = BoolPrefGuard::set("layout.css.content.alt-text.enabled", true);
         for (css, expected) in [
             (r#""" / counter(cnt)"#, r#""" / counter(cnt)"#),
             (r#""a" / counter(cnt) "b""#, r#""a" / counter(cnt) "b""#),
