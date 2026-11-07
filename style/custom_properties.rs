@@ -655,7 +655,7 @@ enum AttributeType {
 enum SubstitutionFunction {
     Var(Name),
     Inherit(Box<[FunctionArgument]>),
-    If(Box<[[FunctionArgument; 2]]>),
+    If(Box<[ConditionalBranch]>),
     Env(Name),
     Attr {
         name: AttrName,
@@ -675,6 +675,12 @@ struct FunctionArgument {
     end: usize,
     first_token_type: TokenSerializationType,
     last_token_type: TokenSerializationType,
+}
+
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
+struct ConditionalBranch {
+    condition: FunctionArgument,
+    value: FunctionArgument,
 }
 
 impl SubstitutionFunction {
@@ -1047,6 +1053,8 @@ fn parse_declaration_value_block<'i, 't>(
                     || name.eq_ignore_ascii_case("inherit")
                     || name.eq_ignore_ascii_case("if") =>
             {
+                let is_if = name.eq_ignore_ascii_case("if");
+                let is_inherit = name.eq_ignore_ascii_case("inherit");
                 let our_ref_index = references.refs.len();
                 let start = token_start.byte_index() - input_start.byte_index();
                 references.refs.push(SubstitutionFunctionReference {
@@ -1068,7 +1076,7 @@ fn parse_declaration_value_block<'i, 't>(
                 });
                 let mut input_end_position = None;
                 let parsed_arguments = input.parse_nested_block(|input| {
-                    if name.eq_ignore_ascii_case("if") {
+                    if is_if {
                         let branches = conditionals::parse_branches(
                             input,
                             input_start,
@@ -1081,7 +1089,7 @@ fn parse_declaration_value_block<'i, 't>(
                         input_end_position = Some(input.position());
                         return Ok(Box::default());
                     }
-                    if name.eq_ignore_ascii_case("inherit") {
+                    if is_inherit {
                         let mut arguments = Vec::new();
                         loop {
                             arguments.push(input.parse_until_before(

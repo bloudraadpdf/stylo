@@ -19,19 +19,30 @@ pub(super) fn parse_branches<'i>(
     namespaces: &Namespaces,
     references: &mut References,
     missing_closing_characters: &mut String,
-) -> Result<Box<[[FunctionArgument; 2]]>, ParseError<'i>> {
+) -> Result<Box<[ConditionalBranch]>, ParseError<'i>> {
     let mut branches = Vec::new();
     while !input.is_exhausted() {
-        let condition = input.parse_until_before(Delimiter::Colon, |input| {
-            parse_substitution_argument(
-                input,
-                input_start,
-                namespaces,
-                references,
-                missing_closing_characters,
-            )
-        })?;
-        input.expect_colon()?;
+        input.skip_whitespace();
+        let start = input.position();
+        let end = loop {
+            let position = input.position();
+            match input.next()? {
+                Token::Colon => break position,
+                Token::Semicolon => {
+                    return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+                },
+                _ => {},
+            }
+        };
+        let css = input.slice(start..end).trim_ascii_end();
+        let (first_token_type, last_token_type) = token_types(css);
+        let start = start.byte_index() - input_start.byte_index();
+        let condition = FunctionArgument {
+            start,
+            end: start + css.len(),
+            first_token_type,
+            last_token_type,
+        };
         let value = input.parse_until_before(Delimiter::Semicolon, |input| {
             parse_substitution_argument(
                 input,
@@ -41,7 +52,7 @@ pub(super) fn parse_branches<'i>(
                 missing_closing_characters,
             )
         })?;
-        branches.push([condition, value]);
+        branches.push(ConditionalBranch { condition, value });
         if !input.is_exhausted() {
             input.expect_semicolon()?;
         }
@@ -84,7 +95,7 @@ pub(super) fn condition_names(value: &VariableValue) -> Vec<Name> {
         let SubstitutionFunction::If(branches) = &reference.function else {
             continue;
         };
-        for [condition, _] in &**branches {
+        for ConditionalBranch { condition, .. } in &**branches {
             let mut input = ParserInput::new(&value.css[condition.start..condition.end]);
             if let Ok(condition) = QueryCondition::parse(
                 &context(&value.url_data),
@@ -103,26 +114,26 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
         &mut self,
         css: &'v str,
         url_data: &UrlExtraData,
-        branches: &[[FunctionArgument; 2]],
+        branches: &[ConditionalBranch],
         frame: Option<usize>,
         references: &mut ReferenceIter<'v>,
     ) -> Result<Substitution<'v>, ()>
     where
         'a: 'v,
     {
-        for [condition, value] in branches {
-            let condition = self.chunk(
-                css,
-                condition.start,
-                condition.end,
-                condition.first_token_type,
-                condition.last_token_type,
+        for ConditionalBranch { condition, value } in branches {
+            let mut input = ParserInput::new(&css[condition.start..condition.end]);
+            let condition = VariableValue::parse(
+                &mut Parser::new(&mut input),
                 url_data,
-                frame,
-                references,
-            );
+                &Namespaces::default(),
+            )
+            .ok();
+            let condition = condition
+                .as_ref()
+                .and_then(|condition| self.substitute_value(condition, frame).ok());
             if condition
-                .is_ok_and(|condition| self.condition_matches(&condition.css, url_data, frame))
+                .is_some_and(|condition| self.condition_matches(&condition.css, url_data, frame))
             {
                 return self.chunk(
                     css,
