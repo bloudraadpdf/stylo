@@ -6,7 +6,7 @@ use crate::attr::{
     AttrSelectorOperation, AttrSelectorWithOptionalNamespace, CaseSensitivity, NamespaceConstraint,
     ParsedAttrSelectorOperation, ParsedCaseSensitivity,
 };
-use crate::bloom::{BloomFilter, BLOOM_HASH_MASK};
+use crate::bloom::{BLOOM_HASH_MASK, BloomFilter};
 use crate::kleene_value::KleeneValue;
 use crate::parser::{
     AncestorHashes, Combinator, Component, LocalName, MatchesFeaturelessHost, NthSelectorData,
@@ -474,7 +474,10 @@ where
                 .pseudo_element_state_matching_fn
                 .is_some_and(|matches| matches(pseudo_class))
         };
-        if !iter.matches_for_stateless_pseudo_element(context.pseudo_element_is_only_child, &matches_state) {
+        if !iter.matches_for_stateless_pseudo_element(
+            context.pseudo_element_is_only_child,
+            &matches_state,
+        ) {
             return KleeneValue::False;
         }
 
@@ -797,9 +800,11 @@ fn assigned_slot<E>(element: &E, context: &MatchingContext<E::Impl>) -> Option<E
 where
     E: Element,
 {
-    debug_assert!(element
-        .assigned_slot()
-        .map_or(true, |s| s.is_html_slot_element()));
+    debug_assert!(
+        element
+            .assigned_slot()
+            .map_or(true, |s| s.is_html_slot_element())
+    );
     let scope = context.current_host?;
     let mut current_slot = element.assigned_slot()?;
     while current_slot.containing_shadow_host().unwrap().opaque() != scope {
@@ -848,7 +853,13 @@ where
             };
             NextElement::new(element, true)
         },
-        Combinator::Part => NextElement::new(host_for_part(element, context), false),
+        Combinator::Part => {
+            let host = host_for_part(element, context);
+            let featureless = host
+                .as_ref()
+                .is_some_and(|host| context.current_host == Some(host.opaque()));
+            NextElement::new(host, featureless)
+        },
         Combinator::SlotAssignment => NextElement::new(assigned_slot(element, context), false),
         Combinator::PseudoElement => {
             NextElement::new(element.pseudo_element_originating_element(), false)
@@ -962,7 +973,7 @@ where
                 return result;
             },
             SelectorMatchingResult::Unknown | SelectorMatchingResult::NotMatchedGlobally => {
-                return result
+                return result;
             },
             _ => {},
         }
@@ -1209,7 +1220,11 @@ pub(crate) fn compound_matches_featureless_host<Impl: SelectorImpl>(
             _ => return MatchesFeaturelessHost::Never,
         }
     }
-    if has_other_selector { matches } else { MatchesFeaturelessHost::Never }
+    if has_other_selector {
+        matches
+    } else {
+        MatchesFeaturelessHost::Never
+    }
 }
 
 /// Determines whether the given element matches the given compound selector.
@@ -1373,17 +1388,17 @@ where
                     nth_of_data.selectors(),
                     rightmost,
                 )
-            })
+            });
         },
         Component::Is(ref list) | Component::Where(ref list) => {
             return context.shared.nest(|context| {
                 matches_complex_selector_list(list.slice(), element, context, rightmost)
-            })
+            });
         },
         Component::Negation(ref list) => {
             return context.shared.nest_for_negation(|context| {
                 !matches_complex_selector_list(list.slice(), element, context, rightmost)
-            })
+            });
         },
         Component::Has(ref relative_selectors) => {
             return match_relative_selectors(
