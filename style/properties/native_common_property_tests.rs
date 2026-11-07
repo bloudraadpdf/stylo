@@ -996,3 +996,13 @@ fn box_shadow_shorthand_omits_only_default_components() {
     assert_serialization("box-shadow", "currentcolor none", Some("currentcolor none"));
     assert_serialization("box-shadow", "1px", None);
 }
+
+#[test]
+fn all_shorthand_schema_members_include_pref_controlled_properties() {
+    let potential = ShorthandId::All.all_longhands();
+    assert!(potential.contains(&super::LonghandId::AlignTracks));
+    assert!(potential.contains(&super::LonghandId::BoxShadowOffset));
+    assert!(!potential.contains(&super::LonghandId::Direction));
+    assert!(!potential.contains(&super::LonghandId::UnicodeBidi));
+    assert!(ShorthandId::All.longhands().all(|id| potential.contains(&id)));
+}

@@ -998,8 +998,8 @@ impl ShorthandId {
         % endfor
     ];
 
-    /// Get the longhand ids that form this shorthand.
-    pub fn longhands(self) -> NonCustomPropertyIterator<LonghandId> {
+    /// All potential members, independent of runtime preferences.
+    pub fn all_longhands(self) -> &'static [LonghandId] {
         static MAP: [&'static [LonghandId]; property_counts::SHORTHANDS] = [
         % for property in data.shorthands:
             &[
@@ -1009,9 +1009,14 @@ impl ShorthandId {
             ],
         % endfor
         ];
+        MAP[self as usize]
+    }
+
+    /// Get the enabled longhand ids that form this shorthand.
+    pub fn longhands(self) -> NonCustomPropertyIterator<LonghandId> {
         NonCustomPropertyIterator {
             filter: NonCustomPropertyId::from(self).enabled_for_all_content(),
-            iter: MAP[self as usize].iter(),
+            iter: self.all_longhands().iter(),
         }
     }
 
