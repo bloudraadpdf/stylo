@@ -1037,6 +1037,8 @@ pub struct Transition {
     /// If this `Transition` has been replaced by a new one this field is
     /// used to help produce better reversed transitions.
     pub reversing_adjusted_start_value: AnimationValue,
+    #[cfg(feature = "servo")]
+    reversing_adjusted_shadow: Option<AnimatedBoxShadowList>,
 
     /// If this `Transition` has been replaced by a new one this field is
     /// used to help produce better reversed transitions.
@@ -1059,6 +1061,8 @@ impl Transition {
         interpolate_size: InterpolateSize,
         #[cfg(feature = "servo")] shadow: Option<(AnimatedBoxShadowList, AnimatedBoxShadowList)>,
     ) -> Self {
+        #[cfg(feature = "servo")]
+        let reversing_adjusted_shadow = shadow.as_ref().map(|(from, _)| from.clone());
         let property_animation = PropertyAnimation {
             from: from.clone(),
             to,
@@ -1080,8 +1084,53 @@ impl Transition {
             state: AnimationState::Pending,
             is_new: true,
             reversing_adjusted_start_value: from,
+            #[cfg(feature = "servo")]
+            reversing_adjusted_shadow,
             reversing_shortening_factor: 1.0,
         }
+    }
+
+    fn end_value_matches(
+        &self,
+        value: &AnimationValue,
+        #[cfg(feature = "servo")] shadow: Option<&AnimatedBoxShadowList>,
+    ) -> bool {
+        #[cfg(feature = "servo")]
+        if self.property_animation.shadow.is_some() || shadow.is_some() {
+            return self.property_animation.shadow.as_ref().map(|(_, end)| end) == shadow;
+        }
+        self.property_animation.to == *value
+    }
+
+    fn reversing_start_matches(
+        &self,
+        value: &AnimationValue,
+        #[cfg(feature = "servo")] shadow: Option<&AnimatedBoxShadowList>,
+    ) -> bool {
+        #[cfg(feature = "servo")]
+        if self.reversing_adjusted_shadow.is_some() || shadow.is_some() {
+            return self.reversing_adjusted_shadow.as_ref() == shadow;
+        }
+        self.reversing_adjusted_start_value == *value
+    }
+
+    #[cfg(feature = "servo")]
+    fn current_shadow(&self, time: f64) -> Option<AnimatedBoxShadowList> {
+        let (from, to) = self.property_animation.shadow.as_ref()?;
+        let progress = (time - self.start_time) / self.property_animation.duration;
+        let eased = self
+            .property_animation
+            .timing_function_output(progress.clamp(0.0, 1.0), Self::before_flag(progress));
+        Some(
+            from.animate(to, Procedure::Interpolate { progress: eased })
+                .unwrap_or_else(|_| {
+                    if eased < 0.5 {
+                        from.clone()
+                    } else {
+                        to.clone()
+                    }
+                }),
+        )
     }
 
     fn update_for_possibly_reversed_transition(
@@ -1098,13 +1147,22 @@ impl Transition {
         //  the section on reversing of transitions for why these case exists),
         //  implementations must cancel the running transition and start
         //  a new transition..."
-        if replaced_transition.reversing_adjusted_start_value != self.property_animation.to {
+        if !replaced_transition.reversing_start_matches(
+            &self.property_animation.to,
+            #[cfg(feature = "servo")]
+            self.property_animation.shadow.as_ref().map(|(_, to)| to),
+        ) {
             return;
         }
 
         // "* reversing-adjusted start value is the end value of the running transition"
         let replaced_animation = &replaced_transition.property_animation;
         self.reversing_adjusted_start_value = replaced_animation.to.clone();
+        #[cfg(feature = "servo")]
+        {
+            self.reversing_adjusted_shadow =
+                replaced_animation.shadow.as_ref().map(|(_, to)| to.clone());
+        }
 
         // "* reversing shortening factor is the absolute value, clamped to the
         //    range [0, 1], of the sum of:
@@ -1519,7 +1577,11 @@ impl ElementAnimationSet {
         let no_completed_transition_or_end_values_differ =
             existing_transition.as_ref().is_none_or(|transition| {
                 transition.state != AnimationState::Finished
-                    || transition.property_animation.to != to
+                    || !transition.end_value_matches(
+                        &to,
+                        #[cfg(feature = "servo")]
+                        shadow.as_ref().map(|(_, to)| to),
+                    )
             });
         if !has_running_transition
             && from != to
@@ -1582,7 +1644,13 @@ impl ElementAnimationSet {
         // > there is a matching transition-property value, and the end value of
         // > the running transition is not equal to the value of the property in
         // > the after-change style, then:
-        if has_running_transition && existing_transition.property_animation.to != to {
+        if has_running_transition
+            && !existing_transition.end_value_matches(
+                &to,
+                #[cfg(feature = "servo")]
+                shadow.as_ref().map(|(_, to)| to),
+            )
+        {
             // > Step 4.1: If the current value of the property in the running transition is
             // > equal to the value of the property in the after-change style, or
             // > if these two values are not transitionable, then implementations
@@ -1590,7 +1658,27 @@ impl ElementAnimationSet {
             let current_value = existing_transition.calculate_value(now);
             let transitionable_from_current_value =
                 transitionable && (allow_discrete || interpolable(&current_value, &to));
-            if current_value == to || !transitionable_from_current_value {
+            #[cfg(feature = "servo")]
+            let current_shadow = existing_transition.current_shadow(now);
+            let current_matches = current_value == to;
+            #[cfg(feature = "servo")]
+            let current_matches = if current_shadow.is_some() || shadow.is_some() {
+                current_shadow.as_ref() == shadow.as_ref().map(|(_, to)| to)
+            } else {
+                current_matches
+            };
+            #[cfg(feature = "servo")]
+            let transitionable_from_current_value = match (current_shadow.as_ref(), shadow.as_ref())
+            {
+                (Some(current), Some((_, target))) => {
+                    allow_discrete
+                        || current
+                            .animate(target, Procedure::Interpolate { progress: 0.5 })
+                            .is_ok()
+                },
+                _ => transitionable_from_current_value,
+            };
+            if current_matches || !transitionable_from_current_value {
                 existing_transition.state = AnimationState::Canceled;
                 self.dirty = true;
                 return;
@@ -1612,7 +1700,13 @@ impl ElementAnimationSet {
             // > the after-change style (see the section on reversing of
             // > transitions for why these case exists), implementations must
             // > cancel the running transition and start a new transition whose:
-            if existing_transition.reversing_adjusted_start_value == to {
+            #[cfg(feature = "servo")]
+            let shadow = shadow.map(|(from, to)| (current_shadow.unwrap_or(from), to));
+            if existing_transition.reversing_start_matches(
+                &to,
+                #[cfg(feature = "servo")]
+                shadow.as_ref().map(|(_, to)| to),
+            ) {
                 existing_transition.state = AnimationState::Canceled;
 
                 let mut transition = Transition::new(
@@ -2070,6 +2164,74 @@ mod tests {
     use crate::properties::ComputedValues;
     use crate::values::animated::{Animate, Procedure};
     use crate::Atom;
+
+    #[cfg(feature = "servo")]
+    #[test]
+    fn shadow_transition_lifecycle_compares_the_whole_list_when_offset_is_unchanged() {
+        use crate::properties::longhands;
+        use crate::values::animated::box_shadow::AnimatedBoxShadowList;
+        use crate::values::computed::{BoxShadowOffset, BoxShadowPosition, Length};
+        let mut start = ComputedValues::initial_values_with_font_override(Font::initial_values());
+        AnimationValue::BoxShadowOffset(longhands::box_shadow_offset::computed_value::OwnedList(
+            [BoxShadowOffset::Offset(
+                Length::new(10.0),
+                Length::new(10.0),
+            )]
+            .into_iter()
+            .collect(),
+        ))
+        .set_in_style_for_servo(servo_arc::Arc::make_mut(&mut start));
+        let mut end = start.clone();
+        AnimationValue::BoxShadowOffset(longhands::box_shadow_offset::computed_value::OwnedList(
+            [BoxShadowOffset::Offset(
+                Length::new(20.0),
+                Length::new(20.0),
+            )]
+            .into_iter()
+            .collect(),
+        ))
+        .set_in_style_for_servo(servo_arc::Arc::make_mut(&mut end));
+        let mut changed_inset = end.clone();
+        AnimationValue::BoxShadowPosition(
+            longhands::box_shadow_position::computed_value::OwnedList(
+                [BoxShadowPosition::Inset].into_iter().collect(),
+            ),
+        )
+        .set_in_style_for_servo(servo_arc::Arc::make_mut(&mut changed_inset));
+        let from = AnimatedBoxShadowList::from_computed_values(&start, None);
+        let to = AnimatedBoxShadowList::from_computed_values(&end, None);
+        let inset = AnimatedBoxShadowList::from_computed_values(&changed_inset, None);
+        let offset = |value: &AnimatedBoxShadowList| value.components().into_iter().nth(1).unwrap();
+        let transition = super::Transition::new(
+            0.0,
+            0.0,
+            1.0,
+            offset(&from),
+            offset(&to),
+            &super::TimingFunction::Keyword(crate::values::generics::easing::TimingKeyword::Linear),
+            InterpolateSize::NumericOnly,
+            Some((from.clone(), to.clone())),
+        );
+        assert_eq!(offset(&to), offset(&inset));
+        assert!(transition.end_value_matches(&offset(&to), Some(&to)));
+        assert!(!transition.end_value_matches(&offset(&inset), Some(&inset)));
+        assert!(transition
+            .current_shadow(0.5)
+            .unwrap()
+            .animate(&inset, Procedure::Interpolate { progress: 0.5 })
+            .is_err());
+        assert!(transition.reversing_start_matches(&offset(&from), Some(&from)));
+        let mut changed_start = start.clone();
+        AnimationValue::BoxShadowPosition(
+            longhands::box_shadow_position::computed_value::OwnedList(
+                [BoxShadowPosition::Inset].into_iter().collect(),
+            ),
+        )
+        .set_in_style_for_servo(servo_arc::Arc::make_mut(&mut changed_start));
+        let false_reverse = AnimatedBoxShadowList::from_computed_values(&changed_start, None);
+        assert_eq!(offset(&from), offset(&false_reverse));
+        assert!(!transition.reversing_start_matches(&offset(&false_reverse), Some(&false_reverse)));
+    }
 
     #[cfg(feature = "servo")]
     #[test]
