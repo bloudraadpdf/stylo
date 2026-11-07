@@ -340,9 +340,12 @@ impl ::selectors::parser::PseudoElement for PseudoElement {
     }
 
     /// Selectors 4 §3.6.3 lets the user action pseudo-classes follow any pseudo-element; a highlight pseudo-element
-    /// and a `::column` have no state of their own (CSS Pseudo 4 §3, CSS Multicol 2 §4.1).
+    /// and a `::column` have no state of their own (CSS Pseudo 4 §3, CSS Multicol 2 §4.1), and the view transition
+    /// pseudo-element tree takes only `:only-child` (CSS View Transitions 1 §3.1).
     fn accepts_user_action_pseudo_classes(&self) -> bool {
-        !self.is_highlight() && !matches!(self, Self::Column)
+        !self.is_highlight()
+            && !self.is_in_pseudo_element_tree()
+            && !matches!(self, Self::Column | Self::ViewTransition)
     }
 
     fn valid_after_slotted(&self) -> bool {
