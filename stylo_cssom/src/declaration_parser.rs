@@ -370,6 +370,10 @@ fn inline_native_declarations(
         .enumerate()
     {
         let authored = &css[range];
+        let mut input = ParserInput::new(authored);
+        if Parser::new(&mut input).expect_ident().is_err() {
+            continue;
+        }
         let empty_custom_property = authored.split_once(':').is_some_and(|(property, value)| {
             property.trim().starts_with("--")
                 && crate::css_scan::trim_ascii(value.as_bytes()).is_empty()
@@ -390,7 +394,7 @@ fn inline_native_declarations(
                 let canonical = inline_style_get_property_value(&block, schema.name)?;
                 let authored_value = authored.split_once(':')?.1;
                 Some(
-                    legacy_shadow_serialization(
+                    authored_shorthand_serialization(
                         schema.name,
                         split_inline_declaration_importance(authored_value).0,
                     )
@@ -643,11 +647,8 @@ pub fn parse_inline_style_property_declarations(
         // Servo expands system fonts to available platform defaults, so the
         // native shorthand serialization no longer contains the specified
         // keyword. Keep the parsed source for specified CSSOM serialization.
-        let shorthand_value = if shorthand.name == "font" && is_system_font_keyword(value.trim()) {
-            value.trim().to_ascii_lowercase()
-        } else {
-            legacy_shadow_serialization(shorthand.name, value).unwrap_or(backing_value)
-        };
+        let shorthand_value =
+            authored_shorthand_serialization(shorthand.name, value).unwrap_or(backing_value);
         let value = specified_style_value_from_css(&shorthand_value, base_url)?;
         for declaration in &mut declarations {
             declaration.shorthand_source = Some(
@@ -665,6 +666,16 @@ pub fn parse_inline_style_property_declarations(
         }
     }
     Some(declarations)
+}
+
+// Native Servo values expand system fonts into platform defaults. Preserve
+// the authored shorthand in both declaration-list and CSSOM setter parsing.
+fn authored_shorthand_serialization(property: &str, value: &str) -> Option<String> {
+    if property == "font" && is_system_font_keyword(value.trim()) {
+        Some(value.trim().to_ascii_lowercase())
+    } else {
+        legacy_shadow_serialization(property, value)
+    }
 }
 
 // CSSOM §6.7.2 preserves backwards-compatible serialization: explicitly
@@ -1754,6 +1765,19 @@ mod tests {
     }
 
     #[test]
+    fn inline_declaration_recovery_discards_the_whole_invalid_declaration() {
+        for (source, expected) in [
+            ("}color:red", ""),
+            ("} color:red;z-index:1", "z-index: 1;"),
+            ("z-index:1;}color:red", "z-index: 1;"),
+            ("/* comment */color:red", "color: red;"),
+        ] {
+            let declarations = parse_inline_style_declarations(source, "about:blank".into());
+            assert_eq!(crate::specified::serialize_specified_declarations(&declarations), expected, "{source}");
+        }
+    }
+
+    #[test]
     fn cssom_timing_functions_keep_authored_bezier_precision_for_the_cascade() {
         let authored = "cubic-bezier(0, 0.2333333333333333, 1, 0.2333333333333333)";
         for property in ["animation-timing-function", "transition-timing-function"] {
@@ -2386,6 +2410,22 @@ mod tests {
                 Some(keyword),
                 "{keyword}"
             );
+            let from_list = parse_inline_style_declarations(
+                &format!("font:{keyword} !important"),
+                "about:blank".into(),
+            );
+            assert_eq!(
+                crate::specified::projected_specified_property_value(&from_list, "font")
+                    .as_deref(),
+                Some(keyword),
+            );
+            for parsed in [&declarations[..], &from_list[..]] {
+                assert_eq!(
+                    crate::specified::projected_specified_property_value(parsed, "font-variant"),
+                    None,
+                    "{keyword}: font-variant",
+                );
+            }
             for declaration in &declarations {
                 let stylo_cssom_model::SpecifiedPropertyName::Standard(property) =
                     declaration.property

@@ -281,6 +281,27 @@ mod inline_compatibility_projection_tests {
     }
 
     #[test]
+    fn shorthand_serialisation_crosses_independent_declarations_and_authored_groups() {
+        for (source, expected) in [
+            ("border-top:1px;border-right:2px;border-bottom:3px;border-left:4px", "border-width: 1px 2px 3px 4px; border-style: none; border-color: currentcolor;"),
+            ("width:100px;--a:a;all:inherit;--b:b;height:inherit", "--a: a; all: inherit; --b: b;"),
+            ("margin-top:1px;color:red;margin-right:2px;margin-bottom:1px;margin-left:2px", "margin: 1px 2px; color: red;"),
+            // Overflow 4 makes the prefixed shorthand unconditionally set
+            // block-ellipsis:ellipsis; unprefixed none sets no-ellipsis.
+            ("-webkit-line-clamp:none", "-webkit-line-clamp: none;"),
+            ("max-lines:auto;continue:normal;block-ellipsis:no-ellipsis", "line-clamp: none;"),
+            ("outline-width:2px;outline-style:dotted;outline-color:blue", "outline: 2px dotted blue;"),
+        ] {
+            let declarations = crate::declaration_parser::parse_inline_style_declarations(source, "about:blank".into());
+            assert_eq!(serialize_specified_declarations(&declarations), expected, "{source}");
+        }
+        let declarations = crate::declaration_parser::parse_inline_style_declarations(
+            "font:menu", "about:blank".into(),
+        );
+        assert_eq!(projected_specified_property_value(&declarations, "font-variant"), None);
+    }
+
+    #[test]
     fn size_is_excluded_from_preferred_specified_serialization() {
         for height in ["100px", "200px"] {
             for priority in ["", " !important"] {
@@ -775,7 +796,7 @@ pub fn serialize_specified_declarations(
     let index = SpecifiedDeclarationIndex::new(declarations);
     let shorthand_completeness = shorthand_completeness(&index);
     let synthesised_shorthands =
-        synthesised_independent_shorthands(&index, &shorthand_completeness);
+        synthesised_independent_shorthands(&index);
     let synthesised_members = synthesised_shorthands
         .iter()
         .flat_map(|shorthand| shorthand.members.iter().copied())
@@ -805,7 +826,13 @@ pub fn serialize_specified_declarations(
             .map(stylo_cssom_model::SpecifiedShorthandSource::property)
             .filter(|shorthand| crate::declaration_parser::inline_shorthand_serializes(shorthand.schema()))
             .filter(|shorthand| !emitted_shorthands.contains(shorthand))
-            .filter(|_| shorthand_completeness[index]);
+            .filter(|_| shorthand_completeness[index])
+            .filter(|shorthand| {
+                declarations.iter().enumerate().all(|(member, declaration)| {
+                    !declaration.shorthand_source.is_some_and(|source| source.property() == *shorthand)
+                        || !synthesised_members.contains(&member)
+                })
+            });
         if declaration.shorthand_source.is_some() && shorthand.is_none() {
             if declaration
                 .shorthand_source
@@ -919,8 +946,7 @@ impl<'a> ShorthandMembers<'a> {
         // A system font is only expressible by the complete `font` shorthand.
         // Once one of its longhands is replaced, the remaining system-derived
         // values cannot be reconstructed as a regular font shorthand.
-        if self.schema.name == "font"
-            && self.declarations().any(|declaration| {
+        if self.declarations().any(|declaration| {
                 declaration
                     .shorthand_source
                     .is_some_and(|source| source.property().schema().name == "font")
@@ -993,7 +1019,6 @@ fn standard_inline_style_block(
 
 fn synthesised_independent_shorthands(
     index: &SpecifiedDeclarationIndex<'_>,
-    shorthand_completeness: &[bool],
 ) -> Vec<SynthesisedShorthand> {
     let declarations = index.declarations;
     let block = LazyLock::new(|| standard_inline_style_block(declarations));
@@ -1008,24 +1033,27 @@ fn synthesised_independent_shorthands(
         let Some(members) = index.members(schema) else {
             continue;
         };
-        if members.importance().is_none()
-            || members.indices.iter().any(|&member| {
-                !declaration_is_available_to_synthesised_shorthand(
-                    &declarations[member],
-                    shorthand_completeness[member],
-                    schema,
-                )
-            })
-        {
+        if members.importance().is_none() {
             continue;
         }
         let mut ordered_members = members.indices.clone();
         ordered_members.sort_unstable();
-        if ordered_members
-            .windows(2)
-            .any(|pair| pair[1] != pair[0] + 1)
-        {
-            continue;
+        if !crate::declaration_parser::compatibility::is_all(schema) {
+            let mapping = |declaration: &stylo_cssom_model::SpecifiedDeclaration| {
+                let CanonicalProperty::Native(property) = CanonicalProperty::from_specified(&declaration.property)?;
+                let id = style::properties::PropertyId::parse_unchecked(property.schema().name, None).ok()?.longhand_id()?;
+                Some((id.logical_group()?, id.to_physical(style::logical_geometry::WritingMode::empty()) != id))
+            };
+            let member_mappings = members.declarations().filter_map(mapping).collect::<Vec<_>>();
+            let first = ordered_members[0];
+            let last = *ordered_members.last().unwrap();
+            if (first..=last).any(|offset| {
+                !ordered_members.contains(&offset) && mapping(&declarations[offset]).is_some_and(|(group, logical)| {
+                    member_mappings.iter().any(|(member_group, member_logical)| *member_group == group && *member_logical != logical)
+                })
+            }) {
+                continue;
+            }
         }
         let Some(value) = members.serialize(|| {
             crate::declaration_parser::inline_style_get_property_value(&block, schema.name)
@@ -1040,7 +1068,12 @@ fn synthesised_independent_shorthands(
             value,
         });
     }
-    shorthands.sort_by(|left, right| right.members.len().cmp(&left.members.len()));
+    shorthands.sort_by(|left, right| {
+        let prefix = |name: &str| if name.starts_with("-webkit-") { 1 } else if name.starts_with('-') { 2 } else { 0 };
+        right.members.len().cmp(&left.members.len())
+            .then_with(|| prefix(left.schema.name).cmp(&prefix(right.schema.name)))
+            .then_with(|| left.schema.name.cmp(right.schema.name))
+    });
     let mut reserved = HashSet::new();
     shorthands.retain(|shorthand| {
         if shorthand
@@ -1055,23 +1088,6 @@ fn synthesised_independent_shorthands(
     });
     shorthands.sort_by_key(|shorthand| shorthand.first);
     shorthands
-}
-
-fn declaration_is_available_to_synthesised_shorthand(
-    declaration: &stylo_cssom_model::SpecifiedDeclaration,
-    source_is_complete: bool,
-    candidate: &'static stylo_cssom_model::PropertySchemaRow,
-) -> bool {
-    let Some(source) = declaration.shorthand_source else {
-        return true;
-    };
-    let source = source.property().schema();
-    if !source_is_complete {
-        return true;
-    }
-    let source = shorthand_member_properties(source);
-    let candidate = shorthand_member_properties(candidate);
-    source.len() < candidate.len() && source.iter().all(|member| candidate.contains(member))
 }
 
 fn shorthand_completeness(index: &SpecifiedDeclarationIndex<'_>) -> Vec<bool> {
