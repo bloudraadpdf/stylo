@@ -3203,7 +3203,7 @@ where
         for activation in outer_result.candidates {
             let mut this_result = collect_scope_roots(
                 *element,
-                Some(activation.root),
+                Some(activation),
                 context,
                 &root_target,
                 matches_shadow_host,
@@ -3239,7 +3239,7 @@ where
                     !element_is_outside_of_scope(
                         selector,
                         *element,
-                        scope_root.root,
+                        scope_root,
                         context,
                         matches_shadow_host,
                     )
@@ -3820,7 +3820,7 @@ impl CascadeData {
             context,
         );
         for candidate in result.candidates {
-            if context.nest_for_scope(Some(candidate.root), |context| {
+            if candidate.with_scope(context, |context| {
                 matches_selector(&rule.selector, 0, Some(&rule.hashes), &element, context)
             }) {
                 return candidate.proximity;
@@ -4974,9 +4974,10 @@ impl CascadeData {
                     &self.scope_subject_map,
                     context,
                 );
-                roots.candidates.into_iter().any(|candidate| {
-                    context.nest_for_scope(Some(candidate.root), |context| matches(context))
-                })
+                roots
+                    .candidates
+                    .into_iter()
+                    .any(|candidate| candidate.with_scope(context, |context| matches(context)))
             })
         })
     }

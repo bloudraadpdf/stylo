@@ -21,10 +21,10 @@ use cssparser::{Parser, SourceLocation, ToCss};
 use malloc_size_of::{
     MallocSizeOfOps, MallocUnconditionalShallowSizeOf, MallocUnconditionalSizeOf,
 };
-use selectors::OpaqueElement;
 use selectors::context::{MatchingContext, QuirksMode, VisitedHandlingMode};
 use selectors::matching::matches_selector;
 use selectors::parser::{Component, ParseRelative, Selector, SelectorList};
+use selectors::OpaqueElement;
 use servo_arc::Arc;
 use std::fmt::{self, Write};
 use style_traits::{CssStringWriter, CssWriter, ParseError};
@@ -230,7 +230,11 @@ impl ImplicitScopeRoot {
                         return ImplicitScopeTarget::Element(host);
                     }
                 }
-                ImplicitScopeTarget::DocumentElement
+                if matches!(self, Self::Constructed) {
+                    ImplicitScopeTarget::Document
+                } else {
+                    ImplicitScopeTarget::DocumentElement
+                }
             },
         }
     }
@@ -238,6 +242,8 @@ impl ImplicitScopeRoot {
 
 /// Target of this implicit scope.
 pub enum ImplicitScopeTarget {
+    /// Virtual document root, represented by its document element for traversal.
+    Document,
     /// Target matches only the specified element.
     Element(OpaqueElement),
     /// Implicit scope whose target is the document element.
@@ -249,7 +255,7 @@ impl ImplicitScopeTarget {
     fn check<E: TElement>(&self, element: E) -> bool {
         match self {
             Self::Element(e) => element.opaque() == *e,
-            Self::DocumentElement => element.is_root(),
+            Self::Document | Self::DocumentElement => element.is_root(),
         }
     }
 }
@@ -267,22 +273,25 @@ impl<'a> ScopeTarget<'a> {
     fn check<E: TElement>(
         &self,
         element: E,
-        scope: Option<OpaqueElement>,
+        scope: Option<ScopeRootCandidate>,
         scope_subject_map: &ScopeSubjectMap,
         context: &mut MatchingContext<E::Impl>,
     ) -> bool {
         match self {
-            Self::Selector(list) => context.nest_for_scope_condition(scope, |context| {
-                if scope_subject_map.early_reject(element, context.quirks_mode()) {
-                    return false;
-                }
-                for selector in list.slice().iter() {
-                    if matches_selector(selector, 0, None, &element, context) {
-                        return true;
+            Self::Selector(list) => {
+                context.nest_for_scope_condition(scope.map(|root| root.root), |context| {
+                    context.scope_is_document = scope.is_some_and(|root| root.is_document);
+                    if scope_subject_map.early_reject(element, context.quirks_mode()) {
+                        return false;
                     }
-                }
-                false
-            }),
+                    for selector in list.slice().iter() {
+                        if matches_selector(selector, 0, None, &element, context) {
+                            return true;
+                        }
+                    }
+                    false
+                })
+            },
             Self::Implicit(t) => t.check(element),
         }
     }
@@ -293,11 +302,24 @@ impl<'a> ScopeTarget<'a> {
 pub struct ScopeRootCandidate {
     /// This candidate's scope root.
     pub root: OpaqueElement,
+    /// The root denotes the document parent rather than its element.
+    pub is_document: bool,
     /// Ancestor hop from the element under consideration to this scope root.
     pub proximity: ScopeProximity,
 }
 
 impl ScopeRootCandidate {
+    /// Matches with this candidate's element or virtual document scope.
+    pub fn with_scope<F, R>(&self, context: &mut MatchingContext<SelectorImpl>, f: F) -> R
+    where
+        F: FnOnce(&mut MatchingContext<SelectorImpl>) -> R,
+    {
+        context.nest_for_scope(Some(self.root), |context| {
+            context.scope_is_document = self.is_document;
+            f(context)
+        })
+    }
+
     /// Get the element corresponding to this scope root candidate.
     pub fn get_scope_root_element<E>(&self, originating_element: E) -> Option<E>
     where
@@ -306,6 +328,9 @@ impl ScopeRootCandidate {
         // Could just unsafe-convert from opaque element - technically
         // faster as well, but it doesn't seem worth having to manually
         // assure safety every time.
+        if self.is_document {
+            return None;
+        }
         let mut e = originating_element;
         let hops = self.proximity.get()?;
         for _ in 0..hops {
@@ -320,7 +345,7 @@ impl ScopeRootCandidate {
 /// The check may not pass the ceiling, if specified.
 pub fn collect_scope_roots<E>(
     element: E,
-    ceiling: Option<OpaqueElement>,
+    ceiling: Option<ScopeRootCandidate>,
     context: &mut MatchingContext<E::Impl>,
     target: &ScopeTarget,
     matches_shadow_host: bool,
@@ -337,14 +362,17 @@ where
         if context.with_visited_handling_mode(visited_handling, |context| {
             target.check(p, ceiling, scope_subject_map, context)
         }) {
+            let is_document =
+                matches!(target, ScopeTarget::Implicit(ImplicitScopeTarget::Document));
             result.push(ScopeRootCandidate {
                 root: p.opaque(),
-                proximity: ScopeProximity::new(proximity),
+                is_document,
+                proximity: ScopeProximity::new(proximity + usize::from(is_document)),
             });
             // Note that we can't really break here - we need to consider
             // ALL scope roots to figure out whch one didn't end.
         }
-        if ceiling == Some(p.opaque()) {
+        if ceiling.is_some_and(|root| root.root == p.opaque()) {
             break;
         }
         // Scope traversal, like selector matching, can visit only the nearest link as :visited.
@@ -367,7 +395,7 @@ where
 pub fn element_is_outside_of_scope<E>(
     selector: &Selector<E::Impl>,
     element: E,
-    root: OpaqueElement,
+    root: ScopeRootCandidate,
     context: &mut MatchingContext<E::Impl>,
     root_may_be_shadow_host: bool,
 ) -> bool
@@ -375,7 +403,8 @@ where
     E: TElement,
 {
     let mut parent = Some(element);
-    context.nest_for_scope_condition(Some(root), |context| {
+    context.nest_for_scope_condition(Some(root.root), |context| {
+        context.scope_is_document = root.is_document;
         let mut visited_handling = context.visited_handling();
         while let Some(p) = parent {
             if context.with_visited_handling_mode(visited_handling, |context| {
@@ -383,7 +412,7 @@ where
             }) {
                 return true;
             }
-            if p.opaque() == root {
+            if p.opaque() == root.root {
                 // Reached the top, not lying outside of scope.
                 break;
             }
@@ -394,7 +423,7 @@ where
             if parent.is_none() && root_may_be_shadow_host {
                 if let Some(host) = p.containing_shadow_host() {
                     // Pretty much an edge case where user specified scope-start and -end of :host
-                    return host.opaque() == root;
+                    return host.opaque() == root.root;
                 }
             }
         }
@@ -527,6 +556,9 @@ pub fn scope_selector_list_is_trivial(list: &SelectorList<SelectorImpl>) -> bool
             while let Some(c) = iter.next() {
                 match c {
                     Component::ID(_)
+                    | Component::AttributeInNoNamespaceExists { .. }
+                    | Component::AttributeInNoNamespace { .. }
+                    | Component::AttributeOther(_)
                     | Component::Nth(_)
                     | Component::NthOf(_)
                     | Component::Has(_) => return false,

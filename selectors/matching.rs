@@ -865,6 +865,25 @@ where
     }
 }
 
+fn matches_virtual_document_scope<Impl: SelectorImpl>(mut iter: SelectorIter<Impl>) -> bool {
+    if compound_matches_featureless_host(&mut iter.clone(), true) == MatchesFeaturelessHost::Never {
+        return false;
+    }
+    let matches = iter.by_ref().all(|component| match component {
+        Component::Scope | Component::ImplicitScope | Component::ParentSelector => true,
+        Component::Is(list) | Component::Where(list) => list
+            .slice()
+            .iter()
+            .any(|selector| matches_virtual_document_scope(selector.iter())),
+        Component::Negation(list) => !list
+            .slice()
+            .iter()
+            .any(|selector| matches_virtual_document_scope(selector.iter())),
+        _ => false,
+    });
+    matches && iter.next_sequence().is_none()
+}
+
 fn matches_complex_selector_internal<E>(
     mut selector_iter: SelectorIter<E::Impl>,
     element: &E,
@@ -942,7 +961,20 @@ where
             featureless,
         } = next_element_for_combinator(&element, combinator, &context);
         element = match next_element {
-            None => return candidate_not_found,
+            None => {
+                if context.scope_is_document
+                    && element.is_root()
+                    && matches!(combinator, Combinator::Child | Combinator::Descendant)
+                    && matches_virtual_document_scope(selector_iter.clone())
+                {
+                    return if matches_compound_selector == KleeneValue::Unknown {
+                        SelectorMatchingResult::Unknown
+                    } else {
+                        SelectorMatchingResult::Matched
+                    };
+                }
+                return candidate_not_found;
+            },
             Some(e) => e,
         };
 
@@ -1374,10 +1406,12 @@ where
                 KleeneValue::False
             });
         },
+        Component::ParentSelector if context.shared.scope_is_document => false,
         Component::ParentSelector => match context.shared.scope_element {
             Some(ref scope_element) => element.opaque() == *scope_element,
             None => element.is_root(),
         },
+        Component::Scope | Component::ImplicitScope if context.shared.scope_is_document => false,
         Component::Scope | Component::ImplicitScope => {
             if let Some(may_return_unknown) = context.shared.matching_for_invalidation_comparison()
             {

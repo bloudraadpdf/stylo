@@ -164,6 +164,9 @@ where
     /// See https://drafts.csswg.org/selectors-4/#scope-pseudo
     pub scope_element: Option<OpaqueElement>,
 
+    /// The scope is the virtual document parent of `scope_element`.
+    pub scope_is_document: bool,
+
     /// The current shadow host we're collecting :host rules for.
     pub current_host: Option<OpaqueElement>,
 
@@ -263,6 +266,7 @@ where
             needs_selector_flags,
             matching_for_invalidation,
             scope_element: None,
+            scope_is_document: false,
             current_host: None,
             featureless: false,
             nesting_level: 0,
@@ -474,9 +478,12 @@ where
         F: FnOnce(&mut Self) -> R,
     {
         let original_scope_element = self.scope_element;
+        let original_scope_is_document = self.scope_is_document;
         self.scope_element = scope;
+        self.scope_is_document = false;
         let result = f(self);
         self.scope_element = original_scope_element;
+        self.scope_is_document = original_scope_is_document;
         result
     }
 
