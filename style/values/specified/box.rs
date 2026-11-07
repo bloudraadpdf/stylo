@@ -2847,6 +2847,10 @@ pub enum Appearance {
     /// This value doesn't make sense for -moz-default-appearance, but we don't bother to guard
     /// against parsing it.
     Auto,
+    /// The CSS basic appearance for form controls.
+    Base,
+    /// The CSS basic appearance for select controls and their picker.
+    BaseSelect,
     /// A searchfield.
     Searchfield,
     /// A multi-line text field, e.g. HTML <textarea>.
