@@ -1707,6 +1707,38 @@ mod tests {
     }
 
     #[test]
+    fn page_transform_restrictions_are_preserved_by_cssom_mutations() {
+        use super::CssomDeclarationContext::{Keyframe, Margin, Page, Style};
+        for context in [Page, Margin, Style, Keyframe] {
+            let allowed = context != Page;
+            let mut block = super::parse_cssom_declaration_block("margin-top:10px", context);
+            for (name, value) in [
+                ("transform", "scale(1)"),
+                ("transform-origin", "left top"),
+                ("transform-box", "border-box"),
+            ] {
+                assert_eq!(
+                    super::cssom_declaration_set_property(
+                        &mut block,
+                        name,
+                        value,
+                        super::CssomDeclarationPriority::Normal,
+                        context,
+                    ),
+                    allowed,
+                    "{context:?}: {name}"
+                );
+            }
+            assert_eq!(block.as_typed().len(), if allowed { 4 } else { 1 });
+            let replaced = super::parse_cssom_declaration_block(
+                "margin-bottom:10px;transform:scale(1);transform-origin:left top;transform-box:border-box",
+                context,
+            );
+            assert_eq!(replaced.as_typed().len(), if allowed { 4 } else { 1 });
+        }
+    }
+
+    #[test]
     fn page_background_image_resolutions_remain_typed() {
         for property in ["image-resolution", "-bd-image-resolution"] {
             let block = super::parse_cssom_declaration_block(
