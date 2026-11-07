@@ -436,3 +436,34 @@ impl Parse for BorderImageRepeat {
         ))
     }
 }
+
+/// Alternating visible and hidden border segments.
+pub type BorderClipSegments = crate::values::generics::border::GenericBorderClip<
+    crate::values::specified::NonNegativeLengthPercentage,
+>;
+
+impl Parse for BorderClipSegments {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        use crate::values::generics::border::GenericBorderClipPart;
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
+            return Ok(Self::none());
+        }
+        let mut parts = Vec::new();
+        loop {
+            if let Ok(flex) = input.try_parse(crate::values::specified::grid::parse_flex) {
+                parts.push(GenericBorderClipPart::Fr(flex));
+            } else {
+                parts.push(GenericBorderClipPart::LengthPercentage(
+                    crate::values::specified::NonNegativeLengthPercentage::parse(context, input)?,
+                ));
+            }
+            if input.is_exhausted() {
+                break;
+            }
+        }
+        Ok(Self(parts.into()))
+    }
+}

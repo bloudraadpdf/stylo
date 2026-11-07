@@ -238,3 +238,8 @@ mod tests {
         assert_eq!(line_width_app_units(0.0), Au(0));
     }
 }
+
+/// Alternating visible and hidden border segments.
+pub type BorderClipSegments = crate::values::generics::border::GenericBorderClip<
+    crate::values::computed::NonNegativeLengthPercentage,
+>;

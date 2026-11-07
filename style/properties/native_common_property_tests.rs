@@ -29,15 +29,25 @@ fn serialized_value(block: &super::PropertyDeclarationBlock, name: &str) -> Stri
 
 #[test]
 fn text_autospace_size_accepts_signed_numbers_and_cascades_independently() {
-    for (input, expected) in [("0", "0"), ("0.5", "0.5"), ("-0.25", "-0.25"), ("calc(1 / 7)", "calc(0.142857)")] {
+    for (input, expected) in [
+        ("0", "0"),
+        ("0.5", "0.5"),
+        ("-0.25", "-0.25"),
+        ("calc(1 / 7)", "calc(0.142857)"),
+    ] {
         assert_serialization("text-autospace-size", input, Some(expected));
     }
     for input in ["1px", "25%", "normal"] {
         assert_serialization("text-autospace-size", input, None);
     }
     let declarations = block("text-autospace-size:0.5;text-spacing:none");
-    assert_eq!(serialized_value(&declarations, "text-autospace-size"), "0.5");
-    assert!(!ShorthandId::TextSpacing.longhands().any(|id| id == super::LonghandId::TextAutospaceSize));
+    assert_eq!(
+        serialized_value(&declarations, "text-autospace-size"),
+        "0.5"
+    );
+    assert!(!ShorthandId::TextSpacing
+        .longhands()
+        .any(|id| id == super::LonghandId::TextAutospaceSize));
 }
 
 fn assert_serialization(name: &str, input: &str, expected: Option<&str>) {
@@ -55,8 +65,14 @@ fn text_stroke_preserves_fractional_widths_and_expands_the_shorthand() {
     assert_serialization("-webkit-text-stroke-width", "0.1px", Some("0.1px"));
     assert_serialization("-webkit-text-stroke-width", "-1px", None);
     let declaration = block("-webkit-text-stroke:0.5px lime");
-    assert_eq!(serialized_value(&declaration, "-webkit-text-stroke-width"), "0.5px");
-    assert_eq!(serialized_value(&declaration, "-webkit-text-stroke-color"), "lime");
+    assert_eq!(
+        serialized_value(&declaration, "-webkit-text-stroke-width"),
+        "0.5px"
+    );
+    assert_eq!(
+        serialized_value(&declaration, "-webkit-text-stroke-color"),
+        "lime"
+    );
 }
 
 #[test]
@@ -499,69 +515,90 @@ fn native_common_properties_validate_and_serialize_their_grammars() {
 }
 
 #[test]
-fn corner_shorthands_preserve_complete_radius_shape_pairs() {
+fn corner_shorthands_parse_independent_shape_and_radius_components() {
     for (name, input, expected) in [
-        ("corner", "normal", Some("normal")),
-        ("corner", "round 30%", Some("30% round")),
-        ("corner", "0px notch", Some("0px notch")),
+        ("corner", "normal", None),
+        ("corner", "round 30%", Some("30%")),
+        ("corner", "0px notch", Some("notch")),
+        ("corner", "0% bevel", Some("bevel 0%")),
         (
             "corner",
-            "10px 20px bevel / 30px 40px scoop",
-            Some("10px 20px bevel / 30px 40px scoop"),
+            "10px 20px / 30px 40px bevel scoop",
+            Some("bevel scoop 10px 20px / 30px 40px"),
         ),
-        (
-            "corner-top-left",
-            "10px 20px round",
-            Some("10px 20px round"),
-        ),
-        ("corner-top-left", "squircle 5px", Some("5px squircle")),
-        ("corner-start-start", "normal", Some("normal")),
+        ("corner-top-left", "10px 20px round", Some("10px 20px")),
+        ("corner-top-left", "squircle 5px", Some("squircle 5px")),
+        ("corner-start-start", "round", Some("0px")),
         (
             "corner-top",
-            "bevel 10px 20px / scoop 30px 40px",
-            Some("10px 20px bevel / 30px 40px scoop"),
+            "bevel scoop 10px 20px / 30px 40px",
+            Some("bevel scoop 10px 20px / 30px 40px"),
         ),
-        ("corner-block-start", "20% round", Some("20% round")),
+        ("corner-block-start", "20% round", Some("20%")),
         (
             "corner-inline-end",
-            "5px squircle / 8px notch",
-            Some("5px squircle / 8px notch"),
+            "5px / 8px squircle notch",
+            Some("squircle notch 5px / 8px"),
         ),
-        ("corner", "0px superellipse(1)", Some("normal")),
+        ("corner", "0px superellipse(1)", Some("0px")),
+        ("corner", "30%", Some("30%")),
+        ("corner", "bevel", Some("bevel")),
+        ("corner", "round", Some("0px")),
         (
             "corner",
-            "normal / 2px round / normal / 2px round",
-            Some("normal / 2px round"),
+            "bevel scoop 1px 2px 3px",
+            Some("bevel scoop 1px 2px 3px"),
         ),
-        ("corner-top-left", "normal", Some("normal")),
-        ("corner-top", "normal", Some("normal")),
-        ("corner-block-start", "normal", Some("normal")),
-        ("corner", "30%", None),
-        ("corner", "bevel", None),
-        ("corner-top-left", "10px", None),
-        ("corner-top-left", "scoop", None),
-        ("corner-top", "10px 20px / 30px 40px bevel scoop", None),
+        ("corner-top-left", "10px", Some("10px")),
+        ("corner-top-left", "scoop", Some("scoop")),
         ("corner-top", "normal / normal / normal", None),
         ("corner", "normal / normal / normal / normal / normal", None),
         ("corner", "3% normal", None),
         ("corner-top-left", "10px / 20px bevel", None),
         ("corner-top", "10px 20px 30px", None),
+        ("corner", "10px round / 20px bevel", None),
+        ("corner", "bevel 10px scoop", None),
+        ("corner", "10px bevel 20px", None),
+        ("corner", "10px / bevel", None),
+        ("corner", "-1px bevel", None),
     ] {
         assert_serialization(name, input, expected);
     }
 
-    let block = block("corner-bottom: 10px 20px bevel / 30px 40px scoop");
-    for (name, expected) in [
-        ("border-bottom-left-radius", "10px 20px"),
-        ("border-bottom-right-radius", "30px 40px"),
-        ("corner-bottom-left-shape", "bevel"),
-        ("corner-bottom-right-shape", "scoop"),
+    for (side, first, second) in [
+        ("top", "top-left", "top-right"),
+        ("right", "top-right", "bottom-right"),
+        ("bottom", "bottom-left", "bottom-right"),
+        ("left", "top-left", "bottom-left"),
+        ("block-start", "start-start", "start-end"),
+        ("block-end", "end-start", "end-end"),
+        ("inline-start", "start-start", "end-start"),
+        ("inline-end", "start-end", "end-end"),
     ] {
-        let id = PropertyId::parse_enabled_for_all_content(name).unwrap();
-        let mut serialized = String::new();
-        block.property_value_to_css(&id, &mut serialized).unwrap();
-        assert_eq!(serialized, expected, "{name}");
+        let declarations = block(&format!("corner-{side}: bevel scoop 10px 30px / 20px 40px"));
+        for (name, expected) in [
+            (format!("border-{first}-radius"), "10px 20px"),
+            (format!("border-{second}-radius"), "30px 40px"),
+            (format!("corner-{first}-shape"), "bevel"),
+            (format!("corner-{second}-shape"), "scoop"),
+        ] {
+            assert_eq!(
+                serialized_value(&declarations, &name),
+                expected,
+                "{side}: {name}"
+            );
+        }
     }
+    let declarations = block("corner-shape: bevel; corner: 10px");
+    assert_eq!(
+        serialized_value(&declarations, "corner-top-left-shape"),
+        "round"
+    );
+    let declarations = block("border-radius: 10px; corner: scoop");
+    assert_eq!(
+        serialized_value(&declarations, "border-top-left-radius"),
+        "0px"
+    );
 }
 
 #[test]
@@ -874,4 +911,88 @@ fn scroll_padding_edges_participate_in_zoom_inheritance() {
     ] {
         assert!(properties.contains(property), "{property:?}");
     }
+}
+
+#[test]
+fn border_clip_uses_current_grammar_and_copies_the_list_to_each_side() {
+    for value in ["none", "10px 20% 1fr", "0px"] {
+        assert_serialization("border-clip", value, Some(value));
+        let declaration = block(&format!("border-clip:{value}"));
+        for side in ["top", "right", "bottom", "left"] {
+            assert_eq!(
+                serialized_value(&declaration, &format!("border-{side}-clip")),
+                value
+            );
+        }
+    }
+    for value in ["normal", "-1px", "-1fr", "none 2px", "1px, 2px"] {
+        assert_serialization("border-clip", value, None);
+    }
+}
+
+#[test]
+fn box_shadow_longhands_expand_and_reset_independently() {
+    assert_serialization(
+        "box-shadow-offset",
+        "10px 10px, none, 2px 3px",
+        Some("10px, none, 2px 3px"),
+    );
+    assert_serialization("box-shadow-blur", "-1px", None);
+    assert_serialization("box-shadow-spread", "-1px, 2px", Some("-1px, 2px"));
+    let declarations =
+        block("box-shadow: red 1px 2px 3px 4px inset; box-shadow-color: blue; box-shadow: none");
+    for (name, value) in [
+        ("offset", "none"),
+        ("blur", "0px"),
+        ("spread", "0px"),
+        ("position", "outset"),
+        ("color", "transparent"),
+    ] {
+        assert_eq!(
+            serialized_value(&declarations, &format!("box-shadow-{name}")),
+            value
+        );
+    }
+}
+
+#[test]
+fn absent_shadow_offset_interpolates_as_two_zero_offsets() {
+    use crate::values::{
+        animated::{Animate, Procedure},
+        computed::{BoxShadowOffset, Length},
+    };
+    let offset = BoxShadowOffset::Offset(Length::new(10.0), Length::new(20.0));
+    assert_eq!(
+        BoxShadowOffset::None
+            .animate(&offset, Procedure::Interpolate { progress: 0.5 })
+            .unwrap(),
+        BoxShadowOffset::Offset(Length::new(5.0), Length::new(10.0))
+    );
+    assert_eq!(
+        offset
+            .animate(
+                &BoxShadowOffset::None,
+                Procedure::Interpolate { progress: 0.5 }
+            )
+            .unwrap(),
+        BoxShadowOffset::Offset(Length::new(5.0), Length::new(10.0))
+    );
+}
+
+#[test]
+fn box_shadow_shorthand_omits_only_default_components() {
+    assert_serialization("box-shadow", "1px 2px", Some("1px 2px"));
+    assert_serialization(
+        "box-shadow",
+        "currentcolor 1px 2px 0px 0px outset",
+        Some("1px 2px"),
+    );
+    assert_serialization(
+        "box-shadow",
+        "1px 2px 0px 3px inset",
+        Some("1px 2px 0px 3px inset"),
+    );
+    assert_serialization("box-shadow", "none", Some("none"));
+    assert_serialization("box-shadow", "currentcolor none", Some("currentcolor none"));
+    assert_serialization("box-shadow", "1px", None);
 }

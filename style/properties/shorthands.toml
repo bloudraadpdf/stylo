@@ -943,3 +943,24 @@ rule_types_allowed = ["style", "keyframe", "page", "scope"]
 sub_properties = ["border-start-end-radius", "border-end-end-radius"]
 spec = "https://drafts.csswg.org/css-borders-4/#border-radius-side-shorthands"
 rule_types_allowed = ["style", "keyframe", "page", "scope"]
+
+[box-shadow]
+engine = "servo"
+sub_properties = ["box-shadow-color", "box-shadow-offset", "box-shadow-blur", "box-shadow-spread", "box-shadow-position"]
+extra_prefixes = ["webkit"]
+spec = "https://drafts.csswg.org/css-borders-4/#propdef-box-shadow"
+
+[border-clip]
+engine = "servo"
+sub_properties = ["border-top-clip", "border-right-clip", "border-bottom-clip", "border-left-clip"]
+spec = "https://drafts.csswg.org/css-borders-4/#propdef-border-clip"
+
+[border-block-clip]
+engine = "servo"
+sub_properties = ["border-block-start-clip", "border-block-end-clip"]
+spec = "https://drafts.csswg.org/css-borders-4/#propdef-border-clip"
+
+[border-inline-clip]
+engine = "servo"
+sub_properties = ["border-inline-start-clip", "border-inline-end-clip"]
+spec = "https://drafts.csswg.org/css-borders-4/#propdef-border-clip"

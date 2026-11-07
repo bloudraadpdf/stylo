@@ -4,6 +4,7 @@
 
 //! Generic types for CSS values related to effects.
 use crate::derives::*;
+use std::fmt::Write;
 
 use crate::values::generics::{NonNegative, ZeroToOne};
 
@@ -138,3 +139,85 @@ pub struct GenericSimpleShadow<Color, SizeLength, ShapeLength> {
 }
 
 pub use self::GenericSimpleShadow as SimpleShadow;
+
+/// One shadow offset; `none` suppresses its layer.
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToAnimatedValue,
+    ToAnimatedZero,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+)]
+#[repr(C, u8)]
+pub enum GenericBoxShadowOffset<L> {
+    /// A suppressed shadow.
+    None,
+    /// Horizontal and vertical offsets.
+    Offset(L, L),
+}
+
+impl<L: style_traits::ToCss + PartialEq> style_traits::ToCss for GenericBoxShadowOffset<L> {
+    fn to_css<W: std::fmt::Write>(
+        &self,
+        dest: &mut style_traits::CssWriter<W>,
+    ) -> std::fmt::Result {
+        match self {
+            Self::None => dest.write_str("none"),
+            Self::Offset(x, y) => {
+                x.to_css(dest)?;
+                if x != y {
+                    dest.write_char(' ')?;
+                    y.to_css(dest)?;
+                }
+                Ok(())
+            },
+        }
+    }
+}
+
+impl<L: Clone + crate::Zero> GenericBoxShadowOffset<L> {
+    fn components(&self) -> (L, L) {
+        match self {
+            Self::None => (L::zero(), L::zero()),
+            Self::Offset(x, y) => (x.clone(), y.clone()),
+        }
+    }
+}
+
+impl<L: Clone + crate::Zero + crate::values::animated::Animate> crate::values::animated::Animate
+    for GenericBoxShadowOffset<L>
+{
+    fn animate(
+        &self,
+        other: &Self,
+        procedure: crate::values::animated::Procedure,
+    ) -> Result<Self, ()> {
+        if matches!((self, other), (Self::None, Self::None)) {
+            return Ok(Self::None);
+        }
+        let (x, y) = self.components();
+        let (other_x, other_y) = other.components();
+        Ok(Self::Offset(
+            x.animate(&other_x, procedure)?,
+            y.animate(&other_y, procedure)?,
+        ))
+    }
+}
+
+impl<L: Clone + crate::Zero + crate::values::distance::ComputeSquaredDistance>
+    crate::values::distance::ComputeSquaredDistance for GenericBoxShadowOffset<L>
+{
+    fn compute_squared_distance(
+        &self,
+        other: &Self,
+    ) -> Result<crate::values::distance::SquaredDistance, ()> {
+        let (x, y) = self.components();
+        let (other_x, other_y) = other.components();
+        Ok(x.compute_squared_distance(&other_x)? + y.compute_squared_distance(&other_y)?)
+    }
+}

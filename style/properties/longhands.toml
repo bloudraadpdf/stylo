@@ -573,6 +573,7 @@ logical_group = "inset"
 affects = "layout"
 
 [box-shadow]
+engine = "gecko"
 type = "BoxShadow"
 struct = "effects"
 vector = { simple_bindings = true, animation_type = "with_zero" }
@@ -8737,3 +8738,133 @@ spec = "https://drafts.csswg.org/css-text-4/#propdef-white-space-trim"
 animation_type = "discrete"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
+
+[box-shadow-color]
+type = "Color"
+initial = "computed::Color::currentcolor()"
+struct = "effects"
+ignored_when_colors_disabled = true
+engine = "servo"
+vector = { simple_bindings = true, animation_type = "by_computed_value" }
+spec = "https://drafts.csswg.org/css-borders-4/#propdef-box-shadow-color"
+affects = "overflow"
+
+[box-shadow-offset]
+type = "BoxShadowOffset"
+initial = "computed::BoxShadowOffset::None"
+struct = "effects"
+ignored_when_colors_disabled = true
+engine = "servo"
+vector = { simple_bindings = true, animation_type = "by_computed_value" }
+spec = "https://drafts.csswg.org/css-borders-4/#propdef-box-shadow-offset"
+affects = "overflow"
+
+[box-shadow-blur]
+type = "NonNegativeLength"
+initial = "computed::NonNegativeLength::zero()"
+struct = "effects"
+ignored_when_colors_disabled = true
+engine = "servo"
+vector = { simple_bindings = true, animation_type = "by_computed_value" }
+spec = "https://drafts.csswg.org/css-borders-4/#propdef-box-shadow-blur"
+affects = "overflow"
+
+[box-shadow-spread]
+type = "Length"
+initial = "computed::Length::zero()"
+struct = "effects"
+ignored_when_colors_disabled = true
+engine = "servo"
+vector = { simple_bindings = true, animation_type = "by_computed_value" }
+spec = "https://drafts.csswg.org/css-borders-4/#propdef-box-shadow-spread"
+affects = "overflow"
+
+[box-shadow-position]
+type = "BoxShadowPosition"
+initial = "computed::BoxShadowPosition::Outset"
+struct = "effects"
+ignored_when_colors_disabled = true
+engine = "servo"
+vector = { simple_bindings = true, animation_type = "by_computed_value" }
+spec = "https://drafts.csswg.org/css-borders-4/#propdef-box-shadow-position"
+affects = "overflow"
+
+[border-top-clip]
+type = "BorderClipSegments"
+initial = "computed::BorderClipSegments::none()"
+struct = "border"
+engine = "servo"
+logical_group = "border-clip"
+
+spec = "https://drafts.csswg.org/css-borders-4/#propdef-border-top-clip"
+affects = "paint"
+
+[border-right-clip]
+type = "BorderClipSegments"
+initial = "computed::BorderClipSegments::none()"
+struct = "border"
+engine = "servo"
+logical_group = "border-clip"
+
+spec = "https://drafts.csswg.org/css-borders-4/#propdef-border-top-clip"
+affects = "paint"
+
+[border-bottom-clip]
+type = "BorderClipSegments"
+initial = "computed::BorderClipSegments::none()"
+struct = "border"
+engine = "servo"
+logical_group = "border-clip"
+
+spec = "https://drafts.csswg.org/css-borders-4/#propdef-border-top-clip"
+affects = "paint"
+
+[border-left-clip]
+type = "BorderClipSegments"
+initial = "computed::BorderClipSegments::none()"
+struct = "border"
+engine = "servo"
+logical_group = "border-clip"
+
+spec = "https://drafts.csswg.org/css-borders-4/#propdef-border-top-clip"
+affects = "paint"
+
+[border-block-start-clip]
+type = "BorderClipSegments"
+initial = "computed::BorderClipSegments::none()"
+struct = "border"
+engine = "servo"
+logical_group = "border-clip"
+logical = true
+spec = "https://drafts.csswg.org/css-borders-4/#propdef-border-top-clip"
+affects = "paint"
+
+[border-block-end-clip]
+type = "BorderClipSegments"
+initial = "computed::BorderClipSegments::none()"
+struct = "border"
+engine = "servo"
+logical_group = "border-clip"
+logical = true
+spec = "https://drafts.csswg.org/css-borders-4/#propdef-border-top-clip"
+affects = "paint"
+
+[border-inline-start-clip]
+type = "BorderClipSegments"
+initial = "computed::BorderClipSegments::none()"
+struct = "border"
+engine = "servo"
+logical_group = "border-clip"
+logical = true
+spec = "https://drafts.csswg.org/css-borders-4/#propdef-border-top-clip"
+affects = "paint"
+
+[border-inline-end-clip]
+type = "BorderClipSegments"
+initial = "computed::BorderClipSegments::none()"
+struct = "border"
+engine = "servo"
+logical_group = "border-clip"
+logical = true
+spec = "https://drafts.csswg.org/css-borders-4/#propdef-border-top-clip"
+affects = "paint"

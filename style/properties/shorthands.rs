@@ -406,88 +406,122 @@ corner_shape_side_shorthand!(
 );
 
 pub mod corner {
-    pub use crate::properties::shorthands_generated::corner::*;
-
     use super::*;
+    pub use crate::properties::shorthands_generated::corner::*;
     use crate::values::generics::{rect::Rect, size::Size2D};
-    use crate::values::specified::border::BorderCornerRadius;
     use crate::values::specified::corner_shape::CornerShape;
-    use crate::Zero;
+    use crate::values::specified::{BorderCornerRadius, BorderRadius, NonNegativeLengthPercentage};
+    use crate::{Zero, ZeroNoPercent};
 
-    #[derive(Clone)]
     pub(super) struct SpecifiedCorner {
         pub radius: BorderCornerRadius,
         pub shape: CornerShape,
     }
 
-    impl Parse for SpecifiedCorner {
-        fn parse<'i, 't>(
-            context: &ParserContext,
-            input: &mut Parser<'i, 't>,
-        ) -> Result<Self, ParseError<'i>> {
-            if input
-                .try_parse(|input| input.expect_ident_matching("normal"))
-                .is_ok()
-            {
-                return Ok(Self {
-                    radius: BorderCornerRadius::zero(),
-                    shape: CornerShape::Round,
-                });
-            }
-            let radius = input
-                .try_parse(|input| BorderCornerRadius::parse(context, input))
-                .ok();
-            let shape = CornerShape::parse(context, input)?;
-            let radius = match radius {
-                Some(radius) => radius,
-                None => BorderCornerRadius::parse(context, input)?,
-            };
-            Ok(Self { radius, shape })
-        }
-    }
-
-    impl SpecifiedCorner {
-        pub(super) fn parse_next_or_clone<'i, 't>(
-            &self,
-            context: &ParserContext,
-            input: &mut Parser<'i, 't>,
-        ) -> Result<Self, ParseError<'i>> {
-            if input.try_parse(|input| input.expect_delim('/')).is_ok() {
-                Self::parse(context, input)
-            } else {
-                Ok(self.clone())
+    fn parse_list<'i, 't, T: Parse + Clone, const N: usize>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<[T; N], ParseError<'i>> {
+        let mut values = vec![T::parse(context, input)?];
+        while values.len() < N {
+            match input.try_parse(|input| T::parse(context, input)) {
+                Ok(value) => values.push(value),
+                Err(_) => break,
             }
         }
+        Ok(std::array::from_fn(|index| {
+            values[match values.len() {
+                1 => 0,
+                2 => index % 2,
+                3 if index == 3 => 1,
+                _ => index,
+            }]
+            .clone()
+        }))
     }
 
-    #[derive(Clone, Copy)]
-    pub(super) struct CornerToSerialize<'a> {
-        pub radius: &'a BorderCornerRadius,
-        pub shape: &'a CornerShape,
-    }
-
-    impl CornerToSerialize<'_> {
-        fn is_normal(&self) -> bool {
-            self.radius.is_zero() && self.shape.is_round()
+    fn parse_radii<'i, 't, const N: usize>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<[BorderCornerRadius; N], ParseError<'i>> {
+        if N == 1 {
+            let radius = BorderCornerRadius::parse(context, input)?;
+            return Ok(std::array::from_fn(|_| radius.clone()));
         }
+        let widths = parse_list::<NonNegativeLengthPercentage, N>(context, input)?;
+        let heights = if input.try_parse(|input| input.expect_delim('/')).is_ok() {
+            parse_list::<NonNegativeLengthPercentage, N>(context, input)?
+        } else {
+            widths.clone()
+        };
+        Ok(std::array::from_fn(|index| {
+            BorderCornerRadius::new(widths[index].clone(), heights[index].clone())
+        }))
     }
 
-    impl PartialEq for CornerToSerialize<'_> {
-        fn eq(&self, other: &Self) -> bool {
-            (self.is_normal() && other.is_normal())
-                || (self.radius == other.radius && self.shape == other.shape)
+    pub(super) fn parse_corners<'i, 't, const N: usize>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<[SpecifiedCorner; N], ParseError<'i>> {
+        let radii = input
+            .try_parse(|input| parse_radii::<N>(context, input))
+            .ok();
+        let shapes = input
+            .try_parse(|input| parse_list::<CornerShape, N>(context, input))
+            .ok();
+        let radii = radii.or_else(|| {
+            input
+                .try_parse(|input| parse_radii::<N>(context, input))
+                .ok()
+        });
+        if radii.is_none() && shapes.is_none() {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
         }
+        Ok(std::array::from_fn(|index| SpecifiedCorner {
+            radius: radii
+                .as_ref()
+                .map_or_else(BorderCornerRadius::zero, |values| values[index].clone()),
+            shape: shapes
+                .as_ref()
+                .map_or(CornerShape::Round, |values| values[index].clone()),
+        }))
     }
 
-    impl ToCss for CornerToSerialize<'_> {
-        fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
-            if self.is_normal() {
-                return dest.write_str("normal");
+    pub(super) fn serialize_corners<W: Write, const N: usize>(
+        radii: [&BorderCornerRadius; N],
+        shapes: [&CornerShape; N],
+        dest: &mut CssWriter<W>,
+    ) -> fmt::Result {
+        let round = shapes.iter().all(|shape| shape.is_round());
+        if !round {
+            Rect(shapes[0], shapes[1 % N], shapes[2 % N], shapes[3 % N]).to_css(dest)?;
+        }
+        if round
+            || !radii.iter().all(|radius| {
+                radius.0.width().0.is_zero_no_percent() && radius.0.height().0.is_zero_no_percent()
+            })
+        {
+            if !round {
+                dest.write_char(' ')?;
             }
-            self.radius.to_css(dest)?;
-            dest.write_char(' ')?;
-            self.shape.to_css(dest)
+            if N == 1 {
+                return radii[0].to_css(dest);
+            }
+            let widths = Rect(
+                radii[0].0.width(),
+                radii[1 % N].0.width(),
+                radii[2 % N].0.width(),
+                radii[3 % N].0.width(),
+            );
+            let heights = Rect(
+                radii[0].0.height(),
+                radii[1 % N].0.height(),
+                radii[2 % N].0.height(),
+                radii[3 % N].0.height(),
+            );
+            BorderRadius::serialize_rects(widths, heights, dest)?;
         }
+        Ok(())
     }
 
     pub(super) fn parse_shape_pair<'i, 't>(
@@ -502,46 +536,32 @@ pub mod corner {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Longhands, ParseError<'i>> {
-        let top_left = SpecifiedCorner::parse(context, input)?;
-        let top_right = top_left.parse_next_or_clone(context, input)?;
-        let bottom_right = top_left.parse_next_or_clone(context, input)?;
-        let bottom_left = top_right.parse_next_or_clone(context, input)?;
+        let [tl, tr, br, bl] = parse_corners::<4>(context, input)?;
         Ok(expanded! {
-            border_top_left_radius: top_left.radius,
-            border_top_right_radius: top_right.radius,
-            border_bottom_right_radius: bottom_right.radius,
-            border_bottom_left_radius: bottom_left.radius,
-            corner_top_left_shape: top_left.shape,
-            corner_top_right_shape: top_right.shape,
-            corner_bottom_right_shape: bottom_right.shape,
-            corner_bottom_left_shape: bottom_left.shape,
+            border_top_left_radius: tl.radius, border_top_right_radius: tr.radius,
+            border_bottom_right_radius: br.radius, border_bottom_left_radius: bl.radius,
+            corner_top_left_shape: tl.shape, corner_top_right_shape: tr.shape,
+            corner_bottom_right_shape: br.shape, corner_bottom_left_shape: bl.shape,
         })
     }
 
-    impl<'a> ToCss for LonghandsToSerialize<'a> {
-        fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
-        where
-            W: fmt::Write,
-        {
-            Rect(
-                CornerToSerialize {
-                    radius: self.border_top_left_radius,
-                    shape: self.corner_top_left_shape,
-                },
-                CornerToSerialize {
-                    radius: self.border_top_right_radius,
-                    shape: self.corner_top_right_shape,
-                },
-                CornerToSerialize {
-                    radius: self.border_bottom_right_radius,
-                    shape: self.corner_bottom_right_shape,
-                },
-                CornerToSerialize {
-                    radius: self.border_bottom_left_radius,
-                    shape: self.corner_bottom_left_shape,
-                },
+    impl ToCss for LonghandsToSerialize<'_> {
+        fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+            serialize_corners(
+                [
+                    self.border_top_left_radius,
+                    self.border_top_right_radius,
+                    self.border_bottom_right_radius,
+                    self.border_bottom_left_radius,
+                ],
+                [
+                    self.corner_top_left_shape,
+                    self.corner_top_right_shape,
+                    self.corner_bottom_right_shape,
+                    self.corner_bottom_left_shape,
+                ],
+                dest,
             )
-            .to_css_with_separator(dest, " / ")
         }
     }
 }
@@ -556,17 +576,13 @@ macro_rules! single_corner_shorthand {
                 context: &ParserContext,
                 input: &mut Parser<'i, 't>,
             ) -> Result<Longhands, ParseError<'i>> {
-                let corner = corner::SpecifiedCorner::parse(context, input)?;
+                let [corner] = corner::parse_corners::<1>(context, input)?;
                 Ok(expanded! { $radius: corner.radius, $shape: corner.shape })
             }
 
             impl ToCss for LonghandsToSerialize<'_> {
                 fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
-                    corner::CornerToSerialize {
-                        radius: self.$radius,
-                        shape: self.$shape,
-                    }
-                    .to_css(dest)
+                    corner::serialize_corners([self.$radius], [self.$shape], dest)
                 }
             }
         }
@@ -578,22 +594,18 @@ macro_rules! side_corner_shorthand {
         pub mod $module {
             pub use crate::properties::shorthands_generated::$module::*;
             use super::*;
-            use crate::values::generics::rect::Rect;
 
             pub fn parse_value<'i, 't>(
                 context: &ParserContext,
                 input: &mut Parser<'i, 't>,
             ) -> Result<Longhands, ParseError<'i>> {
-                let first = corner::SpecifiedCorner::parse(context, input)?;
-                let second = first.parse_next_or_clone(context, input)?;
+                let [first, second] = corner::parse_corners::<2>(context, input)?;
                 Ok(expanded! { $first_radius: first.radius, $second_radius: second.radius, $first_shape: first.shape, $second_shape: second.shape })
             }
 
             impl ToCss for LonghandsToSerialize<'_> {
                 fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
-                    let first = corner::CornerToSerialize { radius: self.$first_radius, shape: self.$first_shape };
-                    let second = corner::CornerToSerialize { radius: self.$second_radius, shape: self.$second_shape };
-                    Rect(first, second, first, second).to_css_with_separator(dest, " / ")
+                    corner::serialize_corners([self.$first_radius, self.$second_radius], [self.$first_shape, self.$second_shape], dest)
                 }
             }
         }
@@ -2527,8 +2539,7 @@ pub mod list_style {
             let mut writer = SequenceWriter::new(dest, " ");
             let type_is_disc = *self.list_style_type == ListStyleType::disc()
                 || matches!(self.list_style_type, ListStyleType::Custom(name) if name.0.as_ref().eq_ignore_ascii_case("disc"));
-            let type_is_outside =
-                matches!(self.list_style_type, ListStyleType::Custom(name) if name.0.as_ref().eq_ignore_ascii_case("outside"));
+            let type_is_outside = matches!(self.list_style_type, ListStyleType::Custom(name) if name.0.as_ref().eq_ignore_ascii_case("outside"));
             if *self.list_style_position != ListStylePosition::Outside || type_is_outside {
                 writer.item(self.list_style_position)?;
             }
@@ -6593,6 +6604,262 @@ mod line_clamp_tests {
             "3 inherit",
         ] {
             assert!(try_parse(css).is_err(), "{css:?} must be invalid");
+        }
+    }
+}
+
+#[cfg(feature = "servo")]
+pub mod border_clip {
+    use super::*;
+    pub use crate::properties::shorthands_generated::border_clip::*;
+    pub fn parse_value<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Longhands, ParseError<'i>> {
+        let value = specified::BorderClipSegments::parse(context, input)?;
+        Ok(Longhands {
+            border_top_clip: value.clone(),
+            border_right_clip: value.clone(),
+            border_bottom_clip: value.clone(),
+            border_left_clip: value.clone(),
+        })
+    }
+    impl ToCss for LonghandsToSerialize<'_> {
+        fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+            if self.border_right_clip != self.border_top_clip
+                || self.border_bottom_clip != self.border_top_clip
+                || self.border_left_clip != self.border_top_clip
+            {
+                return Ok(());
+            }
+            self.border_top_clip.to_css(dest)
+        }
+    }
+}
+
+#[cfg(feature = "servo")]
+pub mod border_block_clip {
+    use super::*;
+    pub use crate::properties::shorthands_generated::border_block_clip::*;
+    pub fn parse_value<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Longhands, ParseError<'i>> {
+        let value = specified::BorderClipSegments::parse(context, input)?;
+        Ok(Longhands {
+            border_block_start_clip: value.clone(),
+            border_block_end_clip: value.clone(),
+        })
+    }
+    impl ToCss for LonghandsToSerialize<'_> {
+        fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+            if self.border_block_end_clip != self.border_block_start_clip {
+                return Ok(());
+            }
+            self.border_block_start_clip.to_css(dest)
+        }
+    }
+}
+
+#[cfg(feature = "servo")]
+pub mod border_inline_clip {
+    use super::*;
+    pub use crate::properties::shorthands_generated::border_inline_clip::*;
+    pub fn parse_value<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Longhands, ParseError<'i>> {
+        let value = specified::BorderClipSegments::parse(context, input)?;
+        Ok(Longhands {
+            border_inline_start_clip: value.clone(),
+            border_inline_end_clip: value.clone(),
+        })
+    }
+    impl ToCss for LonghandsToSerialize<'_> {
+        fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+            if self.border_inline_end_clip != self.border_inline_start_clip {
+                return Ok(());
+            }
+            self.border_inline_start_clip.to_css(dest)
+        }
+    }
+}
+
+#[cfg(feature = "servo")]
+pub mod box_shadow {
+    use super::*;
+    pub use crate::properties::shorthands_generated::box_shadow::*;
+    use crate::values::specified::{
+        BoxShadowOffset, BoxShadowPosition, Color, Length, NonNegativeLength,
+    };
+    use crate::Zero;
+
+    pub fn parse_value<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Longhands, ParseError<'i>> {
+        let layers = input.parse_comma_separated(|input| {
+            let (mut color, mut offset, mut position) = (None, None, None);
+            let mut blur = NonNegativeLength::zero();
+            let mut spread = Length::zero();
+            loop {
+                if offset.is_none() {
+                    let parsed = input.try_parse(|input| {
+                        let value = if input.try_parse(|i| i.expect_ident_matching("none")).is_ok()
+                        {
+                            BoxShadowOffset::None
+                        } else {
+                            BoxShadowOffset::Offset(
+                                Length::parse(context, input)?,
+                                Length::parse(context, input)?,
+                            )
+                        };
+                        let blur = input
+                            .try_parse(|i| NonNegativeLength::parse(context, i))
+                            .ok();
+                        let spread = if blur.is_some() {
+                            input.try_parse(|i| Length::parse(context, i)).ok()
+                        } else {
+                            None
+                        };
+                        Ok::<_, ParseError<'i>>((value, blur, spread))
+                    });
+                    if let Ok((value, b, s)) = parsed {
+                        offset = Some(value);
+                        if let Some(value) = b {
+                            blur = value;
+                        }
+                        if let Some(value) = s {
+                            spread = value;
+                        }
+                        continue;
+                    }
+                }
+                if color.is_none() {
+                    if let Ok(value) = input.try_parse(|i| Color::parse(context, i)) {
+                        color = Some(value);
+                        continue;
+                    }
+                }
+                if position.is_none() {
+                    if let Ok(value) = input.try_parse(|i| BoxShadowPosition::parse(i)) {
+                        position = Some(value);
+                        continue;
+                    }
+                }
+                break;
+            }
+            let offset = offset
+                .ok_or_else(|| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))?;
+            let color = color.unwrap_or_else(|| {
+                if matches!(offset, BoxShadowOffset::None) {
+                    Color::transparent()
+                } else {
+                    Color::CurrentColor
+                }
+            });
+            Ok((
+                color,
+                offset,
+                blur,
+                spread,
+                position.unwrap_or(BoxShadowPosition::Outset),
+            ))
+        })?;
+        use crate::properties::longhands::{
+            box_shadow_blur, box_shadow_color, box_shadow_offset, box_shadow_position,
+            box_shadow_spread,
+        };
+        Ok(Longhands {
+            box_shadow_color: box_shadow_color::SpecifiedValue(
+                layers
+                    .iter()
+                    .map(|v| v.0.clone())
+                    .collect::<Vec<_>>()
+                    .into(),
+            ),
+            box_shadow_offset: box_shadow_offset::SpecifiedValue(
+                layers
+                    .iter()
+                    .map(|v| v.1.clone())
+                    .collect::<Vec<_>>()
+                    .into(),
+            ),
+            box_shadow_blur: box_shadow_blur::SpecifiedValue(
+                layers
+                    .iter()
+                    .map(|v| v.2.clone())
+                    .collect::<Vec<_>>()
+                    .into(),
+            ),
+            box_shadow_spread: box_shadow_spread::SpecifiedValue(
+                layers
+                    .iter()
+                    .map(|v| v.3.clone())
+                    .collect::<Vec<_>>()
+                    .into(),
+            ),
+            box_shadow_position: box_shadow_position::SpecifiedValue(
+                layers.iter().map(|v| v.4).collect::<Vec<_>>().into(),
+            ),
+        })
+    }
+
+    impl ToCss for LonghandsToSerialize<'_> {
+        fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+            let count = self.box_shadow_offset.0.len();
+            if [
+                self.box_shadow_color.0.len(),
+                self.box_shadow_blur.0.len(),
+                self.box_shadow_spread.0.len(),
+                self.box_shadow_position.0.len(),
+            ]
+            .iter()
+            .any(|len| *len != count)
+            {
+                return Ok(());
+            }
+            for index in 0..count {
+                if index > 0 {
+                    dest.write_str(", ")?;
+                }
+                let color = &self.box_shadow_color.0[index];
+                let offset = &self.box_shadow_offset.0[index];
+                let blur = &self.box_shadow_blur.0[index];
+                let spread = &self.box_shadow_spread.0[index];
+                let inset = self.box_shadow_position.0[index] == BoxShadowPosition::Inset;
+                if let BoxShadowOffset::Offset(x, y) = offset {
+                    specified::BoxShadow {
+                        base: specified::SimpleShadow {
+                            color: (*color != Color::CurrentColor).then(|| color.clone()),
+                            horizontal: x.clone(),
+                            vertical: y.clone(),
+                            blur: (!blur.is_zero() || !spread.is_zero()).then(|| blur.clone()),
+                        },
+                        spread: (!spread.is_zero()).then(|| spread.clone()),
+                        inset,
+                    }
+                    .to_css(dest)?;
+                } else {
+                    if *color != Color::transparent() {
+                        color.to_css(dest)?;
+                        dest.write_char(' ')?;
+                    }
+                    dest.write_str("none")?;
+                    if !blur.is_zero() || !spread.is_zero() {
+                        dest.write_char(' ')?;
+                        blur.to_css(dest)?;
+                    }
+                    if !spread.is_zero() {
+                        dest.write_char(' ')?;
+                        spread.to_css(dest)?;
+                    }
+                    if inset {
+                        dest.write_str(" inset")?;
+                    }
+                }
+            }
+            Ok(())
         }
     }
 }

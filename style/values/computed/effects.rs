@@ -20,3 +20,7 @@ pub type Filter = GenericFilter<Angle, Number, Length, SimpleShadow, ComputedUrl
 
 /// A computed value for the `drop-shadow()` filter.
 pub type SimpleShadow = GenericSimpleShadow<Color, Length, NonNegativeLength>;
+
+/// The offset of one box shadow.
+pub type BoxShadowOffset = crate::values::generics::effects::GenericBoxShadowOffset<Length>;
+pub use crate::values::specified::effects::BoxShadowPosition;

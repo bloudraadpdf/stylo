@@ -20,6 +20,7 @@ use crate::custom_properties::{
     document_function_scope, CallingElement, ComputedCustomProperties, FunctionScope,
 };
 use crate::derives::*;
+use crate::dom::{AttributeProvider, TElement};
 use crate::font_metrics::{FontMetrics, FontMetricsOrientation};
 use crate::media_queries::Device;
 #[cfg(feature = "gecko")]
@@ -27,7 +28,6 @@ use crate::properties;
 use crate::properties::{ComputedValues, StyleBuilder};
 use crate::rule_cache::RuleCacheConditions;
 use crate::rule_tree::CascadeLevel;
-use crate::dom::{AttributeProvider, TElement};
 use crate::stylesheets::container_rule::{
     ContainerConditions, ContainerInfo, ContainerLookupResult, ContainerSizeQuery,
     ContainerSizeQueryResult,
@@ -139,8 +139,9 @@ pub use self::bd_pdf_stamp::{BdPdfStampIcon, BdPdfStampIntent, BdPdfStampString}
 pub use self::bd_pdf_tagged::BdPdfTagged;
 pub use self::bd_pdf_trapped::BdPdfTrapped;
 pub use self::border::{
-    BorderCornerRadius, BorderImageRepeat, BorderImageSideWidth, BorderImageSlice,
-    BorderImageWidth, BorderRadius, BorderSideOffset, BorderSideWidth, BorderSpacing, LineWidth,
+    BorderClipSegments, BorderCornerRadius, BorderImageRepeat, BorderImageSideWidth,
+    BorderImageSlice, BorderImageWidth, BorderRadius, BorderSideOffset, BorderSideWidth,
+    BorderSpacing, LineWidth,
 };
 pub use self::box_::{
     AlignmentBaseline, Appearance, BaselineShift, BaselineSource, BookmarkLevel, BookmarkState,
@@ -164,7 +165,7 @@ pub use self::counters::{
 };
 pub use self::display_4::ReadingFlow;
 pub use self::easing::TimingFunction;
-pub use self::effects::{BoxShadow, Filter, SimpleShadow};
+pub use self::effects::{BoxShadow, BoxShadowOffset, BoxShadowPosition, Filter, SimpleShadow};
 pub use self::exclusions_1::{WrapFlow, WrapThrough};
 pub use self::flex::{FlexBasis, FlexWrap};
 pub use self::font::{FontFamily, FontLanguageOverride, FontPalette, FontStyle};
@@ -276,7 +277,9 @@ pub use self::text::{
     HangingPunctuation, InitialLetter, LetterSpacing, LineBreak, TextCombineUpright, TextFit,
     TextIndent, TextSizeAdjust,
 };
-pub use self::text::{HyphenateCharCount, HyphenateCharacter, HyphenateLimitChars, HyphenateLimitLines};
+pub use self::text::{
+    HyphenateCharCount, HyphenateCharacter, HyphenateLimitChars, HyphenateLimitLines,
+};
 pub use self::text::{
     OverflowWrap, RubyPosition, TextOverflow, WordBreak, WordSpaceTransform, WordSpacing,
 };
@@ -307,7 +310,6 @@ pub mod angle;
 pub mod animation;
 pub mod background;
 pub mod basic_shape;
-pub mod calc_size;
 pub mod bd_a11y;
 pub mod bd_barcode;
 pub mod bd_bfo;
@@ -359,6 +361,7 @@ pub mod bd_text_decoration;
 pub mod border;
 #[path = "box.rs"]
 pub mod box_;
+pub mod calc_size;
 pub mod color;
 pub mod color_5;
 pub mod color_hdr_1;

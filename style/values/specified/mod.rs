@@ -172,9 +172,9 @@ pub use self::bd_text_decoration::{
     BdTextUnderlineOffset, BdTextUnderlinePosition,
 };
 pub use self::border::{
-    BorderCornerRadius, BorderImageRepeat, BorderImageSideWidth, BorderImageSlice,
-    BorderImageWidth, BorderRadius, BorderSideOffset, BorderSideWidth, BorderSpacing, BorderStyle,
-    LineWidth,
+    BorderClipSegments, BorderCornerRadius, BorderImageRepeat, BorderImageSideWidth,
+    BorderImageSlice, BorderImageWidth, BorderRadius, BorderSideOffset, BorderSideWidth,
+    BorderSpacing, BorderStyle, LineWidth,
 };
 pub use self::box_::{
     AlignmentBaseline, Appearance, BaselineShift, BaselineSource, BookmarkLevel, BookmarkState,
@@ -198,7 +198,7 @@ pub use self::counters::{
 };
 pub use self::display_4::ReadingFlow;
 pub use self::easing::TimingFunction;
-pub use self::effects::{BoxShadow, Filter, SimpleShadow};
+pub use self::effects::{BoxShadow, BoxShadowOffset, BoxShadowPosition, Filter, SimpleShadow};
 pub use self::exclusions_1::{WrapFlow, WrapThrough};
 pub use self::flex::{FlexBasis, FlexWrap};
 pub use self::font::{FontFamily, FontLanguageOverride, FontPalette, FontStyle};
@@ -244,9 +244,9 @@ pub use self::position::AspectRatio;
 pub use self::position::Inset;
 pub use self::position::PositionAnchor;
 pub use self::position::PositionAnchorKeyword;
-pub use self::position::SpecifiedPositionTryFallbacks as PositionTryFallbacks;
 pub use self::position::PositionTryOrder;
 pub use self::position::PositionVisibility;
+pub use self::position::SpecifiedPositionTryFallbacks as PositionTryFallbacks;
 pub use self::position::{GridAutoFlow, GridTemplateAreas, Position, PositionOrAuto};
 pub use self::position::{MasonryAutoFlow, MasonryItemOrder, MasonryPlacement, MasonrySlack};
 pub use self::position::{PositionArea, PositionAreaKeyword};
@@ -268,7 +268,9 @@ pub use self::text::{
     HangingPunctuation, InitialLetter, LetterSpacing, LineBreak, TextAlign, TextCombineUpright,
     TextFit, TextIndent, TextSizeAdjust,
 };
-pub use self::text::{HyphenateCharCount, HyphenateCharacter, HyphenateLimitChars, HyphenateLimitLines};
+pub use self::text::{
+    HyphenateCharCount, HyphenateCharacter, HyphenateLimitChars, HyphenateLimitLines,
+};
 pub use self::text::{
     OverflowWrap, TextEmphasisPosition, TextEmphasisStyle, WordBreak, WordSpaceTransform,
 };

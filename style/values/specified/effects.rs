@@ -464,3 +464,48 @@ mod tests {
         }
     }
 }
+
+/// The offset of one box shadow.
+pub type BoxShadowOffset = crate::values::generics::effects::GenericBoxShadowOffset<Length>;
+
+impl Parse for BoxShadowOffset {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
+            return Ok(Self::None);
+        }
+        let x = Length::parse(context, input)?;
+        let y = input
+            .try_parse(|i| Length::parse(context, i))
+            .unwrap_or_else(|_| x.clone());
+        Ok(Self::Offset(x, y))
+    }
+}
+
+/// Whether a box shadow falls inside or outside the border.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToAnimatedValue,
+    ToAnimatedZero,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    Animate,
+    ComputeSquaredDistance,
+)]
+#[repr(u8)]
+pub enum BoxShadowPosition {
+    /// Outside the box.
+    Outset,
+    /// Inside the box.
+    Inset,
+}

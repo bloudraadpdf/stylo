@@ -272,3 +272,82 @@ where
         Self::serialize_rects(widths, heights, dest)
     }
 }
+
+/// One visible or hidden segment of a border edge.
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToAnimatedValue,
+    ToAnimatedZero,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    Animate,
+    ComputeSquaredDistance,
+)]
+#[repr(C, u8)]
+pub enum GenericBorderClipPart<LP> {
+    /// A fixed length or percentage.
+    LengthPercentage(LP),
+    /// A fraction of the remaining edge.
+    #[css(dimension)]
+    Fr(f32),
+}
+
+/// Alternating visible and hidden border segments; an empty list means `none`.
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToAnimatedValue,
+    ToAnimatedZero,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(C)]
+pub struct GenericBorderClip<LP>(
+    #[css(iterable, if_empty = "none")] pub crate::OwnedSlice<GenericBorderClipPart<LP>>,
+);
+
+impl<LP> GenericBorderClip<LP> {
+    /// The unsplit border edge.
+    pub fn none() -> Self {
+        Self(Default::default())
+    }
+}
+
+impl<LP: crate::values::animated::Animate> crate::values::animated::Animate
+    for GenericBorderClip<LP>
+{
+    fn animate(
+        &self,
+        other: &Self,
+        procedure: crate::values::animated::Procedure,
+    ) -> Result<Self, ()> {
+        Ok(Self(
+            crate::values::animated::lists::by_computed_value::animate(
+                &self.0, &other.0, procedure,
+            )?,
+        ))
+    }
+}
+
+impl<LP: crate::values::distance::ComputeSquaredDistance>
+    crate::values::distance::ComputeSquaredDistance for GenericBorderClip<LP>
+{
+    fn compute_squared_distance(
+        &self,
+        other: &Self,
+    ) -> Result<crate::values::distance::SquaredDistance, ()> {
+        crate::values::animated::lists::by_computed_value::squared_distance(&self.0, &other.0)
+    }
+}

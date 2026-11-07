@@ -1279,7 +1279,8 @@ class PropertyRestrictions:
             props.remove(prop)
         for prop in PropertyRestrictions.shorthand(data, "border-radius"):
             props.remove(prop)
-        props.remove("box-shadow")
+        if data.engine == "gecko":
+            props.remove("box-shadow")
 
         _remove_common_first_line_and_first_letter_properties(props, data.engine)
         return props
