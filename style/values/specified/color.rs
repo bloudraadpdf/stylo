@@ -1062,7 +1062,7 @@ impl Color {
     pub fn to_computed_color(&self, context: Option<&Context>) -> Option<ComputedColor> {
         macro_rules! adjust_absolute_color {
             ($color:expr) => {{
-                // Resolve Lab lightness ranges after relative calculations and mixing.
+                // Computed lightness values can not be NaN.
                 if matches!(
                     $color.color_space,
                     ColorSpace::Lab | ColorSpace::Oklab | ColorSpace::Lch | ColorSpace::Oklch
@@ -1070,18 +1070,8 @@ impl Color {
                     $color.components.0 = if $color.components.0.is_nan() {
                         0.0
                     } else {
-                        let maximum =
-                            if matches!($color.color_space, ColorSpace::Lab | ColorSpace::Lch) {
-                                100.0
-                            } else {
-                                1.0
-                            };
-                        $color.components.0.clamp(0.0, maximum)
+                        $color.components.0
                     };
-                }
-
-                if matches!($color.color_space, ColorSpace::Lch | ColorSpace::Oklch) {
-                    $color.components.1 = $color.components.1.max(0.0);
                 }
 
                 // Computed RGB and XYZ components can not be NaN.
@@ -1101,9 +1091,13 @@ impl Color {
             }};
         }
 
-        let mut computed = match *self {
+        Some(match *self {
             Color::CurrentColor => ComputedColor::CurrentColor,
-            Color::Absolute(ref absolute) => ComputedColor::Absolute(absolute.color),
+            Color::Absolute(ref absolute) => {
+                let mut color = absolute.color;
+                adjust_absolute_color!(color);
+                ComputedColor::Absolute(color)
+            },
             Color::ColorFunction(ref color_function) => {
                 let color_function = match context {
                     Some(context) => color_function.to_computed_value(context),
@@ -1242,11 +1236,7 @@ impl Color {
             Color::InheritFromBodyQuirk => {
                 ComputedColor::Absolute(context?.device().body_text_color())
             },
-        };
-        if let ComputedColor::Absolute(ref mut color) = computed {
-            adjust_absolute_color!(color);
-        }
-        Some(computed)
+        })
     }
 }
 
@@ -1364,23 +1354,23 @@ mod color_tests {
     }
 
     #[test]
-    fn computed_lab_channels_resolve_after_relative_calculations_and_mixing() {
+    fn computed_lab_channels_retain_relative_and_converted_ranges() {
         use crate::color::ColorSpace;
         use crate::values::computed::Color as ComputedColor;
 
         for (css, lightness, chroma) in [
-            ("lab(from lab(0.7 45 30) 200 300 400)", 100.0, 300.0),
-            ("oklab(from oklab(0.7 0.45 0.3) -2 3 4)", 0.0, 3.0),
-            ("lch(from lch(50 20 180) 200 -30 h)", 100.0, 0.0),
-            ("oklch(from lch(0 20 180) l c h)", 0.0, 0.2641255),
-            ("color-mix(in oklch, lch(0 20 180))", 0.0, 0.2641255),
+            ("lab(from lab(0.7 45 30) 200 300 400)", 200.0, 300.0),
+            ("oklab(from oklab(0.7 0.45 0.3) -2 3 4)", -2.0, 3.0),
+            ("lch(from lch(50 20 180) 200 -30 h)", 200.0, -30.0),
+            ("oklch(from lch(0 20 180) l c h)", -0.05666103, 0.2641255),
+            ("color-mix(in oklch, lch(0 20 180))", -0.05666103, 0.2641255),
         ] {
             let ComputedColor::Absolute(color) =
                 parse(css).unwrap().to_computed_color(None).unwrap()
             else {
                 panic!("{css} must compute to an absolute colour");
             };
-            assert_eq!(color.c0(), Some(lightness), "{css}");
+            assert!((color.c0().unwrap() - lightness).abs() < 0.00001, "{css}");
             assert!((color.c1().unwrap() - chroma).abs() < 0.00001, "{css}");
             assert!(matches!(
                 color.color_space,
