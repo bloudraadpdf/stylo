@@ -64,14 +64,15 @@ fn native_properties_resolve_their_matching_schema() {
     assert_eq!(STANDARD_PROPERTIES.len(), property_counts::LONGHANDS_AND_SHORTHANDS);
     let native = style::properties::LonghandId::ALL
         .iter()
-        .map(|id| PropertyId::NonCustom((*id).into()))
+        .map(|id| (PropertyId::NonCustom((*id).into()), id.name()))
         .chain(
             style::properties::ShorthandId::ALL
                 .iter()
-                .map(|id| PropertyId::NonCustom((*id).into())),
+                .map(|id| (PropertyId::NonCustom((*id).into()), id.name())),
         );
-    for (row, property) in STANDARD_PROPERTIES.iter().zip(native) {
+    for (row, (property, native_name)) in STANDARD_PROPERTIES.iter().zip(native) {
         let resolved = property_schema_for_id(&property).expect("native property has a schema");
+        assert_eq!(resolved.name, native_name, "native property ID must resolve its own schema");
         assert_eq!(resolved.name, row.name);
         assert_eq!(resolved.id, row.id);
     }
@@ -99,4 +100,16 @@ fn all_schema_retains_native_expansion_order() {
     let enabled: Vec<_> = schema.shorthand_expansion.iter().copied()
         .filter(|name| native.contains(name)).collect();
     assert_eq!(enabled, native);
+}
+
+#[test]
+fn named_scroll_timeline_schema_preserves_vector_longhands_and_shorthand() {
+    let row = property_schema("scroll-timeline").expect("enabled shorthand has a schema");
+    assert_eq!(row.shorthand_expansion, &["scroll-timeline-name", "scroll-timeline-axis"]);
+    for (name, initial) in [("scroll-timeline-name", "none"), ("scroll-timeline-axis", "block")] {
+        let row = property_schema(name).expect("enabled longhand has a schema");
+        assert_eq!(row.name, name);
+        assert_eq!(row.initial.serialized, initial);
+        assert_eq!(row.multiplicity, Some(stylo_cssom_model::TypedOmPropertyMultiplicity::CommaSeparated));
+    }
 }
