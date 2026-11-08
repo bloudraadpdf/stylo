@@ -452,7 +452,7 @@ impl AnimationValue {
                 // corresponds to an inherited custom property and then choose the
                 // inherited/non_inherited map accordingly.
                 let p = &style.custom_properties();
-                let value = p.inherited.get(*name).or_else(|| p.non_inherited.get(*name))?;
+                let value = p.inherited.get(*name).or_else(|| p.non_inherited.get(*name));
                 return Some(AnimationValue::Custom(CustomAnimatedValue::from_computed(name, value)))
             }
         };

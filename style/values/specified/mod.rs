@@ -505,8 +505,13 @@ impl PartialEq<Number> for Number {
             return false;
         }
 
-        self.calc == other.calc
-            && (self.value == other.value || (self.value.is_nan() && other.value.is_nan()))
+        match (self.resolve_unclamped(), other.resolve_unclamped()) {
+            (Some(left), Some(right)) => left == right || (left.is_nan() && right.is_nan()),
+            _ => {
+                self.calc == other.calc
+                    && (self.value == other.value || (self.value.is_nan() && other.value.is_nan()))
+            },
+        }
     }
 }
 

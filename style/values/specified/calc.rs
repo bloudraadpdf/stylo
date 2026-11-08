@@ -778,6 +778,7 @@ impl generic::CalcNodeLeaf for Leaf {
     fn from_canonical(value: f32, unit: CalcUnits) -> Option<Self> {
         Some(match unit {
             CalcUnits::LENGTH => Self::Length(NoCalcLength::Absolute(AbsoluteLength::Px(value))),
+            CalcUnits::PERCENTAGE => Self::Percentage(value),
             CalcUnits::ANGLE => Self::Angle(AngleDimension::Deg(value)),
             CalcUnits::TIME => Self::Time(TimeDimension::from_seconds(value)),
             CalcUnits::RESOLUTION => Self::Resolution(ResolutionDimension::from_dppx(value)),
@@ -2797,6 +2798,11 @@ mod math_function_tests {
         ] {
             assert_eq!(used_px(css, 100.0), expected, "{css}");
         }
+        let value = parse_length_percentage("calc((1px * 1px - 2px * 3px) / 1px)").unwrap();
+        assert_eq!(
+            with_computed_context(|context| value.to_computed_value(context)).to_css_string(),
+            "-5px"
+        );
     }
 
     #[test]
@@ -2827,6 +2833,49 @@ mod math_function_tests {
                 panic!("{css} must compute to a line-height multiplier");
             };
             assert!((value.0 - expected).abs() < 0.0001, "{css}: {value:?}");
+        }
+        for css in [
+            "min(1, 1%)",
+            "max(1, 1%)",
+            "round(1, 1%)",
+            "mod(1, 1%)",
+            "rem(1, 1%)",
+        ] {
+            let mut input = ParserInput::new(css);
+            assert!(
+                Parser::new(&mut input)
+                    .parse_entirely(|input| specified::NumberOrPercentage::parse(&context(), input))
+                    .is_err(),
+                "{css}"
+            );
+        }
+    }
+
+    #[test]
+    fn percentage_coefficients_resolve_after_dimensional_factors_cancel() {
+        let mut input = ParserInput::new("calc(1em / 1px * 1%)");
+        let value = Parser::new(&mut input)
+            .parse_entirely(|input| specified::Percentage::parse(&context(), input))
+            .unwrap();
+        assert_eq!(
+            with_computed_context(|context| value.to_computed_value(context).0),
+            0.16
+        );
+    }
+
+    #[test]
+    fn equal_nan_scale_factors_serialize_once() {
+        for css in [
+            "scale(calc(round(1, 0)))",
+            "scale(calc(mod(1, 0)))",
+            "scale(calc(rem(1, 0)))",
+            "scale(calc(sign(-1 * NaN)))",
+        ] {
+            let mut input = ParserInput::new(css);
+            let value = Parser::new(&mut input)
+                .parse_entirely(|input| specified::Transform::parse(&context(), input))
+                .unwrap();
+            assert_eq!(value.to_css_string(), "scale(calc(NaN))", "{css}");
         }
     }
 

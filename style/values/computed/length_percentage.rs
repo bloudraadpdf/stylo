@@ -962,6 +962,7 @@ impl calc::CalcNodeLeaf for CalcLengthPercentageLeaf {
     fn from_canonical(value: f32, unit: CalcUnits) -> Option<Self> {
         match unit {
             CalcUnits::LENGTH => Some(Self::Length(Length::new(value))),
+            CalcUnits::PERCENTAGE => Some(Self::Percentage(Percentage(value))),
             CalcUnits::ANGLE => Some(Self::Deg(value)),
             CalcUnits::TIME => Some(Self::S(value)),
             CalcUnits::RESOLUTION => Some(Self::Dppx(value)),

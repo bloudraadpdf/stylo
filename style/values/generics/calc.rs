@@ -1508,17 +1508,21 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
         self.resolve_internal(&mut leaf_to_output_fn)
     }
 
-    fn resolve_arithmetic<F>(&self, map: &mut F) -> Result<(f32, CalcType), ()>
+    fn resolve_arithmetic<F>(
+        &self,
+        map: &mut F,
+        allow_percentages: bool,
+    ) -> Result<(f64, CalcType), ()>
     where
         F: FnMut(&L) -> Result<L, ()>,
     {
         match self {
             Self::Negate(child) => {
-                let (value, kind) = child.resolve_arithmetic(map)?;
+                let (value, kind) = child.resolve_arithmetic(map, allow_percentages)?;
                 Ok((-value, kind))
             },
             Self::Invert(child) => {
-                let (value, kind) = child.resolve_arithmetic(map)?;
+                let (value, kind) = child.resolve_arithmetic(map, allow_percentages)?;
                 let mut inverse = CalcType::default();
                 inverse.multiply_type(&kind, -1)?;
                 Ok((1.0 / value, inverse))
@@ -1527,16 +1531,17 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 let mut value = 1.0;
                 let mut kind = CalcType::default();
                 for child in children.iter() {
-                    let (factor, factor_kind) = child.resolve_arithmetic(map)?;
+                    let (factor, factor_kind) = child.resolve_arithmetic(map, allow_percentages)?;
                     value *= factor;
                     kind.multiply_type(&factor_kind, 1)?;
                 }
                 Ok((value, kind))
             },
             Self::Sum(children) => {
-                let (mut value, mut kind) = children[0].resolve_arithmetic(map)?;
+                let (mut value, mut kind) =
+                    children[0].resolve_arithmetic(map, allow_percentages)?;
                 for child in children.iter().skip(1) {
-                    let (term, term_kind) = child.resolve_arithmetic(map)?;
+                    let (term, term_kind) = child.resolve_arithmetic(map, allow_percentages)?;
                     kind.sum(&term_kind)?;
                     value += term;
                 }
@@ -1544,7 +1549,15 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
             },
             _ => {
                 let leaf = self.resolve_internal(map)?;
-                let (value, unit) = leaf.canonical().ok_or(())?;
+                let (value, unit) = if allow_percentages && leaf.unit() == CalcUnits::PERCENTAGE {
+                    (
+                        authored_number(leaf.unitless_value().ok_or(())?),
+                        CalcUnits::PERCENTAGE,
+                    )
+                } else {
+                    let (value, unit) = leaf.canonical().ok_or(())?;
+                    (f64::from(value), unit)
+                };
                 let mut kind = CalcType::default();
                 kind.multiply(unit, 1)?;
                 Ok((value, kind))
@@ -1592,8 +1605,11 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 factors
                     .and_then(|factors| resolve_product(&factors))
                     .or_else(|()| {
-                        let (value, kind) = self.resolve_arithmetic(leaf_to_output_fn)?;
-                        L::from_canonical(value, kind.unit()?).ok_or(())
+                        let (value, kind) = self.resolve_arithmetic(
+                            leaf_to_output_fn,
+                            self.unit() == Ok(CalcUnits::PERCENTAGE),
+                        )?;
+                        L::from_canonical(value as f32, kind.unit()?).ok_or(())
                     })
             },
             Self::MinMax(children, op) => {
@@ -2510,6 +2526,20 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 } else {
                     // Else put our simplified children back.
                     *children_slot = children.into_boxed_slice().into();
+                }
+                let percentages_are_coefficients = self.unit() == Ok(CalcUnits::PERCENTAGE);
+                let mut has_contextual_leaf = false;
+                self.visit_depth_first(|node| {
+                    if let Self::Leaf(leaf) = node {
+                        has_contextual_leaf |= leaf.canonical().is_none()
+                            && !(percentages_are_coefficients
+                                && leaf.unit() == CalcUnits::PERCENTAGE);
+                    }
+                });
+                if !has_contextual_leaf {
+                    if let Ok(leaf) = self.resolve() {
+                        *self = Self::Leaf(leaf);
+                    }
                 }
             },
             Self::Hypot(ref children) => {

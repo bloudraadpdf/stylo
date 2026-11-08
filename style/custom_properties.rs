@@ -2341,8 +2341,15 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
             return;
         }
         let mut custom_properties = std::mem::take(&mut computed_context.builder.custom_properties);
-        // Since `CustomPropertiesMap` preserves insertion order, we shouldn't have to worry about
-        // resolving in a wrong order.
+        for (name, value) in deferred.iter() {
+            if let Some(value) = value {
+                custom_properties.insert(
+                    stylist.get_custom_property_registration(name),
+                    name,
+                    value.clone(),
+                );
+            }
+        }
         for (k, v) in deferred.iter() {
             let Some(v) = v else { continue };
             let Some(v) = v.as_universal() else {

@@ -683,8 +683,8 @@ impl<'a> Parser<'a> {
 pub struct CustomAnimatedValue {
     /// The name of the custom property.
     pub(crate) name: crate::custom_properties::Name,
-    /// The computed value of the custom property.
-    value: ComputedValue,
+    /// The computed custom property value, or its guaranteed-invalid value when absent.
+    value: Option<ComputedValue>,
 }
 
 impl Animate for CustomAnimatedValue {
@@ -692,10 +692,14 @@ impl Animate for CustomAnimatedValue {
         if self.name != other.name {
             return Err(());
         }
-        let value = self.value.animate(&other.value, procedure)?;
+        let value = self
+            .value
+            .as_ref()
+            .ok_or(())?
+            .animate(other.value.as_ref().ok_or(())?, procedure)?;
         Ok(Self {
             name: self.name.clone(),
-            value,
+            value: Some(value),
         })
     }
 }
@@ -703,11 +707,11 @@ impl Animate for CustomAnimatedValue {
 impl CustomAnimatedValue {
     pub(crate) fn from_computed(
         name: &crate::custom_properties::Name,
-        value: &ComputedValue,
+        value: Option<&ComputedValue>,
     ) -> Self {
         Self {
             name: name.clone(),
-            value: value.clone(),
+            value: value.cloned(),
         }
     }
 
@@ -762,7 +766,7 @@ impl CustomAnimatedValue {
         };
         Some(Self {
             name: declaration.name.clone(),
-            value: computed_value,
+            value: Some(computed_value),
         })
     }
 
@@ -800,7 +804,12 @@ impl CustomAnimatedValue {
     pub(crate) fn to_declaration(&self) -> properties::PropertyDeclaration {
         properties::PropertyDeclaration::Custom(properties::CustomDeclaration {
             name: self.name.clone(),
-            value: self.value.to_declared_value(),
+            value: self.value.as_ref().map_or(
+                properties::CustomDeclarationValue::CSSWideKeyword(
+                    properties::CSSWideKeyword::Initial,
+                ),
+                ComputedValue::to_declared_value,
+            ),
         })
     }
 }
@@ -1033,6 +1042,7 @@ mod tests {
         )
         .expect("an unparsed declaration has an animated value")
         .value
+        .expect("the declaration retains its computed or unparsed value")
     }
 
     #[test]
