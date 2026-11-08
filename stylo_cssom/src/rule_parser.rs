@@ -4315,6 +4315,12 @@ mod tests {
                 PropertyDeclaration::TransitionTimingFunction(value.clone())
             },
             PropertyDeclaration::Translate(value) => PropertyDeclaration::Translate(value.clone()),
+            PropertyDeclaration::ScrollTimelineAxis(value) => {
+                PropertyDeclaration::ScrollTimelineAxis(value.clone())
+            },
+            PropertyDeclaration::ScrollTimelineName(value) => {
+                PropertyDeclaration::ScrollTimelineName(value.clone())
+            },
             PropertyDeclaration::ViewTimelineAxis(value) => {
                 PropertyDeclaration::ViewTimelineAxis(value.clone())
             },
