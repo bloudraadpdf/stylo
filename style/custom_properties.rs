@@ -3225,20 +3225,24 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
             .iter()
             .find(|(original, _)| original == name)
             .map_or_else(|| name.clone(), |(_, private)| private.clone());
-        let registration = self.stylist.get_custom_property_registration(&name);
-        let value = self.custom_properties.get(registration, &name)?;
-        if let Some(value) = value.as_universal().filter(|value| value.has_references()) {
-            let entry = self.calls.guard_property(&name).ok()?;
-            let result = self
-                .substitute_value(value, frame)
-                .ok()
-                .and_then(|result| self.typed(registration, result, &value.url_data));
-            if self.calls.release(entry) {
-                return None;
+        let entry = self.calls.guard_property(&name).ok()?;
+        let result = (|| {
+            let registration = self.stylist.get_custom_property_registration(&name);
+            let value = self.custom_properties.get(registration, &name)?;
+            if let Some(value) = value.as_universal().filter(|value| value.has_references()) {
+                return self
+                    .substitute_value(value, frame)
+                    .ok()
+                    .and_then(|result| self.typed(registration, result, &value.url_data))
+                    .map(Substitution::from_value);
             }
-            return result.map(Substitution::from_value);
+            Some(Substitution::from_value(value.to_variable_value()))
+        })();
+        if self.calls.release(entry) {
+            None
+        } else {
+            result
         }
-        Some(Substitution::from_value(value.to_variable_value()))
     }
 
     fn query_variable(&mut self, frame: Option<usize>, name: &Name) -> Option<Substitution<'a>> {

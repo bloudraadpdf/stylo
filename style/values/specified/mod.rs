@@ -855,6 +855,9 @@ impl NumberOrPercentage {
                 function,
                 AllowParse::new(CalcUnits::PERCENTAGE),
             )?;
+            if node.unit() != Ok(CalcUnits::empty()) {
+                return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+            }
             let mut node = node.percentage_as_number();
             if node.unit() != Ok(CalcUnits::empty()) {
                 return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));

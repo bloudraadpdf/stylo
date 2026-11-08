@@ -39,6 +39,17 @@ fn has_pending(block: &RuleDeclarationBlock) -> bool {
 
 fn requires_declaration_lowering(block: &RuleDeclarationBlock) -> bool {
     has_pending(block)
+        || matches!(
+            block.domain(),
+            RuleDeclarationDomain::Style
+                | RuleDeclarationDomain::Nested
+                | RuleDeclarationDomain::PositionTry
+                | RuleDeclarationDomain::Keyframe
+                | RuleDeclarationDomain::Page
+                | RuleDeclarationDomain::Margin
+        ) && block.declarations().iter().any(|declaration| {
+            declaration.source_base_url().is_some() || declaration.source_referrer().is_some()
+        })
 }
 
 pub fn has_pending_rules(rules: &[RuleNode]) -> bool {
@@ -145,16 +156,37 @@ fn merge_native_pending(
     projected: &PropertyDeclarationBlock,
 ) -> Result<PropertyDeclarationBlock, DeclarationLoweringError> {
     let restored = native_declarations(source)?;
+    let mut retained_context =
+        style::properties::declaration_block::PropertyDeclarationIdSet::default();
+    for declaration in source.declarations().iter().filter(|declaration| {
+        declaration.source_base_url().is_some() || declaration.source_referrer().is_some()
+    }) {
+        let property =
+            style::properties::PropertyId::parse_enabled_for_all_content(declaration.name())
+                .map_err(|()| DeclarationLoweringError::DeclarationValue)?;
+        match property.as_shorthand() {
+            Ok(shorthand) => {
+                for longhand in shorthand.longhands() {
+                    retained_context
+                        .insert(style::properties::PropertyDeclarationId::Longhand(longhand));
+                }
+            },
+            Err(id) => {
+                retained_context.insert(id);
+            },
+        }
+    }
     let mut result = PropertyDeclarationBlock::new();
-    for (source, importance) in restored.declaration_importance_iter() {
-        let selected = if matches!(source, style::properties::PropertyDeclaration::WithVariables(value)
+    for (declaration, importance) in restored.declaration_importance_iter() {
+        let selected = if retained_context.contains(declaration.id())
+            || matches!(declaration, style::properties::PropertyDeclaration::WithVariables(value)
             if value.value.from_shorthand().is_some())
         {
-            Some((source, importance))
+            Some((declaration, importance))
         } else {
             projected
                 .declaration_importance_iter()
-                .find(|(candidate, _)| candidate.id() == source.id())
+                .find(|(candidate, _)| candidate.id() == declaration.id())
         };
         if let Some((declaration, importance)) = selected {
             let _ = result.push(declaration.clone(), importance);
@@ -172,7 +204,7 @@ fn merge_native_declarations(
     source: &RuleDeclarationBlock,
     projected: &PropertyDeclarationBlock,
 ) -> Result<PropertyDeclarationBlock, DeclarationLoweringError> {
-    if has_pending(source) {
+    if requires_declaration_lowering(source) {
         merge_native_pending(source, projected)
     } else {
         Ok(projected.clone())

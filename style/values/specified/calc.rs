@@ -1903,12 +1903,14 @@ impl CalcNode {
 
     /// Resolves a percentage calculation with element-dependent leaves.
     pub fn resolve_percentage(&self, context: &Context) -> Result<CSSFloat, ()> {
-        self.resolve_contextual_leaves(context).to_percentage()
+        self.resolve_contextual_leaves(context)
+            .percentage_as_number()
+            .to_number()
     }
 
     /// Resolves a percentage calculation which has no contextual leaves.
     pub fn resolve_percentage_without_context(&self) -> Result<CSSFloat, ()> {
-        self.to_percentage()
+        self.percentage_as_number().to_number()
     }
 
     /// Converts a percentage-valued expression into its equivalent number.
@@ -2058,6 +2060,12 @@ mod tree_counting_tests {
     #[test]
     fn percentage_sign_resolves_contextual_lengths_before_multiplication() {
         assert_eq!(compute_percentage("calc(sign(20rem - 20px) * 180%)"), 1.8,);
+    }
+
+    #[test]
+    fn percentage_factors_resolve_after_contextual_dimension_cancellation() {
+        assert_eq!(compute_percentage("calc(1em / 1px * 1%)"), 0.16);
+        assert_eq!(compute_percentage("calc(1em * 10% / 2px)"), 0.8);
     }
 
     #[test]
@@ -2819,6 +2827,24 @@ mod math_function_tests {
                 panic!("{css} must compute to a line-height multiplier");
             };
             assert!((value.0 - expected).abs() < 0.0001, "{css}: {value:?}");
+        }
+    }
+
+    #[test]
+    fn number_percentage_alternatives_do_not_mix_in_math_functions() {
+        for css in [
+            "min(1, 1%)",
+            "max(1%, 1)",
+            "round(1, 1%)",
+            "clamp(0, 1%, 1)",
+        ] {
+            let mut input = ParserInput::new(css);
+            assert!(
+                Parser::new(&mut input)
+                    .parse_entirely(|input| specified::NumberOrPercentage::parse(&context(), input))
+                    .is_err(),
+                "{css}",
+            );
         }
     }
 }
