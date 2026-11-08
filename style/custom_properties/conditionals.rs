@@ -335,7 +335,9 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
                 if name.eq_ignore_ascii_case("supports") {
                     let query =
                         crate::stylesheets::supports_rule::parse_condition_or_declaration(input)?;
-                    return Ok(query.eval(&context(url_data)));
+                    let mut parser_context = context(url_data);
+                    parser_context.quirks_mode = self.computed_context.quirks_mode;
+                    return Ok(query.eval(&parser_context));
                 }
                 if name.eq_ignore_ascii_case("media") {
                     let condition = input
