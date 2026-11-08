@@ -1284,6 +1284,12 @@ mod tests {
             computed.to_css_string(),
             "circle(96px at calc(100% - 96px) calc(100% - 192px))"
         );
+        let style = ComputedValues::initial_values_with_font_override(Font::initial_values());
+        let context = crate::values::resolved::Context {
+            style: &style,
+            for_property: crate::properties::LonghandId::ShapeOutside.into(),
+            current_longhand: Some(crate::properties::LonghandId::ShapeOutside),
+        };
         for (css, expected) in [
             (
                 "circle(at calc(75% + 0px) calc(75% + 0px))",
@@ -1301,7 +1307,25 @@ mod tests {
                 Context::for_media_query_evaluation(&device, QuirksMode::NoQuirks, |context| {
                     specified.to_computed_value(context)
                 });
-            assert_eq!(computed.to_css_string(), expected, "{css}");
+            if css.starts_with("path(") {
+                let clip_context = crate::values::resolved::Context {
+                    style: &style,
+                    for_property: crate::properties::LonghandId::ClipPath.into(),
+                    current_longhand: Some(crate::properties::LonghandId::ClipPath),
+                };
+                let clip = crate::values::resolved::ToResolvedValue::to_resolved_value(
+                    computed.clone(),
+                    &clip_context,
+                );
+                assert_eq!(
+                    computed.to_css_string(),
+                    "path(\"M 10 10 h 80 v 80 h -80 Z\")"
+                );
+                assert_eq!(clip.to_css_string(), computed.to_css_string());
+            }
+            let resolved =
+                crate::values::resolved::ToResolvedValue::to_resolved_value(computed, &context);
+            assert_eq!(resolved.to_css_string(), expected, "{css}");
         }
     }
 }

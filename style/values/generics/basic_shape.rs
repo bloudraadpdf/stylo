@@ -661,7 +661,7 @@ pub struct PolygonCoord<LengthPercentage>(pub LengthPercentage, pub LengthPercen
 #[repr(C, u8)]
 pub enum GenericPathOrShapeFunction<Angle, Position, LengthPercentage> {
     /// Defines a path with SVG path syntax.
-    Path(#[compute(field_bound)] Path),
+    Path(#[resolve(field_bound)] Path),
     /// Defines a shape function, which is identical to path() but it uses the CSS syntax.
     Shape(
         #[css(field_bound)]
@@ -715,8 +715,8 @@ pub enum FillRule {
     Serialize,
     SpecifiedValueInfo,
     ToAnimatedValue,
+    ToComputedValue,
     ToCss,
-    ToResolvedValue,
     ToShmem,
 )]
 #[css(comma, function = "path")]
@@ -729,18 +729,18 @@ pub struct Path {
     pub path: SVGPathData,
 }
 
-impl crate::values::computed::ToComputedValue for Path {
-    type ComputedValue = Self;
+impl crate::values::resolved::ToResolvedValue for Path {
+    type ResolvedValue = Self;
 
-    fn to_computed_value(&self, _: &crate::values::computed::Context) -> Self {
-        Self {
-            fill: self.fill,
-            path: self.path.normalize(false),
+    fn to_resolved_value(mut self, context: &crate::values::resolved::Context) -> Self {
+        if context.current_longhand == Some(crate::properties::LonghandId::ShapeOutside) {
+            self.path = self.path.normalize(false);
         }
+        self
     }
 
-    fn from_computed_value(computed: &Self) -> Self {
-        computed.clone()
+    fn from_resolved_value(resolved: Self) -> Self {
+        resolved
     }
 }
 
