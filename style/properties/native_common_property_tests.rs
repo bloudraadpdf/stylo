@@ -1006,3 +1006,27 @@ fn all_shorthand_schema_members_include_pref_controlled_properties() {
     assert!(!potential.contains(&super::LonghandId::UnicodeBidi));
     assert!(ShorthandId::All.longhands().all(|id| potential.contains(&id)));
 }
+
+#[test]
+fn margin_trim_accepts_only_the_block_container_grammar() {
+    for (input, expected) in [
+        ("none", Some("none")),
+        ("block", Some("block")),
+        ("block-start", Some("block-start")),
+        ("block-end", Some("block-end")),
+        ("block-start block-end", Some("block")),
+        ("block-end block-start", Some("block")),
+        ("BLOCK-END BLOCK-START", Some("block")),
+        ("inline", None),
+        ("inline-start", None),
+        ("inline-end", None),
+        ("block inline", None),
+        ("inline-start inline-end", None),
+        ("block-start inline-start", None),
+        ("block-start block-start", None),
+        ("none block", None),
+        ("block block-start", None),
+    ] {
+        assert_serialization("margin-trim", input, expected);
+    }
+}

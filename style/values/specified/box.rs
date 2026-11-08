@@ -2170,7 +2170,6 @@ bitflags! {
     Debug,
     Eq,
     MallocSizeOf,
-    Parse,
     PartialEq,
     SpecifiedValueInfo,
     ToComputedValue,
@@ -2203,6 +2202,33 @@ bitflags! {
         const BLOCK = MarginTrim::BLOCK_START.bits() | MarginTrim::BLOCK_END.bits();
         /// `inline` shorthand, equivalent to `inline-start inline-end`.
         const INLINE = MarginTrim::INLINE_START.bits() | MarginTrim::INLINE_END.bits();
+    }
+}
+
+impl Parse for MarginTrim {
+    fn parse<'i, 't>(
+        _context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        let location = input.current_source_location();
+        let ident = input.expect_ident_cloned()?;
+        let (value, other) = match_ignore_ascii_case! { &ident,
+            "none" => return Ok(Self::NONE),
+            "block" => return Ok(Self::BLOCK),
+            "block-start" => (Self::BLOCK_START, "block-end"),
+            "block-end" => (Self::BLOCK_END, "block-start"),
+            _ => return Err(location.new_unexpected_token_error(cssparser::Token::Ident(ident.clone()))),
+        };
+        Ok(
+            if input
+                .try_parse(|input| input.expect_ident_matching(other))
+                .is_ok()
+            {
+                Self::BLOCK
+            } else {
+                value
+            },
+        )
     }
 }
 
