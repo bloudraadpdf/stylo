@@ -1024,7 +1024,7 @@ impl VariableValue {
             css.push_str(&missing_closing_characters);
         }
 
-        css.truncate(css.trim_ascii_end().len());
+        css.truncate(trim_token_whitespace(&css).len());
         css.shrink_to_fit();
         references.refs.shrink_to_fit();
 
@@ -1770,6 +1770,33 @@ fn parse_substitution_argument<'i, 't>(
         first_token_type,
         last_token_type,
     })
+}
+
+pub(crate) fn trim_token_whitespace(css: &str) -> &str {
+    if !css.starts_with(crate::str::char_is_whitespace) && !css.ends_with(crate::str::char_is_whitespace) {
+        return css;
+    }
+    let mut input = ParserInput::new(css);
+    let mut input = Parser::new(&mut input);
+    let mut first = None;
+    let mut end = 0;
+    loop {
+        let start = input.position();
+        let Ok(token) = input.next_including_whitespace_and_comments() else { break; };
+        match token {
+            Token::WhiteSpace(_) => continue,
+            Token::Function(_) | Token::ParenthesisBlock | Token::SquareBracketBlock | Token::CurlyBracketBlock => {
+                let _ = input.parse_nested_block(|input| {
+                    while input.next_including_whitespace_and_comments().is_ok() {}
+                    Ok::<(), cssparser::ParseError<'_, ()>>(())
+                });
+            },
+            _ => {},
+        }
+        first.get_or_insert(start.byte_index());
+        end = input.position().byte_index();
+    }
+    &css[first.unwrap_or(end)..end]
 }
 
 fn token_types(css: &str) -> (TokenSerializationType, TokenSerializationType) {
@@ -4102,6 +4129,17 @@ mod tests {
             },
             _ => panic!("expected an attr() reference"),
         }
+    }
+
+    #[test]
+    fn boundary_whitespace_trimming_keeps_escaped_identifier_characters() {
+        assert_eq!(trim_token_whitespace(" \tkeep\\  \n"), r"keep\ ");
+        assert_eq!(trim_token_whitespace(" fn(keep ) \n"), "fn(keep )");
+        assert_eq!(trim_token_whitespace(" fn(keep \n"), "fn(keep \n");
+        assert_eq!(trim_token_whitespace(" \"keep \" \n"), "\"keep \"");
+        assert_eq!(trim_token_whitespace(" /*keep */ \n"), "/*keep */");
+        assert_eq!(parse_value(r"keep\ ", &Namespaces::default()).css, r"keep\ ");
+        assert!(!crate::properties_and_values::value::universal_values_match(Some(r"keep\ "), Some(r"keep\")));
     }
 
     #[test]

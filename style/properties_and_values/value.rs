@@ -454,11 +454,19 @@ impl ComputedValueComponent {
     }
 }
 
+/// Compare universal style-query values without declaration-boundary whitespace.
+pub(crate) fn universal_values_match(a: Option<&str>, b: Option<&str>) -> bool {
+    a.map(crate::custom_properties::trim_token_whitespace)
+        == b.map(crate::custom_properties::trim_token_whitespace)
+}
+
 impl ComputedValue {
-    /// Whether this value and `other` are equal, with equivalent colors equal (CSS Color 4 §12).
+    /// Whether values match, ignoring universal boundary whitespace and equivalent colour representations.
     pub fn is_equivalent(&self, other: &Self) -> bool {
         match (&self.v, &other.v) {
-            (ValueInner::Universal(a), ValueInner::Universal(b)) => a.css_text() == b.css_text(),
+            (ValueInner::Universal(a), ValueInner::Universal(b)) => {
+                universal_values_match(Some(a.css_text()), Some(b.css_text()))
+            },
             (ValueInner::Component(a), ValueInner::Component(b)) => a.is_equivalent(b),
             (ValueInner::List(a), ValueInner::List(b)) => {
                 a.multiplier == b.multiplier

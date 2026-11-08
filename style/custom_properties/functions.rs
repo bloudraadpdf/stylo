@@ -16,6 +16,7 @@ use crate::properties::CSSWideKeyword;
 use crate::properties_and_values::registry::PropertyRegistrationData;
 use crate::properties_and_values::rule::Inherits;
 use crate::properties_and_values::syntax::data_type::DependentDataTypes;
+use crate::properties_and_values::value::universal_values_match;
 use crate::rule_tree::CascadeLevel;
 use crate::stylesheets::container_rule::{ContainerConditions, OriginatingElement};
 use crate::stylesheets::function_rule::{FunctionDescriptor, FunctionDescriptorName, FunctionRule};
@@ -563,12 +564,14 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
         let current = self
             .variable(frame, name)
             .map(|value| value.css.into_owned());
+        let equivalent = |a: Option<&str>, b: Option<&str>| {
+            if registration.syntax.is_universal() { universal_values_match(a, b) } else { a == b }
+        };
         let Some(value) = value else {
-            return current.as_deref()
-                != registration
+            return !equivalent(current.as_deref(), registration
                     .initial_value
                     .as_ref()
-                    .map(|value| value.css.as_str());
+                    .map(|value| value.css.as_str()));
         };
         let queried = match keyword(&value.css) {
             Some(CSSWideKeyword::Initial) => initial,
@@ -586,7 +589,7 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
                 .ok()
                 .and_then(|value_result| self.typed(&registration, value_result, &value.url_data, &self.random_property(frame, name), frame)),
         };
-        current.as_deref() == queried.as_ref().map(|value| value.css.as_str())
+        equivalent(current.as_deref(), queried.as_ref().map(|value| value.css.as_str()))
     }
 
     pub(super) fn inherit_function(
@@ -1545,6 +1548,23 @@ mod tests {
         assert_eq!(checked, 2);
     }
 
+
+    #[test]
+    fn inline_style_queries_ignore_only_universal_value_boundary_whitespace() {
+        let [value, result, function_result, significant] = cascade(
+            "@function --query(--value){result:if(style(--value:3):green;else:red)}
+             #t{--value:var(--missing,3 );
+                --result:if(style(--value:3):green;else:red);
+                --function-result:--query(var(--value));
+                --text:\"3 \";--significant:if(style(--text:\"3\"):FAIL;else:PASS)}",
+            &Attributes(&[]),
+            ["value", "result", "function-result", "significant"],
+        );
+        assert_eq!(value.unwrap().css, "3 ");
+        assert_eq!(result.unwrap().css, "green");
+        assert_eq!(function_result.unwrap().css, "green");
+        assert_eq!(significant.unwrap().css, "PASS");
+    }
 
     #[test]
     fn conditional_dependency_graph_follows_only_evaluated_conditions_and_the_selected_value() {

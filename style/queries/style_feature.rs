@@ -255,11 +255,7 @@ impl RangeOperand {
 
 fn equivalent(a: Option<&ComputedRegisteredValue>, b: Option<&ComputedRegisteredValue>) -> bool {
     match (a, b) {
-        (Some(a), Some(b)) => match (a.as_universal(), b.as_universal()) {
-            (Some(a), Some(b)) => a.css_text().trim_matches(crate::str::char_is_whitespace)
-                == b.css_text().trim_matches(crate::str::char_is_whitespace),
-            _ => a.is_equivalent(b),
-        },
+        (Some(a), Some(b)) => a.is_equivalent(b),
         (a, b) => a.is_none() && b.is_none(),
     }
 }
