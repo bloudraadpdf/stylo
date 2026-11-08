@@ -492,6 +492,7 @@ where
             try_tactic,
         );
     }
+    resolve_anchors_after_adjustment(&mut context);
 
     if context.builder.modified_reset() || using_cached_reset_properties {
         // If we adjusted any reset structs, we can't cache this ComputedValues.
@@ -503,6 +504,34 @@ where
     }
 
     context.builder.build()
+}
+
+fn resolve_anchors_after_adjustment(context: &mut computed::Context) {
+    use crate::values::computed::position::ResolveAnchors;
+
+    macro_rules! resolve {
+        ($structure:ident, $getter:ident, $setter:ident, $property:ident) => {
+            let value = context.builder.$structure().$getter();
+            let resolved = value.clone().resolve_anchors(LonghandId::$property, context);
+            if resolved != value {
+                context.builder.$setter(resolved);
+            }
+        };
+    }
+    resolve!(get_position, clone_top, set_top, Top);
+    resolve!(get_position, clone_right, set_right, Right);
+    resolve!(get_position, clone_bottom, set_bottom, Bottom);
+    resolve!(get_position, clone_left, set_left, Left);
+    resolve!(get_position, clone_width, set_width, Width);
+    resolve!(get_position, clone_height, set_height, Height);
+    resolve!(get_position, clone_min_width, set_min_width, MinWidth);
+    resolve!(get_position, clone_min_height, set_min_height, MinHeight);
+    resolve!(get_position, clone_max_width, set_max_width, MaxWidth);
+    resolve!(get_position, clone_max_height, set_max_height, MaxHeight);
+    resolve!(get_margin, clone_margin_top, set_margin_top, MarginTop);
+    resolve!(get_margin, clone_margin_right, set_margin_right, MarginRight);
+    resolve!(get_margin, clone_margin_bottom, set_margin_bottom, MarginBottom);
+    resolve!(get_margin, clone_margin_left, set_margin_left, MarginLeft);
 }
 
 /// For ignored colors mode, we sometimes want to do something equivalent to

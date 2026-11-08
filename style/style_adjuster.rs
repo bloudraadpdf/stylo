@@ -970,13 +970,7 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
         }
     }
 
-    /// Performs adjustments for position-try-fallbacks. The properties that need adjustments here
-    /// are luckily not affected by previous adjustments nor by other computed-value-time effects,
-    /// so we can just perform them here.
-    ///
-    /// NOTE(emilio): If we ever perform the interleaving dance, this could / should probably move
-    /// around to the specific properties' to_computed_value implementations, but that seems
-    /// overkill for now.
+    /// Adjusts position-try-fallbacks before the cascade resolves anchor functions.
     fn adjust_for_try_tactic(&mut self, tactic: &PositionTryFallbacksTryTactic) {
         debug_assert!(!tactic.is_empty());
         // TODO: This is supposed to use the containing block's WM (bug 1995256).

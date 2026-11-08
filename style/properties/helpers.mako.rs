@@ -149,13 +149,6 @@ pub mod ${property.ident} {
             % else:
             let computed = specified_value.to_computed_value(context);
             % endif
-            % if property.predefined_type in ["Inset", "Size", "MaxSize", "Margin"]:
-            let computed = computed::position::ResolveAnchors::resolve_anchors(
-                computed,
-                LonghandId::${property.camel_case},
-                context,
-            );
-            % endif
             context.builder.set_${property.ident}(computed)
         % endif
         % endif
