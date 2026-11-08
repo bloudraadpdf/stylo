@@ -908,7 +908,13 @@ pub fn stylo_inline_style_block(
         let retained_url_data: Option<UrlExtraData> = declaration
             .source_base_url()
             .and_then(|base| url::Url::parse(base).ok())
-            .map(Into::into);
+            .map(|base| {
+                UrlExtraData::from(base).with_referrer_source(
+                    declaration
+                        .source_referrer()
+                        .and_then(|source| url::Url::parse(source).ok()),
+                )
+            });
         let mut declarations = SourcePropertyDeclaration::default();
         if parse_one_declaration_into(
             &mut declarations,
@@ -1372,7 +1378,13 @@ pub fn stylo_rule_declaration_block(
         let retained_url_data: Option<UrlExtraData> = declaration
             .source_base_url()
             .and_then(|base| url::Url::parse(base).ok())
-            .map(Into::into);
+            .map(|base| {
+                UrlExtraData::from(base).with_referrer_source(
+                    declaration
+                        .source_referrer()
+                        .and_then(|source| url::Url::parse(source).ok()),
+                )
+            });
         if declaration.pending_substitution().is_some() {
             let (retained, importance) = pending.restore(declaration)?;
             let _ = parsed.0.push(retained, importance);
@@ -1395,6 +1407,7 @@ pub fn stylo_rule_declaration_block(
 
 struct PendingShorthandExpansion {
     source: stylo_cssom_model::PendingSubstitutionValue,
+    referrer_source: Option<String>,
     important: bool,
     declarations: Vec<(PropertyDeclaration, Importance)>,
     cursor: usize,
@@ -1423,16 +1436,21 @@ impl<'a> PendingShorthandExpansions<'a> {
     ) -> Option<(PropertyDeclaration, Importance)> {
         let pending = declaration.pending_substitution()?;
         let important = declaration.important();
-        let index =
-            match self.expansions.iter().position(|expansion| {
-                expansion.important == important && expansion.source == *pending
-            }) {
-                Some(index) => index,
-                None => {
-                    self.expansions.push(self.expand(pending, important)?);
-                    self.expansions.len() - 1
-                },
-            };
+        let index = match self.expansions.iter().position(|expansion| {
+            expansion.important == important
+                && expansion.source == *pending
+                && expansion.referrer_source.as_deref() == declaration.source_referrer()
+        }) {
+            Some(index) => index,
+            None => {
+                self.expansions.push(self.expand(
+                    pending,
+                    important,
+                    declaration.source_referrer(),
+                )?);
+                self.expansions.len() - 1
+            },
+        };
         let expansion = &mut self.expansions[index];
         let matches = |(candidate, _): &(PropertyDeclaration, Importance)| {
             candidate.id().name() == declaration.name()
@@ -1449,8 +1467,10 @@ impl<'a> PendingShorthandExpansions<'a> {
         &self,
         pending: &stylo_cssom_model::PendingSubstitutionValue,
         important: bool,
+        referrer_source: Option<&str>,
     ) -> Option<PendingShorthandExpansion> {
-        let url_data = url::Url::parse(pending.base_url()).ok()?.into();
+        let url_data = UrlExtraData::from(url::Url::parse(pending.base_url()).ok()?)
+            .with_referrer_source(referrer_source.and_then(|source| url::Url::parse(source).ok()));
         let mut source = style::properties::declaration_block::PropertyDeclarationBlock::new();
         let priority = if important {
             CssomDeclarationPriority::Important
@@ -1468,6 +1488,7 @@ impl<'a> PendingShorthandExpansions<'a> {
         )
         .then(|| PendingShorthandExpansion {
             source: pending.clone(),
+            referrer_source: referrer_source.map(str::to_owned),
             important,
             declarations: source
                 .declaration_importance_iter()

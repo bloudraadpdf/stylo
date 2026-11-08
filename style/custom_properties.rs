@@ -759,6 +759,17 @@ impl References {
     fn has_references(&self) -> bool {
         !self.refs.is_empty()
     }
+
+    fn in_attribute_fallback(&self, reference: &SubstitutionFunctionReference) -> bool {
+        self.refs.iter().any(|outer| {
+            let SubstitutionFunction::Attr { arguments, .. } = &outer.function else {
+                return false;
+            };
+            arguments.get(1).is_some_and(|fallback| {
+                reference.start >= fallback.start && reference.end <= fallback.end
+            })
+        })
+    }
 }
 
 /// Whether this name belongs to an unobservable lexical private property.
@@ -2600,7 +2611,12 @@ fn substitute_all(
 
             // Visit other custom properties...
             // FIXME: Maybe avoid visiting the same var twice if not needed?
-            for next in &v.references.refs {
+            for next in v
+                .references
+                .refs
+                .iter()
+                .filter(|next| !v.references.in_attribute_fallback(next))
+            {
                 let Some(name) = next.function.variable_name() else {
                     continue;
                 };
@@ -2614,6 +2630,9 @@ fn substitute_all(
             }
 
             for (offset, reference) in v.references.refs.iter().enumerate() {
+                if v.references.in_attribute_fallback(reference) {
+                    continue;
+                }
                 let SubstitutionFunction::DynamicVar {
                     name: None,
                     arguments,
@@ -2949,15 +2968,21 @@ fn substitute_references_if_needed_and_apply(
 
     let inherited = computed_context.inherited_custom_properties();
     let url_data = &value.url_data;
-    let substitution = Substitutor::new(
+    let mut substitutor = Substitutor::new(
         custom_properties,
         stylist,
         computed_context,
         EnvironmentResolutionMode::ResolveLiveEnvironment,
         attribute_tracker,
         level,
-    )
-    .substitute_value(value, None);
+    );
+    let owner = substitutor.calls.guard_property(name).unwrap();
+    let substitution = substitutor.substitute_value(value, None);
+    let substitution = if substitutor.calls.release(owner) {
+        Err(())
+    } else {
+        substitution
+    };
     let substitution = match substitution {
         Ok(v) => v,
         Err(..) => {
@@ -3199,11 +3224,36 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
             .private_names
             .iter()
             .find(|(original, _)| original == name)
-            .map_or(name, |(_, private)| private);
-        let registration = self.stylist.get_custom_property_registration(name);
-        self.custom_properties
-            .get(registration, name)
-            .map(|value| Substitution::from_value(value.to_variable_value()))
+            .map_or_else(|| name.clone(), |(_, private)| private.clone());
+        let registration = self.stylist.get_custom_property_registration(&name);
+        let value = self.custom_properties.get(registration, &name)?;
+        if let Some(value) = value.as_universal().filter(|value| value.has_references()) {
+            let entry = self.calls.guard_property(&name).ok()?;
+            let result = self
+                .substitute_value(value, frame)
+                .ok()
+                .and_then(|result| self.typed(registration, result, &value.url_data));
+            if self.calls.release(entry) {
+                return None;
+            }
+            return result.map(Substitution::from_value);
+        }
+        Some(Substitution::from_value(value.to_variable_value()))
+    }
+
+    fn query_variable(&mut self, frame: Option<usize>, name: &Name) -> Option<Substitution<'a>> {
+        if let Some(value) = self.frame_variable(frame, name) {
+            return value.map(Substitution::from_value);
+        }
+        let name = self
+            .private_names
+            .iter()
+            .find(|(original, _)| original == name)
+            .map_or_else(|| name.clone(), |(_, private)| private.clone());
+        if self.calls.property_is_guarded(&name) {
+            return None;
+        }
+        self.variable(frame, &name)
     }
 
     fn chunk<'v>(

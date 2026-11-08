@@ -47,10 +47,10 @@ use crate::gecko_bindings::sugar::refptr::RefCounted;
 #[cfg(feature = "gecko")]
 use crate::gecko_bindings::{bindings, structs};
 use crate::parser::{NestingContext, ParserContext};
-use crate::properties::{parse_property_declaration_list, PropertyDeclarationBlock};
+use crate::properties::{PropertyDeclarationBlock, parse_property_declaration_list};
 use crate::shared_lock::{DeepCloneWithLock, Locked};
 use crate::shared_lock::{SharedRwLock, SharedRwLockReadGuard, ToCssWithGuard};
-use cssparser::{parse_one_rule, Parser, ParserInput};
+use cssparser::{Parser, ParserInput, parse_one_rule};
 #[cfg(feature = "gecko")]
 use malloc_size_of::{MallocSizeOfOps, MallocUnconditionalShallowSizeOf};
 use servo_arc::Arc;
@@ -62,11 +62,11 @@ use style_traits::{CssStringWriter, ParsingMode};
 use to_shmem::{SharedMemoryBuilder, ToShmem};
 
 pub use self::bd_colour_rule::{
-    parse_bd_colour_body, parse_bd_colour_name, BdColourAlternateKind, BdColourRule,
+    BdColourAlternateKind, BdColourRule, parse_bd_colour_body, parse_bd_colour_name,
 };
 pub use self::color_profile_rule::{
-    parse_color_profile_body, parse_color_profile_name, ColorProfileRenderingIntent,
-    ColorProfileRule,
+    ColorProfileRenderingIntent, ColorProfileRule, parse_color_profile_body,
+    parse_color_profile_name,
 };
 pub use self::container_rule::ContainerRule;
 pub use self::counter_style_rule::CounterStyleRule;
@@ -108,7 +108,7 @@ pub use self::stylesheet::{DocumentStyleSheet, Namespaces, Stylesheet};
 pub use self::stylesheet::{StylesheetContents, StylesheetInDocument, UserAgentStylesheets};
 pub use self::supports_rule::SupportsRule;
 pub use self::view_transition_rule::{
-    parse_view_transition_body, ViewTransitionNavigation, ViewTransitionRule, ViewTransitionTypes,
+    ViewTransitionNavigation, ViewTransitionRule, ViewTransitionTypes, parse_view_transition_body,
 };
 pub use self::when_rule::{ChainConditions, ElseRule, WhenCondition, WhenRule};
 
@@ -145,10 +145,24 @@ pub struct UrlExtraData(usize);
 /// Extra data that the backend may need to resolve url values.
 #[cfg(feature = "servo")]
 #[derive(Clone, Debug, Eq, MallocSizeOf, PartialEq)]
-pub struct UrlExtraData(#[ignore_malloc_size_of = "Arc"] pub Arc<::url::Url>);
+pub struct UrlExtraData(
+    #[ignore_malloc_size_of = "Arc"] pub Arc<::url::Url>,
+    #[ignore_malloc_size_of = "Arc"] Option<Arc<::url::Url>>,
+);
 
 #[cfg(feature = "servo")]
 impl UrlExtraData {
+    /// Retain the stylesheet response URL separately from its URL resolution base.
+    pub fn with_referrer_source(mut self, source: Option<::url::Url>) -> Self {
+        self.1 = source.map(Arc::new);
+        self
+    }
+
+    /// The external stylesheet response URL, when this is not an inline context.
+    pub fn referrer_source(&self) -> Option<&Arc<::url::Url>> {
+        self.1.as_ref()
+    }
+
     /// True if this URL scheme is chrome.
     pub fn chrome_rules_enabled(&self) -> bool {
         self.0.scheme() == "chrome"
@@ -163,7 +177,7 @@ impl UrlExtraData {
 #[cfg(feature = "servo")]
 impl From<::url::Url> for UrlExtraData {
     fn from(url: ::url::Url) -> Self {
-        Self(Arc::new(url))
+        Self(Arc::new(url), None)
     }
 }
 

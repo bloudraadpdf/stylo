@@ -856,7 +856,7 @@ impl calc::CalcNodeLeaf for CalcLengthPercentageLeaf {
                 *one += *other;
             },
             (Percentage(one), Percentage(other)) => {
-                one.0 += other.0;
+                one.0 = (calc::authored_number(one.0) + calc::authored_number(other.0)) as f32;
             },
             (Number(one), Number(other)) => {
                 *one += *other;

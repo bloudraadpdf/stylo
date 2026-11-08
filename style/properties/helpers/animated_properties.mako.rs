@@ -298,12 +298,13 @@ impl AnimationValue {
                 x.boxed,
                 x.animation_type not in ["discrete", "none"],
                 x.style_struct.inherited,
+                x.style_struct.name == "Font",
                 x.ident in SYSTEM_FONT_LONGHANDS and engine == "gecko",
             )
         %>
 
         let animatable = match *decl {
-            % for (specified_ty, ty, boxed, to_animated, inherit, system), props in groupby(animated_with_logical, key=keyfunc):
+            % for (specified_ty, ty, boxed, to_animated, inherit, font_affecting, system), props in groupby(animated_with_logical, key=keyfunc):
             ${" |\n".join("PropertyDeclaration::{}(ref value)".format(prop.camel_case) for prop in props)} => {
                 let decl_repr = unsafe {
                     &*(decl as *const _ as *const PropertyDeclarationVariantRepr<${specified_ty}>)
@@ -312,6 +313,7 @@ impl AnimationValue {
                     *(&decl_repr.tag as *const u16 as *const LonghandId)
                 };
                 context.for_non_inherited_property = ${"false" if inherit else "true"};
+                context.for_font_affecting_property = ${"true" if font_affecting else "false"};
                 % if system:
                 if let Some(sf) = value.get_system() {
                     gecko::system_font::resolve_system_font(sf, context)
@@ -425,6 +427,7 @@ impl AnimationValue {
                 )
             },
             PropertyDeclaration::Custom(ref declaration) => {
+                context.for_font_affecting_property = false;
                 AnimationValue::Custom(CustomAnimatedValue::from_declaration(
                     declaration,
                     context,

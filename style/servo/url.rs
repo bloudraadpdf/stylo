@@ -43,6 +43,9 @@ pub struct CssUrlData {
     #[ignore_malloc_size_of = "Arc"]
     original: Option<Arc<String>>,
 
+    #[ignore_malloc_size_of = "Arc"]
+    referrer_source: Option<Arc<Url>>,
+
     /// The resolved value for the url, if valid.
     #[ignore_malloc_size_of = "Arc"]
     resolved: Option<Arc<Url>>,
@@ -227,6 +230,7 @@ impl CssUrl {
         };
         CssUrl(Arc::new(CssUrlData {
             original: Some(serialization),
+            referrer_source: context.url_data.referrer_source().cloned(),
             resolved: resolved,
             cors_mode,
             modifiers: UrlRequestModifiers::default(),
@@ -267,6 +271,14 @@ impl CssUrl {
         self.original.as_deref().map(|value| value.as_str())
     }
 
+    /// The external stylesheet response URL that supplied this URL value.
+    pub fn referrer_source(&self) -> Option<&str> {
+        self.0
+            .referrer_source
+            .as_ref()
+            .map(|source| source.as_str())
+    }
+
     /// Return the canonical request modifiers authored on this URL.
     pub fn request_modifiers(&self) -> &UrlRequestModifiers {
         &self.modifiers
@@ -282,6 +294,7 @@ impl CssUrl {
     pub fn for_cascade(url: Arc<::url::Url>) -> Self {
         CssUrl(Arc::new(CssUrlData {
             original: None,
+            referrer_source: None,
             resolved: Some(url),
             cors_mode: CorsMode::None,
             modifiers: UrlRequestModifiers::default(),
@@ -292,6 +305,7 @@ impl CssUrl {
     pub fn new_for_testing(url: &str) -> Self {
         CssUrl(Arc::new(CssUrlData {
             original: Some(Arc::new(url.into())),
+            referrer_source: None,
             resolved: ::url::Url::parse(url).ok().map(Arc::new),
             cors_mode: CorsMode::None,
             modifiers: UrlRequestModifiers::default(),
@@ -344,7 +358,11 @@ impl Parse for CssUrl {
 
 impl PartialEq for CssUrl {
     fn eq(&self, other: &Self) -> bool {
-        self.resolved == other.resolved && self.cors_mode == other.cors_mode
+        self.resolved == other.resolved
+            && self.cors_mode == other.cors_mode
+            && self.modifiers == other.modifiers
+            && self.referrer_source == other.referrer_source
+            && self.is_fragment() == other.is_fragment()
     }
 }
 
@@ -385,6 +403,7 @@ impl ToComputedValue for SpecifiedUrl {
         match self.resolved {
             Some(ref url) => ComputedUrl::Valid(Arc::new(ValidComputedUrl {
                 url: url.clone(),
+                referrer_source: self.0.referrer_source.clone(),
                 local: self
                     .original
                     .as_ref()
@@ -396,6 +415,7 @@ impl ToComputedValue for SpecifiedUrl {
             None => match self.original {
                 Some(ref url) => ComputedUrl::Invalid(Arc::new(InvalidComputedUrl {
                     serialization: url.clone(),
+                    referrer_source: self.0.referrer_source.clone(),
                     cors_mode: self.cors_mode,
                     modifiers: self.modifiers.clone(),
                 })),
@@ -410,12 +430,14 @@ impl ToComputedValue for SpecifiedUrl {
         let data = match computed {
             ComputedUrl::Valid(computed) => CssUrlData {
                 original: computed.local.clone(),
+                referrer_source: computed.referrer_source.clone(),
                 resolved: Some(computed.url.clone()),
                 cors_mode: computed.cors_mode,
                 modifiers: computed.modifiers.clone(),
             },
             ComputedUrl::Invalid(computed) => CssUrlData {
                 original: Some(computed.serialization.clone()),
+                referrer_source: computed.referrer_source.clone(),
                 resolved: None,
                 cors_mode: computed.cors_mode,
                 modifiers: computed.modifiers.clone(),
@@ -439,6 +461,8 @@ pub enum ComputedUrl {
 pub struct InvalidComputedUrl {
     #[ignore_malloc_size_of = "Arc"]
     serialization: Arc<String>,
+    #[ignore_malloc_size_of = "Arc"]
+    referrer_source: Option<Arc<Url>>,
     cors_mode: CorsMode,
     modifiers: UrlRequestModifiers,
 }
@@ -449,12 +473,23 @@ pub struct ValidComputedUrl {
     #[ignore_malloc_size_of = "Arc"]
     url: Arc<Url>,
     #[ignore_malloc_size_of = "Arc"]
+    referrer_source: Option<Arc<Url>>,
+    #[ignore_malloc_size_of = "Arc"]
     local: Option<Arc<String>>,
     cors_mode: CorsMode,
     modifiers: UrlRequestModifiers,
 }
 
 impl ComputedUrl {
+    /// The external stylesheet response URL that supplied this URL value.
+    pub fn referrer_source(&self) -> Option<&str> {
+        match self {
+            Self::Valid(computed) => computed.referrer_source.as_ref(),
+            Self::Invalid(computed) => computed.referrer_source.as_ref(),
+        }
+        .map(|source| source.as_str())
+    }
+
     /// Returns the resolved url if it was valid.
     pub fn url(&self) -> Option<&Arc<Url>> {
         match self {
@@ -536,6 +571,59 @@ mod tests {
                 assert_eq!(restored.is_fragment(), url.starts_with('#'));
             });
         }
+    }
+
+    #[test]
+    fn computed_url_roundtrips_keep_the_response_referrer_separate_from_the_base() {
+        let url_data = test_url_data().with_referrer_source(Some(
+            url::Url::parse("https://cdn.test/response.css").unwrap(),
+        ));
+        let context = author_parser_context(&url_data);
+        let specified = CssUrl::parse_from_string(
+            "image.png".into(),
+            &context,
+            crate::stylesheets::CorsMode::None,
+        );
+        with_computed_context(|context| {
+            let computed = specified.to_computed_value(context);
+            assert_eq!(
+                computed.referrer_source(),
+                Some("https://cdn.test/response.css")
+            );
+            let restored = CssUrl::from_computed_value(&computed);
+            assert_eq!(restored.referrer_source(), computed.referrer_source());
+            assert_eq!(restored.as_str(), specified.as_str());
+        });
+    }
+
+    #[test]
+    fn specified_url_equality_retains_fetch_and_local_reference_semantics() {
+        let url_data = test_url_data()
+            .with_referrer_source(Some(url::Url::parse("https://cdn.test/one.css").unwrap()));
+        let context = author_parser_context(&url_data);
+        let parse = |css: &str| {
+            let mut input = ParserInput::new(css);
+            Parser::new(&mut input)
+                .parse_entirely(|input| CssUrl::parse(&context, input))
+                .unwrap()
+        };
+        let plain = parse("url('image.png')");
+        assert_ne!(plain, parse("url('image.png' cross-origin(anonymous))"));
+        assert_ne!(plain, parse("url('image.png' integrity('sha256-example'))"));
+        assert_ne!(
+            plain,
+            parse("url('image.png' referrer-policy(no-referrer))")
+        );
+        let other_data = test_url_data()
+            .with_referrer_source(Some(url::Url::parse("https://cdn.test/two.css").unwrap()));
+        let other = CssUrl::parse_from_string(
+            "image.png".into(),
+            &author_parser_context(&other_data),
+            crate::stylesheets::CorsMode::None,
+        );
+        assert_ne!(plain, other);
+        let local = parse("url('#local')");
+        assert_ne!(local, parse(&format!("url('{}')", local.as_str())));
     }
 
     fn parses<T: Parse>(css: &str, tainted: &[AttrTaintedRange]) -> bool {

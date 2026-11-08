@@ -61,6 +61,7 @@ impl CssUrlRequestModifiers {
 pub struct CssResourceUrl {
     url: String,
     modifiers: CssUrlRequestModifiers,
+    referrer_source: Option<String>,
 }
 
 impl CssResourceUrl {
@@ -68,6 +69,7 @@ impl CssResourceUrl {
         Self {
             url: url.into(),
             modifiers,
+            referrer_source: None,
         }
     }
 
@@ -77,6 +79,22 @@ impl CssResourceUrl {
 
     pub fn as_str(&self) -> &str {
         &self.url
+    }
+
+    pub fn with_referrer_source(mut self, source: Option<String>) -> Self {
+        self.referrer_source = source;
+        self
+    }
+
+    pub fn referrer_source(&self) -> Option<&str> {
+        self.referrer_source.as_deref()
+    }
+
+    pub fn with_url(&self, url: impl Into<String>) -> Self {
+        Self {
+            url: url.into(),
+            ..self.clone()
+        }
     }
 
     pub fn modifiers(&self) -> &CssUrlRequestModifiers {

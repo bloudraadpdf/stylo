@@ -248,7 +248,7 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
                 let mut names = Vec::new();
                 collect_condition_names(&condition, &mut names);
                 *tainted |= names.iter().any(|name| {
-                    self.variable(frame, name)
+                    self.query_variable(frame, name)
                         .is_some_and(|value| !value.attr_tainted.is_empty())
                 });
                 self.query_matches(&condition, url_data, frame)
@@ -313,7 +313,7 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
         frame: Option<usize>,
     ) -> Option<RangeOperand> {
         let css = match value {
-            StyleRangeValue::Property(name) => self.variable(frame, name)?.css.into_owned(),
+            StyleRangeValue::Property(name) => self.query_variable(frame, name)?.css.into_owned(),
             StyleRangeValue::Value(value) => {
                 self.substitute_value(value, frame).ok()?.css.into_owned()
             },

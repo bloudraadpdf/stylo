@@ -744,6 +744,7 @@ pub struct RuleDeclaration {
     value: RuleDeclarationValue,
     important: bool,
     source_base_url: Option<Arc<str>>,
+    source_referrer: Option<Arc<str>>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -813,6 +814,7 @@ impl RuleDeclaration {
             value: RuleDeclarationValue::Serialized(value.into()),
             important: false,
             source_base_url: None,
+            source_referrer: None,
         }
     }
 
@@ -839,6 +841,7 @@ impl RuleDeclaration {
             }),
             important: false,
             source_base_url: None,
+            source_referrer: None,
         })
     }
 
@@ -853,6 +856,17 @@ impl RuleDeclaration {
     #[must_use]
     pub fn source_base_url(&self) -> Option<&str> {
         self.source_base_url.as_deref()
+    }
+
+    #[must_use]
+    pub fn with_source_referrer(mut self, source: impl Into<Arc<str>>) -> Self {
+        self.source_referrer = Some(source.into());
+        self
+    }
+
+    #[must_use]
+    pub fn source_referrer(&self) -> Option<&str> {
+        self.source_referrer.as_deref()
     }
 
     #[must_use]

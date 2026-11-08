@@ -22,7 +22,7 @@ use crate::values::generics::calc::SortKey as AttrUnit;
 use crate::values::specified::calc::CalcNode;
 use crate::values::{serialize_atom_identifier, serialize_number};
 use crate::{Atom, LocalName, Namespace, One, Prefix, Zero};
-use cssparser::{match_ignore_ascii_case, Parser, Token};
+use cssparser::{Parser, Token, match_ignore_ascii_case};
 use std::fmt::{self, Write};
 use std::ops::Add;
 use style_traits::values::specified::AllowedNumericType;
@@ -578,6 +578,17 @@ impl Number {
         Self::new_with_clamping_mode(val, None)
     }
 
+    pub(crate) fn to_computed_value_with_percentage_basis(
+        &self,
+        context: &Context,
+        basis: f32,
+    ) -> CSSFloat {
+        self.clamp(self.calc.as_ref().map_or(self.value, |calc| {
+            calc.resolve_number_with_percentage_basis(context, basis)
+                .unwrap_or(f32::NAN)
+        }))
+    }
+
     /// Returns whether this number came from a `calc()` expression.
     #[inline]
     pub fn was_calc(&self) -> bool {
@@ -829,6 +840,29 @@ impl NumberOrPercentage {
             input.try_parse(|i| Percentage::parse_with_clamping_mode(context, i, type_))
         {
             return Ok(NumberOrPercentage::Percentage(per));
+        }
+
+        if let Ok(number) = input.try_parse(|input| {
+            use crate::values::generics::calc::CalcUnits;
+            use crate::values::specified::calc::AllowParse;
+
+            let location = input.current_source_location();
+            let name = input.expect_function()?.clone();
+            let function = CalcNode::math_function(context, &name, location)?;
+            let node = CalcNode::parse(
+                context,
+                input,
+                function,
+                AllowParse::new(CalcUnits::PERCENTAGE),
+            )?;
+            let mut node = node.percentage_as_number();
+            if node.unit() != Ok(CalcUnits::empty()) {
+                return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+            }
+            node.simplify_and_sort();
+            Ok(Number::from_calc_node(node, Some(type_)))
+        }) {
+            return Ok(Self::Number(number));
         }
 
         parse_number_with_clamping_mode(context, input, type_).map(NumberOrPercentage::Number)
@@ -1759,7 +1793,10 @@ mod tests {
         ] {
             let value = parse_attr(source);
             assert_eq!(value.to_css_string(), expected);
-            assert_eq!(value.name.expanded_name(), parse_attr("attr(bar)").name.expanded_name());
+            assert_eq!(
+                value.name.expanded_name(),
+                parse_attr("attr(bar)").name.expanded_name()
+            );
         }
     }
 

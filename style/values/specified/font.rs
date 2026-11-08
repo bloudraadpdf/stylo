@@ -4,29 +4,29 @@
 
 //! Specified values for font properties
 
+use crate::Atom;
 use crate::color::mix::ColorInterpolationMethod;
 use crate::context::QuirksMode;
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
-use crate::values::computed::font::{FamilyName, FontFamilyList, SingleFontFamily};
 use crate::values::computed::Percentage as ComputedPercentage;
-use crate::values::computed::{
-    font as computed, Length, NonNegativeFiniteLength, NonNegativeLength,
-};
+use crate::values::computed::font::{FamilyName, FontFamilyList, SingleFontFamily};
 use crate::values::computed::{CSSPixelLength, Context, ToComputedValue};
+use crate::values::computed::{
+    Length, NonNegativeFiniteLength, NonNegativeLength, font as computed,
+};
+use crate::values::generics::NonNegative;
 use crate::values::generics::font::{
     self as generics, FeatureTagValue, FontSettings, FontTag, GenericLineHeight, VariationValue,
 };
-use crate::values::generics::NonNegative;
 use crate::values::specified::length::{FontBaseSize, LineHeightBase, PX_PER_PT};
 use crate::values::specified::{AllowQuirks, Angle, Integer, LengthPercentage, Percentage};
 use crate::values::specified::{
     FontRelativeLength, NoCalcLength, NonNegativeLengthPercentage, NonNegativeNumber,
     NonNegativePercentage, Number,
 };
-use crate::values::{serialize_atom_identifier, CustomIdent, SelectorParseErrorKind};
-use crate::Atom;
-use cssparser::{match_ignore_ascii_case, Parser, Token};
+use crate::values::{CustomIdent, SelectorParseErrorKind, serialize_atom_identifier};
+use cssparser::{Parser, Token, match_ignore_ascii_case};
 #[cfg(feature = "gecko")]
 use malloc_size_of::{MallocSizeOf, MallocSizeOfOps, MallocUnconditionalSizeOf};
 #[cfg(feature = "servo")]
@@ -1674,8 +1674,18 @@ pub struct FontPalette(
     #[cfg_attr(feature = "servo", serde(skip))]
     #[css(skip)]
     #[ignore_malloc_size_of = "Arc"]
-    Option<Arc<FontPaletteMix>>,
+    Option<Arc<FontPaletteMixData>>,
 );
+
+#[cfg(feature = "servo")]
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
+enum FontPaletteMixData {
+    Resolved(FontPaletteMix),
+    Contextual {
+        interpolation: ColorInterpolationMethod,
+        items: Box<[(FontPalette, Option<Percentage>)]>,
+    },
+}
 
 /// A `palette-mix()` with the percentage of each item resolved.
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
@@ -1693,6 +1703,34 @@ pub struct FontPaletteMixItem {
     pub palette: FontPalette,
     /// The percentage, from 0 to 1. Omitted percentages are resolved.
     pub percentage: f32,
+}
+
+impl FontPaletteMix {
+    fn from_items(
+        interpolation: ColorInterpolationMethod,
+        items: Vec<(FontPalette, Option<f32>)>,
+    ) -> Self {
+        let sum: f32 = items.iter().filter_map(|(_, percentage)| *percentage).sum();
+        let missing = items
+            .iter()
+            .filter(|(_, percentage)| percentage.is_none())
+            .count();
+        let implied = if missing == items.len() {
+            1.0 / items.len() as f32
+        } else {
+            (1.0 - sum.min(1.0)) / missing.max(1) as f32
+        };
+        Self {
+            interpolation,
+            items: items
+                .into_iter()
+                .map(|(palette, percentage)| FontPaletteMixItem {
+                    palette,
+                    percentage: percentage.unwrap_or(implied),
+                })
+                .collect(),
+        }
+    }
 }
 
 impl ToCss for FontPaletteMix {
@@ -1725,7 +1763,7 @@ impl ToCss for FontPaletteMix {
 impl FontPalette {
     fn computed_css(&self) -> String {
         #[cfg(feature = "servo")]
-        if let Some(mix) = &self.1 {
+        if let Some(mix) = self.mix() {
             return mix.to_css_string();
         }
         self.to_css_string()
@@ -1734,7 +1772,10 @@ impl FontPalette {
     fn with_mix(css: Atom, mix: Option<FontPaletteMix>) -> Self {
         #[cfg(feature = "servo")]
         {
-            Self(css, mix.map(Arc::new))
+            Self(
+                css,
+                mix.map(|mix| Arc::new(FontPaletteMixData::Resolved(mix))),
+            )
         }
         #[cfg(feature = "gecko")]
         {
@@ -1746,7 +1787,10 @@ impl FontPalette {
     /// The `palette-mix()` of this palette, if it is one.
     #[cfg(feature = "servo")]
     pub fn mix(&self) -> Option<&FontPaletteMix> {
-        self.1.as_deref()
+        match self.1.as_deref()? {
+            FontPaletteMixData::Resolved(mix) => Some(mix),
+            FontPaletteMixData::Contextual { .. } => None,
+        }
     }
 
     pub fn normal() -> Self {
@@ -1781,13 +1825,45 @@ impl FontPalette {
 impl ToComputedValue for FontPalette {
     type ComputedValue = Self;
 
-    fn to_computed_value(&self, _context: &Context) -> Self::ComputedValue {
+    fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
         #[cfg(feature = "servo")]
         {
-            Self(Atom::from(self.computed_css().as_str()), self.1.clone())
+            let mix = match self.1.as_deref() {
+                Some(FontPaletteMixData::Contextual {
+                    interpolation,
+                    items,
+                }) => FontPaletteMix::from_items(
+                    *interpolation,
+                    items
+                        .iter()
+                        .map(|(palette, percentage)| {
+                            (
+                                palette.to_computed_value(context),
+                                percentage
+                                    .as_ref()
+                                    .map(|percentage| percentage.to_computed_value(context).0),
+                            )
+                        })
+                        .collect(),
+                ),
+                Some(FontPaletteMixData::Resolved(mix)) => FontPaletteMix {
+                    interpolation: mix.interpolation,
+                    items: mix
+                        .items
+                        .iter()
+                        .map(|item| FontPaletteMixItem {
+                            palette: item.palette.to_computed_value(context),
+                            percentage: item.percentage,
+                        })
+                        .collect(),
+                },
+                None => return self.clone(),
+            };
+            Self::with_mix(Atom::from(mix.to_css_string().as_str()), Some(mix))
         }
         #[cfg(feature = "gecko")]
         {
+            let _ = context;
             self.clone()
         }
     }
@@ -1825,12 +1901,6 @@ impl Parse for FontPalette {
                         percentage = input
                             .try_parse(|input| Percentage::parse_zero_to_a_hundred(context, input))
                             .ok();
-                    }
-                    if percentage
-                        .as_ref()
-                        .is_some_and(|value| value.resolve().is_none())
-                    {
-                        return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
                     }
                     items.push((palette, percentage));
                     if input.try_parse(|input| input.expect_comma()).is_err() {
@@ -1890,23 +1960,33 @@ impl Parse for FontPalette {
                     }
                 }
                 serialized.push(')');
-                let items = computed_items
-                    .into_iter()
-                    .map(|(palette, percentage)| FontPaletteMixItem {
-                        palette,
-                        percentage: percentage
-                            .as_ref()
-                            .and_then(Percentage::resolve)
-                            .unwrap_or(implied),
+                let resolved = computed_items
+                    .iter()
+                    .map(|(palette, percentage)| {
+                        let percentage = match percentage {
+                            Some(percentage) => Some(percentage.resolve()?),
+                            None => None,
+                        };
+                        Some((palette.clone(), percentage))
                     })
-                    .collect();
-                Ok(Self::with_mix(
-                    Atom::from(serialized.as_str()),
-                    Some(FontPaletteMix {
+                    .collect::<Option<Vec<_>>>();
+                let css = Atom::from(serialized.as_str());
+                if let Some(items) = resolved {
+                    return Ok(Self::with_mix(
+                        css,
+                        Some(FontPaletteMix::from_items(interpolation, items)),
+                    ));
+                }
+                #[cfg(feature = "servo")]
+                return Ok(Self(
+                    css,
+                    Some(Arc::new(FontPaletteMixData::Contextual {
                         interpolation,
-                        items,
-                    }),
-                ))
+                        items: computed_items.into(),
+                    })),
+                ));
+                #[cfg(feature = "gecko")]
+                Ok(Self(css))
             });
         }
         let location = input.current_source_location();
@@ -2250,6 +2330,72 @@ impl From<MozScriptSizeMultiplier> for f32 {
 /// A specified value for the `line-height` property.
 pub type LineHeight = GenericLineHeight<NonNegativeNumber, NonNegativeLengthPercentage>;
 
+impl Parse for LineHeight {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        use crate::values::generics::calc::CalcUnits;
+        use crate::values::specified::calc::{AllowParse, CalcNode};
+        use style_traits::values::specified::AllowedNumericType;
+
+        if input
+            .try_parse(|input| input.expect_ident_matching("normal"))
+            .is_ok()
+        {
+            return Ok(Self::Normal);
+        }
+        #[cfg(feature = "servo")]
+        if input
+            .try_parse(|input| input.expect_ident_matching("-bd-none"))
+            .is_ok()
+        {
+            return Ok(Self::None);
+        }
+        #[cfg(feature = "gecko")]
+        if context.in_ua_sheet()
+            && input
+                .try_parse(|input| input.expect_ident_matching("-moz-block-height"))
+                .is_ok()
+        {
+            return Ok(Self::MozBlockHeight);
+        }
+        if let Ok(mut node) = input.try_parse(|input| {
+            let location = input.current_source_location();
+            let name = input.expect_function()?.clone();
+            let function = CalcNode::math_function(context, &name, location)?;
+            CalcNode::parse(
+                context,
+                input,
+                function,
+                AllowParse::new(CalcUnits::LENGTH_PERCENTAGE),
+            )
+        }) {
+            let unit = node
+                .unit()
+                .map_err(|()| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))?;
+            return if unit.is_empty() {
+                node.simplify_and_sort();
+                Ok(Self::Number(NonNegative(Number::from_calc_node(
+                    node,
+                    Some(AllowedNumericType::NonNegative),
+                ))))
+            } else {
+                let value = node
+                    .into_length_or_percentage(AllowedNumericType::NonNegative)
+                    .map_err(|()| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))?;
+                Ok(Self::Length(NonNegative(LengthPercentage::Calc(Box::new(
+                    value,
+                )))))
+            };
+        }
+        if let Ok(number) = input.try_parse(|input| NonNegativeNumber::parse(context, input)) {
+            return Ok(Self::Number(number));
+        }
+        NonNegativeLengthPercentage::parse(context, input).map(Self::Length)
+    }
+}
+
 impl ToComputedValue for LineHeight {
     type ComputedValue = computed::LineHeight;
 
@@ -2262,7 +2408,12 @@ impl ToComputedValue for LineHeight {
             #[cfg(feature = "gecko")]
             GenericLineHeight::MozBlockHeight => GenericLineHeight::MozBlockHeight,
             GenericLineHeight::Number(number) => {
-                GenericLineHeight::Number(number.to_computed_value(context))
+                let base = context.style().get_font().clone_font_size().computed_size();
+                GenericLineHeight::Number(NonNegative(
+                    number
+                        .0
+                        .to_computed_value_with_percentage_basis(context, base.px()),
+                ))
             },
             GenericLineHeight::Length(ref non_negative_lp) => {
                 let result = match non_negative_lp.0 {
@@ -2346,7 +2497,7 @@ mod tests {
 
     #[test]
     fn math_font_size_uses_the_computed_depth() {
-        use crate::properties::{style_structs::Font, ComputedValues, StyleBuilder};
+        use crate::properties::{ComputedValues, StyleBuilder, style_structs::Font};
         use crate::rule_cache::RuleCacheConditions;
         use crate::stylesheets::container_rule::ContainerSizeQuery;
         use crate::values::animated::ToAnimatedValue;
@@ -2382,7 +2533,7 @@ mod tests {
     #[test]
     fn math_font_size_at_the_inherited_depth_reads_no_font_metrics() {
         use crate::computed_value_flags::ComputedValueFlags;
-        use crate::properties::{style_structs::Font, ComputedValues, StyleBuilder};
+        use crate::properties::{ComputedValues, StyleBuilder, style_structs::Font};
         use crate::rule_cache::RuleCacheConditions;
         use crate::stylesheets::container_rule::ContainerSizeQuery;
 
@@ -2396,10 +2547,12 @@ mod tests {
             ContainerSizeQuery::none(),
         );
         FontSize::Keyword(KeywordInfo::new(FontSizeKeyword::Math)).to_computed_value(&context);
-        assert!(!context
-            .builder
-            .flags()
-            .contains(ComputedValueFlags::DEPENDS_ON_INHERITED_FONT_METRICS));
+        assert!(
+            !context
+                .builder
+                .flags()
+                .contains(ComputedValueFlags::DEPENDS_ON_INHERITED_FONT_METRICS)
+        );
     }
 
     #[test]

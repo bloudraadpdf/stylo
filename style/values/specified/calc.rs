@@ -804,9 +804,11 @@ impl generic::CalcNodeLeaf for Leaf {
         }
 
         match (self, other) {
-            (&mut Number(ref mut one), &Number(ref other))
-            | (&mut Percentage(ref mut one), &Percentage(ref other)) => {
+            (&mut Number(ref mut one), &Number(ref other)) => {
                 *one += *other;
+            },
+            (&mut Percentage(ref mut one), &Percentage(ref other)) => {
+                *one = (generic::authored_number(*one) + generic::authored_number(*other)) as f32;
             },
             (&mut Angle(ref mut one), &Angle(ref other)) => {
                 *one = AngleDimension::Deg(one.degrees() + other.degrees());
@@ -1322,6 +1324,18 @@ impl CalcNode {
                     let a = Self::parse_argument(context, input, allow_all)?;
                     input.expect_comma()?;
                     let b = Self::parse_argument(context, input, allow_all)?;
+                    let units = a
+                        .unit()
+                        .and_then(|a| b.unit().map(|b| a | b))
+                        .map_err(|()| {
+                            input.new_custom_error(StyleParseErrorKind::UnspecifiedError)
+                        })?;
+                    if units.contains(CalcUnits::PERCENTAGE)
+                        && units != CalcUnits::PERCENTAGE
+                        && !allowed.includes(CalcUnits::PERCENTAGE)
+                    {
+                        return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+                    }
                     let node = Self::Atan2(Box::new(a), Box::new(b));
                     node.unit().map_err(|()| {
                         input.new_custom_error(StyleParseErrorKind::UnspecifiedError)
@@ -1596,14 +1610,13 @@ impl CalcNode {
         mut self,
         clamping_mode: AllowedNumericType,
     ) -> Result<CalcLengthPercentage, ()> {
-        self.simplify_and_sort();
-
         // Although we allow numbers inside CalcLengthPercentage, calculations that resolve to a
         // number result is still not allowed.
         let unit = self.unit()?;
         if unit.is_empty() || !CalcUnits::LENGTH_PERCENTAGE.contains(unit) {
             Err(())
         } else {
+            self.simplify_and_sort();
             Ok(CalcLengthPercentage {
                 clamping_mode,
                 node: self,
@@ -1802,11 +1815,12 @@ impl CalcNode {
     }
 
     fn resolve_contextual_leaves(&self, context: &Context) -> Self {
-        self.resolve_contextual_leaves_with_base_size(
-            context,
-            FontBaseSize::CurrentStyle,
-            LineHeightBase::CurrentStyle,
-        )
+        let (font_base, line_height_base) = if context.for_font_affecting_property {
+            (FontBaseSize::InheritedStyle, LineHeightBase::InheritedStyle)
+        } else {
+            (FontBaseSize::CurrentStyle, LineHeightBase::CurrentStyle)
+        };
+        self.resolve_contextual_leaves_with_base_size(context, font_base, line_height_base)
     }
 
     fn resolve_contextual_leaves_with_base_size(
@@ -1863,6 +1877,23 @@ impl CalcNode {
     /// lengths to their canonical pixel value.
     pub fn resolve_number(&self, context: &Context) -> Result<CSSFloat, ()> {
         self.resolve_contextual_leaves(context).to_number()
+    }
+
+    pub(crate) fn resolve_number_with_percentage_basis(
+        &self,
+        context: &Context,
+        basis: f32,
+    ) -> Result<CSSFloat, ()> {
+        self.resolve_contextual_leaves_with_base_size(
+            context,
+            FontBaseSize::CurrentStyle,
+            LineHeightBase::InheritedStyle,
+        )
+        .map_leaves(|leaf| match *leaf {
+            Leaf::Percentage(value) => Leaf::Length(NoCalcLength::from_px(basis * value)),
+            _ => leaf.clone(),
+        })
+        .to_number()
     }
 
     /// Resolve a `<number>` calculation which has no contextual units.
@@ -2725,6 +2756,69 @@ mod math_function_tests {
             "calc-mix(1px 1px)",
         ] {
             assert!(parse_length_percentage(css).is_none(), "{css}");
+        }
+    }
+
+    #[test]
+    fn invalid_units_are_rejected_before_zero_step_simplification() {
+        for css in ["round(0px, 0s)", "round(0px, 0deg)", "round(0px, 0dpi)"] {
+            assert!(parse_length_percentage(css).is_none(), "{css}");
+        }
+        let mut input = ParserInput::new("atan2(90px, 100%)");
+        assert!(
+            Parser::new(&mut input)
+                .parse_entirely(|input| specified::Angle::parse(&context(), input))
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn higher_order_products_keep_their_types_until_cancellation() {
+        for (css, expected) in [
+            ("calc((0px * 0px - 2px * 3px) / 1px)", -6.0),
+            ("calc((1px * 1px - 2px * 3px) / 1px)", -5.0),
+            ("calc((0px * 0px - 2em * 3px) / 1px)", -96.0),
+            (
+                "calc((0px * 0px * 0px - 1px * 2px * 3px) / 1px / 1px)",
+                -6.0,
+            ),
+            (
+                "calc((0px * 0px * 0px * 0px - 1px * 2px * 3px * 4px) / 1px / 1px / 1px)",
+                -24.0,
+            ),
+        ] {
+            assert_eq!(used_px(css, 100.0), expected, "{css}");
+        }
+    }
+
+    #[test]
+    fn percentage_arithmetic_preserves_authored_decimals() {
+        assert_eq!(used_px("calc(60% - 50% + 3em)", 570.0), 105.0);
+        assert_eq!(used_px("mod(-19%, 5%)", 75.0), 0.75);
+        assert_eq!(used_px("calc(mod(0.3, 0.1) * 1px)", 100.0), 0.0);
+    }
+
+    #[test]
+    fn number_percentage_contexts_accept_dimensionless_ratios() {
+        let mut input = ParserInput::new("calc(10% / 20%)");
+        let value = Parser::new(&mut input)
+            .parse_entirely(|input| specified::NumberOrPercentage::parse(&context(), input))
+            .unwrap();
+        assert_eq!(
+            with_computed_context(|context| value.to_number().to_computed_value(context)),
+            0.5
+        );
+
+        for (css, expected) in [("calc(10% / 1px)", 1.6), ("calc(10% / 10%)", 1.0)] {
+            let mut input = ParserInput::new(css);
+            let value = Parser::new(&mut input)
+                .parse_entirely(|input| specified::LineHeight::parse(&context(), input))
+                .unwrap();
+            let value = with_computed_context(|context| value.to_computed_value(context));
+            let crate::values::generics::font::GenericLineHeight::Number(value) = value else {
+                panic!("{css} must compute to a line-height multiplier");
+            };
+            assert!((value.0 - expected).abs() < 0.0001, "{css}: {value:?}");
         }
     }
 }

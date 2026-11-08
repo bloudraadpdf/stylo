@@ -381,6 +381,7 @@ struct Frame<'a> {
 struct GuardedContext<'a> {
     function: Option<&'a CustomFunction>,
     attribute: Option<crate::values::specified::AttrName>,
+    property: Option<Name>,
     cyclic: bool,
 }
 
@@ -407,6 +408,7 @@ impl<'a> FunctionCalls<'a> {
         self.stack.push(GuardedContext {
             function,
             attribute: None,
+            property: None,
             cyclic: false,
         });
         self.stack.len() - 1
@@ -438,6 +440,26 @@ impl<'a> FunctionCalls<'a> {
         }
         let entry = self.guard(None);
         self.stack[entry].attribute = Some(name.clone());
+        Ok(entry)
+    }
+
+    pub(super) fn property_is_guarded(&self, name: &Name) -> bool {
+        self.stack
+            .iter()
+            .any(|context| context.property.as_ref() == Some(name))
+    }
+
+    pub(super) fn guard_property(&mut self, name: &Name) -> Result<usize, ()> {
+        if let Some(entry) = self
+            .stack
+            .iter()
+            .position(|context| context.property.as_ref() == Some(name))
+        {
+            self.mark_cyclic(entry);
+            return Err(());
+        }
+        let entry = self.guard(None);
+        self.stack[entry].property = Some(name.clone());
         Ok(entry)
     }
 }
@@ -496,13 +518,7 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
             Some(index) => self.calls.frames[index].function.registration(name).clone(),
             None => self.stylist.get_custom_property_registration(name).clone(),
         };
-        if binding.is_none()
-            && self
-                .custom_properties
-                .get(&registration, name)
-                .and_then(|value| value.as_universal())
-                .is_some_and(|value| value.has_references())
-        {
+        if binding.is_none() && self.calls.property_is_guarded(name) {
             return false;
         }
         let initial = match binding {
@@ -582,7 +598,7 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
         None
     }
 
-    fn typed(
+    pub(super) fn typed(
         &self,
         registration: &PropertyRegistrationData,
         value: Substitution,

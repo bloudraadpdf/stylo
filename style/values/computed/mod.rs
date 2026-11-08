@@ -460,6 +460,9 @@ pub struct Context<'a> {
     /// at all (e.g. in a media query evaluation).
     pub for_non_inherited_property: bool,
 
+    /// Font-relative values in font-affecting properties use inherited metrics.
+    pub for_font_affecting_property: bool,
+
     /// The conditions to cache a rule node on the rule cache.
     ///
     /// FIXME(emilio): Drop the refcell.
@@ -502,6 +505,7 @@ impl<'a> Context<'a> {
             container_info: None,
             style_container: None,
             for_non_inherited_property: false,
+            for_font_affecting_property: false,
             rule_cache_conditions: RefCell::new(&mut conditions),
             scope: CascadeLevel::same_tree_author_normal(),
             tree_counting: TreeCounting::default(),
@@ -546,6 +550,7 @@ impl<'a> Context<'a> {
                 attributes: &c.element,
             }),
             for_non_inherited_property: false,
+            for_font_affecting_property: false,
             rule_cache_conditions: RefCell::new(&mut conditions),
             scope: CascadeLevel::same_tree_author_normal(),
             tree_counting: TreeCounting::new(move || {
@@ -575,6 +580,7 @@ impl<'a> Context<'a> {
             style_container: None,
             for_smil_animation: false,
             for_non_inherited_property: false,
+            for_font_affecting_property: false,
             rule_cache_conditions: RefCell::new(rule_cache_conditions),
             scope: CascadeLevel::same_tree_author_normal(),
             tree_counting: TreeCounting::default(),
@@ -601,6 +607,7 @@ impl<'a> Context<'a> {
             style_container: None,
             for_smil_animation,
             for_non_inherited_property: false,
+            for_font_affecting_property: false,
             rule_cache_conditions: RefCell::new(rule_cache_conditions),
             scope: CascadeLevel::same_tree_author_normal(),
             tree_counting: TreeCounting::default(),
@@ -627,6 +634,7 @@ impl<'a> Context<'a> {
             style_container: None,
             for_smil_animation: false,
             for_non_inherited_property: false,
+            for_font_affecting_property: false,
             rule_cache_conditions: RefCell::new(rule_cache_conditions),
             scope: CascadeLevel::same_tree_author_normal(),
             tree_counting: TreeCounting::default(),
@@ -761,6 +769,11 @@ impl<'a> Context<'a> {
     ) -> default::Size2D<Au> {
         self.builder
             .add_flags(ComputedValueFlags::USES_VIEWPORT_UNITS);
+        #[cfg(feature = "servo")]
+        if self.in_media_query {
+            let size = self.device().page_box_size();
+            return default::Size2D::new(Au::from_f32_px(size.width), Au::from_f32_px(size.height));
+        }
         self.builder
             .device
             .au_viewport_size_for_viewport_unit_resolution(variant)

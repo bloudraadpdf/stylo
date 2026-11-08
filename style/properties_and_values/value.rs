@@ -245,17 +245,21 @@ pub struct Value<Component> {
 
 impl<Component: Animate + Clone> Animate for Value<Component> {
     fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
-        let v = self
-            .v
-            .animate(&other.v, procedure)
-            .or_else(|()| match procedure {
-                Procedure::Interpolate { progress } => Ok(if progress < 0.5 {
-                    self.v.clone()
-                } else {
-                    other.v.clone()
-                }),
-                _ => Err(()),
-            })?;
+        let v = match procedure {
+            Procedure::Interpolate { progress } if progress == 0.0 => self.v.clone(),
+            Procedure::Interpolate { progress } if progress == 1.0 => other.v.clone(),
+            _ => self
+                .v
+                .animate(&other.v, procedure)
+                .or_else(|()| match procedure {
+                    Procedure::Interpolate { progress } => Ok(if progress < 0.5 {
+                        self.v.clone()
+                    } else {
+                        other.v.clone()
+                    }),
+                    _ => Err(()),
+                })?,
+        };
         Ok(Value {
             v,
             url_data: self.url_data.clone(),
@@ -425,6 +429,7 @@ impl ComputedValue {
     /// Whether this value and `other` are equal, with equivalent colors equal (CSS Color 4 §12).
     pub fn is_equivalent(&self, other: &Self) -> bool {
         match (&self.v, &other.v) {
+            (ValueInner::Universal(a), ValueInner::Universal(b)) => a.css_text() == b.css_text(),
             (ValueInner::Component(a), ValueInner::Component(b)) => a.is_equivalent(b),
             (ValueInner::List(a), ValueInner::List(b)) => {
                 a.multiplier == b.multiplier
@@ -439,8 +444,10 @@ impl ComputedValue {
     }
 
     fn to_declared_value(&self) -> properties::CustomDeclarationValue {
-        if let ValueInner::Universal(ref var) = self.v {
-            return properties::CustomDeclarationValue::Unparsed(Arc::clone(var));
+        if let ValueInner::Universal(_) = self.v {
+            return properties::CustomDeclarationValue::Unparsed(Arc::new(
+                self.to_variable_value(),
+            ));
         }
         properties::CustomDeclarationValue::Parsed(Arc::new(ToComputedValue::from_computed_value(
             self,
@@ -850,7 +857,7 @@ mod tests {
                 let to = computed(syntax, to)
                     .unwrap()
                     .with_attr_taint(!tainted_start);
-                for progress in [0.25, 0.75] {
+                for progress in [0.0, 0.25, 0.75, 1.0] {
                     let sampled = from
                         .animate(&to, Procedure::Interpolate { progress })
                         .unwrap();
@@ -863,11 +870,23 @@ mod tests {
                         let computed: ComputedValue = declared.to_computed_value(context);
                         computed.to_variable_value().is_attr_tainted()
                     }));
+                    if syntax == "*" {
+                        let properties::CustomDeclarationValue::Unparsed(declared) =
+                            sampled.to_declared_value()
+                        else {
+                            panic!("universal animation values retain their token stream");
+                        };
+                        assert!(declared.is_attr_tainted());
+                    }
                 }
             }
         }
         let plain = computed("<string>", "\"same\"").unwrap();
         assert_ne!(plain, plain.clone().with_attr_taint(true));
+        let plain = computed("*", "same").unwrap();
+        let tainted = plain.clone().with_attr_taint(true);
+        assert_ne!(plain, tainted);
+        assert!(plain.is_equivalent(&tainted));
         let tainted = computed("<number>", "1").unwrap().with_attr_taint(true);
         let plain = computed("<number>", "2").unwrap();
         for procedure in [Procedure::Add, Procedure::Accumulate { count: 2 }] {
@@ -878,6 +897,21 @@ mod tests {
                     .to_variable_value()
                     .is_attr_tainted()
             );
+        }
+    }
+
+    #[test]
+    fn registered_colour_interpolation_keeps_endpoint_representation_and_combines_taint() {
+        let from = computed("<color>", "color(srgb 1 0.2 0.3)")
+            .unwrap()
+            .with_attr_taint(true);
+        let to = computed("<color>", "color(srgb 0.4 0.5 1)").unwrap();
+        for (progress, expected) in [(0.0, &from), (1.0, &to)] {
+            let sampled = from
+                .animate(&to, Procedure::Interpolate { progress })
+                .unwrap();
+            assert_eq!(sampled.to_css_string(), expected.to_css_string());
+            assert!(sampled.to_variable_value().is_attr_tainted());
         }
     }
 

@@ -50,6 +50,7 @@ pub mod ${property.ident} {
         declaration.debug_crash("Should physicalize before entering here");
         % else:
         context.for_non_inherited_property = ${"false" if property.style_struct.inherited else "true"};
+        context.for_font_affecting_property = ${"true" if property.style_struct.name == "Font" else "false"};
         % if property.logical_group:
         debug_assert_eq!(
             declaration.id().as_longhand().unwrap().logical_group(),

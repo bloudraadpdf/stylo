@@ -97,7 +97,14 @@ impl ProgressClamping {
 }
 
 impl ModRemOp {
-    fn apply(self, dividend: f32, divisor: f32) -> f32 {
+    fn apply(self, dividend: f32, divisor: f32, unit: CalcUnits) -> f32 {
+        let scale = if unit == CalcUnits::PERCENTAGE {
+            100.0
+        } else {
+            1.0
+        };
+        let dividend = dividend * scale;
+        let divisor = divisor * scale;
         // In mod(A, B) only, if B is infinite and A has opposite sign to B
         // (including an oppositely-signed zero), the result is NaN.
         // https://drafts.csswg.org/css-values/#round-infinities
@@ -115,8 +122,23 @@ impl ModRemOp {
         if r == 0.0 && same_sign_as.is_sign_negative() {
             -0.0
         } else {
-            r
+            r / scale
         }
+    }
+}
+
+/// Restore a short authored decimal before widening its stored `f32` for arithmetic.
+pub(crate) fn authored_number(value: f32) -> f64 {
+    let bits = f64::from(value);
+    if value == 0.0 || !value.is_finite() {
+        return bits;
+    }
+    let scale = 10_f64.powi(6 - bits.abs().log10().floor() as i32);
+    let decimal = (bits * scale).round() / scale;
+    if decimal as f32 == value {
+        decimal
+    } else {
+        bits
     }
 }
 
@@ -578,16 +600,18 @@ const BASE_UNITS: [CalcUnits; 5] = [
 /// The type of a product: the power of each base type.
 ///
 /// https://drafts.csswg.org/css-values-4/#calc-type-checking
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct CalcType {
     exponents: [i8; BASE_UNITS.len()],
     /// Whether a percentage resolves against the other dimension of the product.
     percent_hint: bool,
+    color_component: bool,
 }
 
 impl CalcType {
     /// Multiplies this type by `unit` raised to `exponent`.
     fn multiply(&mut self, unit: CalcUnits, exponent: i8) -> Result<(), ()> {
+        self.color_component |= unit.contains(CalcUnits::COLOR_COMPONENT);
         let mut unit = unit - CalcUnits::COLOR_COMPONENT;
         if unit.contains(CalcUnits::PERCENTAGE) && unit != CalcUnits::PERCENTAGE {
             self.percent_hint = true;
@@ -597,8 +621,44 @@ impl CalcType {
             return Ok(());
         }
         let index = BASE_UNITS.iter().position(|base| *base == unit).ok_or(())?;
-        self.exponents[index] += exponent;
+        self.exponents[index] = self.exponents[index].checked_add(exponent).ok_or(())?;
         Ok(())
+    }
+
+    fn multiply_type(&mut self, other: &Self, exponent: i8) -> Result<(), ()> {
+        self.percent_hint |= other.percent_hint;
+        self.color_component |= other.color_component;
+        for (left, right) in self.exponents.iter_mut().zip(other.exponents) {
+            *left = left
+                .checked_add(right.checked_mul(exponent).ok_or(())?)
+                .ok_or(())?;
+        }
+        Ok(())
+    }
+
+    fn sum(&mut self, other: &Self) -> Result<(), ()> {
+        if self.exponents == other.exponents {
+            self.percent_hint |= other.percent_hint;
+            self.color_component |= other.color_component;
+            return Ok(());
+        }
+        for dimension in [0, 2] {
+            let mut left = self.clone();
+            let mut right = other.clone();
+            for value in [&mut left, &mut right] {
+                value.percent_hint |= value.exponents[1] != 0;
+                value.exponents[dimension] = value.exponents[dimension]
+                    .checked_add(mem::take(&mut value.exponents[1]))
+                    .ok_or(())?;
+            }
+            if left.exponents == right.exponents {
+                left.percent_hint |= right.percent_hint;
+                left.color_component |= right.color_component;
+                *self = left;
+                return Ok(());
+            }
+        }
+        Err(())
     }
 
     /// The unit of a value of this type, failing unless it is a number or a single dimension.
@@ -607,7 +667,9 @@ impl CalcType {
         if self.exponents[PERCENTAGE] != 0 {
             // A percentage in a product with a length or angle resolves against that dimension.
             if let Some(index) = [0, 2].into_iter().find(|index| self.exponents[*index] != 0) {
-                self.exponents[index] += mem::take(&mut self.exponents[PERCENTAGE]);
+                self.exponents[index] = self.exponents[index]
+                    .checked_add(mem::take(&mut self.exponents[PERCENTAGE]))
+                    .ok_or(())?;
                 self.percent_hint = true;
             }
         }
@@ -616,6 +678,7 @@ impl CalcType {
             .zip(self.exponents)
             .filter(|(_, exponent)| *exponent != 0);
         Ok(match (dimensions.next(), dimensions.next()) {
+            (None, _) if self.color_component => CalcUnits::COLOR_COMPONENT,
             (None, _) => CalcUnits::empty(),
             (Some((unit, 1)), None) if self.percent_hint && *unit != CalcUnits::PERCENTAGE => {
                 *unit | CalcUnits::PERCENTAGE
@@ -869,6 +932,27 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
         }
     }
 
+    fn arithmetic_type(&self) -> Result<CalcType, ()> {
+        let mut result = CalcType::default();
+        match self {
+            Self::Negate(child) => return child.arithmetic_type(),
+            Self::Invert(child) => result.multiply_type(&child.arithmetic_type()?, -1)?,
+            Self::Product(children) => {
+                for child in children.iter() {
+                    result.multiply_type(&child.arithmetic_type()?, 1)?;
+                }
+            },
+            Self::Sum(children) => {
+                result = children[0].arithmetic_type()?;
+                for child in children.iter().skip(1) {
+                    result.sum(&child.arithmetic_type()?)?;
+                }
+            },
+            _ => result.multiply(self.unit()?, 1)?,
+        }
+        Ok(result)
+    }
+
     /// If the node has a valid unit outcome, then return it, otherwise fail.
     pub fn unit(&self) -> Result<CalcUnits, ()> {
         Ok(match self {
@@ -881,33 +965,7 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 }
                 unit
             },
-            CalcNode::Sum(children) => {
-                let mut unit = children.first().unwrap().unit()?;
-                for child in children.iter().skip(1) {
-                    let child_unit = child.unit()?;
-                    if !child_unit.can_sum_with(unit) {
-                        return Err(());
-                    }
-                    unit |= child_unit;
-                }
-                unit
-            },
-            CalcNode::Product(children) => {
-                let mut product_type = CalcType::default();
-                let mut color_component = false;
-                for child in children.iter() {
-                    let (unit, exponent) = match child {
-                        CalcNode::Invert(divisor) => (divisor.unit()?, -1),
-                        _ => (child.unit()?, 1),
-                    };
-                    color_component |= unit.contains(CalcUnits::COLOR_COMPONENT);
-                    product_type.multiply(unit, exponent)?;
-                }
-                match product_type.unit()? {
-                    unit if unit.is_empty() && color_component => CalcUnits::COLOR_COMPONENT,
-                    unit => unit,
-                }
-            },
+            CalcNode::Sum(_) | CalcNode::Product(_) => self.arithmetic_type()?.unit()?,
             CalcNode::MinMax(children, _) | CalcNode::Hypot(children) => {
                 let mut unit = children.first().unwrap().unit()?;
                 for child in children.iter().skip(1) {
@@ -1450,6 +1508,50 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
         self.resolve_internal(&mut leaf_to_output_fn)
     }
 
+    fn resolve_arithmetic<F>(&self, map: &mut F) -> Result<(f32, CalcType), ()>
+    where
+        F: FnMut(&L) -> Result<L, ()>,
+    {
+        match self {
+            Self::Negate(child) => {
+                let (value, kind) = child.resolve_arithmetic(map)?;
+                Ok((-value, kind))
+            },
+            Self::Invert(child) => {
+                let (value, kind) = child.resolve_arithmetic(map)?;
+                let mut inverse = CalcType::default();
+                inverse.multiply_type(&kind, -1)?;
+                Ok((1.0 / value, inverse))
+            },
+            Self::Product(children) => {
+                let mut value = 1.0;
+                let mut kind = CalcType::default();
+                for child in children.iter() {
+                    let (factor, factor_kind) = child.resolve_arithmetic(map)?;
+                    value *= factor;
+                    kind.multiply_type(&factor_kind, 1)?;
+                }
+                Ok((value, kind))
+            },
+            Self::Sum(children) => {
+                let (mut value, mut kind) = children[0].resolve_arithmetic(map)?;
+                for child in children.iter().skip(1) {
+                    let (term, term_kind) = child.resolve_arithmetic(map)?;
+                    kind.sum(&term_kind)?;
+                    value += term;
+                }
+                Ok((value, kind))
+            },
+            _ => {
+                let leaf = self.resolve_internal(map)?;
+                let (value, unit) = leaf.canonical().ok_or(())?;
+                let mut kind = CalcType::default();
+                kind.multiply(unit, 1)?;
+                Ok((value, kind))
+            },
+        }
+    }
+
     fn resolve_internal<F>(&self, leaf_to_output_fn: &mut F) -> Result<L, ()>
     where
         F: FnMut(&L) -> Result<L, ()>,
@@ -1486,8 +1588,13 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                         },
                         _ => Ok((child.resolve_internal(leaf_to_output_fn)?, false)),
                     })
-                    .collect::<Result<SmallVec<[(L, bool); 4]>, ()>>()?;
-                resolve_product(&factors)
+                    .collect::<Result<SmallVec<[(L, bool); 4]>, ()>>();
+                factors
+                    .and_then(|factors| resolve_product(&factors))
+                    .or_else(|()| {
+                        let (value, kind) = self.resolve_arithmetic(leaf_to_output_fn)?;
+                        L::from_canonical(value, kind.unit()?).ok_or(())
+                    })
             },
             Self::MinMax(children, op) => {
                 let mut result = children[0].resolve_internal(leaf_to_output_fn)?;
@@ -1653,7 +1760,8 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 let Some(divisor) = divisor.unitless_value() else {
                     return Err(());
                 };
-                dividend.map(|dividend| op.apply(dividend, divisor))?;
+                let unit = dividend.unit();
+                dividend.map(|dividend| op.apply(dividend, divisor, unit))?;
                 Ok(dividend)
             },
             Self::Hypot(children) => {
@@ -2231,7 +2339,9 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 ref divisor,
                 op,
             } => {
-                let mut result = value_or_stop!(dividend.try_op(divisor, |a, b| op.apply(a, b)));
+                let unit = value_or_stop!(dividend.unit());
+                let mut result =
+                    value_or_stop!(dividend.try_op(divisor, |a, b| op.apply(a, b, unit)));
                 replace_self_with!(&mut result);
             },
             Self::MinMax(ref mut children, op) => {

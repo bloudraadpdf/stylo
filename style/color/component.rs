@@ -7,8 +7,8 @@
 use std::fmt::Write;
 
 use super::{
-    parsing::{rcs_enabled, ChannelKeyword},
     AbsoluteColor,
+    parsing::{ChannelKeyword, rcs_enabled},
 };
 use crate::derives::*;
 use crate::{
@@ -21,7 +21,7 @@ use crate::{
         specified::length::{FontBaseSize, LineHeightBase, NoCalcLength},
     },
 };
-use cssparser::{color::OPAQUE, Parser, Token};
+use cssparser::{Parser, Token, color::OPAQUE};
 use style_traits::{ParseError, ToCss};
 
 /// A single color component.
@@ -176,14 +176,20 @@ impl<ValueType: ColorComponentType> ColorComponent<ValueType> {
                 let function = GenericCalcNode::math_function(context, name, location)?;
                 let mut node =
                     GenericCalcNode::parse(context, input, function, Self::calc_allow())?;
-                node.map_leaves(|leaf| match leaf {
-                    Leaf::Percentage(value) => Leaf::Number(*value),
-                    _ => leaf.clone(),
-                })
-                .unit()
-                .map_err(|()| {
-                    location.new_custom_error(style_traits::StyleParseErrorKind::UnspecifiedError)
-                })?;
+                let unit = node
+                    .map_leaves(|leaf| match leaf {
+                        Leaf::Percentage(value) => Leaf::Number(*value),
+                        _ => leaf.clone(),
+                    })
+                    .unit()
+                    .map_err(|()| {
+                        location
+                            .new_custom_error(style_traits::StyleParseErrorKind::UnspecifiedError)
+                    })?;
+                if !(unit - ValueType::units() - CalcUnits::COLOR_COMPONENT).is_empty() {
+                    return Err(location
+                        .new_custom_error(style_traits::StyleParseErrorKind::UnspecifiedError));
+                }
 
                 // TODO(tlouw): We only have to simplify the node when we have to store it, but we
                 //              only know if we have to store it much later when the whole color
@@ -253,12 +259,12 @@ impl<ValueType: ColorComponentType> ColorComponent<ValueType> {
             Self::SiblingIndex => {
                 return Self::Value(ValueType::from_value(super::ColorFloat::from(
                     context.sibling_index(),
-                )))
+                )));
             },
             Self::SiblingCount => {
                 return Self::Value(ValueType::from_value(super::ColorFloat::from(
                     context.sibling_count(),
-                )))
+                )));
             },
             Self::Calc(node) => node,
             _ => return self.clone(),

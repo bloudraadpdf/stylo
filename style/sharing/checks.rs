@@ -152,14 +152,10 @@ where
 {
     // The candidate must be styled in order to be in the cache.
     let borrowed_data = candidate.element.borrow_data().unwrap();
-    let attrs_used = borrowed_data.styles.primary().attribute_references.as_ref();
-
-    let Some(attrs_used) = attrs_used else {
-        return true;
-    };
-
-    attrs_used
-        .iter()
+    std::iter::once(borrowed_data.styles.primary())
+        .chain(borrowed_data.styles.pseudos.as_array().iter().flatten())
+        .filter_map(|style| style.attribute_references.as_ref())
+        .flat_map(|references| references.iter())
         .all(|name| target.get_attr(name) == candidate.get_attr(name))
 }
 

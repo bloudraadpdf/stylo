@@ -311,7 +311,6 @@ impl<Factor: ToCss> ToCss for GenericFontSizeAdjust<Factor> {
     ToAnimatedValue,
     ToCss,
     ToShmem,
-    Parse,
     ToTyped,
 )]
 #[cfg_attr(feature = "servo", derive(Deserialize, Serialize))]
@@ -325,7 +324,6 @@ pub enum GenericLineHeight<N, L> {
     None,
     /// `-moz-block-height`
     #[cfg(feature = "gecko")]
-    #[parse(condition = "ParserContext::in_ua_sheet")]
     MozBlockHeight,
     /// `<number>`
     Number(N),
