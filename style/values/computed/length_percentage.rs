@@ -115,9 +115,22 @@ pub struct TagVariant {
 /// Also we need the union and the variants to be `pub` (even though the member
 /// is private) so that cbindgen generates it. They're not part of the public
 /// API otherwise.
-#[derive(ToTyped)]
 #[repr(transparent)]
 pub struct LengthPercentage(LengthPercentageUnion);
+
+impl style_traits::ToTyped for LengthPercentage {
+    fn to_typed(&self) -> Option<style_traits::TypedValue> {
+        use style_traits::{NumericValue, TypedValue};
+        match self.unpack() {
+            Unpacked::Length(length) => length.to_typed(),
+            Unpacked::Percentage(percentage) => Some(TypedValue::Numeric(NumericValue::Unit {
+                value: percentage.0 * 100.0,
+                unit: "%".into(),
+            })),
+            Unpacked::Calc(_) => None,
+        }
+    }
+}
 
 #[doc(hidden)]
 #[repr(C)]
@@ -1700,6 +1713,29 @@ impl TryTacticAdjustment for CalcNode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn typed_scalar_lengths_keep_precision_before_cssom_serialisation() {
+        use style_traits::{NumericValue, ToTyped, TypedValue};
+        let length = LengthPercentage::new_length(Length::new(99.99999));
+        let size = crate::values::computed::Size::LengthPercentage(
+            crate::values::generics::NonNegative(length),
+        );
+        let Some(TypedValue::Numeric(NumericValue::Unit { value, unit })) = size.to_typed() else {
+            panic!("a computed size with a scalar length has a native typed value");
+        };
+        assert_eq!(unit.as_str(), "px");
+        assert_eq!(value, 99.99999);
+        assert!(value < 100.0);
+        let mixed = LengthPercentage::new_calc(
+            CalcNode::Sum(vec![
+                CalcNode::Leaf(CalcLengthPercentageLeaf::Length(Length::new(1.0))),
+                CalcNode::Leaf(CalcLengthPercentageLeaf::Percentage(Percentage(0.25))),
+            ].into()),
+            AllowedNumericType::All,
+        );
+        assert!(mixed.to_typed().is_none());
+    }
 
     #[test]
     fn computed_sums_preserve_zero_terms_with_different_units() {

@@ -423,9 +423,11 @@ where
                             }
                         }
                     });
-                    shadow_cascade_order.inc();
                 }
             }
+
+            // Declaration scope follows every shadow boundary, including trees without part rules.
+            shadow_cascade_order.inc();
 
             inner_shadow = match outer_shadow {
                 Some(s) => s,

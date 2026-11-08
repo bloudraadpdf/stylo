@@ -672,7 +672,7 @@ impl QueryFeatureExpression {
                     resolved = kind;
                     &resolved
                 },
-                None => return KleeneValue::False,
+                None => return KleeneValue::Unknown,
             }
         } else {
             &self.kind

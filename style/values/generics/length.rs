@@ -159,6 +159,7 @@ impl<LengthPercentage: Parse> Parse for LengthPercentageOrAuto<LengthPercentage>
     ToTyped,
 )]
 #[repr(C, u8)]
+#[typed_value(derive_fields)]
 pub enum GenericSize<LengthPercent, Calc> {
     LengthPercentage(LengthPercent),
     Auto,
@@ -177,10 +178,14 @@ pub enum GenericSize<LengthPercent, Calc> {
     Stretch,
     #[animation(error)]
     #[css(function = "fit-content")]
+    #[typed_value(skip)]
     FitContentFunction(LengthPercent),
+    #[typed_value(skip)]
     AnchorSizeFunction(Box<GenericAnchorSizeFunction<Self>>),
+    #[typed_value(skip)]
     AnchorContainingCalcFunction(LengthPercent),
     #[animation(error)]
+    #[typed_value(skip)]
     CalcSize(Box<GenericCalcSize<Calc>>),
 }
 
@@ -240,6 +245,7 @@ impl<LengthPercentage, Calc> Size<LengthPercentage, Calc> {
     ToTyped,
 )]
 #[repr(C, u8)]
+#[typed_value(derive_fields)]
 pub enum GenericMaxSize<LengthPercent, Calc> {
     LengthPercentage(LengthPercent),
     None,
@@ -258,10 +264,14 @@ pub enum GenericMaxSize<LengthPercent, Calc> {
     Stretch,
     #[animation(error)]
     #[css(function = "fit-content")]
+    #[typed_value(skip)]
     FitContentFunction(LengthPercent),
+    #[typed_value(skip)]
     AnchorSizeFunction(Box<GenericAnchorSizeFunction<Self>>),
+    #[typed_value(skip)]
     AnchorContainingCalcFunction(LengthPercent),
     #[animation(error)]
+    #[typed_value(skip)]
     CalcSize(Box<GenericCalcSize<Calc>>),
 }
 
