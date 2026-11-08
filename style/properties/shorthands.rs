@@ -3195,7 +3195,6 @@ pub mod position_try {
     }
 }
 
-#[cfg(feature = "gecko")]
 fn timeline_to_css<W>(
     name: &[specified::TimelineName],
     axes: &[specified::ScrollAxis],
@@ -3220,7 +3219,6 @@ where
     Ok(())
 }
 
-#[cfg(feature = "gecko")]
 pub mod scroll_timeline {
     pub use crate::properties::shorthands_generated::scroll_timeline::*;
 

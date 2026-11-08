@@ -440,7 +440,6 @@ spec = "https://drafts.csswg.org/scroll-animations-1/#propdef-animation-range"
 rule_types_allowed = ["style", "scope"]
 
 [scroll-timeline]
-engine = "gecko"
 sub_properties = ["scroll-timeline-name", "scroll-timeline-axis"]
 spec = "https://drafts.csswg.org/scroll-animations-1/#scroll-timeline-shorthand"
 gecko_pref = "layout.css.scroll-driven-animations.enabled"

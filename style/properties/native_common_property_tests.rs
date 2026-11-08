@@ -908,6 +908,29 @@ fn mask_does_not_serialize_when_a_reset_longhand_is_missing() {
 }
 
 #[test]
+fn scroll_timeline_properties_preserve_names_axes_and_shorthand_defaults() {
+    for (name, input, expected) in [
+        ("scroll-timeline-name", "--main, none", "--main, none"),
+        ("scroll-timeline-axis", "inline, y", "inline, y"),
+        ("scroll-timeline", "--main block, --other inline", "--main, --other inline"),
+        ("scroll-timeline", "none", "none"),
+    ] {
+        assert_serialization(name, input, Some(expected));
+    }
+    let declarations = block("scroll-timeline:--main inline, --other");
+    assert_eq!(serialized_value(&declarations, "scroll-timeline-name"), "--main, --other");
+    assert_eq!(serialized_value(&declarations, "scroll-timeline-axis"), "inline, block");
+    for (name, invalid) in [
+        ("scroll-timeline-name", "main"),
+        ("scroll-timeline-axis", "diagonal"),
+        ("scroll-timeline", "inline --main"),
+        ("scroll-timeline", "--main inline y"),
+    ] {
+        assert_serialization(name, invalid, None);
+    }
+}
+
+#[test]
 fn view_timeline_properties_retain_typed_names_axes_and_insets() {
     for (name, input, expected) in [
         ("view-timeline-name", "--visible, none", "--visible, none"),
