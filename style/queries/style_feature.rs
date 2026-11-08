@@ -255,7 +255,11 @@ impl RangeOperand {
 
 fn equivalent(a: Option<&ComputedRegisteredValue>, b: Option<&ComputedRegisteredValue>) -> bool {
     match (a, b) {
-        (Some(a), Some(b)) => a.is_equivalent(b),
+        (Some(a), Some(b)) => match (a.as_universal(), b.as_universal()) {
+            (Some(a), Some(b)) => a.css_text().trim_matches(crate::str::char_is_whitespace)
+                == b.css_text().trim_matches(crate::str::char_is_whitespace),
+            _ => a.is_equivalent(b),
+        },
         (a, b) => a.is_none() && b.is_none(),
     }
 }
@@ -516,6 +520,8 @@ mod tests {
             ("--foo: bar", "--foo: bar"),
             ("--foo: bar", "--foo: var(--foo)"),
             ("--foo: bar", "--foo: var(--missing, bar)"),
+            ("--foo: var(--missing, 3 )", "--foo: 3"),
+            ("--foo: if(else: 3 )", "--foo: 3"),
             ("--x: 3; --y: 2", "--x > var(--y)"),
         ] {
             assert_eq!(
@@ -523,6 +529,16 @@ mod tests {
                 KleeneValue::True,
                 "{feature}"
             );
+        }
+    }
+
+    #[test]
+    fn matching_keeps_whitespace_inside_universal_values_significant() {
+        for (declarations, feature) in [
+            ("--foo: a b", "--foo: ab"),
+            ("--foo: \"3 \"", "--foo: \"3\""),
+        ] {
+            assert_eq!(container_matches(declarations, feature), KleeneValue::False, "{feature}");
         }
     }
 }
