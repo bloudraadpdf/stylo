@@ -827,6 +827,10 @@ impl AbsoluteColor {
         };
         if source_is_neutral {
             match color_space {
+                Hsl => {
+                    c0 = None;
+                    c1 = Some(0.0);
+                },
                 Lab | Oklab => {
                     // Neutral source colors lie on the lightness axis; do not
                     // retain matrix-rounding residue in its orthogonal axes.

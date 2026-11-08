@@ -279,8 +279,7 @@ impl ColorFunction<AbsoluteColor> {
                 )
             },
             ColorFunction::Rgb(origin_color, r, g, b, alpha) => {
-                // Keep missing components available for interpolation. Direct
-                // rgb() still serializes them as zero in legacy syntax.
+                // Missing components require modern syntax to survive serialization.
                 let use_color_syntax = origin_color.is_some()
                     || r.is_none()
                     || g.is_none()
@@ -305,7 +304,7 @@ impl ColorFunction<AbsoluteColor> {
 
                     // We have to map all the components back to [0..1) range after all the
                     // calculations.
-                    let mut result = AbsoluteColor::new(
+                    AbsoluteColor::new(
                         ColorSpace::Srgb,
                         r.resolve(origin_color.as_ref())?
                             .map(|c| c.to_number(255.0) / 255.0),
@@ -314,11 +313,7 @@ impl ColorFunction<AbsoluteColor> {
                         b.resolve(origin_color.as_ref())?
                             .map(|c| c.to_number(255.0) / 255.0),
                         alpha!(alpha, origin_color.as_ref()),
-                    );
-                    if origin_color.is_none() {
-                        result.flags.insert(ColorFlags::SERIALIZE_AS_LEGACY_SRGB);
-                    }
-                    result
+                    )
                 } else {
                     #[inline]
                     fn resolve(
@@ -1024,7 +1019,7 @@ impl ColorFunctionCssContext for SpecifiedColor {
                 absolute.color.color_space,
                 ColorSpace::Hsl | ColorSpace::Hwb
             ) {
-                return absolute.color.clone().into_srgb_legacy().to_css(dest);
+                return absolute.color.to_css_as_specified(dest);
             }
         }
         self.to_css(dest)
@@ -1417,7 +1412,7 @@ mod tests {
         assert_eq!(color.c1(), Some(1.0));
         assert_eq!(color.c2(), None);
         assert!(!color.is_legacy_syntax());
-        assert!(color.flags.contains(ColorFlags::SERIALIZE_AS_LEGACY_SRGB));
+        assert!(!color.flags.contains(ColorFlags::SERIALIZE_AS_LEGACY_SRGB));
     }
 
     #[test]

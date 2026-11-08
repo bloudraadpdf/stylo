@@ -356,18 +356,7 @@ impl AbsoluteColor {
 
     /// Serialize an absolute specified color.
     pub fn to_css_as_specified<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
-        if matches!(self.color_space, ColorSpace::Hsl | ColorSpace::Hwb)
-            && self.flags.intersects(
-                ColorFlags::C0_IS_NONE
-                    | ColorFlags::C1_IS_NONE
-                    | ColorFlags::C2_IS_NONE
-                    | ColorFlags::ALPHA_IS_NONE,
-            )
-        {
-            self.serialize_hsl_hwb(dest, false)
-        } else {
-            self.to_css(dest)
-        }
+        self.to_css(dest)
     }
 
     /// Write a string to `dest` that represents a color as an author would

@@ -95,7 +95,7 @@ impl Parse for BdImageResolution {
     ) -> Result<Self, ParseError<'i>> {
         let mut from_image = false;
         let mut resolution: Option<Resolution> = None;
-        let mut snap = false;
+        let mut snap = input.try_parse(|i| i.expect_ident_matching("snap")).is_ok();
         loop {
             if !from_image
                 && input
@@ -103,10 +103,6 @@ impl Parse for BdImageResolution {
                     .is_ok()
             {
                 from_image = true;
-                continue;
-            }
-            if !snap && input.try_parse(|i| i.expect_ident_matching("snap")).is_ok() {
-                snap = true;
                 continue;
             }
             if resolution.is_none() {
@@ -119,6 +115,9 @@ impl Parse for BdImageResolution {
         }
         if !from_image && resolution.is_none() {
             return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+        if !snap {
+            snap = input.try_parse(|i| i.expect_ident_matching("snap")).is_ok();
         }
         Ok(Self {
             from_image,

@@ -16,7 +16,7 @@ use crate::values::specified::position::{
 use crate::values::specified::{
     self, AllowQuirks, Angle, Integer, Length, LengthPercentage, Number, NumberOrPercentage,
 };
-use crate::Zero;
+use crate::{One, Zero};
 use cssparser::{match_ignore_ascii_case, Parser};
 use style_traits::{ParseError, StyleParseErrorKind};
 
@@ -536,12 +536,53 @@ impl Parse for Translate {
 }
 
 /// A specified CSS `scale`
-pub type Scale = generic::Scale<Number>;
+pub type Scale = generic::Scale<ScaleFactor>;
+
+/// A scale factor retains calculated percentage units until computation.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem)]
+pub struct ScaleFactor(NumberOrPercentage);
+
+impl One for ScaleFactor {
+    fn one() -> Self {
+        Self(NumberOrPercentage::Number(Number::one()))
+    }
+
+    fn is_one(&self) -> bool {
+        self.0.to_number().is_one()
+    }
+}
+
+impl ToComputedValue for ScaleFactor {
+    type ComputedValue = f32;
+
+    fn to_computed_value(&self, context: &Context) -> f32 {
+        self.0.to_number().to_computed_value(context)
+    }
+
+    fn from_computed_value(computed: &f32) -> Self {
+        Self(NumberOrPercentage::Number(Number::from_computed_value(
+            computed,
+        )))
+    }
+}
+
+impl Parse for ScaleFactor {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        use crate::values::specified::percentage::ToPercentage;
+
+        Ok(Self(match NumberOrPercentage::parse(context, input)? {
+            NumberOrPercentage::Percentage(percentage) if !percentage.is_calc() => {
+                NumberOrPercentage::Number(percentage.to_number())
+            },
+            value => value,
+        }))
+    }
+}
 
 impl Parse for Scale {
-    /// Scale accepts <number> | <percentage>, so we parse it as NumberOrPercentage,
-    /// and then convert into an Number if it's a Percentage.
-    /// https://github.com/w3c/csswg-drafts/pull/4396
     fn parse<'i, 't>(
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
@@ -550,19 +591,18 @@ impl Parse for Scale {
             return Ok(generic::Scale::None);
         }
 
-        let sx = NumberOrPercentage::parse(context, input)?.to_number();
-        if let Ok(sy) = input.try_parse(|i| NumberOrPercentage::parse(context, i)) {
-            let sy = sy.to_number();
-            if let Ok(sz) = input.try_parse(|i| NumberOrPercentage::parse(context, i)) {
+        let sx = ScaleFactor::parse(context, input)?;
+        if let Ok(sy) = input.try_parse(|input| ScaleFactor::parse(context, input)) {
+            if let Ok(sz) = input.try_parse(|input| ScaleFactor::parse(context, input)) {
                 // 'scale: <number> <number> <number>'
-                return Ok(generic::Scale::Scale(sx, sy, sz.to_number()));
+                return Ok(generic::Scale::Scale(sx, sy, sz));
             }
 
             // 'scale: <number> <number>'
-            return Ok(generic::Scale::Scale(sx, sy, Number::new(1.0)));
+            return Ok(generic::Scale::Scale(sx, sy, ScaleFactor::one()));
         }
 
         // 'scale: <number>'
-        Ok(generic::Scale::Scale(sx.clone(), sx, Number::new(1.0)))
+        Ok(generic::Scale::Scale(sx.clone(), sx, ScaleFactor::one()))
     }
 }

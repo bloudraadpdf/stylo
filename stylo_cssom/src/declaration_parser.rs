@@ -781,8 +781,6 @@ pub fn parse_inline_style_property_declarations(
     // the declaration block can replace it with legacy sRGB and lose that
     // distinction before the cascade computes the value. Color mixes also
     // need authored colors: serializing a powerless HSL hue as RGB erases it.
-    // Direct RGB missing channels also serialize as zero for specified CSSOM,
-    // but must remain missing when the cascade computes the color.
     if backing_property.eq_ignore_ascii_case("color")
         && inline_color_needs_authored_cascade_value(&block)
         && let Some(declaration) = declarations.first_mut()
@@ -2006,10 +2004,13 @@ mod tests {
         .expect("direct RGB must parse");
         let cascade_value =
             crate::specified::projected_specified_property_value(&declarations, "color");
-        assert_eq!(cascade_value.as_deref(), Some(authored));
+        assert_eq!(
+            cascade_value.as_deref(),
+            Some("color(srgb none 0.19607843 0.39215686 / none)"),
+        );
         assert_eq!(
             inline_style_cssom_authored_value("color", cascade_value).as_deref(),
-            Some("rgba(0, 50, 100, 0)"),
+            Some("color(srgb none 0.19607843 0.39215686 / none)"),
         );
     }
 

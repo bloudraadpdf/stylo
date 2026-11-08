@@ -8,14 +8,13 @@
 
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
+use crate::values::computed::{Context, ToComputedValue};
 use cssparser::Parser;
 use std::fmt::{self, Write};
 use style_traits::{CssWriter, KeywordsCollectFn, ParseError, SpecifiedValueInfo, ToCss};
 
 /// Constants shared by multiple CSS Box Alignment properties
-#[derive(
-    Clone, Copy, Debug, Eq, MallocSizeOf, PartialEq, ToComputedValue, ToResolvedValue, ToShmem,
-)]
+#[derive(Clone, Copy, Debug, Eq, MallocSizeOf, PartialEq, ToResolvedValue, ToShmem)]
 #[cfg_attr(feature = "servo", derive(Deserialize, Serialize))]
 #[repr(C)]
 pub struct AlignFlags(u8);
@@ -94,6 +93,22 @@ impl AlignFlags {
     #[inline]
     pub fn flags(&self) -> Self {
         *self & AlignFlags::FLAG_BITS
+    }
+}
+
+impl ToComputedValue for AlignFlags {
+    type ComputedValue = Self;
+
+    fn to_computed_value(&self, _: &Context) -> Self {
+        self.with_value(match self.value() {
+            Self::FLEX_START => Self::FLOW_START,
+            Self::FLEX_END => Self::FLOW_END,
+            value => value,
+        })
+    }
+
+    fn from_computed_value(computed: &Self) -> Self {
+        *computed
     }
 }
 
@@ -285,7 +300,15 @@ impl SpecifiedValueInfo for ContentDistribution {
         list_baseline_keywords(f); // block-axis only
         list_content_distribution_keywords(f);
         list_overflow_position_keywords(f);
-        f(&["start", "end", "flex-start", "flex-end", "flow-start", "flow-end", "center"]);
+        f(&[
+            "start",
+            "end",
+            "flex-start",
+            "flex-end",
+            "flow-start",
+            "flow-end",
+            "center",
+        ]);
         f(&["left", "right"]); // inline-axis only
     }
 }

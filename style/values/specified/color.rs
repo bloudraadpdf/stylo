@@ -836,7 +836,7 @@ impl Color {
                 absolute.color.color_space,
                 ColorSpace::Hsl | ColorSpace::Hwb
             ) {
-                return absolute.color.clone().into_srgb_legacy().to_css(dest);
+                return absolute.color.to_css_as_specified(dest);
             }
             if absolute
                 .color
@@ -1062,7 +1062,7 @@ impl Color {
     pub fn to_computed_color(&self, context: Option<&Context>) -> Option<ComputedColor> {
         macro_rules! adjust_absolute_color {
             ($color:expr) => {{
-                // Computed lightness values can not be NaN.
+                // Resolve Lab lightness ranges after relative calculations and mixing.
                 if matches!(
                     $color.color_space,
                     ColorSpace::Lab | ColorSpace::Oklab | ColorSpace::Lch | ColorSpace::Oklch
@@ -1070,8 +1070,18 @@ impl Color {
                     $color.components.0 = if $color.components.0.is_nan() {
                         0.0
                     } else {
-                        $color.components.0
+                        let maximum =
+                            if matches!($color.color_space, ColorSpace::Lab | ColorSpace::Lch) {
+                                100.0
+                            } else {
+                                1.0
+                            };
+                        $color.components.0.clamp(0.0, maximum)
                     };
+                }
+
+                if matches!($color.color_space, ColorSpace::Lch | ColorSpace::Oklch) {
+                    $color.components.1 = $color.components.1.max(0.0);
                 }
 
                 // Computed RGB and XYZ components can not be NaN.
@@ -1091,13 +1101,9 @@ impl Color {
             }};
         }
 
-        Some(match *self {
+        let mut computed = match *self {
             Color::CurrentColor => ComputedColor::CurrentColor,
-            Color::Absolute(ref absolute) => {
-                let mut color = absolute.color;
-                adjust_absolute_color!(color);
-                ComputedColor::Absolute(color)
-            },
+            Color::Absolute(ref absolute) => ComputedColor::Absolute(absolute.color),
             Color::ColorFunction(ref color_function) => {
                 let color_function = match context {
                     Some(context) => color_function.to_computed_value(context),
@@ -1236,7 +1242,11 @@ impl Color {
             Color::InheritFromBodyQuirk => {
                 ComputedColor::Absolute(context?.device().body_text_color())
             },
-        })
+        };
+        if let ComputedColor::Absolute(ref mut color) = computed {
+            adjust_absolute_color!(color);
+        }
+        Some(computed)
     }
 }
 
@@ -1307,13 +1317,14 @@ impl SpecifiedValueInfo for Color {
 }
 
 #[cfg(all(test, feature = "servo"))]
-mod color_layers_tests {
+mod color_tests {
     use super::Color;
     use crate::context::QuirksMode;
     use crate::parser::{Parse, ParserContext};
     use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
     use cssparser::{Parser, ParserInput};
     use style_traits::ParsingMode;
+    use style_traits::ToCss;
 
     fn parse(css: &str) -> Option<Color> {
         let url = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
@@ -1331,6 +1342,75 @@ mod color_layers_tests {
         Parser::new(&mut input)
             .parse_entirely(|input| Color::parse(&context, input))
             .ok()
+    }
+
+    #[test]
+    fn missing_channels_survive_specified_and_nested_serialization() {
+        for (css, expected) in [
+            ("rgb(128 none none)", "color(srgb 0.50196078 none none)"),
+            ("hsl(120 80% none)", "hsl(120 80% none)"),
+            ("hwb(120 none 50%)", "hwb(120 none 50%)"),
+            (
+                "color-mix(in hsl, hsl(none 20% 40%), blue)",
+                "color-mix(in hsl, hsl(none 20% 40%), blue)",
+            ),
+            (
+                "rgb(from rgb(none none none) r g b)",
+                "rgb(from color(srgb none none none) r g b)",
+            ),
+        ] {
+            assert_eq!(parse(css).unwrap().to_css_string(), expected, "{css}");
+        }
+    }
+
+    #[test]
+    fn computed_lab_channels_resolve_after_relative_calculations_and_mixing() {
+        use crate::color::ColorSpace;
+        use crate::values::computed::Color as ComputedColor;
+
+        for (css, lightness, chroma) in [
+            ("lab(from lab(0.7 45 30) 200 300 400)", 100.0, 300.0),
+            ("oklab(from oklab(0.7 0.45 0.3) -2 3 4)", 0.0, 3.0),
+            ("lch(from lch(50 20 180) 200 -30 h)", 100.0, 0.0),
+            ("oklch(from lch(0 20 180) l c h)", 0.0, 0.2641255),
+            ("color-mix(in oklch, lch(0 20 180))", 0.0, 0.2641255),
+        ] {
+            let ComputedColor::Absolute(color) =
+                parse(css).unwrap().to_computed_color(None).unwrap()
+            else {
+                panic!("{css} must compute to an absolute colour");
+            };
+            assert_eq!(color.c0(), Some(lightness), "{css}");
+            assert!((color.c1().unwrap() - chroma).abs() < 0.00001, "{css}");
+            assert!(matches!(
+                color.color_space,
+                ColorSpace::Lab | ColorSpace::Oklab | ColorSpace::Lch | ColorSpace::Oklch
+            ));
+        }
+    }
+
+    #[test]
+    fn neutral_lab_white_keeps_zero_saturation_in_hsl_mixes() {
+        use crate::color::ColorSpace;
+        use crate::values::computed::Color as ComputedColor;
+
+        for css in [
+            "color-mix(in hsl, lch(100% 0 0), blue)",
+            "color-mix(in hsl, oklch(100% 0 0), blue)",
+        ] {
+            let ComputedColor::Absolute(color) =
+                parse(css).unwrap().to_computed_color(None).unwrap()
+            else {
+                panic!("{css} must compute to an absolute colour");
+            };
+            let color = color.to_color_space(ColorSpace::Srgb);
+            for (actual, expected) in color.raw_components()[..3]
+                .iter()
+                .zip([0.625, 0.625, 0.875])
+            {
+                assert!((actual - expected).abs() < 0.00001, "{css}: {color:?}");
+            }
+        }
     }
 
     #[test]

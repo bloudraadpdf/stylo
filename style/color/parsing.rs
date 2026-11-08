@@ -1041,7 +1041,7 @@ mod specified_color_tests {
     }
 
     #[test]
-    fn relative_hsl_origin_serializes_as_chromium_rgb() {
+    fn relative_hsl_origin_preserves_missing_components() {
         let url_data = UrlExtraData::from(
             url::Url::parse("https://example.invalid/").expect("test URL parses"),
         );
@@ -1059,11 +1059,14 @@ mod specified_color_tests {
         let specified = Parser::new(&mut input)
             .parse_entirely(|parser| parse_color_with(&context, parser))
             .expect("relative HSL parses");
-        assert_eq!(specified.to_css_string(), "hsl(from rgb(0, 0, 0) h s l)");
+        assert_eq!(
+            specified.to_css_string(),
+            "hsl(from hsl(none none none) h s l)"
+        );
     }
 
     #[test]
-    fn color_mix_hsl_items_serialize_as_chromium_rgb() {
+    fn color_mix_hsl_items_preserve_missing_components() {
         let url_data = UrlExtraData::from(
             url::Url::parse("https://example.invalid/").expect("test URL parses"),
         );
@@ -1088,7 +1091,7 @@ mod specified_color_tests {
             .expect("HSL color mix parses");
         assert_eq!(
             specified.to_css_string(),
-            "color-mix(in hsl, rgb(0, 0, 0), rgb(0, 0, 0))"
+            "color-mix(in hsl, hsl(none none none), hsl(none none none))"
         );
     }
 
@@ -1277,7 +1280,7 @@ mod specified_color_tests {
     }
 
     #[test]
-    fn direct_rgb_missing_components_serialize_as_legacy_zeroes() {
+    fn direct_rgb_missing_components_serialize_in_modern_syntax() {
         let url_data = UrlExtraData::from(
             url::Url::parse("https://example.invalid/").expect("test URL parses"),
         );
@@ -1292,9 +1295,15 @@ mod specified_color_tests {
             None,
         );
         for (source, expected) in [
-            ("rgb(none none none)", "rgb(0, 0, 0)"),
-            ("rgb(128 none none / none)", "rgba(128, 0, 0, 0)"),
-            ("rgb(20% none none / 50%)", "rgba(51, 0, 0, 0.5)"),
+            ("rgb(none none none)", "color(srgb none none none)"),
+            (
+                "rgb(128 none none / none)",
+                "color(srgb 0.50196078 none none / none)",
+            ),
+            (
+                "rgb(20% none none / 50%)",
+                "color(srgb 0.2 none none / 0.5)",
+            ),
         ] {
             let mut input = ParserInput::new(source);
             let specified = Parser::new(&mut input)
@@ -1493,8 +1502,8 @@ mod specified_color_tests {
         );
 
         for (source, expected) in [
-            ("hsl(120 80% none)", "hsl(120 80 none)"),
-            ("hwb(120 30% 50% / none)", "hwb(120 30 50 / none)"),
+            ("hsl(120 80% none)", "hsl(120 80% none)"),
+            ("hwb(120 30% 50% / none)", "hwb(120 30% 50% / none)"),
             (
                 "color(srgb calc(50%) 50% 0.5)",
                 "color(srgb calc(50%) 0.5 0.5)",

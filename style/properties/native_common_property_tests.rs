@@ -914,6 +914,28 @@ fn scroll_padding_edges_participate_in_zoom_inheritance() {
 }
 
 #[test]
+fn image_resolution_keeps_the_source_and_resolution_group_together() {
+    for value in [
+        "3dpi snap from-image",
+        "from-image snap 4dppx",
+        "snap",
+        "snap from-image snap",
+        "from-image from-image",
+        "2dpi 3dpi",
+    ] {
+        assert_serialization("image-resolution", value, None);
+    }
+    for (input, expected) in [
+        ("3dpi from-image snap", "from-image 3dpi snap"),
+        ("snap from-image 4dppx", "from-image 4dppx snap"),
+        ("snap 2dpi from-image", "from-image 2dpi snap"),
+        ("from-image snap", "from-image snap"),
+    ] {
+        assert_serialization("image-resolution", input, Some(expected));
+    }
+}
+
+#[test]
 fn border_clip_uses_current_grammar_and_copies_the_list_to_each_side() {
     for value in ["none", "10px 20% 1fr", "0px"] {
         assert_serialization("border-clip", value, Some(value));
@@ -1004,7 +1026,9 @@ fn all_shorthand_schema_members_include_pref_controlled_properties() {
     assert!(potential.contains(&super::LonghandId::BoxShadowOffset));
     assert!(!potential.contains(&super::LonghandId::Direction));
     assert!(!potential.contains(&super::LonghandId::UnicodeBidi));
-    assert!(ShorthandId::All.longhands().all(|id| potential.contains(&id)));
+    assert!(ShorthandId::All
+        .longhands()
+        .all(|id| potential.contains(&id)));
 }
 
 #[test]
