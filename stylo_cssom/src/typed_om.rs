@@ -314,6 +314,39 @@ pub fn parse_typed_om_list_iterations(
     TypedOmListIterations::new(items)
 }
 
+pub fn parse_typed_om_property_iterations(
+    input: TypedOmListIterationsInput<'_>,
+    multiplicity: stylo_cssom_model::TypedOmPropertyMultiplicity,
+) -> Option<TypedOmListIterations> {
+    use stylo_cssom_model::TypedOmPropertyMultiplicity;
+    match multiplicity {
+        TypedOmPropertyMultiplicity::Single => TypedOmListIterations::new(vec![input.0.to_owned()]),
+        TypedOmPropertyMultiplicity::CommaSeparated => parse_typed_om_list_iterations(input),
+        TypedOmPropertyMultiplicity::SpaceSeparated => parse_typed_om_space_separated_iterations(input),
+    }
+}
+
+fn parse_typed_om_space_separated_iterations(input: TypedOmListIterationsInput<'_>) -> Option<TypedOmListIterations> {
+    let mut input = ParserInput::new(input.0);
+    let mut parser = Parser::new(&mut input);
+    let mut items = Vec::new();
+    while !parser.is_exhausted() {
+        parser.skip_whitespace();
+        let start = parser.position();
+        let token = next_valid_typed_om_component_token(&mut parser).ok()??;
+        match token {
+            Token::Comma | Token::Semicolon => return None,
+            Token::Function(_) | Token::ParenthesisBlock | Token::SquareBracketBlock | Token::CurlyBracketBlock => {
+                parser.parse_nested_block(consume_typed_om_list_iteration).ok()?;
+            }
+            Token::WhiteSpace(_) | Token::Comment(_) => continue,
+            _ => {}
+        }
+        items.push(parser.slice_from(start).to_owned());
+    }
+    TypedOmListIterations::new(items)
+}
+
 pub fn parse_typed_om_background_size_numeric_value(
     input: TypedOmBackgroundSizeInput<'_>,
 ) -> Option<TypedOmBackgroundSizeNumericValue> {
@@ -786,6 +819,22 @@ mod tests {
                 .is_some_and(|image| image.into_source().is_none())
         );
         assert!(parse_typed_om_image(TypedOmImageInput::new("none")).is_none());
+    }
+
+    #[test]
+    fn space_separated_iterations_keep_function_arguments_together() {
+        let values = parse_typed_om_space_separated_iterations(TypedOmListIterationsInput::new(
+            "blur(calc(1px + 2px)) grayscale(1) opacity(.5)",
+        ))
+        .expect("filter functions form separate iterations");
+        assert_eq!(
+            values.items().collect::<Vec<_>>(),
+            ["blur(calc(1px + 2px))", "grayscale(1)", "opacity(.5)"]
+        );
+        assert!(
+            parse_typed_om_space_separated_iterations(TypedOmListIterationsInput::new("blur(1px), grayscale(1)"))
+                .is_none()
+        );
     }
 
     #[test]
