@@ -11,6 +11,76 @@ use crate::Zero;
 use std::fmt::{self, Write};
 use style_traits::{CssWriter, ToCss};
 
+/// A timeline attachment boundary.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToComputedValue, ToResolvedValue, ToShmem)]
+pub enum GenericAnimationRange<L> {
+    /// The timeline boundary.
+    Normal,
+    /// An offset in the whole timeline.
+    Offset(L),
+    /// An offset in a named timeline range.
+    Named(crate::values::specified::animation::TimelineRangeName, L),
+}
+
+/// Recognises an omittable, non-calculated named-range percentage.
+pub trait AnimationRangeOffset: ToCss {
+    /// Whether this offset is exactly the property's default percentage.
+    fn is_default_percentage(&self, default: f32) -> bool;
+}
+
+impl AnimationRangeOffset for crate::values::specified::LengthPercentage {
+    fn is_default_percentage(&self, default: f32) -> bool {
+        matches!(self, Self::Percentage(value) if value.0 == default)
+    }
+}
+
+impl AnimationRangeOffset for crate::values::computed::LengthPercentage {
+    fn is_default_percentage(&self, default: f32) -> bool {
+        self.to_percentage().is_some_and(|value| value.0 == default)
+    }
+}
+
+impl<L: AnimationRangeOffset> GenericAnimationRange<L> {
+    fn to_css_with_default<W: Write>(&self, dest: &mut CssWriter<W>, default: f32) -> fmt::Result {
+        match self {
+            Self::Normal => dest.write_str("normal"),
+            Self::Offset(offset) => offset.to_css(dest),
+            Self::Named(name, offset) => {
+                name.to_css(dest)?;
+                if !offset.is_default_percentage(default) {
+                    dest.write_char(' ')?;
+                    offset.to_css(dest)?;
+                }
+                Ok(())
+            },
+        }
+    }
+}
+
+macro_rules! animation_range_boundary {
+    ($name:ident, $default:expr) => {
+        /// A timeline attachment boundary with its property's default named-range offset.
+        #[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToComputedValue, ToResolvedValue, ToShmem)]
+        pub struct $name<L>(pub GenericAnimationRange<L>);
+
+        impl<L> $name<L> {
+            /// The initial attachment boundary.
+            pub fn normal() -> Self { Self(GenericAnimationRange::Normal) }
+            /// Whether the boundary has its initial value.
+            pub fn is_normal(&self) -> bool { matches!(self.0, GenericAnimationRange::Normal) }
+        }
+
+        impl<L: AnimationRangeOffset> ToCss for $name<L> {
+            fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+                self.0.to_css_with_default(dest, $default)
+            }
+        }
+    };
+}
+
+animation_range_boundary!(GenericAnimationRangeStart, 0.0);
+animation_range_boundary!(GenericAnimationRangeEnd, 1.0);
+
 /// The `animation-duration` property.
 ///
 /// https://drafts.csswg.org/css-animations-2/#animation-duration

@@ -28,6 +28,45 @@ fn serialized_value(block: &super::PropertyDeclarationBlock, name: &str) -> Stri
 }
 
 #[test]
+fn animation_ranges_preserve_boundary_defaults_and_reset_with_animation() {
+    for (name, input, expected) in [
+        ("animation-range-start", "entry 0%", "entry"),
+        ("animation-range-end", "entry 0%", "entry 0%"),
+        ("animation-range-end", "entry 100%", "entry"),
+        ("animation-range-start", "0", "0px"),
+        ("animation-range-start", "contain calc(10px + 10%)", "contain calc(10% + 10px)"),
+        ("animation-range", "entry 0% exit 0%", "entry exit 0%"),
+        ("animation-range", "entry 0% exit 100%", "entry exit"),
+        ("animation-range", "entry 0% entry 100%", "entry"),
+        ("animation-range", "0% 100%", "0% 100%"),
+        ("animation-range", "entry normal", "entry normal"),
+        ("animation-range", "entry calc(0%) entry calc(100%)", "entry calc(0%) entry calc(100%)"),
+    ] {
+        assert_serialization(name, input, Some(expected));
+    }
+    for invalid in ["entry 1s", "entry 1% / exit", "unknown 10%", "entry 1% exit 2% cover"] {
+        assert_serialization("animation-range", invalid, None);
+    }
+    let declarations = block("animation-range:entry 10% exit 20%;animation:fade 1s");
+    for name in ["animation-range-start", "animation-range-end"] {
+        assert_eq!(serialized_value(&declarations, name), "normal");
+    }
+    let declarations = block("animation-range:entry");
+    assert_eq!(serialized_value(&declarations, "animation-range-start"), "entry");
+    assert_eq!(serialized_value(&declarations, "animation-range-end"), "entry");
+}
+
+#[test]
+fn keyframes_reject_animation_duration_but_keep_timing_function() {
+    let url: UrlExtraData = url::Url::parse("about:blank").unwrap().into();
+    let declarations = parse_style_attribute(
+        "margin-top:10px;animation-timing-function:ease;animation-duration:1s;animation-name:fade;animation:fade 1s",
+        &url, None, selectors::matching::QuirksMode::NoQuirks, CssRuleType::Keyframe,
+    );
+    assert_eq!(declarations.declaration_importance_iter().count(), 2);
+}
+
+#[test]
 fn text_autospace_size_accepts_signed_numbers_and_cascades_independently() {
     for (input, expected) in [
         ("0", "0"),

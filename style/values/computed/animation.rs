@@ -21,6 +21,11 @@ pub use crate::values::specified::animation::{
 /// A computed value for the `animation-duration` property.
 pub type AnimationDuration = generics::GenericAnimationDuration<Time>;
 
+/// A computed animation attachment start.
+pub type AnimationRangeStart = generics::GenericAnimationRangeStart<LengthPercentage>;
+/// A computed animation attachment end.
+pub type AnimationRangeEnd = generics::GenericAnimationRangeEnd<LengthPercentage>;
+
 impl AnimationDuration {
     /// Returns the amount of seconds this time represents.
     #[inline]

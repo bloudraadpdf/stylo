@@ -15,13 +15,13 @@ pub use self::declaration_block::*;
 pub use self::generated::*;
 
 macro_rules! expanded {
-    ( $( $name: ident: $value: expr ),+ ) => {
-        expanded!( $( $name: $value, )+ )
+    ( $( $(#[$attribute:meta])* $name: ident: $value: expr ),+ ) => {
+        expanded!( $( $(#[$attribute])* $name: $value, )+ )
     };
-    ( $( $name: ident: $value: expr, )+ ) => {
+    ( $( $(#[$attribute:meta])* $name: ident: $value: expr, )+ ) => {
         Longhands {
             $(
-                $name: $crate::properties::MaybeBoxed::maybe_boxed($value),
+                $(#[$attribute])* $name: $crate::properties::MaybeBoxed::maybe_boxed($value),
             )+
         }
     }

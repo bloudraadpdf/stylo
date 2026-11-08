@@ -4935,6 +4935,50 @@ pub mod _bd_change_bar {
     }
 }
 
+#[cfg(feature = "servo")]
+pub mod animation_range {
+    pub use crate::properties::shorthands_generated::animation_range::*;
+    use super::*;
+    use crate::properties::longhands::{animation_range_start, animation_range_end};
+    use crate::values::generics::animation::GenericAnimationRange as Range;
+
+    pub fn parse_value<'i, 't>(context: &ParserContext, input: &mut Parser<'i, 't>) -> Result<Longhands, ParseError<'i>> {
+        let ranges = input.parse_comma_separated(|input| {
+            let start = specified::AnimationRangeStart::parse(context, input)?;
+            let end = input.try_parse(|input| specified::AnimationRangeEnd::parse(context, input)).unwrap_or_else(|_| {
+                crate::values::generics::animation::GenericAnimationRangeEnd(match start.0 {
+                    Range::Named(name, _) => Range::Named(name, crate::values::computed::Percentage(1.0).into()),
+                    _ => Range::Normal,
+                })
+            });
+            Ok((start, end))
+        })?;
+        let (starts, ends): (Vec<_>, Vec<_>) = ranges.into_iter().unzip();
+        Ok(expanded! {
+            animation_range_start: animation_range_start::SpecifiedValue(starts.into()),
+            animation_range_end: animation_range_end::SpecifiedValue(ends.into()),
+        })
+    }
+
+    impl ToCss for LonghandsToSerialize<'_> {
+        fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+            if self.animation_range_start.0.len() != self.animation_range_end.0.len() { return Ok(()); }
+            for (index, (start, end)) in self.animation_range_start.0.iter().zip(self.animation_range_end.0.iter()).enumerate() {
+                if index != 0 { dest.write_str(", ")?; }
+                start.to_css(dest)?;
+                let hundred = specified::LengthPercentage::from(crate::values::computed::Percentage(1.0));
+                let omit_end = match (&start.0, &end.0) {
+                    (Range::Named(left, _), Range::Named(right, offset)) => left == right && *offset == hundred,
+                    (Range::Normal | Range::Offset(_), Range::Normal) => true,
+                    _ => false,
+                };
+                if !omit_end { dest.write_char(' ')?; end.to_css(dest)?; }
+            }
+            Ok(())
+        }
+    }
+}
+
 pub mod animation {
     pub use crate::properties::shorthands_generated::animation::*;
 
@@ -4944,6 +4988,8 @@ pub mod animation {
         animation_iteration_count, animation_name, animation_play_state, animation_timeline,
         animation_timing_function,
     };
+    #[cfg(feature = "servo")]
+    use crate::properties::longhands::{animation_range_start, animation_range_end};
 
     pub fn parse_value<'i, 't>(
         context: &ParserContext,
@@ -5077,6 +5123,14 @@ pub mod animation {
             animation_timeline: animation_timeline::SpecifiedValue(
                 vec![animation_timeline::single_value::get_initial_specified_value()].into()
             ),
+            #[cfg(feature = "servo")]
+            animation_range_start: animation_range_start::SpecifiedValue(
+                vec![animation_range_start::single_value::get_initial_specified_value()].into()
+            ),
+            #[cfg(feature = "servo")]
+            animation_range_end: animation_range_end::SpecifiedValue(
+                vec![animation_range_end::single_value::get_initial_specified_value()].into()
+            ),
         })
     }
 
@@ -5122,6 +5176,12 @@ pub mod animation {
             if self
                 .animation_timeline
                 .map_or(false, |v| v.0.len() != 1 || !v.0[0].is_auto())
+            {
+                return Ok(());
+            }
+            #[cfg(feature = "servo")]
+            if self.animation_range_start.0.len() != 1 || !self.animation_range_start.0[0].is_normal()
+                || self.animation_range_end.0.len() != 1 || !self.animation_range_end.0[0].is_normal()
             {
                 return Ok(());
             }

@@ -1099,9 +1099,11 @@ class PropertiesData(object):
 
         return longhand
 
-    def declare_shorthand(self, name, sub_properties, extra_gecko_sub_properties=None, extra_gecko_aliases=None, engine=None, *args, **kwargs):
+    def declare_shorthand(self, name, sub_properties, extra_gecko_sub_properties=None, extra_gecko_aliases=None, extra_servo_sub_properties=None, engine=None, *args, **kwargs):
         if engine and self.engine != engine:
             return
+        if self.engine == "servo" and extra_servo_sub_properties:
+            sub_properties.extend(extra_servo_sub_properties)
         if self.engine == "gecko":
             if extra_gecko_sub_properties:
                 sub_properties.extend(extra_gecko_sub_properties)

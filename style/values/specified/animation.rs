@@ -17,6 +17,53 @@ use style_traits::{
     CssWriter, KeywordsCollectFn, ParseError, SpecifiedValueInfo, StyleParseErrorKind, ToCss,
 };
 
+/// A predefined named view-timeline range.
+#[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, Parse, SpecifiedValueInfo, ToComputedValue, ToCss, ToResolvedValue, ToShmem)]
+pub enum TimelineRangeName {
+    /// The complete visibility interval.
+    Cover,
+    /// The interval of complete containment.
+    Contain,
+    /// The interval entering the scrollport.
+    Entry,
+    /// The interval leaving the scrollport.
+    Exit,
+    /// The entering edge crossing interval.
+    EntryCrossing,
+    /// The leaving edge crossing interval.
+    ExitCrossing,
+}
+
+/// A specified animation attachment start.
+pub type AnimationRangeStart = generics::GenericAnimationRangeStart<LengthPercentage>;
+/// A specified animation attachment end.
+pub type AnimationRangeEnd = generics::GenericAnimationRangeEnd<LengthPercentage>;
+
+fn parse_animation_range<'i, 't>(context: &ParserContext, input: &mut Parser<'i, 't>, default: f32) -> Result<generics::GenericAnimationRange<LengthPercentage>, ParseError<'i>> {
+    use generics::GenericAnimationRange as Range;
+    if input.try_parse(|input| input.expect_ident_matching("normal")).is_ok() {
+        return Ok(Range::Normal);
+    }
+    if let Ok(name) = input.try_parse(TimelineRangeName::parse) {
+        let offset = input.try_parse(|input| LengthPercentage::parse(context, input))
+            .unwrap_or_else(|_| crate::values::computed::Percentage(default).into());
+        return Ok(Range::Named(name, offset));
+    }
+    LengthPercentage::parse(context, input).map(Range::Offset)
+}
+
+impl Parse for AnimationRangeStart {
+    fn parse<'i, 't>(context: &ParserContext, input: &mut Parser<'i, 't>) -> Result<Self, ParseError<'i>> {
+        parse_animation_range(context, input, 0.0).map(generics::GenericAnimationRangeStart)
+    }
+}
+
+impl Parse for AnimationRangeEnd {
+    fn parse<'i, 't>(context: &ParserContext, input: &mut Parser<'i, 't>) -> Result<Self, ParseError<'i>> {
+        parse_animation_range(context, input, 1.0).map(generics::GenericAnimationRangeEnd)
+    }
+}
+
 /// A given transition property, that is either `All`, a longhand or shorthand
 /// property, or an unsupported or custom property.
 #[derive(

@@ -645,21 +645,18 @@ impl RuleCssomData {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct RuleKeyframeSelector(Arc<[f32]>);
-
-impl Eq for RuleKeyframeSelector {}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RuleKeyframeSelector(Arc<str>);
 
 impl RuleKeyframeSelector {
     #[must_use]
-    pub fn new(percentages: impl Into<Arc<[f32]>>) -> Option<Self> {
-        let percentages = percentages.into();
-        (!percentages.is_empty() && percentages.iter().all(|value| (0.0..=1.0).contains(value)))
-            .then_some(Self(percentages))
+    pub fn from_parsed_css(css: impl Into<Arc<str>>) -> Option<Self> {
+        let css = css.into();
+        (!css.trim().is_empty()).then_some(Self(css))
     }
 
     #[must_use]
-    pub fn percentages(&self) -> &[f32] {
+    pub fn css_text(&self) -> &str {
         &self.0
     }
 }

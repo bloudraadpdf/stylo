@@ -271,6 +271,7 @@ vector = { need_index = true }
 animation_type = "none"
 extra_prefixes = ["moz:layout.css.prefixes.animations", "webkit"]
 spec = "https://drafts.csswg.org/css-animations-2/#animation-duration"
+rule_types_allowed = ["style", "scope"]
 affects = ""
 
 [animation-fill-mode]
@@ -332,6 +333,30 @@ animation_type = "none"
 gecko_pref = "layout.css.scroll-driven-animations.enabled"
 spec = "https://drafts.csswg.org/css-animations-2/#propdef-animation-timeline"
 rule_types_allowed = ["style", "scope"]
+affects = ""
+
+[animation-range-start]
+engine = "servo"
+type = "AnimationRangeStart"
+initial = "computed::AnimationRangeStart::normal()"
+initial_specified_value = "specified::AnimationRangeStart::normal()"
+struct = "ui"
+vector = { need_index = true }
+animation_type = "none"
+rule_types_allowed = ["style", "scope"]
+spec = "https://drafts.csswg.org/scroll-animations-1/#propdef-animation-range-start"
+affects = ""
+
+[animation-range-end]
+engine = "servo"
+type = "AnimationRangeEnd"
+initial = "computed::AnimationRangeEnd::normal()"
+initial_specified_value = "specified::AnimationRangeEnd::normal()"
+struct = "ui"
+vector = { need_index = true }
+animation_type = "none"
+rule_types_allowed = ["style", "scope"]
+spec = "https://drafts.csswg.org/scroll-animations-1/#propdef-animation-range-end"
 affects = ""
 
 [animation-timing-function]

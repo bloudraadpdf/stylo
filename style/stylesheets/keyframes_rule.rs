@@ -6,7 +6,7 @@
 
 use crate::derives::*;
 use crate::error_reporting::ContextualParseError;
-use crate::parser::ParserContext;
+use crate::parser::{Parse, ParserContext};
 use crate::properties::{
     longhands::{
         animation_composition::single_value::SpecifiedValue as SpecifiedComposition,
@@ -20,10 +20,13 @@ use crate::shared_lock::{Locked, ToCssWithGuard};
 use crate::stylesheets::rule_parser::VendorPrefix;
 use crate::stylesheets::{CssRuleType, StylesheetContents};
 use crate::values::{serialize_percentage, KeyframesName};
+use crate::values::specified::{Percentage, animation::TimelineRangeName};
 use cssparser::{
     parse_one_rule, AtRuleParser, DeclarationParser, Parser, ParserInput, ParserState,
-    QualifiedRuleParser, RuleBodyItemParser, RuleBodyParser, SourceLocation, Token,
+    QualifiedRuleParser, RuleBodyItemParser, RuleBodyParser, SourceLocation,
 };
+#[cfg(feature = "gecko")]
+use cssparser::Token;
 use servo_arc::Arc;
 use std::borrow::Cow;
 use std::fmt::{self, Write};
@@ -128,6 +131,7 @@ impl KeyframePercentage {
         KeyframePercentage(value)
     }
 
+    #[cfg(feature = "gecko")]
     fn parse<'i, 't>(input: &mut Parser<'i, 't>) -> Result<KeyframePercentage, ParseError<'i>> {
         let token = input.next()?.clone();
         match token {
@@ -146,28 +150,83 @@ impl KeyframePercentage {
     }
 }
 
-/// A keyframes selector is a list of percentages or from/to symbols, which are
-/// converted at parse time to percentages.
-#[derive(Clone, Debug, Eq, PartialEq, ToCss, ToShmem)]
+/// A keyframe position on the animation interval or a named timeline range.
+#[derive(Clone, Debug, PartialEq, ToCss, ToShmem)]
+pub enum KeyframeOffset {
+    /// An ordinary keyframe percentage, including retained calculations.
+    Percentage(Percentage),
+    /// A percentage within a named timeline range.
+    TimelineRange(TimelineRangeName, Percentage),
+}
+
+impl KeyframeOffset {
+    fn parse<'i, 't>(context: &ParserContext, input: &mut Parser<'i, 't>) -> Result<Self, ParseError<'i>> {
+        let normalize = |percentage: Percentage| {
+            match percentage.resolve().filter(|value| value.is_finite()) {
+                Some(value) => Percentage::new(value),
+                None => percentage,
+            }
+        };
+        if input.try_parse(|input| input.expect_ident_matching("from")).is_ok() {
+            return Ok(Self::Percentage(Percentage::zero()));
+        }
+        if input.try_parse(|input| input.expect_ident_matching("to")).is_ok() {
+            return Ok(Self::Percentage(Percentage::hundred()));
+        }
+        if let Ok(name) = input.try_parse(TimelineRangeName::parse) {
+            return Percentage::parse(context, input).map(|percentage| Self::TimelineRange(name, normalize(percentage)));
+        }
+        Percentage::parse_zero_to_a_hundred(context, input).map(|percentage| Self::Percentage(normalize(percentage)))
+    }
+}
+
+/// A list of keyframe offsets, preserving range names and calculations.
+#[derive(Clone, Debug, PartialEq, ToCss, ToShmem)]
 #[css(comma)]
-pub struct KeyframeSelector(#[css(iterable)] Vec<KeyframePercentage>);
+pub struct KeyframeSelector(#[css(iterable)] Vec<KeyframeOffset>);
 
 impl KeyframeSelector {
-    /// Return the list of percentages this selector contains.
+    /// Return offsets on the ordinary interval that do not need element context.
     #[inline]
-    pub fn percentages(&self) -> &[KeyframePercentage] {
+    pub fn percentages(&self) -> Vec<KeyframePercentage> {
+        self.0.iter().filter_map(|offset| match offset {
+            KeyframeOffset::Percentage(percentage) => percentage.resolve().map(KeyframePercentage::new),
+            KeyframeOffset::TimelineRange(..) => None,
+        }).collect()
+    }
+
+    /// The complete parsed offsets, including named and context-dependent positions.
+    pub fn offsets(&self) -> &[KeyframeOffset] {
         &self.0
     }
 
     /// A dummy public function so we can write a unit test for this.
     pub fn new_for_unit_testing(percentages: Vec<KeyframePercentage>) -> KeyframeSelector {
-        KeyframeSelector(percentages)
+        KeyframeSelector(percentages.into_iter().map(|percentage| KeyframeOffset::Percentage(Percentage::new(percentage.0))).collect())
     }
 
     /// Parse a keyframe selector from CSS input.
     pub fn parse<'i, 't>(input: &mut Parser<'i, 't>) -> Result<Self, ParseError<'i>> {
+        #[cfg(feature = "gecko")]
+        {
+            return input.parse_comma_separated(KeyframePercentage::parse).map(Self::new_for_unit_testing);
+        }
+        #[cfg(feature = "servo")]
+        {
+        let url_data = crate::stylesheets::UrlExtraData::from(url::Url::parse("about:blank").expect("a static URL is valid"));
+        let context = ParserContext::new(
+            crate::stylesheets::Origin::Author, &url_data, Some(CssRuleType::Keyframe),
+            ParsingMode::DEFAULT, selectors::matching::QuirksMode::NoQuirks,
+            Cow::Owned(Default::default()), None, None,
+        );
+        Self::parse_with_context(&context, input)
+        }
+    }
+
+    /// Parse offsets in the stylesheet's parsing context.
+    pub fn parse_with_context<'i, 't>(context: &ParserContext, input: &mut Parser<'i, 't>) -> Result<Self, ParseError<'i>> {
         input
-            .parse_comma_separated(KeyframePercentage::parse)
+            .parse_comma_separated(|input| KeyframeOffset::parse(context, input))
             .map(KeyframeSelector)
     }
 }
@@ -235,6 +294,72 @@ impl DeepCloneWithLock for Keyframe {
             selector: self.selector.clone(),
             block: Arc::new(lock.wrap(self.block.read_with(guard).clone())),
             source_location: self.source_location.clone(),
+        }
+    }
+}
+
+#[cfg(all(test, feature = "servo"))]
+mod selector_tests {
+    use super::*;
+
+    fn selector(css: &str) -> KeyframeSelector {
+        let mut input = ParserInput::new(css);
+        Parser::new(&mut input).parse_entirely(KeyframeSelector::parse).unwrap()
+    }
+
+    #[test]
+    fn offsets_preserve_ranges_and_contextual_calculations() {
+        for css in ["entry 10%", "calc(10% * sibling-index())", "calc(10% * sign(1em - 1px))"] {
+            let parsed = selector(css);
+            assert_eq!(parsed.offsets().len(), 1);
+            assert_eq!(parsed.to_css_string(), css);
+        }
+        assert!(matches!(selector("entry 10%").offsets()[0], KeyframeOffset::TimelineRange(TimelineRangeName::Entry, _)));
+        assert_eq!(selector("calc(10%)").percentages()[0].0, 0.1);
+        assert_eq!(selector("calc(10%)"), selector("10%"));
+        assert_eq!(selector("entry calc(10%)"), selector("entry 10%"));
+        assert_eq!(selector("exit calc(60%)").to_css_string(), "exit 60%");
+        for css in ["-10%", "120%", "entry", "unknown 10%"] {
+            let mut input = ParserInput::new(css);
+            assert!(Parser::new(&mut input).parse_entirely(KeyframeSelector::parse).is_err(), "{css}");
+        }
+    }
+
+    #[test]
+    fn unresolved_offsets_do_not_create_synthetic_keyframes() {
+        let url: crate::stylesheets::UrlExtraData = url::Url::parse("about:blank").unwrap().into();
+        for css in ["entry 10%", "calc(10% * sibling-index())"] {
+            let lock = SharedRwLock::new();
+            let declarations = crate::properties::declaration_block::parse_style_attribute(
+                "opacity:0.5", &url, None, selectors::matching::QuirksMode::NoQuirks, CssRuleType::Keyframe,
+            );
+            let frame = Arc::new(lock.wrap(Keyframe {
+                selector: selector(css),
+                block: Arc::new(lock.wrap(declarations)),
+                source_location: SourceLocation { line: 0, column: 1 },
+            }));
+            let effect = KeyframesAnimation::from_keyframes(&[frame], None, &lock.read());
+            assert!(effect.steps.is_empty());
+            assert!(effect.properties_changed.is_empty());
+        }
+    }
+
+    #[test]
+    fn lookup_matches_equal_calculated_offsets() {
+        let lock = SharedRwLock::new();
+        for (declared, lookup) in [("calc(10%)", "10%"), ("entry calc(10%)", "entry 10%")] {
+            let frame = Arc::new(lock.wrap(Keyframe {
+                selector: selector(declared),
+                block: Arc::new(lock.wrap(PropertyDeclarationBlock::new())),
+                source_location: SourceLocation { line: 0, column: 1 },
+            }));
+            let rule = KeyframesRule {
+                name: KeyframesName::from_ident("test"),
+                keyframes: vec![frame],
+                vendor_prefix: None,
+                source_location: SourceLocation { line: 0, column: 1 },
+            };
+            assert_eq!(rule.find_rule(&lock.read(), lookup), Some(0));
         }
     }
 }
@@ -410,6 +535,7 @@ fn get_animated_properties(
     // it here.
     for keyframe in keyframes {
         let keyframe = keyframe.read_with(&guard);
+        if keyframe.selector.percentages().is_empty() { continue; }
         let block = keyframe.block.read_with(guard);
         // CSS Animations spec clearly defines that properties with !important
         // in keyframe rules are invalid and ignored, but it's still ambiguous
@@ -466,15 +592,20 @@ impl KeyframesAnimation {
 
         for keyframe in keyframes {
             let keyframe = keyframe.read_with(&guard);
-            for percentage in keyframe.selector.0.iter() {
+            for percentage in keyframe.selector.percentages() {
                 result.steps.push(KeyframesStep::new(
-                    *percentage,
+                    percentage,
                     KeyframesStepValue::Declarations {
                         block: keyframe.block.clone(),
                     },
                     guard,
                 ));
             }
+        }
+
+        if result.steps.is_empty() {
+            result.properties_changed = PropertyDeclarationIdSet::default();
+            return result;
         }
 
         // Sort by the start percentage, so we can easily find a frame.
@@ -553,7 +684,7 @@ impl<'a, 'b, 'i> QualifiedRuleParser<'i> for KeyframeListParser<'a, 'b> {
         input: &mut Parser<'i, 't>,
     ) -> Result<Self::Prelude, ParseError<'i>> {
         let start_position = input.position();
-        KeyframeSelector::parse(input).map_err(|e| {
+        KeyframeSelector::parse_with_context(self.context, input).map_err(|e| {
             let location = e.location;
             let error = ContextualParseError::InvalidKeyframeRule(
                 input.slice_from(start_position),

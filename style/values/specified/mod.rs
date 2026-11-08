@@ -37,7 +37,7 @@ pub use self::align::{
 pub use self::angle::{AllowUnitlessZeroAngle, Angle};
 pub use self::animation::{
     AnimationComposition, AnimationDirection, AnimationDuration, AnimationFillMode,
-    AnimationIterationCount, AnimationName, AnimationPlayState, AnimationTimeline, ScrollAxis,
+    AnimationIterationCount, AnimationName, AnimationPlayState, AnimationRangeStart, AnimationRangeEnd, AnimationTimeline, ScrollAxis,
     TimelineName, TransitionBehavior, TransitionProperty, ViewTimelineInset, ViewTransitionClass,
     ViewTransitionName,
 };

@@ -11,7 +11,7 @@ use style::{
     shared_lock::SharedRwLockReadGuard,
     stylesheets::{
         Origin,
-        keyframes_rule::{Keyframe, KeyframePercentage, KeyframeSelector},
+        keyframes_rule::{Keyframe, KeyframeSelector},
     },
     values::CustomIdent,
 };
@@ -34,14 +34,8 @@ pub(super) struct CanonicalKeyframeRule {
 }
 
 fn model_selector(selector: &KeyframeSelector) -> RuleKeyframeSelector {
-    RuleKeyframeSelector::new(
-        selector
-            .percentages()
-            .iter()
-            .map(|value| value.0)
-            .collect::<Vec<_>>(),
-    )
-    .expect("parsed keyframe percentages are nonempty and in range")
+    RuleKeyframeSelector::from_parsed_css(selector.to_css_string())
+        .expect("a parsed keyframe selector is nonempty")
 }
 
 pub fn parse_keyframe_selector(text: &str) -> Option<RuleKeyframeSelector> {
@@ -53,12 +47,7 @@ pub fn parse_keyframe_selector(text: &str) -> Option<RuleKeyframeSelector> {
 }
 
 pub fn serialize_keyframe_selector(selector: &RuleKeyframeSelector) -> String {
-    selector
-        .percentages()
-        .iter()
-        .map(|value| KeyframePercentage::new(*value).to_css_string())
-        .collect::<Vec<_>>()
-        .join(", ")
+    selector.css_text().to_owned()
 }
 
 fn serialize_keyframe(selector: &RuleKeyframeSelector, declarations: &str) -> String {
@@ -218,7 +207,6 @@ mod tests {
     #[test]
     fn selectors_preserve_order_duplicates_and_percentage_precision() {
         let selector = parse_keyframe_selector("to, from, 12.5%, 12.5%").unwrap();
-        assert_eq!(selector.percentages(), &[1.0, 0.0, 0.125, 0.125]);
         assert_eq!(
             serialize_keyframe_selector(&selector),
             "100%, 0%, 12.5%, 12.5%"
@@ -230,14 +218,21 @@ mod tests {
         for invalid in ["", "0", "-1%", "101%", "from,", "from {}", "50% 60%"] {
             assert!(parse_keyframe_selector(invalid).is_none(), "{invalid}");
         }
-        for invalid in [
-            vec![],
-            vec![f32::NAN],
-            vec![f32::INFINITY],
-            vec![-0.1],
-            vec![1.1],
+        assert!(RuleKeyframeSelector::from_parsed_css("").is_none());
+    }
+
+    #[test]
+    fn selectors_preserve_named_ranges_and_context_dependent_math() {
+        for (input, retained) in [
+            ("entry 10%", "entry"),
+            ("exit 60%", "exit"),
+            ("calc(10% * sibling-index())", "sibling-index()"),
+            ("calc(10% * sign(1em - 1px))", "sign("),
         ] {
-            assert!(RuleKeyframeSelector::new(invalid).is_none());
+            let selector = parse_keyframe_selector(input).expect("the selector must parse");
+            let css = serialize_keyframe_selector(&selector);
+            assert!(css.contains(retained), "{input}: {css}");
+            assert_eq!(parse_keyframe_selector(&css), Some(selector));
         }
     }
 

@@ -3506,6 +3506,12 @@ mod tests {
             PropertyDeclaration::AnimationPlayState(value) => {
                 PropertyDeclaration::AnimationPlayState(value.clone())
             },
+            PropertyDeclaration::AnimationRangeStart(value) => {
+                PropertyDeclaration::AnimationRangeStart(value.clone())
+            },
+            PropertyDeclaration::AnimationRangeEnd(value) => {
+                PropertyDeclaration::AnimationRangeEnd(value.clone())
+            },
             PropertyDeclaration::AnimationTimeline(value) => {
                 PropertyDeclaration::AnimationTimeline(value.clone())
             },
@@ -6252,6 +6258,21 @@ mod tests {
             assert!(block.declarations().iter().any(|declaration|
                 declaration.name() == name && declaration.value() == value
             ), "{name}");
+        }
+    }
+
+    #[test]
+    fn animation_ranges_keep_canonical_longhands_and_reset_through_animation() {
+        let parsed = ParsedCssRule::parse(".target { animation-range: entry 0% exit 0%; }").unwrap();
+        assert_eq!(parsed.declaration_value("animation-range-start").as_deref(), Some("entry"));
+        assert_eq!(parsed.declaration_value("animation-range-end").as_deref(), Some("exit 0%"));
+        let rule = parsed.to_rule_node();
+        assert!(rule.payload().declaration_block().unwrap().shorthand_values().iter().any(|value|
+            value.name() == "animation-range" && value.value() == "entry exit 0%"
+        ));
+        let reset = ParsedCssRule::parse(".target { animation-range: entry; animation: fade 1s; }").unwrap();
+        for name in ["animation-range-start", "animation-range-end"] {
+            assert_eq!(reset.declaration_value(name).as_deref(), Some("normal"));
         }
     }
 
