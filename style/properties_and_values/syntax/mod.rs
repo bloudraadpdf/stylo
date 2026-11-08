@@ -132,7 +132,7 @@ impl Descriptor {
     fn try_parse_multiplier<'i>(input: &mut CSSParser<'i, '_>) -> Option<Multiplier> {
         input
             .try_parse(|input| {
-                let next = input.next().map_err(|_| ())?;
+                let next = input.next_including_whitespace().map_err(|_| ())?;
                 match next {
                     Token::Delim('+') => Ok(Multiplier::Space),
                     Token::Delim('#') => Ok(Multiplier::Comma),
@@ -147,9 +147,9 @@ impl Descriptor {
     ) -> Result<ComponentName, ParseError> {
         if input.try_parse(|input| input.expect_delim('<')).is_ok() {
             let name = Self::parse_component_data_type_name(input)?;
-            input
-                .expect_delim('>')
-                .map_err(|_| ParseError::UnclosedDataTypeName)?;
+            if !matches!(input.next_including_whitespace(), Ok(Token::Delim('>'))) {
+                return Err(ParseError::UnclosedDataTypeName);
+            }
             Ok(ComponentName::DataType(name))
         } else {
             input.try_parse(|input| {
@@ -163,9 +163,12 @@ impl Descriptor {
         input: &mut CSSParser<'i, '_>,
     ) -> Result<DataType, ParseError> {
         input
-            .expect_ident()
+            .next_including_whitespace()
             .ok()
-            .and_then(|n| DataType::from_str(n))
+            .and_then(|token| match token {
+                Token::Ident(name) => DataType::from_str(name),
+                _ => None,
+            })
             .ok_or(ParseError::UnknownDataTypeName)
     }
 
@@ -492,5 +495,26 @@ impl<'a> Parser<'a> {
             self.parse_multiplier()
         };
         Ok(Component { name, multiplier })
+    }
+}
+
+#[cfg(test)]
+mod token_syntax_tests {
+    use super::*;
+
+    #[test]
+    fn token_syntax_requires_adjacent_type_delimiters_and_multipliers() {
+        for (syntax, valid) in [
+            ("<length>", true), (" <length> | <color> ", true),
+            ("<length>+", true), ("<length>/**/+", true),
+            ("< length>", false), ("<length >", false),
+            ("<length> +", false), ("<length> #", false),
+            ("foo +", false), ("foo#", true),
+        ] {
+            let mut input = cssparser::ParserInput::new(syntax);
+            let mut parser = CSSParser::new(&mut input);
+            let result = parser.parse_entirely(Descriptor::from_css_parser);
+            assert_eq!(result.is_ok(), valid, "{syntax}");
+        }
     }
 }
