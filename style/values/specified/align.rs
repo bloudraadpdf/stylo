@@ -175,17 +175,7 @@ pub enum AxisDirection {
 /// <https://drafts.csswg.org/css-align/#content-distribution>
 /// <https://drafts.csswg.org/css-align/#propdef-align-content>
 #[derive(
-    Clone,
-    Copy,
-    Debug,
-    Eq,
-    MallocSizeOf,
-    PartialEq,
-    ToComputedValue,
-    ToCss,
-    ToResolvedValue,
-    ToShmem,
-    ToTyped,
+    Clone, Copy, Debug, Eq, MallocSizeOf, PartialEq, ToCss, ToResolvedValue, ToShmem, ToTyped,
 )]
 #[cfg_attr(feature = "servo", derive(Deserialize, Serialize))]
 #[repr(C)]
@@ -193,6 +183,18 @@ pub struct ContentDistribution {
     primary: AlignFlags,
     // FIXME(https://github.com/w3c/csswg-drafts/issues/1002): This will need to
     // accept fallback alignment, eventually.
+}
+
+impl ToComputedValue for ContentDistribution {
+    type ComputedValue = Self;
+
+    fn to_computed_value(&self, context: &Context) -> Self {
+        Self::new(self.primary.to_computed_value(context))
+    }
+
+    fn from_computed_value(computed: &Self) -> Self {
+        *computed
+    }
 }
 
 impl ContentDistribution {
@@ -318,22 +320,23 @@ impl SpecifiedValueInfo for ContentDistribution {
 /// <https://drafts.csswg.org/css-align/#self-alignment>
 /// <https://drafts.csswg.org/css-align/#propdef-align-self>
 #[derive(
-    Clone,
-    Copy,
-    Debug,
-    Deref,
-    Eq,
-    MallocSizeOf,
-    PartialEq,
-    ToComputedValue,
-    ToCss,
-    ToResolvedValue,
-    ToShmem,
-    ToTyped,
+    Clone, Copy, Debug, Deref, Eq, MallocSizeOf, PartialEq, ToCss, ToResolvedValue, ToShmem, ToTyped,
 )]
 #[cfg_attr(feature = "servo", derive(Deserialize, Serialize))]
 #[repr(C)]
 pub struct SelfAlignment(pub AlignFlags);
+
+impl ToComputedValue for SelfAlignment {
+    type ComputedValue = Self;
+
+    fn to_computed_value(&self, context: &Context) -> Self {
+        Self(self.0.to_computed_value(context))
+    }
+
+    fn from_computed_value(computed: &Self) -> Self {
+        *computed
+    }
+}
 
 impl SelfAlignment {
     /// The initial value 'auto'
@@ -460,22 +463,23 @@ impl SpecifiedValueInfo for SelfAlignment {
 /// <https://drafts.csswg.org/css-align/#propdef-align-items>
 /// <https://drafts.csswg.org/css-align/#propdef-justify-items>
 #[derive(
-    Clone,
-    Copy,
-    Debug,
-    Deref,
-    Eq,
-    MallocSizeOf,
-    PartialEq,
-    ToComputedValue,
-    ToCss,
-    ToResolvedValue,
-    ToShmem,
-    ToTyped,
+    Clone, Copy, Debug, Deref, Eq, MallocSizeOf, PartialEq, ToCss, ToResolvedValue, ToShmem, ToTyped,
 )]
 #[cfg_attr(feature = "servo", derive(Deserialize, Serialize))]
 #[repr(C)]
 pub struct ItemPlacement(pub AlignFlags);
+
+impl ToComputedValue for ItemPlacement {
+    type ComputedValue = Self;
+
+    fn to_computed_value(&self, context: &Context) -> Self {
+        Self(self.0.to_computed_value(context))
+    }
+
+    fn from_computed_value(computed: &Self) -> Self {
+        *computed
+    }
+}
 
 impl ItemPlacement {
     /// The value 'normal'
@@ -772,7 +776,6 @@ fn list_legacy_keywords(f: KeywordsCollectFn) {
     MallocSizeOf,
     PartialEq,
     SpecifiedValueInfo,
-    ToComputedValue,
     ToCss,
     ToResolvedValue,
     ToShmem,
@@ -783,6 +786,18 @@ fn list_legacy_keywords(f: KeywordsCollectFn) {
 pub struct AlignTracks(
     #[css(iterable, if_empty = "normal")] pub crate::OwnedSlice<ContentDistribution>,
 );
+
+impl ToComputedValue for AlignTracks {
+    type ComputedValue = Self;
+
+    fn to_computed_value(&self, context: &Context) -> Self {
+        Self(self.0.to_computed_value(context))
+    }
+
+    fn from_computed_value(computed: &Self) -> Self {
+        Self(ToComputedValue::from_computed_value(&computed.0))
+    }
+}
 
 impl AlignTracks {
     /// Returns the initial value (`normal`), encoded as the empty
@@ -824,7 +839,6 @@ impl Parse for AlignTracks {
     MallocSizeOf,
     PartialEq,
     SpecifiedValueInfo,
-    ToComputedValue,
     ToCss,
     ToResolvedValue,
     ToShmem,
@@ -835,6 +849,18 @@ impl Parse for AlignTracks {
 pub struct JustifyTracks(
     #[css(iterable, if_empty = "normal")] pub crate::OwnedSlice<ContentDistribution>,
 );
+
+impl ToComputedValue for JustifyTracks {
+    type ComputedValue = Self;
+
+    fn to_computed_value(&self, context: &Context) -> Self {
+        Self(self.0.to_computed_value(context))
+    }
+
+    fn from_computed_value(computed: &Self) -> Self {
+        Self(ToComputedValue::from_computed_value(&computed.0))
+    }
+}
 
 impl JustifyTracks {
     /// Returns the initial value (`normal`), encoded as the empty
