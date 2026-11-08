@@ -407,7 +407,9 @@ impl<S: Side> ToComputedValue for PositionComponent<PositionKeyword<S>> {
                 ComputedLengthPercentage::hundred_percent_minus(length, AllowedNumericType::All)
             },
             PositionComponent::Side(_, Some(ref length))
-            | PositionComponent::Length(ref length) => length.to_computed_value(context),
+            | PositionComponent::Length(ref length) => {
+                length.to_computed_value(context).reduce_zero_dimension()
+            },
         }
     }
 

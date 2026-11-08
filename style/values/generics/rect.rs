@@ -138,9 +138,12 @@ impl<T: PartialEq + ToCss> Rect<T> {
         separator: &str,
     ) -> fmt::Result {
         self.0.to_css(dest)?;
-        let same_vertical = self.0 == self.2;
-        let same_horizontal = self.1 == self.3;
-        if same_vertical && same_horizontal && self.0 == self.1 {
+        let same_vertical = self.0 == self.2 || self.0.to_css_string() == self.2.to_css_string();
+        let same_horizontal = self.1 == self.3 || self.1.to_css_string() == self.3.to_css_string();
+        if same_vertical
+            && same_horizontal
+            && (self.0 == self.1 || self.0.to_css_string() == self.1.to_css_string())
+        {
             return Ok(());
         }
         dest.write_str(separator)?;

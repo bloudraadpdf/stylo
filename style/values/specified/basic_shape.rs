@@ -45,7 +45,8 @@ pub type ClipPath = generic::GenericClipPath<BasicShape, SpecifiedUrl>;
 pub type BorderShape = generic::BorderShape<BasicShape, Option<generic::BorderShapeReferenceBox>>;
 
 /// A specified path in `border-shape`.
-pub type BorderShapePath = generic::BorderShapePath<BasicShape, Option<generic::BorderShapeReferenceBox>>;
+pub type BorderShapePath =
+    generic::BorderShapePath<BasicShape, Option<generic::BorderShapeReferenceBox>>;
 
 /// A specified `shape-outside` value.
 pub type ShapeOutside = generic::GenericShapeOutside<BasicShape, Image>;
@@ -1283,6 +1284,25 @@ mod tests {
             computed.to_css_string(),
             "circle(96px at calc(100% - 96px) calc(100% - 192px))"
         );
+        for (css, expected) in [
+            (
+                "circle(at calc(75% + 0px) calc(75% + 0px))",
+                "circle(at 75% 75%)",
+            ),
+            (
+                "path('M10,10h80v80h-80z')",
+                "path(\"M 10 10 H 90 V 90 H 10 Z\")",
+            ),
+            ("rect(50% 80% 70% 20%)", "inset(50% 20% 30%)"),
+            ("xywh(20% 50% 60% 20%)", "inset(50% 20% 30%)"),
+        ] {
+            let specified = parse(css).unwrap();
+            let computed: crate::values::computed::basic_shape::BasicShape =
+                Context::for_media_query_evaluation(&device, QuirksMode::NoQuirks, |context| {
+                    specified.to_computed_value(context)
+                });
+            assert_eq!(computed.to_css_string(), expected, "{css}");
+        }
     }
 }
 

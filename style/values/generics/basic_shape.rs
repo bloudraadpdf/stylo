@@ -661,7 +661,7 @@ pub struct PolygonCoord<LengthPercentage>(pub LengthPercentage, pub LengthPercen
 #[repr(C, u8)]
 pub enum GenericPathOrShapeFunction<Angle, Position, LengthPercentage> {
     /// Defines a path with SVG path syntax.
-    Path(Path),
+    Path(#[compute(field_bound)] Path),
     /// Defines a shape function, which is identical to path() but it uses the CSS syntax.
     Shape(
         #[css(field_bound)]
@@ -715,7 +715,6 @@ pub enum FillRule {
     Serialize,
     SpecifiedValueInfo,
     ToAnimatedValue,
-    ToComputedValue,
     ToCss,
     ToResolvedValue,
     ToShmem,
@@ -728,6 +727,21 @@ pub struct Path {
     pub fill: FillRule,
     /// The svg path data.
     pub path: SVGPathData,
+}
+
+impl crate::values::computed::ToComputedValue for Path {
+    type ComputedValue = Self;
+
+    fn to_computed_value(&self, _: &crate::values::computed::Context) -> Self {
+        Self {
+            fill: self.fill,
+            path: self.path.normalize(false),
+        }
+    }
+
+    fn from_computed_value(computed: &Self) -> Self {
+        computed.clone()
+    }
 }
 
 impl Path {
