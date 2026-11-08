@@ -72,7 +72,7 @@ impl<'a> AnimationCascadeTarget<'a> {
 }
 
 /// Represents an animation for a given property.
-#[derive(Clone, Debug, MallocSizeOf)]
+#[derive(Clone, Debug, MallocSizeOf, PartialEq)]
 pub struct PropertyAnimation {
     /// The value we are animating from.
     from: AnimationValue,
