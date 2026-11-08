@@ -1307,13 +1307,13 @@ impl ElementAnimationSet {
         let mutable_style = Arc::make_mut(style);
         if let Some(map) = self.get_value_map_for_active_animations(now) {
             for value in map.values() {
-                value.set_in_style_for_servo(mutable_style);
+                value.set_in_style_for_servo(mutable_style, &context.stylist);
             }
         }
 
         if let Some(map) = self.get_value_map_for_transitions(now, IgnoreTransitions::Canceled) {
             for value in map.values() {
-                value.set_in_style_for_servo(mutable_style);
+                value.set_in_style_for_servo(mutable_style, &context.stylist);
             }
         }
     }
@@ -2167,6 +2167,7 @@ mod tests {
     #[cfg(feature = "servo")]
     #[test]
     fn shadow_transition_lifecycle_compares_the_whole_list_when_offset_is_unchanged() {
+        let stylist = crate::stylist::Stylist::new(crate::test_support::test_device(), selectors::matching::QuirksMode::NoQuirks);
         use crate::properties::longhands;
         use crate::values::animated::box_shadow::AnimatedBoxShadowList;
         use crate::values::computed::{BoxShadowOffset, BoxShadowPosition, Length};
@@ -2179,7 +2180,7 @@ mod tests {
             .into_iter()
             .collect(),
         ))
-        .set_in_style_for_servo(servo_arc::Arc::make_mut(&mut start));
+        .set_in_style_for_servo(servo_arc::Arc::make_mut(&mut start), &stylist);
         let mut end = start.clone();
         AnimationValue::BoxShadowOffset(longhands::box_shadow_offset::computed_value::OwnedList(
             [BoxShadowOffset::Offset(
@@ -2189,14 +2190,14 @@ mod tests {
             .into_iter()
             .collect(),
         ))
-        .set_in_style_for_servo(servo_arc::Arc::make_mut(&mut end));
+        .set_in_style_for_servo(servo_arc::Arc::make_mut(&mut end), &stylist);
         let mut changed_inset = end.clone();
         AnimationValue::BoxShadowPosition(
             longhands::box_shadow_position::computed_value::OwnedList(
                 [BoxShadowPosition::Inset].into_iter().collect(),
             ),
         )
-        .set_in_style_for_servo(servo_arc::Arc::make_mut(&mut changed_inset));
+        .set_in_style_for_servo(servo_arc::Arc::make_mut(&mut changed_inset), &stylist);
         let from = AnimatedBoxShadowList::from_computed_values(&start, None);
         let to = AnimatedBoxShadowList::from_computed_values(&end, None);
         let inset = AnimatedBoxShadowList::from_computed_values(&changed_inset, None);
@@ -2226,7 +2227,7 @@ mod tests {
                 [BoxShadowPosition::Inset].into_iter().collect(),
             ),
         )
-        .set_in_style_for_servo(servo_arc::Arc::make_mut(&mut changed_start));
+        .set_in_style_for_servo(servo_arc::Arc::make_mut(&mut changed_start), &stylist);
         let false_reverse = AnimatedBoxShadowList::from_computed_values(&changed_start, None);
         assert_eq!(offset(&from), offset(&false_reverse));
         assert!(!transition.reversing_start_matches(&offset(&false_reverse), Some(&false_reverse)));
@@ -2235,6 +2236,7 @@ mod tests {
     #[cfg(feature = "servo")]
     #[test]
     fn coordinated_shadow_transition_samples_transparent_padding_for_every_component() {
+        let stylist = crate::stylist::Stylist::new(crate::test_support::test_device(), selectors::matching::QuirksMode::NoQuirks);
         use crate::properties::{longhands, LonghandId, PropertyDeclarationId};
         use crate::values::animated::box_shadow::AnimatedBoxShadowList;
         use crate::values::computed::{BoxShadowOffset, Length};
@@ -2248,7 +2250,7 @@ mod tests {
             .into_iter()
             .collect(),
         ))
-        .set_in_style_for_servo(servo_arc::Arc::make_mut(&mut target));
+        .set_in_style_for_servo(servo_arc::Arc::make_mut(&mut target), &stylist);
         let from = AnimatedBoxShadowList::from_computed_values(&initial, None);
         let to = AnimatedBoxShadowList::from_computed_values(&target, None);
         let expected = from

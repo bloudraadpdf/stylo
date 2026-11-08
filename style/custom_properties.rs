@@ -479,7 +479,7 @@ impl ComputedCustomProperties {
 
     /// Insert a custom property in the corresponding inherited/non_inherited
     /// map, depending on whether the inherit flag is set or unset.
-    fn insert(
+    pub(crate) fn insert(
         &mut self,
         registration: &PropertyRegistrationData,
         name: &Name,
@@ -490,7 +490,7 @@ impl ComputedCustomProperties {
 
     /// Remove a custom property from the corresponding inherited/non_inherited
     /// map, depending on whether the inherit flag is set or unset.
-    fn remove(&mut self, registration: &PropertyRegistrationData, name: &Name) {
+    pub(crate) fn remove(&mut self, registration: &PropertyRegistrationData, name: &Name) {
         self.map_mut(registration).remove(name);
     }
 
@@ -2243,7 +2243,7 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
         };
 
         if let Some(value) = computed_value {
-            return existing_value.v != value.v;
+            return existing_value.v != value.v || existing_value.attr_tainted != value.attr_tainted;
         }
 
         true

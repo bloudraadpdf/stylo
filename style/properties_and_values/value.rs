@@ -240,7 +240,7 @@ pub struct Value<Component> {
     #[css(skip)]
     url_data: UrlExtraData,
     #[css(skip)]
-    attr_tainted: bool,
+    pub(crate) attr_tainted: bool,
 }
 
 impl<Component: Animate + Clone> Animate for Value<Component> {
@@ -684,7 +684,7 @@ pub struct CustomAnimatedValue {
     /// The name of the custom property.
     pub(crate) name: crate::custom_properties::Name,
     /// The computed custom property value, or its guaranteed-invalid value when absent.
-    value: Option<ComputedValue>,
+    pub(crate) value: Option<ComputedValue>,
 }
 
 impl Animate for CustomAnimatedValue {

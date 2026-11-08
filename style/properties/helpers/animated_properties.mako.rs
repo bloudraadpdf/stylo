@@ -484,7 +484,7 @@ impl AnimationValue {
     /// SERVO ONLY: This doesn't properly handle things like updating 'em' units
     /// when animated font-size.
     #[cfg(feature = "servo")]
-    pub fn set_in_style_for_servo(&self, style: &mut ComputedValues) {
+    pub fn set_in_style_for_servo(&self, style: &mut ComputedValues, stylist: &crate::stylist::Stylist) {
         match self {
             % for prop in data.longhands:
             % if prop.animatable and not prop.logical:
@@ -501,13 +501,19 @@ impl AnimationValue {
             AnimationValue::${prop.camel_case}(..) => unreachable!(),
             % endif
             % endfor
-            AnimationValue::Custom(..) => unreachable!(),
+            AnimationValue::Custom(animated) => {
+                let registration = stylist.get_custom_property_registration(&animated.name);
+                match &animated.value {
+                    Some(value) => style.custom_properties.insert(registration, &animated.name, value.clone()),
+                    None => style.custom_properties.remove(registration, &animated.name),
+                }
+            },
         }
     }
 
     /// As above, but a stub for Gecko.
     #[cfg(feature = "gecko")]
-    pub fn set_in_style_for_servo(&self, _: &mut ComputedValues) {
+    pub fn set_in_style_for_servo(&self, _: &mut ComputedValues, _: &crate::stylist::Stylist) {
     }
 }
 
