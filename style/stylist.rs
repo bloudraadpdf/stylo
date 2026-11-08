@@ -1581,7 +1581,15 @@ impl Stylist {
             }
             inputs
         };
-        self.cascade_style_and_visited(
+        #[cfg(feature = "servo")]
+        let original_rules = inputs.rules.clone();
+        #[cfg(feature = "servo")]
+        let (inputs, sampled) = if try_tactic.is_empty() {
+            (inputs, Vec::new())
+        } else {
+            self.position_try_animation_inputs(inputs, style, guards, element)
+        };
+        let computed = self.cascade_style_and_visited(
             Some(element),
             pseudo.as_ref(),
             inputs,
@@ -1592,7 +1600,117 @@ impl Stylist {
             try_tactic,
             /* rule_cache = */ None,
             &mut RuleCacheConditions::default(),
-        )
+        );
+        #[cfg(feature = "servo")]
+        {
+            let mut computed = computed;
+            let output = Arc::make_mut(&mut computed);
+            output.rules = original_rules;
+            for value in sampled {
+                value.set_in_style_for_servo(output, self);
+            }
+            return computed;
+        }
+        #[cfg(feature = "gecko")]
+        computed
+    }
+
+    #[cfg(feature = "servo")]
+    fn position_try_animation_inputs<E: TElement>(
+        &self,
+        mut inputs: CascadeInputs,
+        style: &ComputedValues,
+        guards: &StylesheetGuards,
+        element: E,
+    ) -> (
+        CascadeInputs,
+        Vec<properties::animated_properties::AnimationValue>,
+    ) {
+        use crate::dom::{TDocument, TNode};
+        use crate::properties::animated_properties::AnimationValue;
+        use crate::properties::{LonghandId, LonghandIdSet, PropertyDeclarationId};
+
+        let sensitive = |id| {
+            matches!(
+                id,
+                LonghandId::Top
+                    | LonghandId::Right
+                    | LonghandId::Bottom
+                    | LonghandId::Left
+                    | LonghandId::Width
+                    | LonghandId::Height
+                    | LonghandId::MinWidth
+                    | LonghandId::MinHeight
+                    | LonghandId::MaxWidth
+                    | LonghandId::MaxHeight
+                    | LonghandId::MarginTop
+                    | LonghandId::MarginRight
+                    | LonghandId::MarginBottom
+                    | LonghandId::MarginLeft
+                    | LonghandId::AlignSelf
+                    | LonghandId::JustifySelf
+                    | LonghandId::PositionArea
+            )
+        };
+        let rules = inputs
+            .rules
+            .as_ref()
+            .unwrap_or(self.rule_tree.root())
+            .clone();
+        let mut current = Some(&rules);
+        let mut seen = LonghandIdSet::default();
+        let mut sampled = Vec::new();
+        let mut filtered = Vec::new();
+        while let Some(rule) = current {
+            let level = rule.cascade_level();
+            if matches!(level, CascadeLevel::Animations | CascadeLevel::Transitions) {
+                let Some(source) = rule.style_source() else {
+                    current = rule.parent();
+                    continue;
+                };
+                let block = source.read(level.guard(guards));
+                let mut retained = PropertyDeclarationBlock::new();
+                for (declaration, importance) in block.declaration_importance_iter() {
+                    let property = declaration.id().to_physical(style.writing_mode);
+                    let affected =
+                        matches!(property, PropertyDeclarationId::Longhand(id) if sensitive(id));
+                    if !affected {
+                        retained.push(declaration.clone(), importance);
+                    }
+                    if importance != rule.importance() || !affected {
+                        continue;
+                    }
+                    let PropertyDeclarationId::Longhand(id) = property else {
+                        unreachable!()
+                    };
+                    if !seen.contains(id) {
+                        seen.insert(id);
+                        // The original style already resolved cascade priority,
+                        // including important declarations and revert. Preserve
+                        // that winning value without recascading the effect
+                        // through the position-try tactic.
+                        sampled.extend(AnimationValue::from_computed_values(property, style));
+                    }
+                }
+                filtered.push((level, retained));
+            }
+            current = rule.parent();
+        }
+        for (level, block) in filtered {
+            let source = (!block.is_empty())
+                .then(|| Arc::new(element.as_node().owner_doc().shared_lock().wrap(block)));
+            if let Some(rules) = self.rule_tree.update_rule_at_level(
+                level,
+                LayerOrder::root(),
+                source.as_ref().map(Arc::borrow_arc),
+                inputs.rules.as_ref().unwrap_or(self.rule_tree.root()),
+                guards,
+                &mut false,
+            ) {
+                inputs.rules = Some(rules);
+            }
+        }
+        (inputs, sampled)
     }
 
     /// Computes a style using the given CascadeInputs.  This can be used to
