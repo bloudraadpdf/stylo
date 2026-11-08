@@ -10,14 +10,14 @@ use crate::computed_values::list_style_type::T as ListStyleType;
 use crate::counter_style::CounterStyle;
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
+use crate::values::CustomIdent;
 use crate::values::computed::{Context, ToComputedValue};
 use crate::values::generics::counters as generics;
 use crate::values::generics::counters::CounterPair;
-use crate::values::specified::image::Image;
 use crate::values::specified::Attr;
 use crate::values::specified::Integer;
-use crate::values::CustomIdent;
-use cssparser::{match_ignore_ascii_case, Parser, Token};
+use crate::values::specified::image::Image;
+use cssparser::{Parser, Token, match_ignore_ascii_case};
 use selectors::parser::SelectorParseErrorKind;
 use std::fmt::{self, Write};
 use style_traits::{
@@ -452,7 +452,10 @@ fn parse_content_item<'i, 't>(
                     let mut arguments = Vec::new();
                     while !input.is_exhausted() {
                         input.expect_comma()?;
-                        let argument = parse_content_item(context, input, false, true, false, false, false, false)?;
+                        let argument = match input.try_parse(|input| Attr::parse(context, input)) {
+                            Ok(attribute) => generics::ContentItem::Attr(attribute),
+                            Err(_) => parse_content_item(context, input, false, true, false, false, false, false)?,
+                        };
                         arguments.push(match argument {
                             generics::ContentItem::String(value) => generics::ScriptContentArgument::String(value),
                             generics::ContentItem::Counter(name, style) => generics::ScriptContentArgument::Counter(name, style),
@@ -579,9 +582,6 @@ fn parse_content_item<'i, 't>(
                         generics::LeaderType::String(s.into())
                     };
                     Ok(generics::ContentItem::Leader(leader_type))
-                }),
-                "attr" if static_prefs::pref!("layout.css.attr.enabled") => input.parse_nested_block(|input| {
-                    Ok(generics::ContentItem::Attr(Attr::parse_function(context, input)?))
                 }),
                 // moegoe Family 14: `-bd-attr(...)` and
                 // `-bd-attr-ancestor(...)` extend `attr()` for use inside
@@ -756,7 +756,7 @@ mod tests {
     use crate::context::QuirksMode;
     use crate::parser::{Parse, ParserContext};
     use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
-    use crate::test_support::{pref_lock, BoolPrefGuard};
+    use crate::test_support::{BoolPrefGuard, pref_lock};
     use crate::values::specified::AttrSyntax;
     use cssparser::{Parser, ParserInput};
     use style_traits::{ParsingMode, ToCss};
@@ -1008,11 +1008,11 @@ mod tests {
     }
 
     #[test]
-    fn content_items_accept_attr_fallback_and_type_annotation() {
+    fn content_items_accept_prefixed_attr_fallback_and_type_annotation() {
         let _guard = pref_lock().lock().unwrap();
         let _attr_pref = BoolPrefGuard::set("layout.css.attr.enabled", true);
 
-        let content = parse_content_value(r##"" [" attr(data-status string, "unknown") "]""##);
+        let content = parse_content_value(r##"" [" -bd-attr(data-status string, "unknown") "]""##);
         let Content::Items(items) = content else {
             panic!("expected content items");
         };
@@ -1030,11 +1030,11 @@ mod tests {
     }
 
     #[test]
-    fn content_items_accept_plain_attr_functions() {
+    fn content_items_accept_prefixed_attr_functions() {
         let _guard = pref_lock().lock().unwrap();
         let _attr_pref = BoolPrefGuard::set("layout.css.attr.enabled", true);
 
-        let content = parse_content_value("attr(data-label)");
+        let content = parse_content_value("-bd-attr(data-label)");
         let Content::Items(items) = content else {
             panic!("expected content items");
         };
@@ -1099,7 +1099,10 @@ mod tests {
             (r#""" / counter(cnt)"#, r#""" / counter(cnt)"#),
             (r#""a" / counter(cnt) "b""#, r#""a" / counter(cnt) "b""#),
             ("counter(cnt, DECIMAL)", "counter(cnt)"),
-            (r#"counters(cnt, ".", dECiMaL) / "alt""#, r#"counters(cnt, ".") / "alt""#),
+            (
+                r#"counters(cnt, ".", dECiMaL) / "alt""#,
+                r#"counters(cnt, ".") / "alt""#,
+            ),
             ("counter(cnt, Upper-Roman)", "counter(cnt, upper-roman)"),
             ("counter(cnt, MyStyle)", "counter(cnt, MyStyle)"),
         ] {

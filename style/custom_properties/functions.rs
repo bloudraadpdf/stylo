@@ -1368,12 +1368,14 @@ mod tests {
             let css = format!("{css} #t {{ --actual: a {call} b; }}");
             let [actual] = cascade(&css, &attributes, ["actual"]);
             let actual = actual.unwrap_or_else(|| panic!("{name}: invalid"));
-            let start = actual.css.find("url").expect("the url is substituted");
+            let url_start = actual.css.find("url(").expect("the URL is substituted");
+            assert_eq!(&actual.css[..url_start], "a ", "{name}");
+            assert!(actual.css.ends_with(" b"), "{name}: {}", actual.css);
             assert_eq!(
                 actual.attr_tainted.as_slice(),
                 [AttrTaintedRange {
-                    start,
-                    end: actual.css.len() - 2
+                    start: 0,
+                    end: actual.css.len()
                 }],
                 "{name}: {}",
                 actual.css

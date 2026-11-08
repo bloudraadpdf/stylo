@@ -2235,6 +2235,10 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 replace_self_with!(&mut result);
             },
             Self::MinMax(ref mut children, op) => {
+                if children.len() == 1 {
+                    replace_self_with!(&mut children[0]);
+                    return;
+                }
                 let unit = value_or_stop!(children[0].as_leaf().ok_or(())).sort_key();
                 if children
                     .iter()

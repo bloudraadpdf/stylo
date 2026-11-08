@@ -424,7 +424,9 @@ pub fn compute_variable_value(
     if registration.syntax.is_universal() {
         return Some(ComputedRegisteredValue::universal(Arc::clone(value)));
     }
-    compute_value(&value.css, &value.url_data, registration, computed_context).ok()
+    compute_value(&value.css, &value.url_data, registration, computed_context)
+        .ok()
+        .map(|computed| computed.with_attr_taint(value.is_attr_tainted()))
 }
 
 // Identical authored tokens can refer to different unobservable mixin bindings.
@@ -433,6 +435,7 @@ impl PartialEq for VariableValue {
         self.css == other.css
             && self.references == other.references
             && self.private_names == other.private_names
+            && self.attr_tainted == other.attr_tainted
     }
 }
 
@@ -1063,6 +1066,20 @@ impl VariableValue {
         self.references.has_references()
     }
 
+    pub(crate) fn is_attr_tainted(&self) -> bool {
+        !self.attr_tainted.is_empty()
+    }
+
+    pub(crate) fn with_attr_taint(mut self, tainted: bool) -> Self {
+        if tainted {
+            self.attr_tainted = ThinVec::from([AttrTaintedRange {
+                start: 0,
+                end: self.css.len(),
+            }]);
+        }
+        self
+    }
+
     /// Returns whether this value calls a custom function.
     pub fn has_dashed_functions(&self) -> bool {
         self.references.any_function
@@ -1233,6 +1250,15 @@ fn parse_declaration_value_block<'i, 't>(
                         return Ok(Box::default());
                     }
                     if is_ident {
+                        let state = input.state();
+                        while let Ok(token) = input.next() {
+                            if matches!(token, Token::CurlyBracketBlock | Token::Comma) {
+                                return Err(
+                                    input.new_custom_error(StyleParseErrorKind::UnspecifiedError)
+                                );
+                            }
+                        }
+                        input.reset(&state);
                         let argument = input.parse_until_before(Delimiter::Comma, |input| {
                             parse_function_argument_value(
                                 input,
@@ -3047,6 +3073,7 @@ impl<'a> Substitution<'a> {
             )));
         }
         compute_value(&self.css, url_data, registration, computed_context)
+            .map(|value| value.with_attr_taint(!self.attr_tainted.is_empty()))
     }
 
     fn new(
@@ -3592,7 +3619,11 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
                 .next_if(|next_ref| next_ref.end <= reference.end)
                 .is_some()
             {}
-            return Ok(s);
+            return Ok(if s.attr_tainted.is_empty() {
+                s
+            } else {
+                s.attr_tainted()
+            });
         }
 
         let Some(ref fallback) = reference.fallback else {

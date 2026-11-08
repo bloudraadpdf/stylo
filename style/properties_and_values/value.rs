@@ -10,7 +10,7 @@ use std::fmt::{self, Write};
 use super::{
     registry::PropertyRegistrationData,
     syntax::{
-        data_type::DataType, Component as SyntaxComponent, ComponentName, Descriptor, Multiplier,
+        Component as SyntaxComponent, ComponentName, Descriptor, Multiplier, data_type::DataType,
     },
 };
 use crate::derives::*;
@@ -20,10 +20,11 @@ use crate::rule_tree::CascadeLevel;
 use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
 use crate::stylist::Stylist;
 use crate::values::{
+    CustomIdent,
     animated::{self, Animate, Procedure},
     computed::{self, ToComputedValue},
     generics::transform::Transform,
-    specified, CustomIdent,
+    specified,
 };
 use crate::{custom_properties::ComputedValue as ComputedPropertyValue, dom::AttributeTracker};
 use cssparser::{BasicParseErrorKind, ParseErrorKind, Parser as CSSParser, TokenSerializationType};
@@ -31,8 +32,8 @@ use selectors::matching::QuirksMode;
 use servo_arc::Arc;
 use smallvec::SmallVec;
 use style_traits::{
-    owned_str::OwnedStr, CssWriter, ParseError as StyleParseError, ParsingMode,
-    StyleParseErrorKind, ToCss,
+    CssWriter, ParseError as StyleParseError, ParsingMode, StyleParseErrorKind, ToCss,
+    owned_str::OwnedStr,
 };
 
 /// A single component of the computed value.
@@ -238,14 +239,27 @@ pub struct Value<Component> {
     /// necessary to uncompute registered custom properties.
     #[css(skip)]
     url_data: UrlExtraData,
+    #[css(skip)]
+    attr_tainted: bool,
 }
 
-impl<Component: Animate> Animate for Value<Component> {
+impl<Component: Animate + Clone> Animate for Value<Component> {
     fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
-        let v = self.v.animate(&other.v, procedure)?;
+        let v = self
+            .v
+            .animate(&other.v, procedure)
+            .or_else(|()| match procedure {
+                Procedure::Interpolate { progress } => Ok(if progress < 0.5 {
+                    self.v.clone()
+                } else {
+                    other.v.clone()
+                }),
+                _ => Err(()),
+            })?;
         Ok(Value {
             v,
             url_data: self.url_data.clone(),
+            attr_tainted: self.attr_tainted || other.attr_tainted,
         })
     }
 }
@@ -253,14 +267,29 @@ impl<Component: Animate> Animate for Value<Component> {
 impl<Component> Value<Component> {
     /// Creates a new registered custom property value.
     pub fn new(v: ValueInner<Component>, url_data: UrlExtraData) -> Self {
-        Self { v, url_data }
+        let attr_tainted = matches!(&v, ValueInner::Universal(value) if value.is_attr_tainted());
+        Self {
+            v,
+            url_data,
+            attr_tainted,
+        }
     }
 
     /// Creates a new registered custom property value presumed to have universal syntax.
     pub fn universal(var: Arc<ComputedPropertyValue>) -> Self {
         let url_data = var.url_data.clone();
+        let attr_tainted = var.is_attr_tainted();
         let v = ValueInner::Universal(var);
-        Self { v, url_data }
+        Self {
+            v,
+            url_data,
+            attr_tainted,
+        }
+    }
+
+    pub(crate) fn with_attr_taint(mut self, tainted: bool) -> Self {
+        self.attr_tainted |= tainted;
+        self
     }
 }
 
@@ -283,7 +312,7 @@ where
     /// Convert to an untyped variable value.
     pub fn to_variable_value(&self) -> ComputedPropertyValue {
         if let ValueInner::Universal(ref value) = self.v {
-            return (**value).clone();
+            return (**value).clone().with_attr_taint(self.attr_tainted);
         }
         let serialization_types = self.serialization_types();
         ComputedPropertyValue::new(
@@ -292,6 +321,7 @@ where
             serialization_types.0,
             serialization_types.1,
         )
+        .with_attr_taint(self.attr_tainted)
     }
 }
 
@@ -351,6 +381,7 @@ impl SpecifiedValue {
             let namespaces = crate::stylesheets::Namespaces::default();
             let parsed = ComputedPropertyValue::parse(&mut input, url_data, &namespaces)?;
             return Ok(SpecifiedValue {
+                attr_tainted: parsed.is_attr_tainted(),
                 v: ValueInner::Universal(Arc::new(parsed)),
                 url_data: url_data.clone(),
             });
@@ -373,6 +404,7 @@ impl SpecifiedValue {
         Ok(Self {
             v,
             url_data: url_data.clone(),
+            attr_tainted: false,
         })
     }
 }
@@ -734,18 +766,18 @@ impl CustomAnimatedValue {
         context: &computed::Context,
         attribute_tracker: &mut AttributeTracker,
     ) -> Result<ComputedValue, ()> {
-        let css = if value.has_references() {
-            crate::custom_properties::substitute(
+        let (css, attr_tainted) = if value.has_references() {
+            let substituted = crate::custom_properties::substitute(
                 value,
                 context.style().custom_properties(),
                 stylist,
                 context,
                 CascadeLevel::Animations,
                 attribute_tracker,
-            )?
-            .css
+            )?;
+            (substituted.css, !substituted.attr_tainted.is_empty())
         } else {
-            Cow::Borrowed(value.css.as_str())
+            (Cow::Borrowed(value.css.as_str()), value.is_attr_tainted())
         };
         let mut input = cssparser::ParserInput::new(&css);
         SpecifiedValue::compute(
@@ -755,6 +787,7 @@ impl CustomAnimatedValue {
             context,
             AllowComputationallyDependent::Yes,
         )
+        .map(|value| value.with_attr_taint(attr_tainted))
     }
 
     pub(crate) fn to_declaration(&self) -> properties::PropertyDeclaration {
@@ -768,6 +801,7 @@ impl CustomAnimatedValue {
 #[cfg(all(test, feature = "servo"))]
 mod tests {
     use super::*;
+    use crate::Atom;
     use crate::dom::DummyAttributeProvider;
     use crate::properties::{CustomDeclaration, CustomDeclarationValue, StyleBuilder};
     use crate::properties_and_values::registry::PropertyRegistration;
@@ -775,7 +809,6 @@ mod tests {
     use crate::rule_cache::RuleCacheConditions;
     use crate::stylesheets::container_rule::ContainerSizeQuery;
     use crate::test_support::{test_device, with_computed_context};
-    use crate::Atom;
 
     fn computed(syntax: &str, css: &str) -> Result<ComputedValue, ()> {
         let syntax = Descriptor::from_str(syntax, false).expect("the syntax must parse");
@@ -804,10 +837,60 @@ mod tests {
     }
 
     #[test]
+    fn registered_values_keep_attribute_taint_through_interpolation_and_discrete_sampling() {
+        for (syntax, from, to) in [
+            ("<length>", "1px", "3px"),
+            ("<string>", "\"first\"", "\"second\""),
+            ("*", "first", "second"),
+        ] {
+            for tainted_start in [true, false] {
+                let from = computed(syntax, from)
+                    .unwrap()
+                    .with_attr_taint(tainted_start);
+                let to = computed(syntax, to)
+                    .unwrap()
+                    .with_attr_taint(!tainted_start);
+                for progress in [0.25, 0.75] {
+                    let sampled = from
+                        .animate(&to, Procedure::Interpolate { progress })
+                        .unwrap();
+                    assert!(
+                        sampled.to_variable_value().is_attr_tainted(),
+                        "{syntax}: {progress}"
+                    );
+                    let declared: SpecifiedValue = ToComputedValue::from_computed_value(&sampled);
+                    assert!(with_computed_context(|context| {
+                        let computed: ComputedValue = declared.to_computed_value(context);
+                        computed.to_variable_value().is_attr_tainted()
+                    }));
+                }
+            }
+        }
+        let plain = computed("<string>", "\"same\"").unwrap();
+        assert_ne!(plain, plain.clone().with_attr_taint(true));
+        let tainted = computed("<number>", "1").unwrap().with_attr_taint(true);
+        let plain = computed("<number>", "2").unwrap();
+        for procedure in [Procedure::Add, Procedure::Accumulate { count: 2 }] {
+            assert!(
+                tainted
+                    .animate(&plain, procedure)
+                    .unwrap()
+                    .to_variable_value()
+                    .is_attr_tainted()
+            );
+        }
+    }
+
+    #[test]
     fn container_relative_lengths_are_not_computationally_independent() {
         let syntax = Descriptor::from_str("<length>", false).expect("the syntax must parse");
         let url_data = UrlExtraData::from(url::Url::parse("about:blank").unwrap());
-        for (css, independent) in [("1px", true), ("1vw", true), ("1cqw", false), ("1cqmax", false)] {
+        for (css, independent) in [
+            ("1px", true),
+            ("1vw", true),
+            ("1cqw", false),
+            ("1cqmax", false),
+        ] {
             let mut input = cssparser::ParserInput::new(css);
             let parsed = CSSParser::new(&mut input).parse_entirely(|input| {
                 SpecifiedValue::parse(input, &syntax, &url_data, AllowComputationallyDependent::No)

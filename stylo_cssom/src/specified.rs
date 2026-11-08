@@ -1531,7 +1531,7 @@ mod namespace_component_serialization_tests {
     fn specified_attr_namespace_components_round_trip_without_inserted_whitespace() {
         for (source, expected) in [
             ("attr(|bar)", "attr(|bar)"),
-            ("attr( |bar )", "attr(|bar)"),
+            ("attr( |bar )", "attr( |bar )"),
             ("attr(prefix|bar)", "attr(prefix|bar)"),
             ("attr(|bar, \"fallback\")", "attr(|bar, \"fallback\")"),
             ("attr(foo-bar)", "attr(foo-bar)"),

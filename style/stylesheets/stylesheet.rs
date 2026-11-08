@@ -584,13 +584,14 @@ impl Clone for Stylesheet {
 #[cfg(all(test, feature = "servo"))]
 mod tests {
     use super::*;
+    use crate::Atom;
     use crate::color::AbsoluteColor;
     use crate::font_metrics::FontMetrics;
     use crate::media_queries::MediaType;
     use crate::parser::Parse;
     use crate::properties::{
-        declaration_block::PropertyDeclarationBlock, style_structs::Font, ComputedValues,
-        Importance, LonghandId, PropertyDeclaration, ShorthandId, StyleBuilder,
+        ComputedValues, Importance, LonghandId, PropertyDeclaration, ShorthandId, StyleBuilder,
+        declaration_block::PropertyDeclarationBlock, style_structs::Font,
     };
     use crate::properties_and_values::value::ComputedValue as ComputedRegisteredValue;
     use crate::queries::values::PrefersColorScheme;
@@ -598,11 +599,10 @@ mod tests {
     use crate::shared_lock::ToCssWithGuard;
     use crate::stylesheets::CssRule;
     use crate::test_support::{
-        author_parser_context, parse_stylesheet, pref_lock, test_url_data, BoolPrefGuard,
+        BoolPrefGuard, author_parser_context, parse_stylesheet, pref_lock, test_url_data,
     };
     use crate::values::computed::font::GenericFontFamily;
     use crate::values::computed::{CSSPixelLength, Length, ToComputedValue};
-    use crate::Atom;
     use app_units::Au;
     use cssparser::TokenSerializationType;
     use euclid::{Scale, Size2D};
@@ -1029,10 +1029,12 @@ mod tests {
             );
         }
         for value in ["none", "all around", "between, all"] {
-            assert!(parsed_rule_visibility_declarations(&format!(
-                "p {{ rule-visibility-items: {value}; }}"
-            ))
-            .is_empty());
+            assert!(
+                parsed_rule_visibility_declarations(&format!(
+                    "p {{ rule-visibility-items: {value}; }}"
+                ))
+                .is_empty()
+            );
         }
     }
 
@@ -1611,7 +1613,7 @@ mod tests {
         let _attr_pref = BoolPrefGuard::set("layout.css.attr.enabled", true);
 
         let stylesheet = parse_stylesheet(
-            r#"p::after { content: " [" attr(data-status string, "unknown") "]"; }"#,
+            r#"p::after { content: " [" attr(data-status raw-string, "unknown") "]"; }"#,
         );
         let guard = stylesheet.shared_lock.read();
         let contents = stylesheet.contents.read_with(&guard);
@@ -1628,13 +1630,19 @@ mod tests {
             .read_with(&guard)
             .declaration_importance_iter()
             .find_map(|(decl, _)| match decl {
-                PropertyDeclaration::Content(value) => Some(value.to_css_string()),
+                PropertyDeclaration::WithVariables(value)
+                    if decl.id().as_longhand() == Some(LonghandId::Content) =>
+                {
+                    assert!(value.value.variable_value().has_references());
+                    assert!(value.value.from_shorthand().is_none());
+                    Some(value.value.variable_value().css_text().to_owned())
+                },
                 _ => None,
             })
             .expect("expected content declaration");
         assert_eq!(
-            content, r#"" [" attr(data-status string, "unknown") "]""#,
-            "typed style rules should preserve attr() fallback and syntax in pseudo content",
+            content, r#"" [" attr(data-status raw-string, "unknown") "]""#,
+            "pseudo content must retain attr() syntax and fallback until substitution",
         );
     }
 
@@ -1659,13 +1667,19 @@ mod tests {
             .read_with(&guard)
             .declaration_importance_iter()
             .find_map(|(decl, _)| match decl {
-                PropertyDeclaration::Content(value) => Some(value.to_css_string()),
+                PropertyDeclaration::WithVariables(value)
+                    if decl.id().as_longhand() == Some(LonghandId::Content) =>
+                {
+                    assert!(value.value.variable_value().has_references());
+                    assert!(value.value.from_shorthand().is_none());
+                    Some(value.value.variable_value().css_text().to_owned())
+                },
                 _ => None,
             })
             .expect("expected content declaration");
         assert_eq!(
             content, "attr(data-label)",
-            "plain attr() should remain a typed content declaration, not WithVariables",
+            "plain attr() must remain pending until its attribute value is substituted",
         );
     }
 
@@ -4490,12 +4504,14 @@ mod tests {
                 HyphenateLimitLines::Count(NonNegative(expected)),
             );
         }
-        assert!(start
-            .animate(
-                &HyphenateLimitLines::NoLimit,
-                Procedure::Interpolate { progress: 0.5 }
-            )
-            .is_err());
+        assert!(
+            start
+                .animate(
+                    &HyphenateLimitLines::NoLimit,
+                    Procedure::Interpolate { progress: 0.5 }
+                )
+                .is_err()
+        );
     }
 
     // ----- F31 ---------------------------------------------------------

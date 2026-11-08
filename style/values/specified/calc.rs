@@ -1283,7 +1283,8 @@ impl CalcNode {
                     } else {
                         CalcUnits::ANGLE
                     };
-                    let argument = Self::parse_argument(context, input, AllowParse::new(units))?;
+                    let argument =
+                        Self::parse_argument(context, input, allowed.new_including(units))?;
                     let operation = match function {
                         MathFunction::Sin => TrigonometricFunction::Sin,
                         MathFunction::Cos => TrigonometricFunction::Cos,
@@ -1302,7 +1303,8 @@ impl CalcNode {
                     } else {
                         CalcUnits::empty()
                     };
-                    let argument = Self::parse_argument(context, input, AllowParse::new(units))?;
+                    let argument =
+                        Self::parse_argument(context, input, allowed.new_including(units))?;
                     let operation = match function {
                         MathFunction::Asin => TrigonometricFunction::Asin,
                         MathFunction::Acos => TrigonometricFunction::Acos,
@@ -2624,6 +2626,21 @@ mod math_function_tests {
     }
 
     #[test]
+    fn trigonometric_arguments_retain_the_enclosing_percentage_basis() {
+        for css in [
+            "calc(sin(asin(50% / 100px)) * 1px)",
+            "calc(cos(acos(50% / 100px)) * 1px)",
+            "calc(tan(atan(50% / 100px)) * 1px)",
+        ] {
+            let px = used_px(css, 100.0);
+            assert!((px - 0.5).abs() < 0.0001, "{css}: {px}");
+        }
+        for css in ["calc(sin(50%) * 1px)", "calc(asin(50%) * 1px)"] {
+            assert!(parse_length_percentage(css).is_none(), "{css}");
+        }
+    }
+
+    #[test]
     fn number_mixes_resolve_to_their_weighted_average() {
         for (css, specified, computed) in [
             ("calc-mix(1 50%, 3 50%)", "calc(2)", 2.0),
@@ -2689,6 +2706,15 @@ mod math_function_tests {
             ),
             20.0
         );
+    }
+
+    #[test]
+    fn one_argument_comparisons_simplify_without_resolving_percentages() {
+        for css in ["min(1% + 1px)", "max(1px + 1%)"] {
+            let value = parse_length_percentage(css).expect("comparison must parse");
+            assert_eq!(value.to_css_string(), "calc(1% + 1px)");
+            assert_eq!(used_px(css, 100.0), 2.0);
+        }
     }
 
     #[test]

@@ -51,7 +51,7 @@ use crate::stylesheets::Origin;
 use crate::stylist::Stylist;
 use crate::values::{computed, serialize_atom_name};
 use arrayvec::{ArrayVec, Drain as ArrayVecDrain};
-use cssparser::{match_ignore_ascii_case, Parser, ParserInput};
+use cssparser::{Parser, ParserInput, match_ignore_ascii_case};
 use rustc_hash::FxHashMap;
 use servo_arc::Arc;
 use std::{
@@ -809,9 +809,9 @@ fn parse_non_custom_property_declaration_value_into<'i>(
     input.reset(&start);
     input.look_for_arbitrary_substitution_functions(
         if static_prefs::pref!("layout.css.attr.enabled") {
-            &["var", "env", "attr", "inherit", "if"]
+            &["var", "env", "attr", "inherit", "if", "ident"]
         } else {
-            &["var", "env", "inherit", "if"]
+            &["var", "env", "inherit", "if", "ident"]
         },
     );
 
