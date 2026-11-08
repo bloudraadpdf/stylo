@@ -140,17 +140,6 @@ pub enum TypedOmSpecifiedNumericReification {
 pub enum TypedOmPropertyMultiplicity {
     Single,
     CommaSeparated,
-    SpaceSeparated,
-}
-
-impl TypedOmPropertyMultiplicity {
-    pub const fn separator(self) -> Option<&'static str> {
-        match self {
-            Self::Single => None,
-            Self::CommaSeparated => Some(", "),
-            Self::SpaceSeparated => Some(" "),
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
