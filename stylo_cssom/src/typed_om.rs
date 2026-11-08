@@ -271,7 +271,7 @@ struct TypedOmCustomPropertyName(String);
 
 impl TypedOmCustomPropertyName {
     fn parse(name: String) -> Option<Self> {
-        crate::is_valid_custom_property_name(&name).then_some(Self(name))
+        name.starts_with("--").then_some(Self(name))
     }
 
     fn as_str(&self) -> &str {
@@ -677,6 +677,16 @@ mod tests {
             matches!(&bar_segments[2], TypedOmUnparsedSegment::String(value) if value == " + 15px")
         );
         assert!(matches!(&segments[4], TypedOmUnparsedSegment::String(value) if value == ")"));
+    }
+
+    #[test]
+    fn unparsed_variable_names_retain_decoded_identifier_characters() {
+        let value = parse_typed_om_unparsed_value(TypedOmUnparsedInput::new("var(--a\\,fail)"))
+            .expect("escaped variable names must parse");
+        let Some(TypedOmUnparsedSegment::VariableReference(reference)) = value.segments().next() else {
+            panic!("var() must reify as a variable reference");
+        };
+        assert_eq!(reference.name(), "--a,fail");
     }
 
     #[test]
