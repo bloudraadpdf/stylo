@@ -1761,7 +1761,7 @@ fn parse_substitution_argument<'i, 't>(
         missing_closing_characters,
     )?;
     input.expect_exhausted()?;
-    let css = input.slice_from(start).trim_ascii_end();
+    let css = input.slice_from(start);
     let (first_token_type, last_token_type) = token_types(css);
     let start = start.byte_index() - input_start.byte_index();
     Ok(FunctionArgument {
@@ -3963,21 +3963,15 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
             return Err(());
         };
 
-        // Skip the closing parenthesis of the reference value, and the whitespace before it.
+        // The closing parenthesis is outside the fallback token stream.
         let start = fallback.start.get();
         let end = reference.end - 1;
-        let trimmed_end = start + css[start..end].trim_ascii_end().len();
-        let last_token_type = if trimmed_end == end {
-            fallback.last_token_type
-        } else {
-            token_types(&css[start..trimmed_end]).1
-        };
         self.chunk(
             css,
             start,
-            trimmed_end,
+            end,
             fallback.first_token_type,
-            last_token_type,
+            fallback.last_token_type,
             url_data,
             frame,
             references,
@@ -4108,6 +4102,35 @@ mod tests {
             },
             _ => panic!("expected an attr() reference"),
         }
+    }
+
+    #[test]
+    fn nested_substitution_arguments_preserve_trailing_whitespace() {
+        for css in [
+            "if(else: keep )",
+            "var(--missing, keep )",
+            "attr(missing type(<length>), keep )",
+            "--identity(keep )",
+            "--identity({keep })",
+        ] {
+            let value = parse_value(&format!("{css}   "), &Namespaces::default());
+            assert_eq!(value.css, css, "only the declaration boundary trims whitespace");
+            let argument = match &value.references.refs[0].function {
+                SubstitutionFunction::If(branches) => &branches[0].value,
+                SubstitutionFunction::DynamicVar { arguments, .. }
+                | SubstitutionFunction::Attr { arguments, .. }
+                | SubstitutionFunction::Function { arguments, .. } => arguments.last().unwrap(),
+                _ => panic!("the fixture has a nested substitution argument"),
+            };
+            assert_eq!(&value.css[argument.start..argument.end], "keep ", "{css}");
+            assert_eq!(argument.last_token_type, token_types("keep ").1);
+        }
+        let value = parse_value("env(unknown-test-variable, keep )   ", &Namespaces::default());
+        assert_eq!(value.css, "env(unknown-test-variable, keep )");
+        let reference = &value.references.refs[0];
+        let fallback = reference.fallback.as_ref().unwrap();
+        assert_eq!(&value.css[fallback.start.get()..reference.end - 1], "keep ");
+        assert_eq!(parse_value("keep   ", &Namespaces::default()).css, "keep");
     }
 
     #[test]
