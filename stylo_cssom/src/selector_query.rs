@@ -76,7 +76,21 @@ pub fn selector_specificity(selector: &str) -> Result<u32, String> {
     Ok(selector.specificity())
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum CssomPseudoTarget {
+    Single(PseudoElement),
+    BeforeMarker,
+    AfterMarker,
+}
+
 pub fn parse_cssom_pseudo_element(selector: &str) -> Result<PseudoElement, String> {
+    match parse_cssom_pseudo_target(selector)? {
+        CssomPseudoTarget::Single(pseudo) => Ok(pseudo),
+        _ => Err("expected a single pseudo-element".to_owned()),
+    }
+}
+
+pub fn parse_cssom_pseudo_target(selector: &str) -> Result<CssomPseudoTarget, String> {
     let mut input = cssparser::ParserInput::new(selector);
     let mut input = cssparser::Parser::new(&mut input);
     let start = input.state();
@@ -102,18 +116,38 @@ pub fn parse_cssom_pseudo_element(selector: &str) -> Result<PseudoElement, Strin
     let [selector] = parsed.slice() else {
         return Err("expected one pseudo-element selector".to_owned());
     };
-    if selector.len() != 2 || selector.is_part() || selector.is_slotted() {
+    if selector.is_part() || selector.is_slotted() {
+        return Err("expected only a pseudo-element selector".to_owned());
+    }
+    if selector.len() == 4 && selector.is_universal() {
+        let pseudos = selector.pseudo_elements();
+        match pseudos.as_slice() {
+            &[&PseudoElement::Marker, &PseudoElement::Before] => return Ok(CssomPseudoTarget::BeforeMarker),
+            &[&PseudoElement::Marker, &PseudoElement::After] => return Ok(CssomPseudoTarget::AfterMarker),
+            _ => {},
+        }
+    }
+    if selector.len() != 2 {
         return Err("expected only a pseudo-element selector".to_owned());
     }
     selector
         .pseudo_element()
         .filter(|pseudo| !matches!(pseudo, PseudoElement::ViewTransitionSelector(_)))
         .cloned()
+        .map(CssomPseudoTarget::Single)
         .ok_or_else(|| "expected a pseudo-element selector".to_owned())
 }
 
 pub fn serialize_selector_list(selectors: &ParsedSelectorList) -> String {
     cssparser::ToCss::to_css_string(selectors)
+}
+
+pub fn serialize_cssom_pseudo_target(target: &CssomPseudoTarget) -> String {
+    match target {
+        CssomPseudoTarget::Single(pseudo) => serialize_pseudo_element(pseudo),
+        CssomPseudoTarget::BeforeMarker => format!("{}{}", serialize_pseudo_element(&PseudoElement::Before), serialize_pseudo_element(&PseudoElement::Marker)),
+        CssomPseudoTarget::AfterMarker => format!("{}{}", serialize_pseudo_element(&PseudoElement::After), serialize_pseudo_element(&PseudoElement::Marker)),
+    }
 }
 
 pub fn serialize_pseudo_element(pseudo: &PseudoElement) -> String {
@@ -545,5 +579,32 @@ mod tests {
             assert!(selector_targets_pseudo_element(selector), "{selector}");
         }
         assert!(!selector_targets_pseudo_element("button:is(:focus)"));
+    }
+}
+
+#[cfg(test)]
+mod nested_cssom_pseudo_tests {
+    use super::{parse_cssom_pseudo_element, parse_cssom_pseudo_target, serialize_cssom_pseudo_target, CssomPseudoTarget};
+
+    #[test]
+    fn cssom_nested_marker_targets_use_the_author_selector_grammar() {
+        for (source, expected, serialized) in [
+            ("::before::marker", CssomPseudoTarget::BeforeMarker, "::before::marker"),
+            (r"::BEF\oRE::M\61 RKER", CssomPseudoTarget::BeforeMarker, "::before::marker"),
+            ("::AFTER::MARKER", CssomPseudoTarget::AfterMarker, "::after::marker"),
+        ] {
+            let parsed = parse_cssom_pseudo_target(source).unwrap();
+            assert_eq!(parsed, expected, "{source}");
+            assert_eq!(serialize_cssom_pseudo_target(&parsed), serialized);
+            assert!(parse_cssom_pseudo_element(source).is_err(), "single-pseudo API must remain single");
+        }
+        for source in [
+            "::before::marker ", "::before ::marker", "::before,::marker",
+            "div::before::marker", "*::before::marker", "::marker::before",
+            "::marker::marker", "::before::after", "::before::marker::marker",
+            "::part(label)::marker", "::slotted(div)::marker", "::before:hover::marker",
+        ] {
+            assert!(parse_cssom_pseudo_target(source).is_err(), "{source}");
+        }
     }
 }
