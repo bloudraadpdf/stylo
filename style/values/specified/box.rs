@@ -2127,7 +2127,6 @@ mod touch_action_tests {
     Parse,
     PartialEq,
     SpecifiedValueInfo,
-    ToComputedValue,
     ToCss,
     ToResolvedValue,
     ToShmem,
@@ -2135,7 +2134,7 @@ mod touch_action_tests {
 )]
 #[css(bitflags(
     single = "none,strict,content",
-    mixed = "size,layout,style,paint,inline-size",
+    mixed = "size,inline-size,layout,style,paint",
     overlapping_bits
 ))]
 #[repr(C)]
@@ -2161,6 +2160,95 @@ bitflags! {
         const CONTENT = 1 << 6 | Contain::LAYOUT.bits() | Contain::STYLE.bits() | Contain::PAINT.bits();
         /// `strict` variant, turns on all types of containment
         const STRICT = 1 << 7 | Contain::LAYOUT.bits() | Contain::STYLE.bits() | Contain::PAINT.bits() | Contain::SIZE.bits();
+    }
+}
+
+impl Contain {
+    fn canonical_computed_value(self) -> Self {
+        let content = Self::LAYOUT | Self::STYLE | Self::PAINT;
+        let strict = content | Self::SIZE;
+        let value = self & strict;
+        if value == strict {
+            Self::STRICT
+        } else if value == content {
+            Self::CONTENT
+        } else {
+            value
+        }
+    }
+}
+
+impl ToComputedValue for Contain {
+    type ComputedValue = Self;
+
+    fn to_computed_value(&self, _: &Context) -> Self {
+        self.canonical_computed_value()
+    }
+
+    fn from_computed_value(computed: &Self) -> Self {
+        *computed
+    }
+}
+
+#[cfg(all(test, feature = "servo"))]
+mod containment_tests {
+    use super::*;
+    use crate::values::animated::{Animate, Procedure};
+
+    #[test]
+    fn containment_serialization_distinguishes_specified_and_computed_values() {
+        for (specified, canonical, computed) in [
+            (
+                "layout inline-size",
+                "inline-size layout",
+                "inline-size layout",
+            ),
+            ("style layout paint", "layout style paint", "content"),
+            (
+                "size style layout paint",
+                "size layout style paint",
+                "strict",
+            ),
+            (
+                "inline-size layout style paint",
+                "inline-size layout style paint",
+                "inline-size layout style paint",
+            ),
+            ("strict", "strict", "strict"),
+        ] {
+            let value: Contain = parse_box_test_value(specified).unwrap();
+            assert_eq!(value.to_css_string(), canonical);
+            assert_eq!(value.canonical_computed_value().to_css_string(), computed);
+        }
+    }
+
+    #[test]
+    fn hidden_content_visibility_preserves_the_non_hidden_endpoint_interior() {
+        assert!(crate::properties::LonghandId::ContentVisibility.is_discrete_animatable());
+        for visible in [ContentVisibility::Visible, ContentVisibility::Auto] {
+            for (from, to) in [
+                (visible, ContentVisibility::Hidden),
+                (ContentVisibility::Hidden, visible),
+            ] {
+                assert_eq!(
+                    from.animate(&to, Procedure::Interpolate { progress: 0.0 })
+                        .unwrap(),
+                    from
+                );
+                for progress in [0.1, 0.5, 0.9] {
+                    assert_eq!(
+                        from.animate(&to, Procedure::Interpolate { progress })
+                            .unwrap(),
+                        visible
+                    );
+                }
+                assert_eq!(
+                    from.animate(&to, Procedure::Interpolate { progress: 1.0 })
+                        .unwrap(),
+                    to
+                );
+            }
+        }
     }
 }
 

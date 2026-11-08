@@ -1169,7 +1169,7 @@ affects = "layout"
 type = "ContentVisibility"
 initial = "computed::ContentVisibility::Visible"
 struct = "box"
-animation_type = "discrete"
+animation_type = "normal"
 spec = "https://drafts.csswg.org/css-contain/#content-visibility"
 affects = "layout"
 
