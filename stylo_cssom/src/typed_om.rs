@@ -437,7 +437,7 @@ fn parse_typed_om_component_values<'i>(
     let mut segments = Vec::new();
     let mut raw_start = input.position();
     collect_typed_om_component_values(input, &mut raw_start, &mut segments)?;
-    append_typed_om_string_segment(input, raw_start, input.position(), &mut segments);
+    append_typed_om_string_segment(input.slice(raw_start..input.position()), &mut segments);
     Ok(TypedOmUnparsedValue {
         segments: segments.into(),
     })
@@ -454,8 +454,13 @@ fn collect_typed_om_component_values<'i>(
             return Ok(());
         };
         match token {
+            Token::Comment(_) => {
+                append_typed_om_string_segment(input.slice(*raw_start..token_start), segments);
+                append_typed_om_string_segment("/**/", segments);
+                *raw_start = input.position();
+            },
             Token::Function(name) if name.eq_ignore_ascii_case("var") => {
-                append_typed_om_string_segment(input, *raw_start, token_start, segments);
+                append_typed_om_string_segment(input.slice(*raw_start..token_start), segments);
                 let reference = input.parse_nested_block(parse_typed_om_variable_reference)?;
                 segments.push(TypedOmUnparsedSegment::VariableReference(reference));
                 *raw_start = input.position();
@@ -473,16 +478,14 @@ fn collect_typed_om_component_values<'i>(
     }
 }
 
-fn append_typed_om_string_segment(
-    input: &Parser<'_, '_>,
-    start: SourcePosition,
-    end: SourcePosition,
-    segments: &mut Vec<TypedOmUnparsedSegment>,
-) {
-    if start != end {
-        segments.push(TypedOmUnparsedSegment::String(
-            input.slice(start..end).to_owned(),
-        ));
+fn append_typed_om_string_segment(text: &str, segments: &mut Vec<TypedOmUnparsedSegment>) {
+    if text.is_empty() {
+        return;
+    }
+    if let Some(TypedOmUnparsedSegment::String(last)) = segments.last_mut() {
+        last.push_str(text);
+    } else {
+        segments.push(TypedOmUnparsedSegment::String(text.to_owned()));
     }
 }
 
@@ -680,10 +683,31 @@ mod tests {
     }
 
     #[test]
+    fn unparsed_values_normalise_comments_without_rewriting_strings() {
+        let value = parse_typed_om_unparsed_value(TypedOmUnparsedInput::new(
+            "foo/*first*/bar/**/var(--a, fn(/*nested*/\"/*literal*/\"))",
+        ))
+        .expect("comments must not change component values");
+        let segments = value.segments().collect::<Vec<_>>();
+        assert_eq!(segments.len(), 2);
+        assert!(
+            matches!(&segments[0], TypedOmUnparsedSegment::String(text) if text == "foo/**/bar/**/")
+        );
+        let TypedOmUnparsedSegment::VariableReference(reference) = &segments[1] else {
+            panic!("var() must remain a variable reference");
+        };
+        assert!(matches!(
+            reference.fallback().unwrap().segments().next(),
+            Some(TypedOmUnparsedSegment::String(text)) if text == " fn(/**/\"/*literal*/\")"
+        ));
+    }
+
+    #[test]
     fn unparsed_variable_names_retain_decoded_identifier_characters() {
         let value = parse_typed_om_unparsed_value(TypedOmUnparsedInput::new("var(--a\\,fail)"))
             .expect("escaped variable names must parse");
-        let Some(TypedOmUnparsedSegment::VariableReference(reference)) = value.segments().next() else {
+        let Some(TypedOmUnparsedSegment::VariableReference(reference)) = value.segments().next()
+        else {
             panic!("var() must reify as a variable reference");
         };
         assert_eq!(reference.name(), "--a,fail");
