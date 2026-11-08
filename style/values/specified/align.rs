@@ -396,10 +396,7 @@ impl SelfAlignment {
         let overflow_position = input
             .try_parse(parse_overflow_position)
             .unwrap_or(AlignFlags::empty());
-        let position = match input.try_parse(|input| input.expect_ident_matching("normal")) {
-            Ok(()) => AlignFlags::NORMAL,
-            Err(_) => parse_self_position(input, axis, true)?,
-        };
+        let position = parse_self_position(input, axis, true)?;
         Ok(SelfAlignment(overflow_position | position))
     }
 
@@ -530,7 +527,7 @@ impl ItemPlacement {
             }
         }
 
-        // <overflow-position>? <self-position>
+        // <overflow-position>? [ normal | <self-position> ]
         let overflow = input
             .try_parse(parse_overflow_position)
             .unwrap_or(AlignFlags::empty());
@@ -674,7 +671,7 @@ fn list_overflow_position_keywords(f: KeywordsCollectFn) {
     f(&["safe", "unsafe"]);
 }
 
-// <self-position> | left | right in the inline axis.
+// normal | <self-position> | left | right in the inline axis.
 fn parse_self_position<'i, 't>(
     input: &mut Parser<'i, 't>,
     axis: AxisDirection,
@@ -683,6 +680,7 @@ fn parse_self_position<'i, 't>(
     // NOTE Please also update the `list_self_position_keywords`
     //      function below when this function is updated.
     Ok(try_match_ident_ignore_ascii_case! { input,
+        "normal" => AlignFlags::NORMAL,
         "start" => AlignFlags::START,
         "end" => AlignFlags::END,
         "flex-start" => AlignFlags::FLEX_START,
@@ -704,6 +702,7 @@ fn list_self_position_keywords(
     allow_anchor_center: bool,
 ) {
     f(&[
+        "normal",
         "start",
         "end",
         "flex-start",
@@ -885,5 +884,60 @@ impl Parse for JustifyTracks {
         let values =
             input.parse_comma_separated(|i| ContentDistribution::parse_inline(context, i))?;
         Ok(JustifyTracks(crate::OwnedSlice::from(values)))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cssparser::ParserInput;
+
+    #[test]
+    fn item_placement_accepts_overflow_position_with_normal() {
+        for axis in [AxisDirection::Block, AxisDirection::Inline] {
+            for css in ["normal", "safe normal", "unsafe normal"] {
+                let mut source = ParserInput::new(css);
+                let item = Parser::new(&mut source)
+                    .parse_entirely(|input| ItemPlacement::parse(input, axis))
+                    .unwrap();
+                assert_eq!(item.to_css_string(), css);
+                let mut source = ParserInput::new(css);
+                let alignment = Parser::new(&mut source)
+                    .parse_entirely(|input| SelfAlignment::parse(input, axis))
+                    .unwrap();
+                assert_eq!(item.0, alignment.0);
+            }
+            for css in [
+                "safe stretch",
+                "unsafe baseline",
+                "safe first baseline",
+                "unsafe legacy center",
+                "normal safe",
+                "safe unsafe normal",
+            ] {
+                let mut source = ParserInput::new(css);
+                assert!(
+                    Parser::new(&mut source)
+                        .parse_entirely(|input| ItemPlacement::parse(input, axis))
+                        .is_err(),
+                    "{css}"
+                );
+            }
+        }
+        for (css, axis, valid) in [
+            ("safe left", AxisDirection::Block, false),
+            ("safe left", AxisDirection::Inline, true),
+            ("legacy center", AxisDirection::Block, false),
+            ("legacy center", AxisDirection::Inline, true),
+        ] {
+            let mut source = ParserInput::new(css);
+            assert_eq!(
+                Parser::new(&mut source)
+                    .parse_entirely(|input| ItemPlacement::parse(input, axis))
+                    .is_ok(),
+                valid,
+                "{css}"
+            );
+        }
     }
 }
