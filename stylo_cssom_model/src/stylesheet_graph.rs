@@ -561,6 +561,7 @@ pub enum RuleCssomData {
         fallback: Arc<str>,
         symbols: Arc<str>,
         additive_symbols: Arc<str>,
+        speak_as: Arc<str>,
     },
     Property {
         name: Arc<str>,
@@ -1532,6 +1533,7 @@ impl RuleNode {
             fallback,
             symbols,
             additive_symbols,
+            speak_as,
         } = &data
         else {
             return None;
@@ -1550,6 +1552,7 @@ impl RuleNode {
             ("fallback", fallback),
             ("symbols", symbols),
             ("additive-symbols", additive_symbols),
+            ("speak-as", speak_as),
         ] {
             if !value.is_empty() {
                 descriptors.push(format!("{property}: {value};"));

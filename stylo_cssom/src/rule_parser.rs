@@ -479,6 +479,7 @@ struct CanonicalCounterStyleRule {
     fallback: String,
     symbols: String,
     additive_symbols: String,
+    speak_as: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1177,6 +1178,7 @@ impl ParsedCssRule {
                     fallback: optional_css(rule.fallback()),
                     symbols: optional_css(rule.symbols()),
                     additive_symbols: optional_css(rule.additive_symbols()),
+                    speak_as: optional_css(rule.speak_as()),
                 })
             },
             CssRule::FontPaletteValues(rule) => canonical_font_palette_values_rule(rule),
@@ -1447,6 +1449,7 @@ impl ParsedCssRule {
                 fallback: rule.fallback.as_str().into(),
                 symbols: rule.symbols.as_str().into(),
                 additive_symbols: rule.additive_symbols.as_str().into(),
+                speak_as: rule.speak_as.as_str().into(),
             },
             ParsedCssRuleKind::Property(rule) => RuleCssomData::Property {
                 name: rule.name.as_str().into(),

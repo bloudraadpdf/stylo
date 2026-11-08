@@ -1,7 +1,7 @@
 use cssparser::{Parser, ParserInput};
 use style::{
     counter_style::{
-        AdditiveSymbols, CounterRanges, Fallback, Negative, Pad, Symbol, Symbols, System,
+        AdditiveSymbols, CounterRanges, Fallback, Negative, Pad, SpeakAs, Symbol, Symbols, System,
         parse_counter_style_name_definition,
     },
     parser::Parse,
@@ -54,6 +54,7 @@ pub fn mutate_counter_style_rule(
         mut fallback,
         mut symbols,
         additive_symbols: mut additive,
+        mut speak_as,
     } = node.cssom_data()?.clone()
     else {
         return None;
@@ -74,6 +75,7 @@ pub fn mutate_counter_style_rule(
         "range" => range = canonical(parse_descriptor::<CounterRanges>(value)?.to_css_string()),
         "pad" => pad = canonical(parse_descriptor::<Pad>(value)?.to_css_string()),
         "fallback" => fallback = canonical(parse_descriptor::<Fallback>(value)?.to_css_string()),
+        "speak-as" => speak_as = canonical(parse_descriptor::<SpeakAs>(value)?.to_css_string()),
         "symbols" => {
             let candidate = parse_descriptor::<Symbols>(value)?;
             match resolved_system(&system)? {
@@ -109,6 +111,7 @@ pub fn mutate_counter_style_rule(
             fallback,
             symbols,
             additive_symbols: additive,
+            speak_as,
         })
 }
 
@@ -128,6 +131,7 @@ pub fn counter_style_rule_value(
         fallback,
         symbols,
         additive_symbols,
+        speak_as,
     } = node.cssom_data()?
     else {
         return None;
@@ -144,6 +148,7 @@ pub fn counter_style_rule_value(
             "fallback" => fallback.to_string(),
             "symbols" => symbols.to_string(),
             "additive-symbols" => additive_symbols.to_string(),
+            "speak-as" => speak_as.to_string(),
             _ => return None,
         },
     ))
@@ -159,6 +164,30 @@ mod tests {
         crate::ValidatedCssRule::parse(crate::RuleInput::new(FIXED))
             .expect("the fixed counter style must parse")
             .into_rule_node()
+    }
+
+    #[test]
+    fn speak_as_uses_typed_parsing_and_survives_other_mutations() {
+        let rule = crate::ValidatedCssRule::parse(crate::RuleInput::new(
+            "@counter-style sample { system: fixed; symbols: A B; speak-as: words; }",
+        ))
+        .unwrap()
+        .into_rule_node();
+        assert_eq!(
+            counter_style_rule_value(&rule, "speak-as")
+                .unwrap()
+                .into_css_text(),
+            "words"
+        );
+        let rule = mutate_counter_style_rule(&rule, "speak-as", "numbers").unwrap();
+        let rule = mutate_counter_style_rule(&rule, "prefix", "\"[\"").unwrap();
+        assert_eq!(
+            counter_style_rule_value(&rule, "speak-as")
+                .unwrap()
+                .into_css_text(),
+            "numbers"
+        );
+        assert!(mutate_counter_style_rule(&rule, "speak-as", "123").is_none());
     }
 
     #[test]
