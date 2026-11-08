@@ -845,46 +845,50 @@ impl Animation {
         }
     }
 
-    /// Fill in an `AnimationValueMap` with values calculated from this animation at
-    /// the given time value.
-    fn get_property_declaration_at_time(&self, now: f64, map: &mut AnimationValueMap) {
-        debug_assert!(!self.computed_steps.is_empty());
-
+    /// The directed progress and easing phase when this animation contributes a value.
+    pub fn directed_progress_at(&self, now: f64) -> Option<(f64, BeforeFlag)> {
         let total_progress = match self.state {
             AnimationState::Running | AnimationState::Pending | AnimationState::Finished => {
                 self.elapsed_iterations(now)
-            },
+            }
             AnimationState::Paused(progress) => progress,
-            AnimationState::Canceled => return,
+            AnimationState::Canceled => return None,
         };
 
         let before_phase = total_progress < 0.;
-        if before_phase
-            && self.fill_mode != AnimationFillMode::Backwards
-            && self.fill_mode != AnimationFillMode::Both
-        {
-            return;
+        if before_phase && self.fill_mode != AnimationFillMode::Backwards && self.fill_mode != AnimationFillMode::Both {
+            return None;
         }
         let after_phase = self.has_ended(now);
-        if after_phase
-            && self.fill_mode != AnimationFillMode::Forwards
-            && self.fill_mode != AnimationFillMode::Both
-        {
-            return;
+        if after_phase && self.fill_mode != AnimationFillMode::Forwards && self.fill_mode != AnimationFillMode::Both {
+            return None;
         }
-        let total_progress = total_progress
-            .min(self.current_iteration_end_progress())
-            .max(0.0);
+        let total_progress = total_progress.min(self.current_iteration_end_progress()).max(0.0);
 
         // Reversing an iteration mirrors the progress and nothing else
         // (Web Animations 1 § 4.9.1 "Calculating the directed progress"). The
         // keyframes are then walked, bracketed, and eased in ordinary offset
         // order, so a reversed iteration retraces the very curve the forward
         // one drew rather than its reflection.
-        let directed_progress = match self.current_direction {
+        let directed = match self.current_direction {
             AnimationDirection::Normal => total_progress,
             AnimationDirection::Reverse => 1. - total_progress,
             _ => unreachable!(),
+        };
+        let before_flag = match self.current_direction {
+            AnimationDirection::Normal if before_phase => BeforeFlag::Set,
+            AnimationDirection::Reverse if after_phase => BeforeFlag::Set,
+            _ => BeforeFlag::Unset,
+        };
+        Some((directed, before_flag))
+    }
+
+    /// Fill in an `AnimationValueMap` with values calculated from this animation at
+    /// the given time value.
+    fn get_property_declaration_at_time(&self, now: f64, map: &mut AnimationValueMap) {
+        debug_assert!(!self.computed_steps.is_empty());
+        let Some((directed_progress, before_flag)) = self.directed_progress_at(now) else {
+            return;
         };
 
         // Get the indices of the previous (from) keyframe and the next (to) keyframe.
@@ -931,19 +935,11 @@ impl Animation {
             return;
         }
 
-        // Web Animations 1 section 4.10: the before flag is set before the active interval when going
-        // forwards, and after it when going backwards.
-        let before_flag = match self.current_direction {
-            AnimationDirection::Normal if before_phase => BeforeFlag::Set,
-            AnimationDirection::Reverse if after_phase => BeforeFlag::Set,
-            _ => BeforeFlag::Unset,
-        };
         let percentage_between_keyframes =
             (next_keyframe.start_percentage - prev_keyframe.start_percentage).abs() as f64;
         let duration_between_keyframes = percentage_between_keyframes * self.duration;
-        let progress_between_keyframes = (directed_progress
-            - prev_keyframe.start_percentage as f64)
-            / percentage_between_keyframes;
+        let progress_between_keyframes =
+            (directed_progress - prev_keyframe.start_percentage as f64) / percentage_between_keyframes;
 
         #[cfg(feature = "servo")]
         let shadow_sampled = if let (Some(from), Some(to)) = (
@@ -951,11 +947,10 @@ impl Animation {
             self.composited_shadow(next_keyframe, map),
         ) {
             let epsilon = 1.0 / (200.0 * duration_between_keyframes);
-            let progress = prev_keyframe.timing_function.calculate_output(
-                progress_between_keyframes,
-                before_flag,
-                epsilon,
-            );
+            let progress =
+                prev_keyframe
+                    .timing_function
+                    .calculate_output(progress_between_keyframes, before_flag, epsilon);
             let sample = from
                 .animate(&to, Procedure::Interpolate { progress })
                 .unwrap_or_else(|_| if progress < 0.5 { from } else { to });
@@ -1548,7 +1543,11 @@ impl ElementAnimationSet {
         let now = context.current_time_for_animations;
         let transitionable = property_declaration_id.is_animatable()
             && (allow_discrete || !property_declaration_id.is_discrete_animatable())
-            && (allow_discrete || interpolable(&from, &to));
+            && (allow_discrete
+                || match property_declaration_id {
+                    PropertyDeclarationId::Custom(_) => from.interpolable_with(&to),
+                    _ => interpolable(&from, &to),
+                });
 
         // CSS Transitions §3: only a running or completed transition matches.
         let mut existing_transition = self.transitions.iter_mut().find(|transition| {

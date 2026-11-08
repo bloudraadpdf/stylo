@@ -2848,6 +2848,8 @@ fn substitute_all(
                             .is_some_and(|name| deferred.get(name).is_some())
                             || reference.function.is_attr()
                     })
+                    || conditionals::condition_names(v).iter()
+                        .any(|name| deferred.get(name).is_some())
                     || dependencies.as_ref().is_some_and(|dependencies| {
                         dependencies.any_attr
                             || dependencies

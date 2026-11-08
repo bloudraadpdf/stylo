@@ -705,6 +705,15 @@ impl Animate for CustomAnimatedValue {
 }
 
 impl CustomAnimatedValue {
+    pub(crate) fn interpolable_with(&self, other: &Self) -> bool {
+        self.name == other.name
+            && self
+                .value
+                .as_ref()
+                .zip(other.value.as_ref())
+                .is_some_and(|(from, to)| from.v.animate(&to.v, Procedure::Interpolate { progress: 0.5 }).is_ok())
+    }
+
     pub(crate) fn from_computed(
         name: &crate::custom_properties::Name,
         value: Option<&ComputedValue>,
@@ -922,6 +931,19 @@ mod tests {
             assert_eq!(sampled.to_css_string(), expected.to_css_string());
             assert!(sampled.to_variable_value().is_attr_tainted());
         }
+    }
+
+    #[test]
+    fn custom_property_transition_interpolability_excludes_discrete_values() {
+        let name = Atom::from("value");
+        let number = computed("<number>", "1").unwrap();
+        let number = CustomAnimatedValue::from_computed(&name, Some(&number));
+        assert!(number.interpolable_with(&number));
+        let string = computed("<string>", "\"value\"").unwrap();
+        let string = CustomAnimatedValue::from_computed(&name, Some(&string));
+        assert!(!string.interpolable_with(&string));
+        let invalid = CustomAnimatedValue::from_computed(&name, None);
+        assert!(!invalid.interpolable_with(&number));
     }
 
     #[test]

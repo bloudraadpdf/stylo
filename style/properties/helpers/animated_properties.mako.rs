@@ -205,6 +205,9 @@ impl AnimationValue {
 
     /// Returns whether this value is interpolable with another one.
     pub fn interpolable_with(&self, other: &Self) -> bool {
+        if let (Self::Custom(from), Self::Custom(to)) = (self, other) {
+            return from.interpolable_with(to);
+        }
         self.animate(other, Procedure::Interpolate { progress: 0.5 }).is_ok()
     }
 

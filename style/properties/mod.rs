@@ -413,7 +413,7 @@ impl PropertyId {
     pub fn is_animatable(&self) -> bool {
         match self {
             Self::NonCustom(id) => id.is_animatable(),
-            Self::Custom(_) => cfg!(feature = "gecko"),
+            Self::Custom(_) => true,
         }
     }
 
@@ -1253,7 +1253,7 @@ impl<'a> PropertyDeclarationId<'a> {
     pub fn is_animatable(&self) -> bool {
         match self {
             Self::Longhand(id) => id.is_animatable(),
-            Self::Custom(_) => cfg!(feature = "gecko"),
+            Self::Custom(_) => true,
         }
     }
 
