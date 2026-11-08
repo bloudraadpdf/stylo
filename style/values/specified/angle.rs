@@ -61,13 +61,13 @@ impl AngleDimension {
     /// Returns the amount of degrees this angle represents.
     #[inline]
     pub fn degrees(&self) -> CSSFloat {
-        const DEG_PER_RAD: f32 = 180.0 / PI;
+        const DEG_PER_RAD: f64 = 180.0 / std::f64::consts::PI;
         const DEG_PER_TURN: f32 = 360.0;
         const DEG_PER_GRAD: f32 = 180.0 / 200.0;
 
         match *self {
             AngleDimension::Deg(d) => d,
-            AngleDimension::Rad(rad) => rad * DEG_PER_RAD,
+            AngleDimension::Rad(rad) => (f64::from(rad) * DEG_PER_RAD) as CSSFloat,
             AngleDimension::Turn(turns) => turns * DEG_PER_TURN,
             AngleDimension::Grad(gradians) => gradians * DEG_PER_GRAD,
         }
