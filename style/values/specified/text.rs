@@ -276,6 +276,14 @@ mod tests {
     }
 
     #[test]
+    fn text_overflow_accepts_fade_keyword() {
+        let value = parse_value::<super::TextOverflow>("fade").unwrap();
+        assert!(matches!(value.second, super::TextOverflowSide::Fade));
+        assert_eq!(value.to_css_string(), "fade");
+        assert!(parse_value::<super::TextOverflow>("fade(1px, 50%)").is_err());
+    }
+
+    #[test]
     fn text_autospace_accepts_punctuation_and_exclusive_spacing_modes() {
         for (css, expected) in [
             ("punctuation", "punctuation"),
@@ -501,6 +509,8 @@ pub enum TextOverflowSide {
     Clip,
     /// Render ellipsis to represent clipped inline content.
     Ellipsis,
+    /// Fade clipped inline content at the line box edge.
+    Fade,
     /// Uniformly scale overflowing text down to the available inline size.
     #[css(keyword = "-bd-scale-down")]
     BdScaleDown,
