@@ -29,6 +29,7 @@ use smallvec::SmallVec;
 /// A `@function` rule, compiled for evaluation: static conditional rules are folded.
 #[derive(Debug)]
 pub struct CustomFunction {
+    name: DashedIdent,
     parameters: Box<[Parameter]>,
     result: PropertyRegistrationData,
     body: Box<[FunctionBodyItem]>,
@@ -63,15 +64,29 @@ fn registration(
 
 impl CustomFunction {
     /// Compile a function from its rule and its folded body.
-    pub fn new(rule: &FunctionRule, body: Vec<FunctionBodyItem>) -> Self {
+    pub fn new(rule: &FunctionRule, mut body: Vec<FunctionBodyItem>) -> Self {
+        fn scope(items: &mut [FunctionBodyItem], name: &str) {
+            for item in items {
+                match item {
+                    FunctionBodyItem::Descriptor(descriptor) => Arc::make_mut(&mut descriptor.value).scope_random_functions(name),
+                    FunctionBodyItem::Container(_, body) => scope(body, name),
+                }
+            }
+        }
+        scope(&mut body, &rule.name.0);
         Self {
+            name: rule.name.clone(),
             parameters: rule
                 .parameters
                 .iter()
                 .map(|parameter| Parameter {
                     name: parameter.name.clone(),
                     registration: registration(&parameter.syntax, Inherits::True),
-                    default: parameter.default.clone(),
+                    default: parameter.default.as_ref().map(|value| {
+                        let mut value = (**value).clone();
+                        value.scope_random_functions(&rule.name.0);
+                        Arc::new(value)
+                    }),
                 })
                 .collect(),
             result: registration(&rule.return_type, Inherits::False),
@@ -262,6 +277,7 @@ fn calls(value: &VariableValue) -> impl Iterator<Item = &DashedIdent> {
         .references
         .refs
         .iter()
+        .filter(|reference| !value.references.in_lazy_argument(reference))
         .filter_map(|reference| match reference.function {
             SubstitutionFunction::Function { ref name, .. } => Some(name),
             _ => None,
@@ -317,16 +333,18 @@ impl FunctionDependencies {
             let conditions = super::conditionals::condition_values(value);
             for value in std::iter::once(value).chain(conditions.iter()) {
                 free.extend(super::conditionals::condition_names(value));
-                self.non_custom_references |= value.references.non_custom_references;
+                self.non_custom_references |= value.references.eager_non_custom_references();
                 self.any_attr |= value.references.any_attr;
                 free.extend(
                     value
                         .references
                         .refs
                         .iter()
+                        .filter(|reference| !value.references.in_lazy_argument(reference))
                         .filter_map(|reference| reference.function.variable_name().cloned()),
                 );
                 for reference in &value.references.refs {
+                    if value.references.in_lazy_argument(reference) { continue; }
                     if let SubstitutionFunction::Inherit(ref arguments) = reference.function {
                         if let Some(argument) = arguments.first() {
                             let mut input =
@@ -369,6 +387,7 @@ struct Frame<'a> {
     /// The definition tree: an index into the function scope.
     offset: usize,
     caller: Option<usize>,
+    random_scope: Vec<crate::Atom>,
     /// Resolved parameters; during argument resolution, only the earlier ones.
     parameters: Vec<Option<VariableValue>>,
     /// The locals of the evaluated body, once argument resolution is over.
@@ -402,6 +421,10 @@ impl<'a> FunctionCalls<'a> {
             frames: Vec::new(),
             stack: Vec::new(),
         }
+    }
+
+    pub(super) fn random_scope(&self, frame: Option<usize>) -> Option<&[crate::Atom]> {
+        frame.map(|frame| self.frames[frame].random_scope.as_slice())
     }
 
     fn guard(&mut self, function: Option<&'a CustomFunction>) -> usize {
@@ -555,7 +578,7 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
             None => self
                 .substitute_value(value, frame)
                 .ok()
-                .and_then(|value_result| self.typed(&registration, value_result, &value.url_data)),
+                .and_then(|value_result| self.typed(&registration, value_result, &value.url_data, &self.random_property(frame, name), frame)),
         };
         current.as_deref() == queried.as_ref().map(|value| value.css.as_str())
     }
@@ -598,19 +621,27 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
         None
     }
 
+    fn random_property(&self, frame: Option<usize>, name: &Name) -> String {
+        frame.map_or_else(|| format!("--{name}"), |frame| format!("{}---{name}", self.calls.frames[frame].function.name.0))
+    }
+
     pub(super) fn typed(
         &self,
         registration: &PropertyRegistrationData,
         value: Substitution,
         url_data: &UrlExtraData,
+        property: &str,
+        frame: Option<usize>,
     ) -> Option<VariableValue> {
         if registration.syntax.is_universal() {
             return Some(owned(value, url_data));
         }
         let tainted = !value.attr_tainted.is_empty();
-        let computed = compute_value(&value.css, url_data, registration, self.computed_context)
-            .ok()?
-            .to_variable_value();
+        let scope = self.calls.random_scope(frame).unwrap_or_default().to_vec();
+        let previous = self.computed_context.replace_random_function_scope(scope);
+        let computed = compute_value(&value.css, url_data, registration, self.computed_context, property);
+        let _ = self.computed_context.replace_random_function_scope(previous);
+        let computed = computed.ok()?.to_variable_value();
         let computed = Substitution::from_value(computed);
         Some(owned(
             if tainted {
@@ -632,7 +663,7 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
         let caller = self.calls.frames[frame].caller;
         let value = self.variable(caller, name)?;
         let function = self.calls.frames[frame].function;
-        self.typed(function.registration(name), value, url_data)
+        self.typed(function.registration(name), value, url_data, &self.random_property(Some(frame), name), Some(frame))
     }
 
     /// A declared parameter or local value after substitution, with CSS-wide keywords resolved.
@@ -650,7 +681,7 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
             Some(_) => None,
             None => {
                 let function = self.calls.frames[frame].function;
-                self.typed(function.registration(name), value, url_data)
+                self.typed(function.registration(name), value, url_data, &self.random_property(Some(frame), name), Some(frame))
             },
         }
     }
@@ -732,6 +763,7 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
         name: &DashedIdent,
         arguments: Vec<Option<Substitution<'static>>>,
         url_data: &UrlExtraData,
+        identity: Option<&crate::values::random::RandomFunctionIdentity>,
     ) -> Option<Substitution<'a>> {
         let level = self.calls.level.unwrap_or(self.computed_context.scope);
         let computed_context = self.computed_context;
@@ -761,10 +793,17 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
             return None;
         }
         let entry = self.calls.guard(Some(function));
+        let mut random_scope = self.calls.random_scope(caller).unwrap_or_default().to_vec();
+        if let Some(identity) = identity {
+            random_scope.push(identity.property.clone());
+            random_scope.push(crate::Atom::from(identity.index.to_string()));
+        }
+        random_scope.push(name.0.clone());
         self.calls.frames.push(Frame {
             function,
             offset,
             caller,
+            random_scope,
             parameters: Vec::with_capacity(function.parameters.len()),
             locals: None,
         });
@@ -801,7 +840,7 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
             if function.result.syntax.is_universal() {
                 return Some(owned(value, &declared.url_data));
             }
-            self.typed(&function.result, value, &declared.url_data)
+            self.typed(&function.result, value, &declared.url_data, &format!("{}-result", function.name.0), Some(frame))
         });
         self.calls.frames.pop();
         if self.calls.release(entry) {
@@ -1435,4 +1474,35 @@ mod tests {
             assert_eq!(actual, deferred, "{name}");
         }
     }
+
+    #[test]
+    fn random_item_substitutes_only_the_selected_branch_and_resolves_keys_in_the_calling_frame() {
+        assert_templates(&[
+            ("unused self cycle", "#t{--actual:random-item(fixed 0, PASS, var(--actual));--expected:PASS}"),
+            ("unused unresolved variable", "#t{--actual:random-item(fixed 1, var(--missing), PASS);--expected:PASS}"),
+            ("selected variable declared later", "#t{--actual:random-item(fixed 0, var(--later), FAIL);--later:PASS;--expected:PASS}"),
+            ("nested item", "#t{--actual:random-item(fixed 0, random-item(fixed 0.5, FAIL, PASS), FAIL);--expected:PASS}"),
+            ("variable key", "#t{--actual:random-item(var(--key), FAIL, PASS);--key:fixed calc(1 / 2);--expected:PASS}"),
+            ("comma option", "#t{--actual:random-item(fixed 0, {Times, serif}, sans-serif);--expected:Times, serif}"),
+            ("empty option", "#t{--actual:random-item(fixed 0, {}, FAIL);--expected:}"),
+            ("selected missing variable", "#t{--actual:random-item(fixed 0, var(--missing), PASS)}"),
+            ("selected self cycle", "#t{--actual:random-item(fixed 0, var(--actual), PASS)}"),
+            ("invalid computed key", "#t{--actual:random-item(fixed -0.5, PASS)}"),
+            ("function parameter key", "@function --pick(--n <number>){result:random-item(fixed var(--n), PASS, var(--missing))}#t{--actual:--pick(0);--expected:PASS}"),
+            ("function early property index", "@function --f(){result:random-item(--shared property-index-scoped, 1, 2, 3)}#t{--actual:--f();--expected:random-item(--shared ua-early---f-result-1, 1, 2, 3)}"),
+        ]);
+    }
+
+    #[test]
+    fn random_item_taint_tracks_the_key_and_chosen_option() {
+        let values = cascade(
+            "#t{--chosen:random-item(fixed 0, attr(secret), public);--unused:random-item(fixed 1, attr(secret), public);--key:random-item(attr(seed type(*)), public, private)}",
+            &Attributes(&[("secret", "private"), ("seed", "fixed 0")]),
+            ["chosen", "unused", "key"],
+        );
+        assert!(!values[0].as_ref().unwrap().attr_tainted.is_empty());
+        assert!(values[1].as_ref().unwrap().attr_tainted.is_empty());
+        assert!(!values[2].as_ref().unwrap().attr_tainted.is_empty());
+    }
+
 }

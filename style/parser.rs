@@ -117,6 +117,7 @@ impl NestingContext {
 }
 
 /// The data that the parser needs from outside in order to parse a stylesheet.
+#[derive(Clone)]
 pub struct ParserContext<'a> {
     /// The `Origin` of the stylesheet, whether it's a user, author or
     /// user-agent stylesheet.
@@ -137,6 +138,7 @@ pub struct ParserContext<'a> {
     pub nesting_context: NestingContext,
     /// The ranges of the parsed text that `attr()` substitution produced.
     attr_tainted: &'a [AttrTaintedRange],
+    random_declaration: Option<std::sync::Arc<crate::values::random::RandomDeclarationContext>>,
 }
 
 impl<'a> ParserContext<'a> {
@@ -162,7 +164,61 @@ impl<'a> ParserContext<'a> {
             use_counters,
             nesting_context: NestingContext::new_from_rule(rule_type),
             attr_tainted: &[],
+            random_declaration: None,
         }
+    }
+
+    /// Bind the original property and lexical random occurrences before any shorthand expansion.
+    pub fn for_random_declaration<'i>(&self, property: &str, input: &mut Parser<'i, '_>) -> Self {
+        self.for_random_declaration_with_offset(property, 0, input)
+    }
+
+    /// Bind an early typed subexpression after preceding functions in the declaration's early stream.
+    pub fn for_random_declaration_with_offset<'i>(&self, property: &str, offset: usize, input: &mut Parser<'i, '_>) -> Self {
+        let mut context = self.clone();
+        let mut declaration = crate::values::random::RandomDeclarationContext::new(crate::Atom::from(property), input);
+        declaration.index_offset = offset;
+        context.random_declaration = Some(std::sync::Arc::new(declaration));
+        context
+    }
+
+    /// The stable random occurrence immediately after the opening function token.
+    pub fn random_function_identity(&self, position: SourcePosition) -> crate::values::random::RandomFunctionIdentity {
+        self.random_function_identity_by_byte(position.byte_index())
+    }
+
+    /// Resolve a retained substitution function's absolute source position.
+    pub fn random_function_identity_by_byte(&self, byte: usize) -> crate::values::random::RandomFunctionIdentity {
+        self.random_declaration.as_ref().map_or_else(
+            || crate::values::random::RandomFunctionIdentity { property: crate::Atom::from(""), index: 0 },
+            |declaration| declaration.identity(byte),
+        )
+    }
+
+    /// Whether random auto/property scopes have an original declaration identity.
+    pub fn random_declaration_is_bound(&self) -> bool { self.random_declaration.is_some() }
+
+    /// The early-substitution occurrence of a retained arbitrary random function.
+    pub fn random_early_function_identity_by_byte(&self, byte: usize) -> crate::values::random::RandomFunctionIdentity {
+        self.random_declaration.as_ref().map_or_else(
+            || self.random_function_identity_by_byte(byte),
+            |declaration| declaration.early_identity(byte),
+        )
+    }
+
+    /// Random functions are values of declarations, never media/container feature values or descriptors.
+    pub fn random_functions_allowed(&self) -> bool {
+        let rules = self.rule_types();
+        ![
+            CssRuleType::FontFace,
+            CssRuleType::FontFeatureValues,
+            CssRuleType::FontPaletteValues,
+            CssRuleType::CounterStyle,
+            CssRuleType::Property,
+            CssRuleType::ColorProfile,
+        ].into_iter().any(|rule| rules.contains(rule))
+            && !(self.declaration_rule_types().is_empty()
+                && (rules.contains(CssRuleType::Media) || rules.contains(CssRuleType::Container)))
     }
 
     /// Parse text whose `ranges` came from `attr()` substitution.

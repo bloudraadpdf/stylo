@@ -29,6 +29,7 @@ use crate::values::specified::resolution::ResolutionDimension;
 use crate::values::specified::time::TimeDimension;
 use crate::values::specified::{Angle, Resolution, Time};
 use crate::values::{CSSFloat, DashedIdent, serialize_number, serialize_percentage};
+use crate::values::random::RandomKey;
 use cssparser::{CowRcStr, Parser, ParserInput, SourceLocation, Token, match_ignore_ascii_case};
 use debug_unreachable::debug_unreachable;
 use smallvec::SmallVec;
@@ -146,6 +147,8 @@ pub enum MathFunction {
     Progress,
     /// `calc-mix()`: https://drafts.csswg.org/css-values-5/#funcdef-calc-mix
     CalcMix,
+    /// A typed numeric random value.
+    Random,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -171,7 +174,9 @@ impl TreeCountingFunction {
         input: &mut Parser<'i, 't>,
         location: SourceLocation,
     ) -> Result<CalcNode, ParseError<'i>> {
-        if [
+        if (context.declaration_rule_types().is_empty()
+            && context.rule_types().contains(CssRuleType::Media))
+            || [
             CssRuleType::FontFace,
             CssRuleType::FontFeatureValues,
             CssRuleType::FontPaletteValues,
@@ -521,7 +526,7 @@ impl ToComputedValue for CalcSizeCalculation {
     type ComputedValue = Self;
 
     fn to_computed_value(&self, context: &Context) -> Self {
-        Self::new(self.0.map_leaves(|leaf| match leaf {
+        Self::new(self.0.resolve_tree_counting(context).map_leaves(|leaf| match leaf {
             Leaf::Length(length) => Leaf::Length(NoCalcLength::Absolute(AbsoluteLength::Px(
                 length.to_computed_value(context).px(),
             ))),
@@ -1162,8 +1167,35 @@ impl CalcNode {
         function: MathFunction,
         allowed: AllowParse,
     ) -> Result<Self, ParseError<'i>> {
+        let function_position = input.position();
         input.parse_nested_block(|input| {
             match function {
+                MathFunction::Random => {
+                    if !context.random_functions_allowed() {
+                        return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+                    }
+                    let key = input.try_parse(|input| {
+                        let key = RandomKey::parse(context, input, function_position, Self::parse_random_fixed)?;
+                        input.expect_comma()?;
+                        Ok::<_, ParseError<'i>>(key)
+                    }).or_else(|_| {
+                        if context.random_function_identity(function_position).is_bound() {
+                            Ok(RandomKey::auto(context, function_position))
+                        } else {
+                            Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
+                        }
+                    })?;
+                    let min = Box::new(Self::parse_argument(context, input, allowed)?);
+                    input.expect_comma()?;
+                    let max = Box::new(Self::parse_argument(context, input, allowed)?);
+                    let step = if input.try_parse(|input| input.expect_comma()).is_ok() {
+                        Some(Box::new(Self::parse_argument(context, input, allowed)?))
+                    } else { None };
+                    let mut node = Self::Random { key, min, max, step };
+                    node.unit().map_err(|()| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))?;
+                    node.simplify_and_sort();
+                    Ok(node)
+                },
                 MathFunction::Calc => Self::parse_argument(context, input, allowed),
                 MathFunction::CalcMix => {
                     let items = input.parse_comma_separated(|input| {
@@ -1414,6 +1446,25 @@ impl CalcNode {
                 },
             }
         })
+    }
+
+    /// Parse the `<number [0,1]>` after a fixed random key, preserving authored calc syntax.
+    pub fn parse_random_fixed<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<generic::GenericRandomFixed<Leaf>, ParseError<'i>> {
+        let start = input.state();
+        let is_function = match input.next()?.clone() {
+            Token::Number { value, .. } if (0.0..=1.0).contains(&value) => false,
+            Token::Function(_) => true,
+            ref token => return Err(input.new_unexpected_token_error(token.clone())),
+        };
+        input.reset(&start);
+        let value = Self::parse_one(context, input, AllowParse::new(CalcUnits::empty()))?;
+        if !value.unit().is_ok_and(|unit| unit.is_empty()) {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+        Ok(generic::GenericRandomFixed { value: Box::new(value), is_function })
     }
 
     /// Parses a `<percentage [0,100]>` mix percentage, or a math function that resolves to a
@@ -1675,7 +1726,7 @@ impl CalcNode {
     /// return a mathematical function corresponding to that name or an error.
     #[inline]
     pub fn math_function<'i>(
-        _: &ParserContext,
+        context: &ParserContext,
         name: &CowRcStr<'i>,
         location: cssparser::SourceLocation,
     ) -> Result<MathFunction, ParseError<'i>> {
@@ -1686,6 +1737,13 @@ impl CalcNode {
             },
         };
 
+        if matches!(function, MathFunction::Random)
+            && [CssRuleType::FontFace, CssRuleType::FontFeatureValues, CssRuleType::FontPaletteValues,
+                CssRuleType::CounterStyle, CssRuleType::Page, CssRuleType::BdColour, CssRuleType::ColorProfile]
+                .into_iter().any(|rule| context.rule_types().contains(rule))
+        {
+            return Err(location.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
         Ok(function)
     }
 
@@ -1802,6 +1860,22 @@ impl CalcNode {
         Self::parse_number_node(context, input, function)
     }
 
+    /// Fix each random base in the element context before the value can be inherited.
+    fn resolve_random_bases(&mut self, context: &Context) {
+        self.visit_depth_first(|node| {
+            let Self::Random { key, .. } = node else { return; };
+            let base = match key {
+                RandomKey::Cache(cache) => context.resolve_random_base(cache) as f32,
+                RandomKey::Fixed(fixed) => fixed.value.resolve_number(context).unwrap_or(f32::NAN),
+            };
+            let base = if base.is_nan() { base } else { base.clamp(0.0, f32::from_bits(1.0f32.to_bits() - 1)) };
+            *key = RandomKey::Fixed(generic::GenericRandomFixed {
+                value: Box::new(Self::Leaf(Leaf::Number(base))),
+                is_function: false,
+            });
+        });
+    }
+
     /// Resolves the tree-counting functions, and the calculations they leave resolvable, such as
     /// a trigonometric function of an angle in a length.
     pub(crate) fn resolve_tree_counting(&self, context: &Context) -> Self {
@@ -1810,6 +1884,7 @@ impl CalcNode {
             Leaf::SiblingCount => Leaf::Number(context.sibling_count()),
             _ => leaf.clone(),
         });
+        node.resolve_random_bases(context);
         node.compute_mix_percentages();
         node.simplify_and_sort();
         node
@@ -1840,6 +1915,7 @@ impl CalcNode {
             Leaf::SiblingCount => Leaf::Number(context.sibling_count()),
             _ => leaf.clone(),
         });
+        node.resolve_random_bases(context);
         node.compute_mix_percentages();
         node
     }
@@ -2422,6 +2498,16 @@ mod tree_counting_tests {
             );
         }
     }
+    #[test]
+    fn media_queries_reject_sibling_functions_before_zero_folding() {
+        for name in ["sibling-index", "sibling-count"] {
+            let css = format!("calc(0px * {name}())");
+            let mut input = ParserInput::new(&css);
+            assert!(Parser::new(&mut input).parse_entirely(|input|
+                specified::LengthPercentage::parse(&context_for(CssRuleType::Media), input)).is_err());
+        }
+    }
+
 }
 
 #[cfg(test)]
@@ -2896,4 +2982,67 @@ mod math_function_tests {
             );
         }
     }
+    #[test]
+    fn numeric_random_resolves_bounds_steps_and_nested_fixed_bases() {
+        for (css, expected) in [
+            ("random(fixed 0.5, 0, 100, 3)", 51.0),
+            ("random(fixed 0.999, 0, 100, 33.333)", 100.0),
+            ("random(fixed 0.5, 100, 10)", 100.0),
+            ("random(fixed 0.25, -100, -20)", -80.0),
+            ("random(fixed 0.5, 10, 30, -1)", 20.0),
+            ("random(fixed 0.5, 10, 30, infinity)", 10.0),
+            ("random(fixed calc(1em / 64px), 0, 100)", 25.0),
+            ("random(fixed random(fixed 0.5, 0, 1), 0, 100)", 50.0),
+        ] {
+            assert_eq!(number(css).1, expected, "{css}");
+        }
+    }
+
+    #[test]
+    fn numeric_random_retains_percentage_basis_until_used_values() {
+        assert_eq!(used_px("random(fixed 0.25, 10px, 50%)", 200.0), 32.5);
+        assert_eq!(used_px("random(fixed 0.25, 10px, 50%)", 0.0), 10.0);
+        assert_eq!(used_px("random(fixed 0.5, 50%, 100%)", -200.0), -100.0);
+        assert_eq!(used_px("calc(2 * random(fixed 0.5, 50%, 100%))", -200.0), -200.0);
+        for (css, expected) in [
+            ("random(fixed 0.5, 0%, 100%)", "random(fixed 0.5, 0%, 100%)"),
+            ("random(fixed calc(2 / 4), 0%, 100%)", "random(fixed calc(0.5), 0%, 100%)"),
+            ("random(fixed 0.5, 0px, 100px)", "calc(50px)"),
+        ] {
+            assert_eq!(parse_length_percentage(css).unwrap().to_css_string(), expected);
+        }
+    }
+
+    #[test]
+    fn numeric_random_agrees_on_the_full_argument_type() {
+        for css in [
+            "random(fixed 0.5, 10px, 20deg)",
+            "random(fixed 0.5, 10px, 20px, 1s)",
+            "random(fixed 0.5, 10px)",
+            "random(fixed -1, 10px, 20px)",
+            "random(fixed 0.5%, 10px, 20px)",
+            "random(fixed 0.5, 10px, 20px,)",
+        ] {
+            assert!(parse_length_percentage(css).is_none(), "{css}");
+        }
+        for css in ["random(fixed 0.5, 1, 1%)", "random(fixed 0.5, 1%, 1%, 1)"] {
+            let mut input = ParserInput::new(css);
+            assert!(Parser::new(&mut input).parse_entirely(|input|
+                specified::NumberOrPercentage::parse(&context(), input)).is_err(), "{css}");
+        }
+    }
+
+    #[test]
+    fn numeric_random_computes_angle_time_and_resolution_domains() {
+        let mut input = ParserInput::new("random(fixed 0.5, 90deg, 1turn)");
+        let angle = Parser::new(&mut input).parse_entirely(|input| specified::Angle::parse(&context(), input)).unwrap();
+        assert_eq!(with_computed_context(|context| angle.to_computed_value(context).degrees()), 225.0);
+        let mut input = ParserInput::new("random(fixed 0.5, 500ms, 1.5s)");
+        let time = Parser::new(&mut input).parse_entirely(|input| specified::Time::parse(&context(), input)).unwrap();
+        assert_eq!(with_computed_context(|context| time.to_computed_value(context).seconds()), 1.0);
+        let mut input = ParserInput::new("random(fixed 0.5, 96dpi, 3dppx)");
+        let resolution = Parser::new(&mut input).parse_entirely(|input| specified::Resolution::parse(&context(), input)).unwrap();
+        assert_eq!(with_computed_context(|context| resolution.to_computed_value(context).dppx()), 2.0);
+    }
+
 }

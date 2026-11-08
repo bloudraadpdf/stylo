@@ -349,6 +349,7 @@ impl<'a, 'b> StyleQueryContainer<'a, 'b> {
                         &Arc::new(value),
                         registration,
                         self.context,
+                        name,
                     ) {
                         Some(value) => Some(value),
                         None => return false,

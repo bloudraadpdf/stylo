@@ -420,11 +420,12 @@ pub fn compute_variable_value(
     value: &Arc<VariableValue>,
     registration: &PropertyRegistrationData,
     computed_context: &computed::Context,
+    name: &Name,
 ) -> Option<ComputedRegisteredValue> {
     if registration.syntax.is_universal() {
         return Some(ComputedRegisteredValue::universal(Arc::clone(value)));
     }
-    compute_value(&value.css, &value.url_data, registration, computed_context)
+    compute_value(&value.css, &value.url_data, registration, computed_context, &format!("--{name}"))
         .ok()
         .map(|computed| computed.with_attr_taint(value.is_attr_tainted()))
 }
@@ -667,6 +668,12 @@ enum SubstitutionFunction {
         arguments: Box<[FunctionArgument]>,
     },
     Ident(Box<[FunctionArgument]>),
+    RandomItem {
+        arguments: Box<[FunctionArgument]>,
+        function_token_end: usize,
+        identity: Option<crate::values::random::RandomFunctionIdentity>,
+        selected_option: Option<usize>,
+    },
     Inherit(Box<[FunctionArgument]>),
     If(Box<[ConditionalBranch]>),
     Env(Name),
@@ -678,6 +685,7 @@ enum SubstitutionFunction {
     Function {
         name: DashedIdent,
         arguments: Box<[FunctionArgument]>,
+        call_identity: Option<crate::values::random::RandomFunctionIdentity>,
     },
 }
 
@@ -703,6 +711,7 @@ impl SubstitutionFunction {
             Self::DynamicVar { name, .. } => name.as_ref(),
             Self::Inherit(_)
             | Self::Ident(_)
+            | Self::RandomItem { .. }
             | Self::If(_)
             | Self::Env(_)
             | Self::Attr { .. }
@@ -749,6 +758,7 @@ struct SubstitutionFunctionReference {
 struct References {
     refs: Vec<SubstitutionFunctionReference>,
     non_custom_references: NonCustomReferences,
+    unit_references: Vec<(usize, NonCustomReferences)>,
     any_env: bool,
     any_var: bool,
     any_attr: bool,
@@ -760,16 +770,30 @@ impl References {
         !self.refs.is_empty()
     }
 
-    fn in_attribute_fallback(&self, reference: &SubstitutionFunctionReference) -> bool {
+    fn eager_non_custom_references(&self) -> NonCustomReferences {
+        self.unit_references.iter().filter(|(position, _)| {
+            !self.refs.iter().any(|outer| match &outer.function {
+                SubstitutionFunction::RandomItem { arguments, selected_option, .. } => arguments.iter().skip(1).enumerate().any(|(index, argument)| {
+                    *selected_option != Some(index) && *position >= argument.start && *position < argument.end
+                }),
+                _ => false,
+            })
+        }).fold(NonCustomReferences::empty(), |all, (_, references)| all | *references)
+    }
+
+    fn in_lazy_argument(&self, reference: &SubstitutionFunctionReference) -> bool {
         self.refs.iter().any(|outer| {
-            let SubstitutionFunction::Attr { arguments, .. } = &outer.function else {
-                return false;
+            let (arguments, selected) = match &outer.function {
+                SubstitutionFunction::Attr { arguments, .. } => (arguments, None),
+                SubstitutionFunction::RandomItem { arguments, selected_option, .. } => (arguments, *selected_option),
+                _ => return false,
             };
-            arguments.get(1).is_some_and(|fallback| {
-                reference.start >= fallback.start && reference.end <= fallback.end
+            arguments.iter().skip(1).enumerate().any(|(index, argument)| {
+                selected != Some(index) && reference.start >= argument.start && reference.end <= argument.end
             })
         })
     }
+
 }
 
 /// Whether this name belongs to an unobservable lexical private property.
@@ -832,8 +856,12 @@ impl VariableValue {
                     SubstitutionFunction::DynamicVar { name: source, .. },
                 ) => *target = source.clone(),
                 (
-                    SubstitutionFunction::Function { name: target, .. },
-                    SubstitutionFunction::Function { name: source, .. },
+                    SubstitutionFunction::Function { name: target, call_identity: target_identity, .. },
+                    SubstitutionFunction::Function { name: source, call_identity: source_identity, .. },
+                ) => { *target = source.clone(); *target_identity = source_identity.clone(); },
+                (
+                    SubstitutionFunction::RandomItem { identity: target, .. },
+                    SubstitutionFunction::RandomItem { identity: source, .. },
                 ) => *target = source.clone(),
                 _ => {},
             }
@@ -862,11 +890,22 @@ impl VariableValue {
                 let mut input =
                     cssparser::ParserInput::new(&self.css[argument.start..argument.end]);
                 let mut input = cssparser::Parser::new(&mut input);
-                Self::parse(&mut input, &self.url_data, &Namespaces::default())
-                    .ok()
-                    .map(Arc::new)
+                let mut value = Self::parse(&mut input, &self.url_data, &Namespaces::default()).ok()?;
+                value.copy_random_function_context(self.references.refs.iter(), argument.start);
+                Some(Arc::new(value))
             })
             .collect()
+    }
+
+    fn copy_random_function_context<'r>(&mut self, source: impl Iterator<Item = &'r SubstitutionFunctionReference> + Clone, offset: usize) {
+        for target in &mut self.references.refs {
+            let Some(original) = source.clone().find(|original| original.start == offset + target.start) else { continue; };
+            match (&mut target.function, &original.function) {
+                (SubstitutionFunction::RandomItem { identity: target, .. }, SubstitutionFunction::RandomItem { identity: original, .. })
+                | (SubstitutionFunction::Function { call_identity: target, .. }, SubstitutionFunction::Function { call_identity: original, .. }) => *target = original.clone(),
+                _ => {},
+            }
+        }
     }
 
     fn empty(url_data: &UrlExtraData) -> Self {
@@ -1066,6 +1105,39 @@ impl VariableValue {
         }
     }
 
+    /// Retain the declaration identity before substitution changes token offsets.
+    pub fn set_random_function_context(&mut self, context: &crate::parser::ParserContext, declaration_value_start: SourcePosition) {
+        let property = context.random_function_identity_by_byte(declaration_value_start.byte_index()).property;
+        let mut calls = 0;
+        for reference in &mut self.references.refs {
+            match &mut reference.function {
+                SubstitutionFunction::RandomItem { identity, function_token_end, .. } => {
+                    *identity = Some(context.random_early_function_identity_by_byte(declaration_value_start.byte_index() + *function_token_end));
+                },
+                SubstitutionFunction::Function { call_identity, .. } => {
+                    calls += 1;
+                    *call_identity = Some(crate::values::random::RandomFunctionIdentity { property: property.clone(), index: calls });
+                },
+                _ => {},
+            }
+        }
+    }
+
+    pub(super) fn scope_random_functions(&mut self, function: &str) {
+        for reference in &mut self.references.refs {
+            let identity = match &mut reference.function {
+                SubstitutionFunction::RandomItem { identity, .. } => identity,
+                SubstitutionFunction::Function { call_identity, .. } => call_identity,
+                _ => continue,
+            };
+            if let Some(identity) = identity {
+                identity.property = Atom::from(if let Some(property) = identity.property.strip_prefix("early-") {
+                    format!("early-{function}-{property}")
+                } else { format!("{function}-{}", identity.property) });
+            }
+        }
+    }
+
     /// Returns the raw CSS text from this VariableValue
     pub fn css_text(&self) -> &str {
         &self.css
@@ -1202,14 +1274,18 @@ fn parse_declaration_value_block<'i, 't>(
                     || name.eq_ignore_ascii_case("if")
                     || name.eq_ignore_ascii_case("var")
                     || name.eq_ignore_ascii_case("ident")
+                    || name.eq_ignore_ascii_case("random-item")
                     || (name.eq_ignore_ascii_case("attr")
                         && static_prefs::pref!("layout.css.attr.enabled")) =>
             {
+                let name = name.clone();
                 let is_if = name.eq_ignore_ascii_case("if");
                 let is_inherit = name.eq_ignore_ascii_case("inherit");
                 let is_attr = name.eq_ignore_ascii_case("attr");
                 let is_var = name.eq_ignore_ascii_case("var");
                 let is_ident = name.eq_ignore_ascii_case("ident");
+                let is_random_item = name.eq_ignore_ascii_case("random-item");
+                let function_token_end = input.position().byte_index() - input_start.byte_index();
                 let our_ref_index = references.refs.len();
                 let start = token_start.byte_index() - input_start.byte_index();
                 references.refs.push(SubstitutionFunctionReference {
@@ -1217,6 +1293,7 @@ fn parse_declaration_value_block<'i, 't>(
                         SubstitutionFunction::Function {
                             name: DashedIdent(Atom::from(name.as_ref())),
                             arguments: Box::default(),
+                            call_identity: None,
                         }
                     } else if name.eq_ignore_ascii_case("inherit") {
                         SubstitutionFunction::Inherit(Box::default())
@@ -1236,6 +1313,13 @@ fn parse_declaration_value_block<'i, 't>(
                         }
                     } else if is_ident {
                         SubstitutionFunction::Ident(Box::default())
+                    } else if is_random_item {
+                        SubstitutionFunction::RandomItem {
+                            arguments: Box::default(),
+                            function_token_end,
+                            identity: None,
+                            selected_option: None,
+                        }
                     } else {
                         SubstitutionFunction::If(Box::default())
                     },
@@ -1259,6 +1343,21 @@ fn parse_declaration_value_block<'i, 't>(
                             SubstitutionFunction::If(branches);
                         input_end_position = Some(input.position());
                         return Ok(Box::default());
+                    }
+                    if is_random_item {
+                        let mut arguments = vec![input.parse_until_before(Delimiter::Comma, |input| {
+                            parse_component_argument(input, input_start, namespaces, references, missing_closing_characters, false)
+                        })?];
+                        input.expect_comma()?;
+                        loop {
+                            arguments.push(input.parse_until_before(Delimiter::Comma, |input| {
+                                parse_component_argument(input, input_start, namespaces, references, missing_closing_characters, true)
+                            })?);
+                            if input.is_exhausted() { break; }
+                            input.expect_comma()?;
+                        }
+                        input_end_position = Some(input.position());
+                        return Ok(arguments.into_boxed_slice());
                     }
                     if is_ident {
                         let state = input.state();
@@ -1361,7 +1460,8 @@ fn parse_declaration_value_block<'i, 't>(
                         *arguments = parsed_arguments;
                         references.any_var = true;
                     },
-                    SubstitutionFunction::Ident(ref mut arguments) => {
+                    SubstitutionFunction::Ident(ref mut arguments)
+                    | SubstitutionFunction::RandomItem { ref mut arguments, .. } => {
                         *arguments = parsed_arguments;
                         references.any_var = true;
                     },
@@ -1498,9 +1598,11 @@ fn parse_declaration_value_block<'i, 't>(
             | Token::Dimension {
                 unit: ref value, ..
             } => {
-                references
-                    .non_custom_references
-                    .insert(NonCustomReferences::from_unit(value));
+                let unit = NonCustomReferences::from_unit(value);
+                references.non_custom_references.insert(unit);
+                if !unit.is_empty() {
+                    references.unit_references.push((token_start.byte_index() - input_start.byte_index(), unit));
+                }
                 let is_unquoted_url = matches!(token, Token::UnquotedUrl(_));
                 if value.ends_with("�") && input.slice_from(token_start).ends_with("\\") {
                     // Unescaped backslash at EOF in these contexts is interpreted as U+FFFD
@@ -1557,36 +1659,7 @@ fn parse_function_argument<'i, 't>(
     missing_closing_characters: &mut String,
 ) -> Result<FunctionArgument, ParseError<'i>> {
     input.skip_whitespace();
-    let wrapped = input.try_parse(|input| {
-        input.expect_curly_bracket_block()?;
-        let mut inner_end_position = None;
-        let argument = input.parse_nested_block(|input| {
-            let argument = parse_function_argument_value(
-                input,
-                input_start,
-                namespaces,
-                references,
-                missing_closing_characters,
-            )?;
-            inner_end_position = Some(input.position());
-            Ok(argument)
-        })?;
-        if inner_end_position == Some(input.position()) {
-            missing_closing_characters.push_str("}");
-        }
-        input.expect_exhausted()?;
-        Ok::<_, ParseError<'i>>(argument)
-    });
-    if let Ok(argument) = wrapped {
-        return Ok(argument);
-    }
     let state = input.state();
-    while let Ok(token) = input.next() {
-        if matches!(token, Token::CurlyBracketBlock) {
-            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
-        }
-    }
-    input.reset(&state);
     let named = input.try_parse(|input| -> Result<bool, ParseError<'i>> {
         let dashed = input.expect_ident()?.starts_with("--");
         input.expect_colon()?;
@@ -1596,13 +1669,7 @@ fn parse_function_argument<'i, 't>(
         return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
     }
     input.reset(&state);
-    parse_function_argument_value(
-        input,
-        input_start,
-        namespaces,
-        references,
-        missing_closing_characters,
-    )
+    parse_component_argument(input, input_start, namespaces, references, missing_closing_characters, false)
 }
 
 fn parse_function_argument_value<'i, 't>(
@@ -1634,22 +1701,34 @@ fn parse_component_argument<'i, 't>(
     allow_empty: bool,
 ) -> Result<FunctionArgument, ParseError<'i>> {
     input.skip_whitespace();
-    if allow_empty && input.is_exhausted() {
-        return parse_substitution_argument(
-            input,
-            input_start,
-            namespaces,
-            references,
-            missing_closing_characters,
-        );
+    if input.try_parse(|input| input.expect_curly_bracket_block()).is_ok() {
+        let mut inner_end_position = None;
+        let argument = input.parse_nested_block(|input| {
+            let argument = parse_substitution_argument(input, input_start, namespaces, references, missing_closing_characters)?;
+            if !allow_empty && argument.start == argument.end {
+                return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+            }
+            inner_end_position = Some(input.position());
+            Ok(argument)
+        })?;
+        if inner_end_position == Some(input.position()) {
+            missing_closing_characters.push_str("}");
+        }
+        input.expect_exhausted()?;
+        return Ok(argument);
     }
-    parse_function_argument(
-        input,
-        input_start,
-        namespaces,
-        references,
-        missing_closing_characters,
-    )
+    let state = input.state();
+    while let Ok(token) = input.next() {
+        if matches!(token, Token::CurlyBracketBlock) {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+    }
+    input.reset(&state);
+    let argument = parse_substitution_argument(input, input_start, namespaces, references, missing_closing_characters)?;
+    if !allow_empty && argument.start == argument.end {
+        return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+    }
+    Ok(argument)
 }
 
 fn parse_substitution_argument<'i, 't>(
@@ -2112,6 +2191,7 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
         let variables: Vec<Atom> = refs
             .refs
             .iter()
+            .filter(|reference| !refs.in_lazy_argument(reference))
             .filter_map(|reference| reference.function.variable_name())
             .chain(called.iter().flatten())
             .filter(|name| {
@@ -2193,6 +2273,7 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
                         &value.url_data,
                         registration,
                         self.computed_context,
+                        &format!("--{name}"),
                     )
                     .ok()
                 } else {
@@ -2479,6 +2560,15 @@ fn substitute_all(
             VarType::Custom(ref name) => {
                 let registration = context.stylist.get_custom_property_registration(name);
                 let value = context.map.get(registration, name)?.as_universal()?;
+                let random_value;
+                let value = if value.references.refs.iter().any(|reference| matches!(reference.function, SubstitutionFunction::RandomItem { .. })) {
+                    let mut substitutor = Substitutor::new(context.map, context.stylist, context.computed_context,
+                        EnvironmentResolutionMode::ResolveLiveEnvironment, attribute_tracker, context.function_levels.get(name).copied());
+                    let owner = substitutor.calls.guard_property(name).ok()?;
+                    random_value = Arc::new(substitutor.random_dependencies(value));
+                    substitutor.calls.release(owner);
+                    &random_value
+                } else { value };
                 let is_root = context.computed_context.is_root_element();
                 // We need to keep track of potential non-custom-references even on unregistered
                 // properties for cycle-detection purposes.
@@ -2622,7 +2712,7 @@ fn substitute_all(
                 .references
                 .refs
                 .iter()
-                .filter(|next| !v.references.in_attribute_fallback(next))
+                .filter(|next| !v.references.in_lazy_argument(next))
             {
                 let Some(name) = next.function.variable_name() else {
                     continue;
@@ -2637,7 +2727,7 @@ fn substitute_all(
             }
 
             for (offset, reference) in v.references.refs.iter().enumerate() {
-                if v.references.in_attribute_fallback(reference) {
+                if v.references.in_lazy_argument(reference) {
                     continue;
                 }
                 let SubstitutionFunction::DynamicVar {
@@ -2947,6 +3037,7 @@ fn handle_invalid_at_computed_value_time(
                 &initial_value.url_data,
                 registration,
                 computed_context,
+                &format!("--{name}"),
             ) {
                 custom_properties.insert(registration, name, initial_value);
                 return;
@@ -3049,7 +3140,7 @@ fn substitute_references_if_needed_and_apply(
         }
     }
 
-    let value = match substitution.into_value(url_data, registration, computed_context) {
+    let value = match substitution.into_value(url_data, registration, computed_context, name) {
         Ok(v) => v,
         Err(()) => {
             handle_invalid_at_computed_value_time(name, custom_properties, computed_context);
@@ -3092,6 +3183,7 @@ impl<'a> Substitution<'a> {
         url_data: &UrlExtraData,
         registration: &PropertyRegistrationData,
         computed_context: &computed::Context,
+        name: &Name,
     ) -> Result<ComputedRegisteredValue, ()> {
         if registration.syntax.is_universal() {
             return Ok(ComputedRegisteredValue::universal(Arc::new(
@@ -3106,7 +3198,7 @@ impl<'a> Substitution<'a> {
                 },
             )));
         }
-        compute_value(&self.css, url_data, registration, computed_context)
+        compute_value(&self.css, url_data, registration, computed_context, &format!("--{name}"))
             .map(|value| value.with_attr_taint(!self.attr_tainted.is_empty()))
     }
 
@@ -3138,18 +3230,20 @@ fn compute_value(
     url_data: &UrlExtraData,
     registration: &PropertyRegistrationData,
     computed_context: &computed::Context,
+    property: &str,
 ) -> Result<ComputedRegisteredValue, ()> {
     debug_assert!(!registration.syntax.is_universal());
 
     let mut input = ParserInput::new(&css);
     let mut input = Parser::new(&mut input);
 
-    SpecifiedRegisteredValue::compute(
+    SpecifiedRegisteredValue::compute_with_property(
         &mut input,
         registration,
         url_data,
         computed_context,
         AllowComputationallyDependent::Yes,
+        property,
     )
 }
 
@@ -3242,7 +3336,7 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
                 return self
                     .substitute_value(value, frame)
                     .ok()
-                    .and_then(|result| self.typed(registration, result, &value.url_data))
+                    .and_then(|result| self.typed(registration, result, &value.url_data, &format!("--{name}"), None))
                     .map(Substitution::from_value);
             }
             Some(Substitution::from_value(value.to_variable_value()))
@@ -3334,6 +3428,72 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
             substituted.push(&css[cur_pos..end], next_token_type, last_token_type, &[])?;
         }
         Ok(Substitution::from_value(substituted))
+    }
+
+    fn random_dependencies(&mut self, value: &VariableValue) -> VariableValue {
+        self.private_names = value.private_names.clone();
+        let mut resolved = value.clone();
+        let mut excluded = Vec::new();
+        for (index, reference) in value.references.refs.iter().enumerate() {
+            if excluded.iter().any(|&(start, end)| reference.start >= start && reference.end <= end) { continue; }
+            let SubstitutionFunction::RandomItem { arguments, identity, .. } = &reference.function else { continue; };
+            let mut nested = value.references.refs[index + 1..].iter().peekable();
+            let selected = self.random_item_option(&value.css, &value.url_data, arguments, identity.as_ref(), None, &mut nested).ok().map(|(index, _)| index);
+            if let SubstitutionFunction::RandomItem { selected_option, .. } = &mut resolved.references.refs[index].function { *selected_option = selected; }
+            for (index, argument) in arguments.iter().skip(1).enumerate() {
+                if selected != Some(index) { excluded.push((argument.start, argument.end)); }
+            }
+        }
+        resolved.references.non_custom_references = resolved.references.eager_non_custom_references();
+        resolved
+    }
+
+    fn random_item_option<'v>(
+        &mut self, css: &'v str, url_data: &UrlExtraData, arguments: &[FunctionArgument],
+        identity: Option<&crate::values::random::RandomFunctionIdentity>, frame: Option<usize>,
+        references: &mut ReferenceIter<'v>,
+    ) -> Result<(usize, bool), ()> where 'a: 'v {
+                if self.computed_context.in_media_query || self.computed_context.in_container_query { return Err(()); }
+                let [key, options @ ..] = arguments else { return Err(()); };
+                if options.is_empty() { return Err(()); }
+                let key = self.chunk(css, key.start, key.end, key.first_token_type, key.last_token_type, url_data, frame, references)?;
+                let tainted = !key.attr_tainted.is_empty();
+                let context = crate::parser::ParserContext::new(
+                    crate::stylesheets::Origin::Author,
+                    url_data,
+                    Some(crate::stylesheets::CssRuleType::Style),
+                    style_traits::ParsingMode::DEFAULT,
+                    self.computed_context.quirks_mode,
+                    Default::default(), None, None,
+                );
+                let fallback_identity = context.random_function_identity_by_byte(0);
+                let identity = identity.unwrap_or(&fallback_identity);
+                let mut source = ParserInput::new(&key.css);
+                let mut input = Parser::new(&mut source);
+                let context = context.for_random_declaration_with_offset(&identity.property, identity.index, &mut input);
+                let key = input.parse_entirely(|input| {
+                    crate::values::random::RandomKey::parse_with_identity(
+                        identity,
+                        input,
+                        |input| crate::values::specified::Number::parse(&context, input),
+                    )
+                }).map_err(|_| ())?;
+                let base = match key {
+                    crate::values::random::RandomKey::Fixed(value) => {
+                        let scope = self.calls.random_scope(frame).unwrap_or_default().to_vec();
+                        let previous = self.computed_context.replace_random_function_scope(scope);
+                        let value = f64::from(value.to_computed_value(self.computed_context));
+                        let _ = self.computed_context.replace_random_function_scope(previous);
+                        crate::values::random::normalized_base(value).ok_or(())?
+                    },
+                    crate::values::random::RandomKey::Cache(key) => self.calls.random_scope(frame).map_or_else(
+                        || self.computed_context.resolve_random_base(&key),
+                        |scope| self.computed_context.resolve_random_base_for_function(&key, scope),
+                    ),
+                };
+                let index = ((base * options.len() as f64).floor() as usize).min(options.len() - 1);
+                Ok((index, tainted))
+
     }
 
     fn reference<'v>(
@@ -3446,6 +3606,14 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
                     value.attr_tainted()
                 })
             },
+            SubstitutionFunction::RandomItem { arguments, identity, .. } => {
+                let (index, tainted) = self.random_item_option(css, url_data, arguments, identity.as_ref(), frame, references)?;
+                let options = &arguments[1..];
+                let chosen = &options[index];
+                while references.next_if(|reference| reference.end <= chosen.start).is_some() {}
+                let value = self.chunk(css, chosen.start, chosen.end, chosen.first_token_type, chosen.last_token_type, url_data, frame, references)?;
+                Some(if tainted { value.attr_tainted() } else { value })
+            },
             SubstitutionFunction::If(branches) => {
                 Some(self.conditional(css, url_data, branches, frame, references)?)
             },
@@ -3523,7 +3691,7 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
                     },
                 }
             },
-            SubstitutionFunction::Function { name, arguments } => {
+            SubstitutionFunction::Function { name, arguments, call_identity } => {
                 let arguments = arguments
                     .iter()
                     .map(|argument| {
@@ -3541,7 +3709,7 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
                         .map(Substitution::into_owned)
                     })
                     .collect();
-                self.call(frame, name, arguments, url_data)
+                self.call(frame, name, arguments, url_data, call_identity.as_ref())
             },
             // https://drafts.csswg.org/css-values-5/#attr-substitution
             SubstitutionFunction::Attr {
@@ -3932,4 +4100,18 @@ mod tests {
         assert!(matches!(&value.references.refs[0].function,
             SubstitutionFunction::Attr { arguments, .. } if arguments.len() == 2));
     }
+
+    #[test]
+    fn random_item_argument_grammar_is_independent_of_key_and_chosen_value_grammar() {
+        let url_data = UrlExtraData::from(Url::parse("https://example.invalid/").unwrap());
+        for css in ["random-item(auto, serif)", "random-item(fixed -0.5, serif)", "random-item(var(--key), ,)", "random-item(auto, {}, {Times, serif})", "random-item(auto, --custom: value)"] {
+            let mut input = ParserInput::new(css);
+            assert!(Parser::new(&mut input).parse_entirely(|input| VariableValue::parse(input, &url_data, &Namespaces::default())).is_ok(), "{css}");
+        }
+        for css in ["random-item()", "random-item(auto)", "random-item(, serif)", "random-item(auto, !)", "random-item(auto, ;)", "random-item(auto, {Times, serif} extra)", "random-item(auto, extra {serif})"] {
+            let mut input = ParserInput::new(css);
+            assert!(Parser::new(&mut input).parse_entirely(|input| VariableValue::parse(input, &url_data, &Namespaces::default())).is_err(), "{css}");
+        }
+    }
+
 }

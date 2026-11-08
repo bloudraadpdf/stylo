@@ -125,7 +125,10 @@ pub(crate) fn parse_parameter<'i>(
         .unwrap_or_else(|_| Descriptor::universal());
     let default = if input.try_parse(|input| input.expect_colon()).is_ok() {
         input.skip_whitespace();
-        let value = VariableValue::parse(input, &context.url_data, &context.namespaces)?;
+        let context = context.for_random_declaration(&format!("--{name}"), input);
+        let start = input.position();
+        let mut value = VariableValue::parse(input, &context.url_data, &context.namespaces)?;
+        value.set_random_function_context(&context, start);
         if value.css.is_empty() || !default_matches(&value, &syntax) {
             return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
         }
@@ -292,7 +295,10 @@ impl FunctionDescriptor {
             return Err(input.new_custom_error(StyleParseErrorKind::UnknownProperty(name)));
         };
         input.skip_whitespace();
-        let value = VariableValue::parse(input, &context.url_data, &context.namespaces)?;
+        let context = context.for_random_declaration(&name.to_css_string(), input);
+        let start = input.position();
+        let mut value = VariableValue::parse(input, &context.url_data, &context.namespaces)?;
+        value.set_random_function_context(&context, start);
         input.expect_exhausted()?;
         Ok(Self {
             name,

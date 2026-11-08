@@ -203,7 +203,7 @@ fn parse_color_function<'i, 't>(
         // transparent.
         // FIXME(emilio, bug 1925572): This could avoid cloning, or be done earlier.
         let Some(abs) = color
-            .with_siblings_as_one()
+            .with_contextual_values_for_validation()
             .map_origin_color(|_| Some(AbsoluteColor::TRANSPARENT_BLACK))
         else {
             return Err(arguments.new_custom_error(StyleParseErrorKind::UnspecifiedError));

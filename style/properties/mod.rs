@@ -809,9 +809,9 @@ fn parse_non_custom_property_declaration_value_into<'i>(
     input.reset(&start);
     input.look_for_arbitrary_substitution_functions(
         if static_prefs::pref!("layout.css.attr.enabled") {
-            &["var", "env", "attr", "inherit", "if", "ident"]
+            &["var", "env", "attr", "inherit", "if", "ident", "random-item"]
         } else {
-            &["var", "env", "inherit", "if", "ident"]
+            &["var", "env", "inherit", "if", "ident", "random-item"]
         },
     );
 
@@ -844,7 +844,7 @@ fn parse_non_custom_property_declaration_value_into<'i>(
         return Err(err);
     }
     input.reset(start);
-    let value = match custom_properties::VariableValue::parse(
+    let mut value = match custom_properties::VariableValue::parse(
         input,
         &context.url_data,
         &context.namespaces,
@@ -853,6 +853,7 @@ fn parse_non_custom_property_declaration_value_into<'i>(
         Err(error) if seen_substitution_functions => return Err(error),
         _ => return Err(err),
     };
+    value.set_random_function_context(context, start_pos);
     parsed_custom(declarations, value);
     Ok(())
 }
@@ -1002,18 +1003,27 @@ impl PropertyDeclaration {
         debug_assert!(id.allowed_in(context), "{:?}", id);
         input.skip_whitespace();
 
+        let random_property = match &id {
+            PropertyId::NonCustom(id) => id.name().to_owned(),
+            PropertyId::Custom(name) => format!("--{}", name),
+        };
+        let random_context = context.for_random_declaration(&random_property, input);
+        let context = &random_context;
+
         let start = input.state();
         let non_custom_id = match id {
             PropertyId::Custom(property_name) => {
                 let value = match input.try_parse(CSSWideKeyword::parse) {
                     Ok(keyword) => CustomDeclarationValue::CSSWideKeyword(keyword),
-                    Err(()) => CustomDeclarationValue::Unparsed(Arc::new(
-                        custom_properties::VariableValue::parse(
+                    Err(()) => {
+                        let mut value = custom_properties::VariableValue::parse(
                             input,
                             &context.url_data,
                             &context.namespaces,
-                        )?,
-                    )),
+                        )?;
+                        value.set_random_function_context(context, start.position());
+                        CustomDeclarationValue::Unparsed(Arc::new(value))
+                    },
                 };
                 declarations.push(PropertyDeclaration::Custom(CustomDeclaration {
                     name: property_name,
@@ -1686,6 +1696,13 @@ impl UnparsedValue {
         let mut input = ParserInput::new(&substituted.css);
         let mut input = Parser::new(&mut input);
         input.skip_whitespace();
+
+        // Late random functions are numbered in the substituted value, using the authored shorthand's name.
+        let property = self.from_shorthand.map_or_else(
+            || longhand_id.name().to_owned(),
+            |shorthand| shorthand.name().to_owned(),
+        );
+        let context = context.for_random_declaration(&property, &mut input);
 
         if let Ok(keyword) = input.try_parse(CSSWideKeyword::parse) {
             return Cow::Owned(PropertyDeclaration::css_wide_keyword(longhand_id, keyword));

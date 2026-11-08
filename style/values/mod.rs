@@ -29,6 +29,7 @@ pub mod animated;
 pub mod computed;
 pub mod distance;
 pub mod generics;
+pub mod random;
 pub mod resolved;
 pub mod specified;
 

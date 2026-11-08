@@ -81,6 +81,9 @@ pub trait FontMetricsProvider: Debug + Sync {
 /// same time (given we need the style of the parent to compute everything else).
 #[derive(Debug, MallocSizeOf)]
 pub struct Device {
+    /// Document-lifetime random state, retained when the embedder replaces a style device.
+    #[ignore_malloc_size_of = "Shared document random state"]
+    random_state: std::sync::Arc<crate::values::random::DocumentRandomState>,
     /// The current media type used by de device.
     media_type: MediaType,
     /// The current viewport size, in CSS pixels.
@@ -208,6 +211,7 @@ impl Device {
             ComputedValues::initial_values_with_font_override(Font::initial_values());
         let root_style = RwLock::new(Arc::clone(&default_values));
         Device {
+            random_state: std::sync::Arc::new(crate::values::random::DocumentRandomState::default()),
             media_type,
             viewport_size,
             device_size: viewport_size,
@@ -241,6 +245,16 @@ impl Device {
             link_state_cascade_priority: false,
             link_after_rules_enabled: true,
         }
+    }
+
+    /// The random base state belonging to this device's document.
+    pub fn random_state(&self) -> &std::sync::Arc<crate::values::random::DocumentRandomState> {
+        &self.random_state
+    }
+
+    /// Preserve the document's random state across replacement devices.
+    pub fn set_random_state(&mut self, state: std::sync::Arc<crate::values::random::DocumentRandomState>) {
+        self.random_state = state;
     }
 
     /// The lengths of the `thin`, `medium` and `thick` line widths.

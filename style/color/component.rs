@@ -61,17 +61,30 @@ impl<ValueType> ColorComponent<ValueType> {
         }
     }
 
-    /// Substitute a valid sibling count for parse-time channel validation.
-    pub fn with_siblings_as_one(&self) -> Self
+    /// Substitute valid contextual values for parse-time channel validation.
+    pub fn with_contextual_values_for_validation(&self) -> Self
     where
         ValueType: ColorComponentType + Clone,
     {
         match self {
             Self::SiblingIndex | Self::SiblingCount => Self::Value(ValueType::from_value(1.0)),
-            Self::Calc(node) => Self::Calc(Box::new(node.map_leaves(|leaf| match leaf {
-                Leaf::SiblingIndex | Leaf::SiblingCount => Leaf::Number(1.0),
-                _ => leaf.clone(),
-            }))),
+            Self::Calc(node) => {
+                let mut node = node.map_leaves(|leaf| match leaf {
+                    Leaf::SiblingIndex | Leaf::SiblingCount => Leaf::Number(1.0),
+                    _ => leaf.clone(),
+                });
+                node.visit_depth_first(|node| {
+                    if let GenericCalcNode::Random { key, .. } = node {
+                        if matches!(key, crate::values::random::RandomKey::Cache(_)) {
+                            *key = crate::values::random::RandomKey::Fixed(crate::values::generics::calc::GenericRandomFixed {
+                                value: Box::new(GenericCalcNode::Leaf(Leaf::Number(0.5))),
+                                is_function: false,
+                            });
+                        }
+                    }
+                });
+                Self::Calc(Box::new(node))
+            },
             _ => self.clone(),
         }
     }
@@ -270,7 +283,7 @@ impl<ValueType: ColorComponentType> ColorComponent<ValueType> {
             _ => return self.clone(),
         };
 
-        let computed = node.map_leaves(|leaf| match leaf {
+        let computed = node.resolve_tree_counting(context).map_leaves(|leaf| match leaf {
             Leaf::Length(length) => Leaf::Length(NoCalcLength::from_px(
                 length
                     .to_computed_value_in_calc(

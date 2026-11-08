@@ -1092,6 +1092,9 @@ fn fold_float_offset_calc_node<F: crate::values::computed::box_::FloatOffsetCalc
         | GenericCalcNode::Leaf(CalcLengthPercentageLeaf::Dppx(_)) => {
             Err(crate::values::computed::box_::UnsupportedFloatOffsetCalculation::Trigonometric)
         },
+        GenericCalcNode::Random { .. } => {
+            Err(crate::values::computed::box_::UnsupportedFloatOffsetCalculation::Random)
+        },
         GenericCalcNode::Pow(_, _)
         | GenericCalcNode::Exponential { .. }
         | GenericCalcNode::Mix(_) => {

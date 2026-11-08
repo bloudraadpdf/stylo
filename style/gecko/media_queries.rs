@@ -41,6 +41,7 @@ use style_traits::{CSSPixel, DevicePixel};
 /// of the root element, there can't be any other style being computed at the
 /// same time (given we need the style of the parent to compute everything else).
 pub struct Device {
+    random_state: std::sync::Arc<crate::values::random::DocumentRandomState>,
     /// NB: The document owns the styleset, who owns the stylist, and thus the
     /// `Device`, so having a raw document pointer here is fine.
     document: *const structs::Document,
@@ -105,6 +106,14 @@ unsafe impl Sync for Device {}
 unsafe impl Send for Device {}
 
 impl Device {
+    /// The random base state belonging to this device's document.
+    pub fn random_state(&self) -> &std::sync::Arc<crate::values::random::DocumentRandomState> { &self.random_state }
+
+    /// Preserve the document's random state across replacement devices.
+    pub fn set_random_state(&mut self, state: std::sync::Arc<crate::values::random::DocumentRandomState>) {
+        self.random_state = state;
+    }
+
     /// Trivially constructs a new `Device`.
     pub fn new(document: *const structs::Document) -> Self {
         assert!(!document.is_null());
@@ -113,6 +122,7 @@ impl Device {
         let default_values = ComputedValues::default_values(doc);
         let root_style = RwLock::new(Arc::clone(&default_values));
         Device {
+            random_state: std::sync::Arc::new(crate::values::random::DocumentRandomState::default()),
             document,
             default_values: default_values,
             root_style: root_style,

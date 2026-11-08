@@ -113,6 +113,7 @@ fn collect_condition_names(condition: &QueryCondition, names: &mut Vec<Name>) {
 pub(super) fn condition_names(value: &VariableValue) -> Vec<Name> {
     let mut names = Vec::new();
     for reference in &value.references.refs {
+        if value.references.in_lazy_argument(reference) { continue; }
         let SubstitutionFunction::If(branches) = &reference.function else {
             continue;
         };
@@ -142,10 +143,12 @@ pub(super) fn condition_names(value: &VariableValue) -> Vec<Name> {
 pub(super) fn condition_values(value: &VariableValue) -> Vec<VariableValue> {
     let mut values = Vec::new();
     for reference in &value.references.refs {
+        if value.references.in_lazy_argument(reference) { continue; }
         let SubstitutionFunction::If(branches) = &reference.function else {
             continue;
         };
         for ConditionalBranch { condition, .. } in &**branches {
+            let offset = condition.start;
             let mut input = ParserInput::new(&value.css[condition.start..condition.end]);
             if let Ok(mut condition) = VariableValue::parse(
                 &mut Parser::new(&mut input),
@@ -153,6 +156,7 @@ pub(super) fn condition_values(value: &VariableValue) -> Vec<VariableValue> {
                 &Namespaces::default(),
             ) {
                 condition.private_names = value.private_names.clone();
+                condition.copy_random_function_context(value.references.refs.iter(), offset);
                 for reference in &mut condition.references.refs {
                     if let Some(name) = reference.function.variable_name_mut() {
                         if let Some((_, private)) = value
@@ -186,6 +190,7 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
     {
         let mut tainted = false;
         for ConditionalBranch { condition, value } in branches {
+            let offset = condition.start;
             let mut input = ParserInput::new(&css[condition.start..condition.end]);
             let condition = VariableValue::parse(
                 &mut Parser::new(&mut input),
@@ -195,6 +200,7 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
             .ok();
             let condition = condition.map(|mut condition| {
                 condition.private_names = self.private_names.clone();
+                condition.copy_random_function_context(references.clone(), offset);
                 condition
             });
             let condition = condition

@@ -351,6 +351,20 @@ pub type SpecifiedValue = Value<SpecifiedValueComponent>;
 pub type ComputedValue = Value<ComputedValueComponent>;
 
 impl SpecifiedValue {
+    /// Compute a typed custom property with its original name available to random-key simplification.
+    pub fn compute_with_property<'i, 't>(
+        input: &mut CSSParser<'i, 't>,
+        registration: &PropertyRegistrationData,
+        url_data: &UrlExtraData,
+        context: &computed::Context,
+        allow: AllowComputationallyDependent,
+        property: &str,
+    ) -> Result<ComputedValue, ()> {
+        Self::parse_with_property(input, &registration.syntax, url_data, allow, property)
+            .map(|value| value.to_computed_value(context))
+            .map_err(|_| ())
+    }
+
     /// Convert a registered custom property to a Computed custom property value, given input and a
     /// property registration.
     pub fn compute<'i, 't>(
@@ -376,10 +390,25 @@ impl SpecifiedValue {
     /// Parse and validate a registered custom property value according to its syntax descriptor,
     /// and check for computational independence.
     pub fn parse<'i, 't>(
-        mut input: &mut CSSParser<'i, 't>,
+        input: &mut CSSParser<'i, 't>,
         syntax: &Descriptor,
         url_data: &UrlExtraData,
         allow_computationally_dependent: AllowComputationallyDependent,
+    ) -> Result<Self, StyleParseError<'i>> {
+        Self::parse_internal(input, syntax, url_data, allow_computationally_dependent, None)
+    }
+
+    /// Parse a typed custom property or function descriptor in its original declaration scope.
+    pub fn parse_with_property<'i, 't>(
+        input: &mut CSSParser<'i, 't>, syntax: &Descriptor, url_data: &UrlExtraData,
+        allow: AllowComputationallyDependent, property: &str,
+    ) -> Result<Self, StyleParseError<'i>> {
+        Self::parse_internal(input, syntax, url_data, allow, Some(property))
+    }
+
+    fn parse_internal<'i, 't>(
+        mut input: &mut CSSParser<'i, 't>, syntax: &Descriptor, url_data: &UrlExtraData,
+        allow_computationally_dependent: AllowComputationallyDependent, property: Option<&str>,
     ) -> Result<Self, StyleParseError<'i>> {
         if syntax.is_universal() {
             let namespaces = crate::stylesheets::Namespaces::default();
@@ -395,7 +424,7 @@ impl SpecifiedValue {
         let mut multiplier = None;
         {
             let mut parser = Parser::new(syntax, &mut values, &mut multiplier);
-            parser.parse(&mut input, url_data, allow_computationally_dependent)?;
+            parser.parse(&mut input, url_data, allow_computationally_dependent, property)?;
         }
         let v = if let Some(multiplier) = multiplier {
             ValueInner::List(ComponentList {
@@ -525,13 +554,14 @@ impl<'a> Parser<'a> {
         input: &mut CSSParser<'i, 't>,
         url_data: &UrlExtraData,
         allow_computationally_dependent: AllowComputationallyDependent,
+        property: Option<&str>,
     ) -> Result<(), StyleParseError<'i>> {
         use self::AllowComputationallyDependent::*;
         let parsing_mode = match allow_computationally_dependent {
             No => ParsingMode::DISALLOW_COMPUTATIONALLY_DEPENDENT,
             Yes => ParsingMode::DEFAULT,
         };
-        let ref context = ParserContext::new(
+        let context = ParserContext::new(
             Origin::Author,
             url_data,
             Some(CssRuleType::Style),
@@ -541,10 +571,14 @@ impl<'a> Parser<'a> {
             None,
             None,
         );
+        let context = match property {
+            Some(property) => context.for_random_declaration(property, input),
+            None => context,
+        };
         for component in self.syntax.components.iter() {
             let component = component.premultiplied();
             let result = input.try_parse(|input| {
-                input.parse_entirely(|input| Self::parse_value(context, input, &component))
+                input.parse_entirely(|input| Self::parse_value(&context, input, &component))
             });
             let Ok(values) = result else { continue };
             self.output.extend(values);
@@ -759,6 +793,7 @@ impl CustomAnimatedValue {
                     // A value that is invalid at computed-value time stays unparsed: it animates
                     // discretely and does not compose.
                     Self::compute_registered(
+                        &declaration.name,
                         value,
                         registration,
                         stylist,
@@ -780,6 +815,7 @@ impl CustomAnimatedValue {
     }
 
     fn compute_registered(
+        name: &crate::custom_properties::Name,
         value: &ComputedPropertyValue,
         registration: &PropertyRegistrationData,
         stylist: &Stylist,
@@ -800,12 +836,13 @@ impl CustomAnimatedValue {
             (Cow::Borrowed(value.css.as_str()), value.is_attr_tainted())
         };
         let mut input = cssparser::ParserInput::new(&css);
-        SpecifiedValue::compute(
+        SpecifiedValue::compute_with_property(
             &mut CSSParser::new(&mut input),
             registration,
             &value.url_data,
             context,
             AllowComputationallyDependent::Yes,
+            &format!("--{}", name),
         )
         .map(|value| value.with_attr_taint(attr_tainted))
     }

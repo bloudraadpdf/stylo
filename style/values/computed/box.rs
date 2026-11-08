@@ -160,6 +160,8 @@ pub enum UnsupportedFloatOffsetCalculation {
     Trigonometric,
     /// Deferred exponentiation or logarithm is not a float offset.
     Pow,
+    /// A random step or range still depends on the float offset percentage basis.
+    Random,
 }
 
 /// A semantics-preserving computed `float-offset`.

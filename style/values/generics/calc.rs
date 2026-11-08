@@ -8,6 +8,7 @@
 
 use crate::derives::*;
 use crate::values::generics::length::GenericAnchorSizeFunction;
+use crate::values::random::RandomKey;
 use crate::values::generics::position::{GenericAnchorFunction, GenericAnchorSide};
 use num_traits::Zero;
 use smallvec::SmallVec;
@@ -140,6 +141,45 @@ pub(crate) fn authored_number(value: f32) -> f64 {
     } else {
         bits
     }
+}
+
+/// Evaluate a numeric random function after its arguments have a shared unit.
+pub fn evaluate_random(base: f64, min: f64, max: f64, step: Option<f64>) -> f64 {
+    if base.is_nan() || min.is_nan() || max.is_nan() || step.is_some_and(f64::is_nan) {
+        return f64::NAN;
+    }
+    if min.is_infinite() {
+        return min;
+    }
+    let max = max.max(min);
+    let range = max - min;
+    if !range.is_finite() {
+        return f64::NAN;
+    }
+    if range == 0.0 {
+        return min;
+    }
+    let base = base.clamp(0.0, f64::from_bits(1.0f64.to_bits() - 1));
+    let Some(step) = step else {
+        return min + base * range;
+    };
+    if step.is_infinite() {
+        return min;
+    }
+    let multiplier = range / step;
+    if step <= 0.0 || !multiplier.is_finite() {
+        return min + base * range;
+    }
+    let epsilon = (step / 1000.0).max(f64::from_bits(1));
+    let mut count = multiplier.floor();
+    let last = min + count * step;
+    let next = min + (count + 1.0) * step;
+    if (last - max).abs() > epsilon && (next - max).abs() <= epsilon {
+        count += 1.0;
+    }
+    let index = (base * (count + 1.0)).floor().min(count);
+    let value = min + index * step;
+    if index == count && (value - max).abs() <= epsilon { max } else { value }
 }
 
 /// The strategy used in `round()`
@@ -433,6 +473,17 @@ pub enum GenericCalcNode<L> {
     Trigonometric(Box<GenericCalcNode<L>>, TrigonometricFunction),
     /// An `atan2()` function whose arguments require context.
     Atan2(Box<GenericCalcNode<L>>, Box<GenericCalcNode<L>>),
+    /// A numeric random function, retaining its base before layout resolves percentages.
+    Random {
+        /// The value-sharing key or fixed numeric base.
+        key: RandomKey<GenericRandomFixed<L>>,
+        /// The minimum calculation.
+        min: Box<GenericCalcNode<L>>,
+        /// The maximum calculation.
+        max: Box<GenericCalcNode<L>>,
+        /// The optional step calculation.
+        step: Option<Box<GenericCalcNode<L>>>,
+    },
     /// A power function with unresolved numeric arguments.
     Pow(Box<GenericCalcNode<L>>, Box<GenericCalcNode<L>>),
     /// A `sqrt()`, `exp()` or `log()` function with an unresolved numeric argument.
@@ -485,6 +536,26 @@ pub struct GenericCalcMixItem<L> {
     /// Whether the mix percentage is a math function, which normalizes only once computed.
     #[animation(constant)]
     pub percentage_is_function: bool,
+}
+
+/// A fixed random base, retaining the specified number's math-function syntax.
+#[derive(Clone, Debug, Deserialize, MallocSizeOf, PartialEq, Serialize, ToAnimatedZero, ToResolvedValue, ToShmem)]
+pub struct GenericRandomFixed<L> {
+    /// The dimensionless base calculation.
+    pub value: Box<GenericCalcNode<L>>,
+    /// Whether the number was specified as a math function.
+    #[animation(constant)]
+    pub is_function: bool,
+}
+
+impl<L: CalcNodeLeaf> ToCss for GenericRandomFixed<L> {
+    fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        if self.is_function {
+            self.value.to_css(dest)
+        } else {
+            self.value.to_css_as_argument(dest)
+        }
+    }
 }
 
 /// Normalizes mix percentages, as fractions, filling in the omitted ones.
@@ -1011,6 +1082,18 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 }
                 dividend_unit | divisor_unit
             },
+            CalcNode::Random { key, min, max, step } => {
+                if let RandomKey::Fixed(fixed) = key {
+                    if !fixed.value.unit()?.is_empty() { return Err(()); }
+                }
+                let mut unit = min.unit()?;
+                for child in std::iter::once(max.as_ref()).chain(step.as_deref()) {
+                    let child_unit = child.unit()?;
+                    if !unit.can_sum_with(child_unit) { return Err(()); }
+                    unit |= child_unit;
+                }
+                unit
+            },
             CalcNode::Sign(ref child) => {
                 // sign() always resolves to a number, but we still need to make sure that the
                 // child units make sense.
@@ -1195,7 +1278,7 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
             CalcNode::Sign(ref mut child) => {
                 child.negate();
             },
-            CalcNode::Trigonometric(..) | CalcNode::Atan2(..) => wrap_self_in_negate(self),
+            CalcNode::Random { .. } | CalcNode::Trigonometric(..) | CalcNode::Atan2(..) => wrap_self_in_negate(self),
             CalcNode::Pow(..) | CalcNode::Exponential { .. } | CalcNode::Mix(..) => {
                 wrap_self_in_negate(self)
             },
@@ -1324,6 +1407,11 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                     map_internal(base, op)?;
                     map_internal(exponent, op)
                 },
+                CalcNode::Random { min, max, step, .. } => {
+                    map_internal(min, op)?;
+                    map_internal(max, op)?;
+                    step.as_mut().map_or(Ok(()), |step| map_internal(step, op))
+                },
                 CalcNode::Exponential { value, base, .. } => {
                     map_internal(value, op)?;
                     base.as_mut().map_or(Ok(()), |base| map_internal(base, op))
@@ -1437,6 +1525,18 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 Box::new(y.map_leaves_internal(map)),
                 Box::new(x.map_leaves_internal(map)),
             ),
+            Self::Random { ref key, ref min, ref max, ref step } => CalcNode::Random {
+                key: match key {
+                    RandomKey::Cache(cache) => RandomKey::Cache(cache.clone()),
+                    RandomKey::Fixed(fixed) => RandomKey::Fixed(GenericRandomFixed {
+                        value: Box::new(fixed.value.map_leaves_internal(map)),
+                        is_function: fixed.is_function,
+                    }),
+                },
+                min: Box::new(min.map_leaves_internal(map)),
+                max: Box::new(max.map_leaves_internal(map)),
+                step: step.as_ref().map(|step| Box::new(step.map_leaves_internal(map))),
+            },
             Self::Exponential {
                 function,
                 ref value,
@@ -1857,6 +1957,24 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                     };
                 L::new_angle_radians(y.atan2(x))
             },
+            Self::Random { key, min, max, step } => {
+                let RandomKey::Fixed(fixed) = key else { return Err(()); };
+                let base = fixed.value.resolve_internal(leaf_to_output_fn)?.as_number().ok_or(())?;
+                let min = min.resolve_internal(leaf_to_output_fn)?;
+                let max = max.resolve_internal(leaf_to_output_fn)?;
+                let step = step.as_ref().map(|s| s.resolve_internal(leaf_to_output_fn)).transpose()?;
+                let scalar = |leaf: &L| leaf.canonical().ok_or(());
+                let (min_value, unit) = scalar(&min)?;
+                let (max_value, max_unit) = scalar(&max)?;
+                if unit != max_unit { return Err(()); }
+                let step = step.as_ref().map(|step| {
+                    let (value, step_unit) = scalar(step)?;
+                    if step_unit != unit { return Err(()); }
+                    Ok(authored_number(value))
+                }).transpose()?;
+                let value = evaluate_random(authored_number(base), authored_number(min_value), authored_number(max_value), step) as f32;
+                L::from_canonical(value, unit).ok_or(())
+            },
             Self::Pow(ref base, ref exponent) => {
                 let base = base
                     .resolve_internal(leaf_to_output_fn)?
@@ -1975,6 +2093,12 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
             Self::Pow(base, exponent) | Self::Atan2(base, exponent) => {
                 base.map_node_internal(mapping_fn)?;
                 exponent.map_node_internal(mapping_fn)?;
+            },
+            Self::Random { key, min, max, step } => {
+                if let RandomKey::Fixed(fixed) = key { fixed.value.map_node_internal(mapping_fn)?; }
+                min.map_node_internal(mapping_fn)?;
+                max.map_node_internal(mapping_fn)?;
+                if let Some(step) = step { step.map_node_internal(mapping_fn)?; }
             },
             Self::Exponential { value, base, .. } => {
                 value.map_node_internal(mapping_fn)?;
@@ -2118,6 +2242,12 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
             | Self::Atan2(ref mut base, ref mut exponent) => {
                 base.visit_depth_first_internal(f);
                 exponent.visit_depth_first_internal(f);
+            },
+            Self::Random { ref mut key, ref mut min, ref mut max, ref mut step } => {
+                if let RandomKey::Fixed(fixed) = key { fixed.value.visit_depth_first_internal(f); }
+                min.visit_depth_first_internal(f);
+                max.visit_depth_first_internal(f);
+                if let Some(step) = step { step.visit_depth_first_internal(f); }
             },
             Self::Exponential {
                 ref mut value,
@@ -2631,6 +2761,11 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
             Self::Leaf(ref mut l) => {
                 l.simplify();
             },
+            Self::Random { .. } => {
+                if self.unit().is_ok_and(|unit| !unit.contains(CalcUnits::PERCENTAGE)) {
+                    if let Ok(leaf) = self.resolve() { *self = Self::Leaf(leaf); }
+                }
+            },
             Self::Trigonometric(..)
             | Self::Atan2(..)
             | Self::Pow(..)
@@ -2857,6 +2992,10 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 })?;
                 true
             },
+            Self::Random { .. } => {
+                dest.write_str("random(")?;
+                true
+            },
             Self::Pow(..) => {
                 dest.write_str("pow(")?;
                 true
@@ -3036,6 +3175,17 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 dest.write_str(", ")?;
                 exponent.to_css_impl(dest, ArgumentLevel::ArgumentRoot)?;
             },
+            Self::Random { ref key, ref min, ref max, ref step } => {
+                key.to_css(dest)?;
+                dest.write_str(", ")?;
+                min.to_css_impl(dest, ArgumentLevel::ArgumentRoot)?;
+                dest.write_str(", ")?;
+                max.to_css_impl(dest, ArgumentLevel::ArgumentRoot)?;
+                if let Some(step) = step {
+                    dest.write_str(", ")?;
+                    step.to_css_impl(dest, ArgumentLevel::ArgumentRoot)?;
+                }
+            },
             Self::Exponential {
                 ref value,
                 ref base,
@@ -3175,5 +3325,36 @@ mod tests {
         assert!(
             !(CalcUnits::ANGLE | CalcUnits::TIME).can_sum_with(CalcUnits::ANGLE | CalcUnits::TIME)
         );
+    }
+}
+
+#[cfg(test)]
+mod random_evaluation_tests {
+    use super::evaluate_random;
+
+    #[test]
+    fn random_steps_are_uniform_buckets_with_an_epsilon_endpoint() {
+        for (base, expected) in [(0.0, 0.0), (0.333, 0.0), (0.334, 50.0), (0.666, 50.0), (0.667, 100.0), (1.0, 100.0)] {
+            assert_eq!(evaluate_random(base, 0.0, 100.0, Some(50.0)), expected);
+        }
+        assert_eq!(evaluate_random(1.0, 0.0, 100.0, Some(33.333)), 100.0);
+        assert!((evaluate_random(1.0, 0.0, 100.0, Some(33.3)) - 99.9).abs() < 1e-10);
+    }
+
+    #[test]
+    fn random_special_values_follow_css_argument_range_rules() {
+        for step in [None, Some(0.0), Some(-1.0), Some(-0.0)] {
+            assert_eq!(evaluate_random(0.5, 10.0, 30.0, step), 20.0);
+        }
+        for step in [f64::INFINITY, f64::NEG_INFINITY] {
+            assert_eq!(evaluate_random(0.5, 10.0, 30.0, Some(step)), 10.0);
+        }
+        assert_eq!(evaluate_random(0.5, 30.0, 10.0, None), 30.0);
+        assert_eq!(evaluate_random(0.5, f64::INFINITY, 10.0, None), f64::INFINITY);
+        assert_eq!(evaluate_random(0.5, f64::NEG_INFINITY, 10.0, None), f64::NEG_INFINITY);
+        assert!(evaluate_random(0.5, 10.0, f64::INFINITY, None).is_nan());
+        assert!(evaluate_random(0.5, f64::INFINITY, f64::NAN, None).is_nan());
+        assert!(evaluate_random(0.5, 10.0, 30.0, Some(f64::NAN)).is_nan());
+        assert!(evaluate_random(0.5, -0.0, -0.0, None).is_sign_negative());
     }
 }

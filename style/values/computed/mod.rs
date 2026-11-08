@@ -20,7 +20,7 @@ use crate::custom_properties::{
     CallingElement, ComputedCustomProperties, FunctionScope, document_function_scope,
 };
 use crate::derives::*;
-use crate::dom::{AttributeProvider, TElement};
+use crate::dom::{AttributeProvider, TElement, TNode};
 use crate::font_metrics::{FontMetrics, FontMetricsOrientation};
 use crate::media_queries::Device;
 #[cfg(feature = "gecko")]
@@ -472,6 +472,8 @@ pub struct Context<'a> {
     pub scope: CascadeLevel,
 
     tree_counting: TreeCounting<'a>,
+    random_element: Option<usize>,
+    random_function_scope: RefCell<Vec<crate::Atom>>,
 
     /// The element whose properties call custom functions.
     calling_element: Option<Box<dyn CallingElement<'a> + 'a>>,
@@ -509,6 +511,8 @@ impl<'a> Context<'a> {
             rule_cache_conditions: RefCell::new(&mut conditions),
             scope: CascadeLevel::same_tree_author_normal(),
             tree_counting: TreeCounting::default(),
+            random_element: None,
+            random_function_scope: RefCell::new(Vec::new()),
             calling_element: None,
             container_size_query: RefCell::new(ContainerSizeQuery::none()),
         };
@@ -556,6 +560,8 @@ impl<'a> Context<'a> {
             tree_counting: TreeCounting::new(move || {
                 tree_counting::tree_counts(container.map(|c| c.element))
             }),
+            random_element: container.map(|c| c.element.as_node().opaque().0),
+            random_function_scope: RefCell::new(Vec::new()),
             calling_element: None,
             container_size_query: RefCell::new(container_size_query),
         };
@@ -584,6 +590,8 @@ impl<'a> Context<'a> {
             rule_cache_conditions: RefCell::new(rule_cache_conditions),
             scope: CascadeLevel::same_tree_author_normal(),
             tree_counting: TreeCounting::default(),
+            random_element: None,
+            random_function_scope: RefCell::new(Vec::new()),
             calling_element: None,
             container_size_query: RefCell::new(container_size_query),
         }
@@ -611,6 +619,8 @@ impl<'a> Context<'a> {
             rule_cache_conditions: RefCell::new(rule_cache_conditions),
             scope: CascadeLevel::same_tree_author_normal(),
             tree_counting: TreeCounting::default(),
+            random_element: None,
+            random_function_scope: RefCell::new(Vec::new()),
             calling_element: None,
             container_size_query: RefCell::new(container_size_query),
         }
@@ -638,6 +648,8 @@ impl<'a> Context<'a> {
             rule_cache_conditions: RefCell::new(rule_cache_conditions),
             scope: CascadeLevel::same_tree_author_normal(),
             tree_counting: TreeCounting::default(),
+            random_element: None,
+            random_function_scope: RefCell::new(Vec::new()),
             calling_element: None,
             container_size_query: RefCell::new(ContainerSizeQuery::none()),
         }
@@ -645,7 +657,28 @@ impl<'a> Context<'a> {
 
     /// Resolve `sibling-index()` and `sibling-count()` against the element children of `element`'s parent.
     pub fn set_tree_counting_element<E: crate::dom::TElement + 'a>(&mut self, element: Option<E>) {
+        self.random_element = element.map(|element| element.as_node().opaque().0);
         self.tree_counting = TreeCounting::new(move || tree_counting::tree_counts(element));
+    }
+
+    /// Resolve a simplified random key before inheritance, using the actual element and pseudo identity.
+    pub fn resolve_random_base(&self, key: &crate::values::random::RandomCacheKey) -> f64 {
+        self.resolve_random_base_for_function(key, &self.random_function_scope.borrow())
+    }
+
+    /// Temporarily bind the hypothetical element of a typed custom-function evaluation.
+    pub fn replace_random_function_scope(&self, scope: Vec<crate::Atom>) -> Vec<crate::Atom> {
+        self.random_function_scope.replace(scope)
+    }
+
+    /// Resolve a key for an explicit custom-function invocation path.
+    pub fn resolve_random_base_for_function(&self, key: &crate::values::random::RandomCacheKey, scope: &[crate::Atom]) -> f64 {
+        if key.element_scoped {
+            self.builder.add_flags(ComputedValueFlags::DEPENDS_ON_ELEMENT_CONTEXT);
+            self.rule_cache_conditions.borrow_mut().set_uncacheable();
+        }
+        let pseudo = self.builder.pseudo.map(|pseudo| crate::Atom::from(cssparser::ToCss::to_css_string(pseudo)));
+        self.device().random_state().resolve_in_scope(key, self.random_element.unwrap_or(0), pseudo, scope)
     }
 
     /// Evaluate custom function calls for `element`.

@@ -850,7 +850,7 @@ impl ColorFunction<SpecifiedColor> {
 
 impl<Color> ColorFunction<Color> {
     /// Replace element-dependent tree counts before parse-time channel validation.
-    pub fn with_siblings_as_one(&self) -> Self
+    pub fn with_contextual_values_for_validation(&self) -> Self
     where
         Color: Clone,
     {
@@ -858,10 +858,10 @@ impl<Color> ColorFunction<Color> {
             ($variant:ident, $origin:expr, $c0:expr, $c1:expr, $c2:expr, $alpha:expr) => {
                 Self::$variant(
                     $origin.clone(),
-                    $c0.with_siblings_as_one(),
-                    $c1.with_siblings_as_one(),
-                    $c2.with_siblings_as_one(),
-                    $alpha.with_siblings_as_one(),
+                    $c0.with_contextual_values_for_validation(),
+                    $c1.with_contextual_values_for_validation(),
+                    $c2.with_contextual_values_for_validation(),
+                    $alpha.with_contextual_values_for_validation(),
                 )
             };
         }
@@ -875,10 +875,10 @@ impl<Color> ColorFunction<Color> {
             Self::Oklch(origin, c0, c1, c2, alpha) => map!(Oklch, origin, c0, c1, c2, alpha),
             Self::Color(origin, c0, c1, c2, alpha, space) => Self::Color(
                 origin.clone(),
-                c0.with_siblings_as_one(),
-                c1.with_siblings_as_one(),
-                c2.with_siblings_as_one(),
-                alpha.with_siblings_as_one(),
+                c0.with_contextual_values_for_validation(),
+                c1.with_contextual_values_for_validation(),
+                c2.with_contextual_values_for_validation(),
+                alpha.with_contextual_values_for_validation(),
                 *space,
             ),
             _ => self.clone(),
