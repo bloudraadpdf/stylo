@@ -10,6 +10,7 @@ pub(super) fn tree_counts<E: TElement>(element: Option<E>) -> (usize, usize) {
     let Some(element) = element else {
         return (0, 0);
     };
+    element.apply_selector_flags(selectors::matching::ElementSelectorFlags::HAS_SLOW_SELECTOR);
     let node = element.as_node();
     match node.parent_node() {
         Some(parent) => {

@@ -7,16 +7,16 @@
 //! <https://drafts.csswg.org/css-values-5/#interp-calc-size>
 
 use crate::values::animated::{Animate, Procedure};
+use crate::values::computed::LengthPercentage;
 use crate::values::computed::length::{MaxSize, NonNegativeLengthPercentage, Size};
 use crate::values::computed::length_percentage::{
-    anchor_size_calc_node, CalcLengthPercentageLeaf, CalcNode as ComputedCalcNode, ToAnchorCalcNode,
+    CalcLengthPercentageLeaf, CalcNode as ComputedCalcNode, ToAnchorCalcNode, anchor_size_calc_node,
 };
-use crate::values::computed::LengthPercentage;
 use crate::values::generics::NonNegative;
-use style_traits::values::specified::AllowedNumericType;
 use crate::values::generics::length::{GenericCalcSize, GenericCalcSizeBasis};
 use crate::values::specified::calc::{CalcNode, CalcSizeCalculation, Leaf};
 use crate::values::specified::length::{AbsoluteLength, NoCalcLength};
+use style_traits::values::specified::AllowedNumericType;
 
 /// A computed `calc-size()` value.
 pub type CalcSize = GenericCalcSize<CalcSizeCalculation>;
@@ -26,9 +26,20 @@ pub type CalcSizeBasis = GenericCalcSizeBasis<CalcSizeCalculation>;
 
 fn calculation(lp: &NonNegativeLengthPercentage) -> CalcSizeCalculation {
     CalcSizeCalculation::new(lp.0.to_calc_node().map_leaves(|leaf| match *leaf {
-        CalcLengthPercentageLeaf::Length(l) => Leaf::Length(NoCalcLength::Absolute(AbsoluteLength::Px(l.px()))),
+        CalcLengthPercentageLeaf::Length(l) => {
+            Leaf::Length(NoCalcLength::Absolute(AbsoluteLength::Px(l.px())))
+        },
         CalcLengthPercentageLeaf::Percentage(p) => Leaf::Percentage(p.0),
         CalcLengthPercentageLeaf::Number(n) => Leaf::Number(n),
+        CalcLengthPercentageLeaf::Deg(n) => {
+            Leaf::Angle(crate::values::specified::angle::AngleDimension::Deg(n))
+        },
+        CalcLengthPercentageLeaf::S(n) => Leaf::Time(
+            crate::values::specified::time::TimeDimension::from_seconds(n),
+        ),
+        CalcLengthPercentageLeaf::Dppx(n) => Leaf::Resolution(
+            crate::values::specified::resolution::ResolutionDimension::from_dppx(n),
+        ),
     }))
 }
 
@@ -82,7 +93,12 @@ impl CalcSize {
 impl Animate for CalcSize {
     fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
         if self.basis == other.basis {
-            return Ok(mix(&self.basis, &self.calculation, &other.calculation, procedure));
+            return Ok(mix(
+                &self.basis,
+                &self.calculation,
+                &other.calculation,
+                procedure,
+            ));
         }
         let (from, to) = (self.prepared().ok_or(())?, other.prepared().ok_or(())?);
         let basis = match (&from.basis, &to.basis) {

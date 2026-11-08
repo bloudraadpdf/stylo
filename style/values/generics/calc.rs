@@ -208,7 +208,15 @@ impl ExponentialFunction {
         match (self, base) {
             (Self::Sqrt, _) => value.sqrt(),
             (Self::Exp, _) => value.exp(),
-            (Self::Log, Some(base)) => value.log(base),
+            (Self::Log, Some(base)) => {
+                if value.is_nan() || base.is_nan() || base <= 0.0 || base == 1.0 {
+                    f32::NAN
+                } else if value == 1.0 {
+                    0.0
+                } else {
+                    value.log(base)
+                }
+            },
             (Self::Log, None) => value.ln(),
         }
     }
@@ -401,6 +409,8 @@ pub enum GenericCalcNode<L> {
     Sign(Box<GenericCalcNode<L>>),
     /// A trigonometric function with an unresolved argument.
     Trigonometric(Box<GenericCalcNode<L>>, TrigonometricFunction),
+    /// An `atan2()` function whose arguments require context.
+    Atan2(Box<GenericCalcNode<L>>, Box<GenericCalcNode<L>>),
     /// A power function with unresolved numeric arguments.
     Pow(Box<GenericCalcNode<L>>, Box<GenericCalcNode<L>>),
     /// A `sqrt()`, `exp()` or `log()` function with an unresolved numeric argument.
@@ -628,7 +638,7 @@ fn resolve_product<L: CalcNodeLeaf>(factors: &[(L, bool)]) -> Result<L, ()> {
             (Some(number), true) => scale /= number,
             (None, false) if dimension.is_none() => dimension = Some(leaf),
             (None, _) => {
-                return canonical_product(factors.iter().map(|(leaf, inverted)| (leaf, *inverted)))
+                return canonical_product(factors.iter().map(|(leaf, inverted)| (leaf, *inverted)));
             },
         }
     }
@@ -804,6 +814,9 @@ pub trait CalcNodeLeaf: Clone + Sized + PartialEq + ToCss + ToTyped {
 
     /// Create a new leaf containing the sign() result of the given leaf.
     fn sign_from(leaf: &impl CalcNodeLeaf) -> Result<Self, ()> {
+        if leaf.unit() != CalcUnits::PERCENTAGE && leaf.canonical().is_none() {
+            return Err(());
+        }
         let Some(value) = leaf.unitless_value() else {
             return Err(());
         };
@@ -968,6 +981,12 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                     _ => return Err(()),
                 }
             },
+            CalcNode::Atan2(ref y, ref x) => {
+                if !y.unit()?.can_sum_with(x.unit()?) {
+                    return Err(());
+                }
+                CalcUnits::ANGLE
+            },
             CalcNode::Pow(ref base, ref exponent) => {
                 let numeric =
                     |unit: CalcUnits| unit.is_empty() || unit == CalcUnits::COLOR_COMPONENT;
@@ -1111,18 +1130,14 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 dividend.negate();
                 divisor.negate();
             },
-            CalcNode::Hypot(ref mut children) => {
-                for child in children.iter_mut() {
-                    child.negate();
-                }
-            },
+            CalcNode::Hypot(_) => wrap_self_in_negate(self),
             CalcNode::Abs(_) => {
                 wrap_self_in_negate(self);
             },
             CalcNode::Sign(ref mut child) => {
                 child.negate();
             },
-            CalcNode::Trigonometric(..) => wrap_self_in_negate(self),
+            CalcNode::Trigonometric(..) | CalcNode::Atan2(..) => wrap_self_in_negate(self),
             CalcNode::Pow(..) | CalcNode::Exponential { .. } | CalcNode::Mix(..) => {
                 wrap_self_in_negate(self)
             },
@@ -1247,7 +1262,7 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 CalcNode::Abs(child)
                 | CalcNode::Sign(child)
                 | CalcNode::Trigonometric(child, _) => map_internal(child, op),
-                CalcNode::Pow(base, exponent) => {
+                CalcNode::Pow(base, exponent) | CalcNode::Atan2(base, exponent) => {
                     map_internal(base, op)?;
                     map_internal(exponent, op)
                 },
@@ -1359,6 +1374,10 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
             Self::Pow(ref base, ref exponent) => CalcNode::Pow(
                 Box::new(base.map_leaves_internal(map)),
                 Box::new(exponent.map_leaves_internal(map)),
+            ),
+            Self::Atan2(ref y, ref x) => CalcNode::Atan2(
+                Box::new(y.map_leaves_internal(map)),
+                Box::new(x.map_leaves_internal(map)),
             ),
             Self::Exponential {
                 function,
@@ -1554,7 +1573,7 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                     // TODO(emilio): Seems like at least a few of these
                     // special-cases could be removed if we do the math in a
                     // particular order.
-                    if step.is_zero() {
+                    if step.is_zero() || step.is_nan() {
                         return f32::NAN;
                     }
 
@@ -1698,6 +1717,22 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                     },
                 }
             },
+            Self::Atan2(ref y, ref x) => {
+                let y = y.resolve_internal(leaf_to_output_fn)?;
+                let x = x.resolve_internal(leaf_to_output_fn)?;
+                let (y, x) =
+                    if y.unit() == CalcUnits::PERCENTAGE && x.unit() == CalcUnits::PERCENTAGE {
+                        (y.unitless_value().ok_or(())?, x.unitless_value().ok_or(())?)
+                    } else {
+                        let (y, y_unit) = y.canonical().ok_or(())?;
+                        let (x, x_unit) = x.canonical().ok_or(())?;
+                        if y_unit != x_unit {
+                            return Err(());
+                        }
+                        (y, x)
+                    };
+                L::new_angle_radians(y.atan2(x))
+            },
             Self::Pow(ref base, ref exponent) => {
                 let base = base
                     .resolve_internal(leaf_to_output_fn)?
@@ -1707,7 +1742,16 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                     .resolve_internal(leaf_to_output_fn)?
                     .as_number()
                     .ok_or(())?;
-                Ok(L::new_number(base.powf(exponent)))
+                Ok(L::new_number(
+                    if base.is_nan()
+                        || exponent.is_nan()
+                        || (base.abs() == 1.0 && exponent.is_infinite())
+                    {
+                        f32::NAN
+                    } else {
+                        base.powf(exponent)
+                    },
+                ))
             },
             Self::Exponential {
                 function,
@@ -1804,7 +1848,7 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
             | Self::Trigonometric(child, _) => {
                 child.map_node_internal(mapping_fn)?;
             },
-            Self::Pow(base, exponent) => {
+            Self::Pow(base, exponent) | Self::Atan2(base, exponent) => {
                 base.map_node_internal(mapping_fn)?;
                 exponent.map_node_internal(mapping_fn)?;
             },
@@ -1946,7 +1990,8 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
             | Self::Trigonometric(ref mut value, _) => {
                 value.visit_depth_first_internal(f);
             },
-            Self::Pow(ref mut base, ref mut exponent) => {
+            Self::Pow(ref mut base, ref mut exponent)
+            | Self::Atan2(ref mut base, ref mut exponent) => {
                 base.visit_depth_first_internal(f);
                 exponent.visit_depth_first_internal(f);
             },
@@ -2050,7 +2095,7 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 ref mut value,
                 ref mut step,
             } => {
-                if value_or_stop!(step.is_zero_leaf()) {
+                if value_or_stop!(step.is_nan_leaf()) || value_or_stop!(step.is_zero_leaf()) {
                     value_or_stop!(value.coerce_to_value(f32::NAN));
                     replace_self_with!(&mut **value);
                     return;
@@ -2072,7 +2117,12 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 if value_or_stop!(step.is_infinite_leaf()) {
                     match strategy {
                         RoundingStrategy::Nearest | RoundingStrategy::ToZero => {
-                            value_or_stop!(value.coerce_to_value(0.0));
+                            let zero = if value_or_stop!(value.is_negative_leaf()) {
+                                -0.0
+                            } else {
+                                0.0
+                            };
+                            value_or_stop!(value.coerce_to_value(zero));
                             replace_self_with!(&mut **value);
                             return;
                         },
@@ -2089,7 +2139,7 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                                 replace_self_with!(&mut **value);
                                 return;
                             } else {
-                                value_or_stop!(value.coerce_to_value(0.0));
+                                value_or_stop!(value.coerce_to_value(-0.0));
                                 replace_self_with!(&mut **value);
                                 return;
                             }
@@ -2098,7 +2148,7 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                             if value_or_stop!(value.is_negative_leaf())
                                 && !value_or_stop!(value.is_zero_leaf())
                             {
-                                value_or_stop!(value.coerce_to_value(f32::INFINITY));
+                                value_or_stop!(value.coerce_to_value(f32::NEG_INFINITY));
                                 replace_self_with!(&mut **value);
                                 return;
                             } else if value_or_stop!(value.is_negative_leaf())
@@ -2437,8 +2487,10 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
             Self::Leaf(ref mut l) => {
                 l.simplify();
             },
-            Self::Trigonometric(..) => {},
-            Self::Pow(..) | Self::Exponential { .. } => {
+            Self::Trigonometric(..)
+            | Self::Atan2(..)
+            | Self::Pow(..)
+            | Self::Exponential { .. } => {
                 // The arguments are numbers, so the function resolves once they do.
                 if let Ok(leaf) = self.resolve() {
                     *self = Self::Leaf(leaf);
@@ -2665,6 +2717,10 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 dest.write_str("pow(")?;
                 true
             },
+            Self::Atan2(..) => {
+                dest.write_str("atan2(")?;
+                true
+            },
             Self::Exponential { function, .. } => {
                 dest.write_str(function.name())?;
                 true
@@ -2831,7 +2887,7 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
             Self::Abs(ref v) | Self::Sign(ref v) | Self::Trigonometric(ref v, _) => {
                 v.to_css_impl(dest, ArgumentLevel::ArgumentRoot)?
             },
-            Self::Pow(ref base, ref exponent) => {
+            Self::Pow(ref base, ref exponent) | Self::Atan2(ref base, ref exponent) => {
                 base.to_css_impl(dest, ArgumentLevel::ArgumentRoot)?;
                 dest.write_str(", ")?;
                 exponent.to_css_impl(dest, ArgumentLevel::ArgumentRoot)?;
@@ -2865,7 +2921,9 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 }
             },
             Self::Leaf(ref l) => l.to_css(dest)?,
-            Self::Anchor(ref f) => f.to_css_with_fallback(dest, |f, dest| f.to_css_as_fallback(dest))?,
+            Self::Anchor(ref f) => {
+                f.to_css_with_fallback(dest, |f, dest| f.to_css_as_fallback(dest))?
+            },
             Self::AnchorSize(ref f) => {
                 f.to_css_with_fallback(dest, |f, dest| f.to_css_as_fallback(dest))?
             },

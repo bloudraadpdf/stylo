@@ -24,7 +24,7 @@
 //! The assertions in the constructor methods ensure that the tag getter matches
 //! our expectations.
 
-use super::{position::AnchorSide, Context, Length, Percentage, ToComputedValue};
+use super::{Context, Length, Percentage, ToComputedValue, position::AnchorSide};
 use crate::derives::*;
 #[cfg(feature = "gecko")]
 use crate::gecko_bindings::structs::{AnchorPosOffsetResolutionParams, GeckoFontMetrics};
@@ -38,10 +38,10 @@ use crate::values::generics::calc::{CalcUnits, PositivePercentageBasis};
 #[cfg(feature = "gecko")]
 use crate::values::generics::length::AnchorResolutionResult;
 use crate::values::generics::position::GenericAnchorSide;
-use crate::values::generics::{calc, ClampToNonNegative, NonNegative};
+use crate::values::generics::{ClampToNonNegative, NonNegative, calc};
 use crate::values::resolved::{Context as ResolvedContext, ToResolvedValue};
 use crate::values::specified::length::{FontBaseSize, LineHeightBase};
-use crate::values::{specified, CSSFloat};
+use crate::values::{CSSFloat, specified};
 use crate::{Zero, ZeroNoPercent};
 use app_units::Au;
 use debug_unreachable::debug_unreachable;
@@ -358,6 +358,13 @@ impl LengthPercentage {
                             "The final result of a <length-percentage> should never be a number"
                         );
                         Self::new_length(Length::new(number))
+                    },
+                    CalcLengthPercentageLeaf::Deg(_)
+                    | CalcLengthPercentageLeaf::S(_)
+                    | CalcLengthPercentageLeaf::Dppx(_) => {
+                        unreachable!(
+                            "a length-percentage calculation must have a length or percentage result"
+                        )
                     },
                 };
             },
@@ -749,6 +756,12 @@ pub enum CalcLengthPercentageLeaf {
     Length(Length),
     Percentage(Percentage),
     Number(f32),
+    #[css(dimension)]
+    Deg(f32),
+    #[css(dimension)]
+    S(f32),
+    #[css(dimension)]
+    Dppx(f32),
 }
 
 impl calc::CalcNodeLeaf for CalcLengthPercentageLeaf {
@@ -757,6 +770,9 @@ impl calc::CalcNodeLeaf for CalcLengthPercentageLeaf {
             Self::Length(_) => CalcUnits::LENGTH,
             Self::Percentage(_) => CalcUnits::PERCENTAGE,
             Self::Number(_) => CalcUnits::empty(),
+            Self::Deg(_) => CalcUnits::ANGLE,
+            Self::S(_) => CalcUnits::TIME,
+            Self::Dppx(_) => CalcUnits::RESOLUTION,
         }
     }
 
@@ -764,7 +780,7 @@ impl calc::CalcNodeLeaf for CalcLengthPercentageLeaf {
         Some(match *self {
             Self::Length(ref l) => l.px(),
             Self::Percentage(ref p) => p.0,
-            Self::Number(n) => n,
+            Self::Number(n) | Self::Deg(n) | Self::S(n) | Self::Dppx(n) => n,
         })
     }
 
@@ -772,9 +788,22 @@ impl calc::CalcNodeLeaf for CalcLengthPercentageLeaf {
         Self::Number(value)
     }
 
+    fn new_angle_radians(value: f32) -> Result<Self, ()> {
+        Ok(Self::Deg(value.to_degrees()))
+    }
+
+    fn as_angle_radians(&self) -> Option<f32> {
+        match *self {
+            Self::Deg(value) => Some(value.to_radians()),
+            _ => None,
+        }
+    }
+
     fn as_number(&self) -> Option<f32> {
         match *self {
-            Self::Length(_) | Self::Percentage(_) => None,
+            Self::Length(_) | Self::Percentage(_) | Self::Deg(_) | Self::S(_) | Self::Dppx(_) => {
+                None
+            },
             Self::Number(value) => Some(value),
         }
     }
@@ -807,9 +836,12 @@ impl calc::CalcNodeLeaf for CalcLengthPercentageLeaf {
             (&Length(ref one), &Length(ref other)) => one.partial_cmp(other),
             (&Percentage(ref one), &Percentage(ref other)) => one.partial_cmp(other),
             (&Number(ref one), &Number(ref other)) => one.partial_cmp(other),
+            (&Deg(ref one), &Deg(ref other))
+            | (&S(ref one), &S(ref other))
+            | (&Dppx(ref one), &Dppx(ref other)) => one.partial_cmp(other),
             _ => unsafe {
                 match *self {
-                    Length(..) | Percentage(..) | Number(..) => {},
+                    Length(..) | Percentage(..) | Number(..) | Deg(..) | S(..) | Dppx(..) => {},
                 }
                 debug_unreachable!("Forgot to handle unit in compare()")
             },
@@ -827,6 +859,9 @@ impl calc::CalcNodeLeaf for CalcLengthPercentageLeaf {
                 one.0 += other.0;
             },
             (Number(one), Number(other)) => {
+                *one += *other;
+            },
+            (Deg(one), Deg(other)) | (S(one), S(other)) | (Dppx(one), Dppx(other)) => {
                 *one += *other;
             },
             _ => return Err(()),
@@ -877,9 +912,12 @@ impl calc::CalcNodeLeaf for CalcLengthPercentageLeaf {
                 Self::Percentage(super::Percentage(op(one.0, other.0)))
             },
             (&Number(one), &Number(other)) => Self::Number(op(one, other)),
+            (&Deg(one), &Deg(other)) => Self::Deg(op(one, other)),
+            (&S(one), &S(other)) => Self::S(op(one, other)),
+            (&Dppx(one), &Dppx(other)) => Self::Dppx(op(one, other)),
             _ => unsafe {
                 match *self {
-                    Length(..) | Percentage(..) | Number(..) => {},
+                    Length(..) | Percentage(..) | Number(..) | Deg(..) | S(..) | Dppx(..) => {},
                 }
                 debug_unreachable!("Forgot to handle unit in try_op()")
             },
@@ -898,7 +936,7 @@ impl calc::CalcNodeLeaf for CalcLengthPercentageLeaf {
             Self::Percentage(value) => {
                 *value = Percentage(op(value.0));
             },
-            Self::Number(value) => {
+            Self::Number(value) | Self::Deg(value) | Self::S(value) | Self::Dppx(value) => {
                 *value = op(*value);
             },
         })
@@ -911,6 +949,9 @@ impl calc::CalcNodeLeaf for CalcLengthPercentageLeaf {
             Self::Length(length) => Some((length.px(), CalcUnits::LENGTH)),
             Self::Percentage(..) => None,
             Self::Number(value) => Some((value, CalcUnits::empty())),
+            Self::Deg(value) => Some((value, CalcUnits::ANGLE)),
+            Self::S(value) => Some((value, CalcUnits::TIME)),
+            Self::Dppx(value) => Some((value, CalcUnits::RESOLUTION)),
         }
     }
 
@@ -921,6 +962,9 @@ impl calc::CalcNodeLeaf for CalcLengthPercentageLeaf {
     fn from_canonical(value: f32, unit: CalcUnits) -> Option<Self> {
         match unit {
             CalcUnits::LENGTH => Some(Self::Length(Length::new(value))),
+            CalcUnits::ANGLE => Some(Self::Deg(value)),
+            CalcUnits::TIME => Some(Self::S(value)),
+            CalcUnits::RESOLUTION => Some(Self::Dppx(value)),
             unit if unit.is_empty() => Some(Self::Number(value)),
             _ => None,
         }
@@ -931,6 +975,9 @@ impl calc::CalcNodeLeaf for CalcLengthPercentageLeaf {
             Self::Length(..) => calc::SortKey::Px,
             Self::Percentage(..) => calc::SortKey::Percentage,
             Self::Number(..) => calc::SortKey::Number,
+            Self::Deg(..) => calc::SortKey::Deg,
+            Self::S(..) => calc::SortKey::S,
+            Self::Dppx(..) => calc::SortKey::Dppx,
         }
     }
 }
@@ -1037,7 +1084,11 @@ fn fold_float_offset_calc_node<F: crate::values::computed::box_::FloatOffsetCalc
             let value = fold_float_offset_calc_node(value, fold)?;
             Ok(fold.sign(value))
         },
-        GenericCalcNode::Trigonometric(_, _) => {
+        GenericCalcNode::Trigonometric(_, _)
+        | GenericCalcNode::Atan2(_, _)
+        | GenericCalcNode::Leaf(CalcLengthPercentageLeaf::Deg(_))
+        | GenericCalcNode::Leaf(CalcLengthPercentageLeaf::S(_))
+        | GenericCalcNode::Leaf(CalcLengthPercentageLeaf::Dppx(_)) => {
             Err(crate::values::computed::box_::UnsupportedFloatOffsetCalculation::Trigonometric)
         },
         GenericCalcNode::Pow(_, _)
@@ -1152,7 +1203,9 @@ impl CalcLengthPercentage {
         {
             Length::new(self.clamping_mode.clamp(px.px())).normalized()
         } else {
-            unreachable!("resolve_map should turn percentages to lengths, and parsing should ensure that we don't end up with a number");
+            unreachable!(
+                "resolve_map should turn percentages to lengths, and parsing should ensure that we don't end up with a number"
+            );
         }
     }
 
@@ -1166,7 +1219,7 @@ impl CalcLengthPercentage {
         params: &AnchorPosOffsetResolutionParams,
     ) -> Result<(CalcNode, AllowedNumericType), ()> {
         use crate::values::{
-            computed::{length::resolve_anchor_size, AnchorFunction},
+            computed::{AnchorFunction, length::resolve_anchor_size},
             generics::{length::GenericAnchorSizeFunction, position::GenericAnchorFunction},
         };
 
@@ -1298,7 +1351,7 @@ impl specified::CalcLengthPercentage {
     fn to_computed_float_offset_value(&self, context: &Context) -> LengthPercentage {
         use crate::values::specified::calc::Leaf;
 
-        let node = self
+        let mut node = self
             .node
             .resolve_tree_counting(context)
             .map_leaves(|leaf| match *leaf {
@@ -1314,14 +1367,15 @@ impl specified::CalcLengthPercentage {
                 Leaf::Number(value) => CalcLengthPercentageLeaf::Number(value),
                 Leaf::SiblingIndex => CalcLengthPercentageLeaf::Number(context.sibling_index()),
                 Leaf::SiblingCount => CalcLengthPercentageLeaf::Number(context.sibling_count()),
-                Leaf::Angle(..)
-                | Leaf::Time(..)
-                | Leaf::Resolution(..)
-                | Leaf::ColorComponent(..) => {
+                Leaf::Angle(value) => CalcLengthPercentageLeaf::Deg(value.degrees()),
+                Leaf::Time(value) => CalcLengthPercentageLeaf::S(value.seconds()),
+                Leaf::Resolution(value) => CalcLengthPercentageLeaf::Dppx(value.dppx()),
+                Leaf::ColorComponent(..) => {
                     unreachable!("float-offset grammar accepts only length-percentage calculations")
                 },
             });
 
+        node.simplify_and_sort();
         LengthPercentage::new_calc_unchecked(Box::new(CalcLengthPercentage {
             clamping_mode: self.clamping_mode,
             node,
@@ -1358,10 +1412,10 @@ impl specified::CalcLengthPercentage {
                 Leaf::Number(n) => CalcLengthPercentageLeaf::Number(n),
                 Leaf::SiblingIndex => CalcLengthPercentageLeaf::Number(context.sibling_index()),
                 Leaf::SiblingCount => CalcLengthPercentageLeaf::Number(context.sibling_count()),
-                Leaf::Angle(..)
-                | Leaf::Time(..)
-                | Leaf::Resolution(..)
-                | Leaf::ColorComponent(..) => {
+                Leaf::Angle(value) => CalcLengthPercentageLeaf::Deg(value.degrees()),
+                Leaf::Time(value) => CalcLengthPercentageLeaf::S(value.seconds()),
+                Leaf::Resolution(value) => CalcLengthPercentageLeaf::Dppx(value.dppx()),
+                Leaf::ColorComponent(..) => {
                     unreachable!("Shouldn't have parsed")
                 },
             });
@@ -1444,6 +1498,15 @@ impl specified::CalcLengthPercentage {
                 },
                 CalcLengthPercentageLeaf::Percentage(ref p) => Leaf::Percentage(p.0),
                 CalcLengthPercentageLeaf::Number(n) => Leaf::Number(*n),
+                CalcLengthPercentageLeaf::Deg(n) => {
+                    Leaf::Angle(specified::angle::AngleDimension::Deg(*n))
+                },
+                CalcLengthPercentageLeaf::S(n) => {
+                    Leaf::Time(specified::time::TimeDimension::from_seconds(*n))
+                },
+                CalcLengthPercentageLeaf::Dppx(n) => {
+                    Leaf::Resolution(specified::resolution::ResolutionDimension::from_dppx(*n))
+                },
             }),
         }
     }
@@ -1552,10 +1615,14 @@ impl LengthPercentage {
             if let CalcNode::Sum(terms) = &calc.node {
                 use CalcLengthPercentageLeaf::{Length, Percentage};
                 match &**terms {
-                    [CalcNode::Leaf(Length(length)), CalcNode::Leaf(Percentage(percent))]
-                    | [CalcNode::Leaf(Percentage(percent)), CalcNode::Leaf(Length(length))]
-                        if length.px() == 0.0 =>
-                    {
+                    [
+                        CalcNode::Leaf(Length(length)),
+                        CalcNode::Leaf(Percentage(percent)),
+                    ]
+                    | [
+                        CalcNode::Leaf(Percentage(percent)),
+                        CalcNode::Leaf(Length(length)),
+                    ] if length.px() == 0.0 => {
                         return Self::new_percent(crate::values::computed::Percentage(
                             calc.clamping_mode.clamp(percent.0),
                         ));

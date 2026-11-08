@@ -77,7 +77,7 @@ enum LegacyRange {
 
 /// The operator that was specified in this feature.
 #[derive(Clone, Copy, Debug, Eq, MallocSizeOf, PartialEq, ToShmem)]
-pub(crate) enum Operator {
+pub enum Operator {
     /// =
     Equal,
     /// >
@@ -482,7 +482,7 @@ impl QueryFeatureExpression {
             None => {
                 return Err(location.new_custom_error(
                     StyleParseErrorKind::MediaQueryExpectedFeatureName(ident.clone()),
-                ))
+                ));
             },
         };
 
@@ -681,16 +681,14 @@ impl QueryFeatureExpression {
         KleeneValue::from(match self.feature().evaluator {
             Evaluator::Length(eval) => {
                 let v = eval(context);
-                kind
-                    .evaluate(v, |v| expect!(Length, v).to_computed_value(context))
+                kind.evaluate(v, |v| expect!(Length, v).to_computed_value(context))
             },
             Evaluator::OptionalLength(eval) => {
                 let v = match eval(context) {
                     Some(v) => v,
                     None => return KleeneValue::Unknown,
                 };
-                kind
-                    .evaluate(v, |v| expect!(Length, v).to_computed_value(context))
+                kind.evaluate(v, |v| expect!(Length, v).to_computed_value(context))
             },
             Evaluator::Integer(eval) => {
                 let v = eval(context);
@@ -706,8 +704,11 @@ impl QueryFeatureExpression {
                 // to convert it if necessary.
                 // FIXME: we may need to update here once
                 // https://github.com/w3c/csswg-drafts/issues/4954 got resolved.
-                kind
-                    .evaluate(ratio, |v| expect!(NumberRatio, v).to_computed_value(context).used_value())
+                kind.evaluate(ratio, |v| {
+                    expect!(NumberRatio, v)
+                        .to_computed_value(context)
+                        .used_value()
+                })
             },
             Evaluator::OptionalNumberRatio(eval) => {
                 let ratio = match eval(context) {
@@ -715,8 +716,11 @@ impl QueryFeatureExpression {
                     None => return KleeneValue::Unknown,
                 };
                 // See above for subtleties here.
-                kind
-                    .evaluate(ratio, |v| expect!(NumberRatio, v).to_computed_value(context).used_value())
+                kind.evaluate(ratio, |v| {
+                    expect!(NumberRatio, v)
+                        .to_computed_value(context)
+                        .used_value()
+                })
             },
             Evaluator::Resolution(eval) => {
                 let v = eval(context).dppx();
@@ -725,13 +729,14 @@ impl QueryFeatureExpression {
                 })
             },
             Evaluator::Enumerated { evaluator, .. } => {
-                let computed = kind
-                    .non_ranged_value()
-                    .map(|v| *expect!(Enumerated, v));
+                let computed = kind.non_ranged_value().map(|v| *expect!(Enumerated, v));
                 return evaluator(context, computed);
             },
             Evaluator::Fallback(eval) => {
-                return eval(context, kind.non_ranged_value().map(|v| expect!(Fallback, v)));
+                return eval(
+                    context,
+                    kind.non_ranged_value().map(|v| expect!(Fallback, v)),
+                );
             },
             Evaluator::BoolInteger(eval) => {
                 let computed = kind

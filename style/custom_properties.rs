@@ -12,6 +12,7 @@ use crate::custom_properties_map::CustomPropertiesMap;
 use crate::derives::*;
 use crate::dom::AttributeTracker;
 use crate::media_queries::Device;
+use crate::parser::Parse;
 use crate::properties::{
     CSSWideKeyword, CustomDeclaration, CustomDeclarationValue, LonghandId, LonghandIdSet,
     PropertyDeclaration,
@@ -645,7 +646,6 @@ pub enum DeferFontRelativeCustomPropertyResolution {
 enum SubstitutionFunctionKind {
     Var,
     Env,
-    Attr,
 }
 
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem, Parse)]
@@ -659,12 +659,17 @@ enum AttributeType {
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
 enum SubstitutionFunction {
     Var(Name),
+    DynamicVar {
+        name: Option<Name>,
+        arguments: Box<[FunctionArgument]>,
+    },
+    Ident(Box<[FunctionArgument]>),
     Inherit(Box<[FunctionArgument]>),
     If(Box<[ConditionalBranch]>),
     Env(Name),
     Attr {
-        name: AttrName,
-        syntax: AttributeType,
+        arguments: Box<[FunctionArgument]>,
+        namespaces: Box<[(crate::Prefix, crate::Namespace)]>,
     },
     /// <https://drafts.csswg.org/css-mixins-1/#typedef-dashed-function>
     Function {
@@ -692,7 +697,9 @@ impl SubstitutionFunction {
     fn variable_name(&self) -> Option<&Name> {
         match self {
             Self::Var(name) => Some(name),
+            Self::DynamicVar { name, .. } => name.as_ref(),
             Self::Inherit(_)
+            | Self::Ident(_)
             | Self::If(_)
             | Self::Env(_)
             | Self::Attr { .. }
@@ -702,6 +709,14 @@ impl SubstitutionFunction {
 
     fn is_attr(&self) -> bool {
         matches!(self, Self::Attr { .. })
+    }
+
+    fn variable_name_mut(&mut self) -> Option<&mut Name> {
+        match self {
+            Self::Var(name) => Some(name),
+            Self::DynamicVar { name, .. } => name.as_mut(),
+            _ => None,
+        }
     }
 }
 
@@ -757,7 +772,7 @@ impl VariableValue {
             .map(|(name, private)| (name.clone(), private.clone()))
             .collect();
         for reference in &mut self.references.refs {
-            if let SubstitutionFunction::Var(ref mut name) = reference.function {
+            if let Some(name) = reference.function.variable_name_mut() {
                 if let Some(private) = names.get(name) {
                     *name = private.clone();
                 }
@@ -798,6 +813,10 @@ impl VariableValue {
                 (SubstitutionFunction::Var(target), SubstitutionFunction::Var(source)) => {
                     *target = source.clone()
                 },
+                (
+                    SubstitutionFunction::DynamicVar { name: target, .. },
+                    SubstitutionFunction::DynamicVar { name: source, .. },
+                ) => *target = source.clone(),
                 (
                     SubstitutionFunction::Function { name: target, .. },
                     SubstitutionFunction::Function { name: source, .. },
@@ -1152,10 +1171,17 @@ fn parse_declaration_value_block<'i, 't>(
             Token::Function(ref name)
                 if name.starts_with("--")
                     || name.eq_ignore_ascii_case("inherit")
-                    || name.eq_ignore_ascii_case("if") =>
+                    || name.eq_ignore_ascii_case("if")
+                    || name.eq_ignore_ascii_case("var")
+                    || name.eq_ignore_ascii_case("ident")
+                    || (name.eq_ignore_ascii_case("attr")
+                        && static_prefs::pref!("layout.css.attr.enabled")) =>
             {
                 let is_if = name.eq_ignore_ascii_case("if");
                 let is_inherit = name.eq_ignore_ascii_case("inherit");
+                let is_attr = name.eq_ignore_ascii_case("attr");
+                let is_var = name.eq_ignore_ascii_case("var");
+                let is_ident = name.eq_ignore_ascii_case("ident");
                 let our_ref_index = references.refs.len();
                 let start = token_start.byte_index() - input_start.byte_index();
                 references.refs.push(SubstitutionFunctionReference {
@@ -1166,6 +1192,22 @@ fn parse_declaration_value_block<'i, 't>(
                         }
                     } else if name.eq_ignore_ascii_case("inherit") {
                         SubstitutionFunction::Inherit(Box::default())
+                    } else if is_attr {
+                        SubstitutionFunction::Attr {
+                            arguments: Box::default(),
+                            namespaces: namespaces
+                                .prefixes
+                                .iter()
+                                .map(|(prefix, namespace)| (prefix.clone(), namespace.clone()))
+                                .collect(),
+                        }
+                    } else if is_var {
+                        SubstitutionFunction::DynamicVar {
+                            name: None,
+                            arguments: Box::default(),
+                        }
+                    } else if is_ident {
+                        SubstitutionFunction::Ident(Box::default())
                     } else {
                         SubstitutionFunction::If(Box::default())
                     },
@@ -1190,25 +1232,42 @@ fn parse_declaration_value_block<'i, 't>(
                         input_end_position = Some(input.position());
                         return Ok(Box::default());
                     }
-                    if is_inherit {
-                        let mut arguments = Vec::new();
-                        loop {
-                            arguments.push(input.parse_until_before(
-                                Delimiter::Comma,
-                                |input| {
-                                    parse_substitution_argument(
-                                        input,
-                                        input_start,
-                                        namespaces,
-                                        references,
-                                        missing_closing_characters,
-                                    )
-                                },
-                            )?);
-                            if input.is_exhausted() {
-                                break;
-                            }
+                    if is_ident {
+                        let argument = input.parse_until_before(Delimiter::Comma, |input| {
+                            parse_function_argument_value(
+                                input,
+                                input_start,
+                                namespaces,
+                                references,
+                                missing_closing_characters,
+                            )
+                        })?;
+                        input.expect_exhausted()?;
+                        input_end_position = Some(input.position());
+                        return Ok(vec![argument].into_boxed_slice());
+                    }
+                    if is_inherit || is_attr || is_var {
+                        let mut arguments =
+                            vec![input.parse_until_before(Delimiter::Comma, |input| {
+                                parse_component_argument(
+                                    input,
+                                    input_start,
+                                    namespaces,
+                                    references,
+                                    missing_closing_characters,
+                                    false,
+                                )
+                            })?];
+                        if !input.is_exhausted() {
                             input.expect_comma()?;
+                            arguments.push(parse_component_argument(
+                                input,
+                                input_start,
+                                namespaces,
+                                references,
+                                missing_closing_characters,
+                                true,
+                            )?);
                         }
                         input_end_position = Some(input.position());
                         return Ok(arguments.into_boxed_slice());
@@ -1226,6 +1285,22 @@ fn parse_declaration_value_block<'i, 't>(
                 if input_end_position.unwrap() == input.position() {
                     missing_closing_characters.push_str(")");
                 }
+                let static_var_name = if is_var {
+                    let argument = &parsed_arguments[0];
+                    let name = parse_property_name_css(
+                        &input.slice_from(input_start)[argument.start..argument.end],
+                    );
+                    if name.is_none()
+                        && !references.refs[our_ref_index + 1..]
+                            .iter()
+                            .any(|reference| reference.end <= argument.end)
+                    {
+                        return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+                    }
+                    name
+                } else {
+                    None
+                };
                 prev_reference_index = Some(our_ref_index);
                 let reference = &mut references.refs[our_ref_index];
                 reference.end = input.position().byte_index() - input_start.byte_index()
@@ -1241,21 +1316,30 @@ fn parse_declaration_value_block<'i, 't>(
                         *arguments = parsed_arguments;
                         references.any_var = true;
                     },
+                    SubstitutionFunction::DynamicVar {
+                        ref mut name,
+                        ref mut arguments,
+                    } => {
+                        *name = static_var_name;
+                        *arguments = parsed_arguments;
+                        references.any_var = true;
+                    },
+                    SubstitutionFunction::Ident(ref mut arguments) => {
+                        *arguments = parsed_arguments;
+                        references.any_var = true;
+                    },
+                    SubstitutionFunction::Attr {
+                        ref mut arguments, ..
+                    } => {
+                        *arguments = parsed_arguments;
+                        references.any_attr = true;
+                    },
                     SubstitutionFunction::If(_) => references.any_var = true,
                     _ => unreachable!(),
                 }
             },
             Token::Function(ref name) => {
-                let substitution_kind = match SubstitutionFunctionKind::from_ident(name).ok() {
-                    Some(SubstitutionFunctionKind::Attr) => {
-                        if static_prefs::pref!("layout.css.attr.enabled") {
-                            Some(SubstitutionFunctionKind::Attr)
-                        } else {
-                            None
-                        }
-                    },
-                    kind => kind,
-                };
+                let substitution_kind = SubstitutionFunctionKind::from_ident(name).ok();
                 if let Some(substitution_kind) = substitution_kind {
                     let our_ref_index = references.refs.len();
                     let mut input_end_position = None;
@@ -1279,10 +1363,6 @@ fn parse_declaration_value_block<'i, 't>(
                             SubstitutionFunctionKind::Env => SubstitutionFunction::Env(Atom::from(
                                 input.expect_ident()?.as_ref(),
                             )),
-                            SubstitutionFunctionKind::Attr => SubstitutionFunction::Attr {
-                                name: AttrName::parse_with_namespaces(input, namespaces)?,
-                                syntax: parse_attr_type(input),
-                            },
                         };
 
                         // We want the order of the references to match source order. So we need to reserve our slot
@@ -1351,7 +1431,6 @@ fn parse_declaration_value_block<'i, 't>(
                     match substitution_kind {
                         SubstitutionFunctionKind::Var => references.any_var = true,
                         SubstitutionFunctionKind::Env => references.any_env = true,
-                        SubstitutionFunctionKind::Attr => references.any_attr = true,
                     };
                 } else {
                     nested!(")");
@@ -1509,6 +1588,33 @@ fn parse_function_argument_value<'i, 't>(
     Ok(argument)
 }
 
+fn parse_component_argument<'i, 't>(
+    input: &mut Parser<'i, 't>,
+    input_start: SourcePosition,
+    namespaces: &Namespaces,
+    references: &mut References,
+    missing_closing_characters: &mut String,
+    allow_empty: bool,
+) -> Result<FunctionArgument, ParseError<'i>> {
+    input.skip_whitespace();
+    if allow_empty && input.is_exhausted() {
+        return parse_substitution_argument(
+            input,
+            input_start,
+            namespaces,
+            references,
+            missing_closing_characters,
+        );
+    }
+    parse_function_argument(
+        input,
+        input_start,
+        namespaces,
+        references,
+        missing_closing_characters,
+    )
+}
+
 fn parse_substitution_argument<'i, 't>(
     input: &mut Parser<'i, 't>,
     input_start: SourcePosition,
@@ -1549,30 +1655,51 @@ fn token_types(css: &str) -> (TokenSerializationType, TokenSerializationType) {
     (first, last)
 }
 
+fn parse_property_name_css(css: &str) -> Option<Name> {
+    let mut input = ParserInput::new(css);
+    Parser::new(&mut input)
+        .parse_entirely(|input| {
+            let name = input.expect_ident()?;
+            parse_name(name)
+                .map(Atom::from)
+                .map_err(|()| input.new_error_for_next_token::<()>())
+        })
+        .ok()
+}
+
 /// Parse <attr-type> = type( <syntax> ) | raw-string | number | <attr-unit>.
 /// https://drafts.csswg.org/css-values-5/#attr-notation
-fn parse_attr_type<'i, 't>(input: &mut Parser<'i, 't>) -> AttributeType {
-    input
-        .try_parse(|input| {
-            Ok(match input.next()? {
-                Token::Function(ref name) if name.eq_ignore_ascii_case("type") => {
-                    AttributeType::Type(input.parse_nested_block(Descriptor::from_css_parser)?)
-                },
-                Token::Ident(ref ident) => {
-                    if ident.eq_ignore_ascii_case("raw-string") {
-                        AttributeType::RawString
-                    } else {
-                        let unit = AttrUnit::from_ident(ident).map_err(|_| {
-                            input.new_custom_error(StyleParseErrorKind::UnspecifiedError)
-                        })?;
-                        AttributeType::Unit(unit)
-                    }
-                },
-                Token::Delim('%') => AttributeType::Unit(AttrUnit::Percentage),
-                _ => return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError)),
-            })
-        })
-        .unwrap_or(AttributeType::None)
+fn parse_attr_type<'i, 't>(input: &mut Parser<'i, 't>) -> Result<AttributeType, ParseError<'i>> {
+    if input.is_exhausted() {
+        return Ok(AttributeType::None);
+    }
+    Ok(match input.next()? {
+        Token::Function(ref name) if name.eq_ignore_ascii_case("type") => {
+            let syntax = input.parse_nested_block(Descriptor::from_css_parser)?;
+            if syntax.components.iter().any(|component| {
+                matches!(
+                    component.name(),
+                    crate::properties_and_values::syntax::ComponentName::DataType(
+                        crate::properties_and_values::syntax::data_type::DataType::Url
+                    )
+                )
+            }) {
+                return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+            }
+            AttributeType::Type(syntax)
+        },
+        Token::Ident(ref ident) => {
+            if ident.eq_ignore_ascii_case("raw-string") {
+                AttributeType::RawString
+            } else {
+                let unit = AttrUnit::from_ident(ident)
+                    .map_err(|_| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))?;
+                AttributeType::Unit(unit)
+            }
+        },
+        Token::Delim('%') => AttributeType::Unit(AttrUnit::Percentage),
+        _ => return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError)),
+    })
 }
 
 /// A struct that takes care of encapsulating the cascade process for custom properties.
@@ -2411,31 +2538,34 @@ fn substitute_all(
 
         let mut self_ref = false;
         let mut lowlink = index;
-        let mut visit_link =
-            |var: VarType, context: &mut Context, lowlink: &mut usize, self_ref: &mut bool| {
-                let next_index =
-                    match traverse(var, non_custom_references, context, attribute_tracker) {
-                        Some(index) => index,
-                        // There is nothing to do if the next variable has been
-                        // fully resolved at this point.
-                        None => {
-                            return;
-                        },
-                    };
-                let next_info = &context.var_info[next_index];
-                if next_index > index {
-                    // The next variable has a larger index than us, so it
-                    // must be inserted in the recursive call above. We want
-                    // to get its lowlink.
-                    *lowlink = cmp::min(*lowlink, next_info.lowlink);
-                } else if next_index == index {
-                    *self_ref = true;
-                } else if next_info.var.is_some() {
-                    // The next variable has a smaller order index and it is
-                    // in the stack, so we are at the same component.
-                    *lowlink = cmp::min(*lowlink, next_index);
-                }
+        let visit_link = |var: VarType,
+                          context: &mut Context,
+                          lowlink: &mut usize,
+                          self_ref: &mut bool,
+                          attribute_tracker: &mut AttributeTracker| {
+            let next_index = match traverse(var, non_custom_references, context, attribute_tracker)
+            {
+                Some(index) => index,
+                // There is nothing to do if the next variable has been
+                // fully resolved at this point.
+                None => {
+                    return;
+                },
             };
+            let next_info = &context.var_info[next_index];
+            if next_index > index {
+                // The next variable has a larger index than us, so it
+                // must be inserted in the recursive call above. We want
+                // to get its lowlink.
+                *lowlink = cmp::min(*lowlink, next_info.lowlink);
+            } else if next_index == index {
+                *self_ref = true;
+            } else if next_info.var.is_some() {
+                // The next variable has a smaller order index and it is
+                // in the stack, so we are at the same component.
+                *lowlink = cmp::min(*lowlink, next_index);
+            }
+        };
         if let Some((ref v, ref dependencies, function_references)) = value {
             debug_assert!(
                 matches!(var, VarType::Custom(_)),
@@ -2453,7 +2583,58 @@ fn substitute_all(
                     context,
                     &mut lowlink,
                     &mut self_ref,
+                    attribute_tracker,
                 );
+            }
+
+            for (offset, reference) in v.references.refs.iter().enumerate() {
+                let SubstitutionFunction::DynamicVar {
+                    name: None,
+                    arguments,
+                } = &reference.function
+                else {
+                    continue;
+                };
+                let argument = &arguments[0];
+                let name = {
+                    let mut substitutor = Substitutor::new(
+                        context.map,
+                        context.stylist,
+                        context.computed_context,
+                        EnvironmentResolutionMode::ResolveLiveEnvironment,
+                        attribute_tracker,
+                        None,
+                    );
+                    substitutor.private_names = v.private_names.clone();
+                    let mut references = v.references.refs[offset + 1..].iter().peekable();
+                    substitutor
+                        .chunk(
+                            &v.css,
+                            argument.start,
+                            argument.end,
+                            argument.first_token_type,
+                            argument.last_token_type,
+                            &v.url_data,
+                            None,
+                            &mut references,
+                        )
+                        .ok()
+                        .and_then(|name| parse_property_name_css(&name.css))
+                };
+                if let Some(name) = name {
+                    let name = v
+                        .private_names
+                        .iter()
+                        .find(|(original, _)| original == &name)
+                        .map_or(name.clone(), |(_, private)| private.clone());
+                    visit_link(
+                        VarType::Custom(name),
+                        context,
+                        &mut lowlink,
+                        &mut self_ref,
+                        attribute_tracker,
+                    );
+                }
             }
 
             // ... and the custom properties that called functions read...
@@ -2466,12 +2647,36 @@ fn substitute_all(
                     context,
                     &mut lowlink,
                     &mut self_ref,
+                    attribute_tracker,
+                );
+            }
+
+            for name in conditionals::condition_names(v) {
+                if context
+                    .index_map
+                    .get(&name)
+                    .is_some_and(|index| context.var_info[*index].var.is_some())
+                {
+                    continue;
+                }
+                visit_link(
+                    VarType::Custom(name),
+                    context,
+                    &mut lowlink,
+                    &mut self_ref,
+                    attribute_tracker,
                 );
             }
 
             // ... Then non-custom properties.
             (v.references.non_custom_references | function_references).for_each(|r| {
-                visit_link(VarType::NonCustom(r), context, &mut lowlink, &mut self_ref);
+                visit_link(
+                    VarType::NonCustom(r),
+                    context,
+                    &mut lowlink,
+                    &mut self_ref,
+                    attribute_tracker,
+                );
             });
         } else if let VarType::NonCustom(non_custom) = var {
             let entry = &non_custom_references[non_custom];
@@ -2483,6 +2688,7 @@ fn substitute_all(
                         context,
                         &mut lowlink,
                         &mut self_ref,
+                        attribute_tracker,
                     );
                 }
             }
@@ -3060,6 +3266,96 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
         };
         let substitution: Option<_> = match &reference.function {
             SubstitutionFunction::Var(name) => self.variable(frame, name),
+            SubstitutionFunction::DynamicVar { name, arguments } => {
+                let [argument, fallback @ ..] = &**arguments else {
+                    return Err(());
+                };
+                let substituted = self.chunk(
+                    css,
+                    argument.start,
+                    argument.end,
+                    argument.first_token_type,
+                    argument.last_token_type,
+                    url_data,
+                    frame,
+                    references,
+                )?;
+                let tainted = !substituted.attr_tainted.is_empty();
+                let value = name
+                    .clone()
+                    .or_else(|| parse_property_name_css(&substituted.css))
+                    .and_then(|name| self.variable(frame, &name));
+                let value = match (value, fallback.first()) {
+                    (Some(value), _) => Some(value),
+                    (None, Some(fallback)) => Some(self.chunk(
+                        css,
+                        fallback.start,
+                        fallback.end,
+                        fallback.first_token_type,
+                        fallback.last_token_type,
+                        url_data,
+                        frame,
+                        references,
+                    )?),
+                    (None, None) => None,
+                };
+                value.map(|value| if tainted { value.attr_tainted() } else { value })
+            },
+            SubstitutionFunction::Ident(arguments) => {
+                let [argument] = &**arguments else {
+                    return Err(());
+                };
+                let argument = self.chunk(
+                    css,
+                    argument.start,
+                    argument.end,
+                    argument.first_token_type,
+                    argument.last_token_type,
+                    url_data,
+                    frame,
+                    references,
+                )?;
+                let context = crate::parser::ParserContext::new(
+                    crate::stylesheets::Origin::Author,
+                    url_data,
+                    Some(crate::stylesheets::CssRuleType::Style),
+                    style_traits::ParsingMode::DEFAULT,
+                    self.computed_context.quirks_mode,
+                    Default::default(),
+                    None,
+                    None,
+                );
+                let mut input = ParserInput::new(&argument.css);
+                let mut input = Parser::new(&mut input);
+                let mut ident = String::new();
+                while !input.is_exhausted() {
+                    if let Ok(value) =
+                        input.try_parse(|input| input.expect_ident_or_string().cloned())
+                    {
+                        ident.push_str(&value);
+                    } else {
+                        let number = crate::values::specified::Integer::parse(&context, &mut input)
+                            .map_err(|_| ())?;
+                        ident
+                            .push_str(&number.to_computed_value(self.computed_context).to_string());
+                    }
+                }
+                if ident.is_empty() {
+                    return Err(());
+                }
+                let mut css = String::new();
+                cssparser::serialize_identifier(&ident, &mut css).map_err(|_| ())?;
+                let value = Substitution::new(
+                    Cow::Owned(css),
+                    TokenSerializationType::Ident,
+                    TokenSerializationType::Ident,
+                );
+                Some(if argument.attr_tainted.is_empty() {
+                    value
+                } else {
+                    value.attr_tainted()
+                })
+            },
             SubstitutionFunction::If(branches) => {
                 Some(self.conditional(css, url_data, branches, frame, references)?)
             },
@@ -3158,72 +3454,134 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
                 self.call(frame, name, arguments, url_data)
             },
             // https://drafts.csswg.org/css-values-5/#attr-substitution
-            SubstitutionFunction::Attr { name, syntax } => {
-                let entry = self.calls.guard_attribute(name)?;
-                let attribute = name
-                    .expanded_name()
-                    .as_ref()
-                    .and_then(|name| self.attribute_tracker.query(name));
-                let value = attribute.map_or_else(
-                    || {
-                        // Special case when fallback and <attr-type> are omitted.
-                        // See FAILURE: https://drafts.csswg.org/css-values-5/#attr-substitution
-                        if reference.fallback.is_none() && *syntax == AttributeType::None {
-                            simple_subst("")
-                        } else {
-                            None
-                        }
-                    },
-                    |attr| {
-                        let mut input = ParserInput::new(&attr);
-                        let mut parser = Parser::new(&mut input);
-                        match syntax {
-                            AttributeType::Unit(unit) => {
-                                let css = {
-                                    // Verify that attribute data is a <number-token>.
-                                    parser.expect_number().ok()?;
-                                    let mut s = attr.clone();
-                                    s.push_str(unit.as_ref());
-                                    s
-                                };
-                                let serialization = match unit {
-                                    AttrUnit::Number => TokenSerializationType::Number,
-                                    AttrUnit::Percentage => TokenSerializationType::Percentage,
-                                    _ => TokenSerializationType::Dimension,
-                                };
-                                let value =
-                                    ComputedValue::new(css, url_data, serialization, serialization);
-                                Some(Substitution::from_value(value))
-                            },
-                            AttributeType::Type(syntax) => {
-                                let mut value = VariableValue::parse(
-                                    &mut parser,
-                                    url_data,
-                                    &Namespaces::default(),
-                                )
-                                .ok()?;
-                                value.private_names = self.private_names.clone();
-                                let value = self.substitute_value(&value, frame).ok()?;
-                                let mut input = ParserInput::new(&value.css);
-                                let mut parser = Parser::new(&mut input);
-                                let value = SpecifiedRegisteredValue::parse(
-                                    &mut parser,
-                                    syntax,
-                                    url_data,
-                                    AllowComputationallyDependent::Yes,
-                                )
-                                .ok()?;
-                                Some(Substitution::from_value(value.to_variable_value()))
-                            },
-                            AttributeType::RawString | AttributeType::None => simple_subst(&attr),
-                        }
-                        .map(Substitution::attr_tainted)
-                    },
-                );
-                if self.calls.release(entry) {
-                    None
+            SubstitutionFunction::Attr {
+                arguments,
+                namespaces,
+            } => {
+                let [argument, fallback @ ..] = &**arguments else {
+                    return Err(());
+                };
+                if fallback.len() > 1 {
+                    return Err(());
+                }
+                let parsed = self
+                    .chunk(
+                        css,
+                        argument.start,
+                        argument.end,
+                        argument.first_token_type,
+                        argument.last_token_type,
+                        url_data,
+                        frame,
+                        references,
+                    )
+                    .ok()
+                    .and_then(|argument| {
+                        let mut input = ParserInput::new(&argument.css);
+                        let namespaces = Namespaces {
+                            default: None,
+                            prefixes: namespaces.iter().cloned().collect(),
+                        };
+                        Parser::new(&mut input)
+                            .parse_entirely(|input| {
+                                let name = AttrName::parse_with_namespaces(input, &namespaces)?;
+                                Ok::<_, ParseError<'_>>((name, parse_attr_type(input)?))
+                            })
+                            .ok()
+                    });
+                let value = if let Some((name, syntax)) = parsed {
+                    let entry = self.calls.guard_attribute(&name)?;
+                    let attribute = name
+                        .expanded_name()
+                        .as_ref()
+                        .and_then(|name| self.attribute_tracker.query(name));
+                    let value = attribute.map_or_else(
+                        || {
+                            // Special case when fallback and <attr-type> are omitted.
+                            // See FAILURE: https://drafts.csswg.org/css-values-5/#attr-substitution
+                            if fallback.is_empty() && syntax == AttributeType::None {
+                                simple_subst("")
+                            } else {
+                                None
+                            }
+                        },
+                        |attr| {
+                            let mut input = ParserInput::new(&attr);
+                            let mut parser = Parser::new(&mut input);
+                            match &syntax {
+                                AttributeType::Unit(unit) => {
+                                    let css = {
+                                        // Verify that attribute data is a <number-token>.
+                                        parser
+                                            .parse_entirely(|input| {
+                                                Ok::<_, ParseError<'_>>(input.expect_number()?)
+                                            })
+                                            .ok()?;
+                                        let mut s = attr.trim_ascii().to_owned();
+                                        s.push_str(unit.as_ref());
+                                        s
+                                    };
+                                    let serialization = match unit {
+                                        AttrUnit::Number => TokenSerializationType::Number,
+                                        AttrUnit::Percentage => TokenSerializationType::Percentage,
+                                        _ => TokenSerializationType::Dimension,
+                                    };
+                                    let value = ComputedValue::new(
+                                        css,
+                                        url_data,
+                                        serialization,
+                                        serialization,
+                                    );
+                                    Some(Substitution::from_value(value))
+                                },
+                                AttributeType::Type(syntax) => {
+                                    let mut value = VariableValue::parse(
+                                        &mut parser,
+                                        url_data,
+                                        &Namespaces::default(),
+                                    )
+                                    .ok()?;
+                                    value.private_names = self.private_names.clone();
+                                    let value = self.substitute_value(&value, frame).ok()?;
+                                    let mut input = ParserInput::new(&value.css);
+                                    let mut parser = Parser::new(&mut input);
+                                    let value = SpecifiedRegisteredValue::parse(
+                                        &mut parser,
+                                        syntax,
+                                        url_data,
+                                        AllowComputationallyDependent::Yes,
+                                    )
+                                    .ok()?;
+                                    Some(Substitution::from_value(value.to_variable_value()))
+                                },
+                                AttributeType::RawString | AttributeType::None => {
+                                    simple_subst(&attr)
+                                },
+                            }
+                            .map(Substitution::attr_tainted)
+                        },
+                    );
+                    if self.calls.release(entry) {
+                        None
+                    } else {
+                        value
+                    }
                 } else {
-                    value
+                    None
+                };
+                match (value, fallback.first()) {
+                    (Some(value), _) => Some(value),
+                    (None, Some(fallback)) => Some(self.chunk(
+                        css,
+                        fallback.start,
+                        fallback.end,
+                        fallback.first_token_type,
+                        fallback.last_token_type,
+                        url_data,
+                        frame,
+                        references,
+                    )?),
+                    (None, None) => None,
                 }
             },
         };
@@ -3363,9 +3721,27 @@ mod tests {
             .unwrap()
     }
 
-    fn parsed_attr(value: &VariableValue) -> (&AttrName, &AttributeType) {
+    fn parsed_attr(value: &VariableValue) -> (AttrName, AttributeType) {
         match &value.references.refs[0].function {
-            SubstitutionFunction::Attr { name, syntax } => (name, syntax),
+            SubstitutionFunction::Attr {
+                arguments,
+                namespaces,
+            } => {
+                let argument = &arguments[0];
+                let namespaces = Namespaces {
+                    default: None,
+                    prefixes: namespaces.iter().cloned().collect(),
+                };
+                let mut input = ParserInput::new(&value.css[argument.start..argument.end]);
+                Parser::new(&mut input)
+                    .parse_entirely(|input| {
+                        Ok::<_, ParseError<'_>>((
+                            AttrName::parse_with_namespaces(input, &namespaces)?,
+                            parse_attr_type(input)?,
+                        ))
+                    })
+                    .unwrap()
+            },
             _ => panic!("expected an attr() reference"),
         }
     }
@@ -3403,9 +3779,9 @@ mod tests {
 
         let value = parse_value("attr(value|colour type(*), red)", &namespaces);
         let (name, syntax) = parsed_attr(&value);
-        assert_eq!(*syntax, AttributeType::Type(Descriptor::universal()));
+        assert_eq!(syntax, AttributeType::Type(Descriptor::universal()));
         assert_eq!(
-            *name,
+            name,
             AttrName::Resolved {
                 prefix: Some(Prefix::from("value")),
                 namespace: Namespace::from("https://example.invalid/value"),
@@ -3445,19 +3821,21 @@ mod tests {
         );
         assert_eq!(
             parsed_attr(&value).0,
-            &AttrName::UnresolvedNamespace {
+            AttrName::UnresolvedNamespace {
                 prefix: Prefix::from("unbound"),
                 local_name: Atom::from("colour"),
             }
         );
-        assert!(value.references.refs[0].fallback.is_some());
+        assert!(matches!(&value.references.refs[0].function,
+            SubstitutionFunction::Attr { arguments, .. } if arguments.len() == 2));
     }
 
     #[test]
     fn untyped_attr_fallback_remains_distinct_from_the_attribute_name() {
         let value = parse_value("attr(missing, \"fallback\")", &Namespaces::default());
         let (_, syntax) = parsed_attr(&value);
-        assert_eq!(*syntax, AttributeType::None);
-        assert!(value.references.refs[0].fallback.is_some());
+        assert_eq!(syntax, AttributeType::None);
+        assert!(matches!(&value.references.refs[0].function,
+            SubstitutionFunction::Attr { arguments, .. } if arguments.len() == 2));
     }
 }

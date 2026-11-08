@@ -464,6 +464,11 @@ pub enum SpecifiedComponentValue {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum SpecifiedStyleValue {
+    ParsedCalculation {
+        property: StandardPropertyId,
+        serialization: Box<Self>,
+        source: Box<Self>,
+    },
     CssWide(CssWideKeyword),
     Opacity(Opacity),
     TokenStream(Arc<str>),
@@ -504,6 +509,14 @@ impl SpecifiedComponentValue {
 impl SpecifiedStyleValue {
     fn recontextualize_urls(&mut self, base_url: &Arc<str>) {
         match self {
+            Self::ParsedCalculation {
+                serialization,
+                source,
+                ..
+            } => {
+                serialization.recontextualize_urls(base_url);
+                source.recontextualize_urls(base_url);
+            },
             Self::Components(values) => {
                 for value in values {
                     value.recontextualize_urls(base_url);
@@ -2795,14 +2808,15 @@ mod tests {
             "p { color: green; }"
         );
         let mut source_bases = Vec::new();
-        let projected = root.projection_nodes_with_source(
-            ImportBindingContext::Source,
-            &mut |source, rule| {
+        let projected =
+            root.projection_nodes_with_source(ImportBindingContext::Source, &mut |source, rule| {
                 source_bases.push(source.base_url.clone());
                 rule
-            },
+            });
+        assert_eq!(
+            source_bases,
+            [Some(Arc::from("https://example.test/loaded.css"))]
         );
-        assert_eq!(source_bases, [Some(Arc::from("https://example.test/loaded.css"))]);
         assert_ne!(source_bases[0], root.source().base_url);
         assert_eq!(projected.len(), 1);
         assert_eq!(projected[0].grammar(), RuleGrammar::Style);

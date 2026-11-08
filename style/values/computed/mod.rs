@@ -17,7 +17,7 @@ use super::{CSSFloat, CSSInteger};
 use crate::computed_value_flags::ComputedValueFlags;
 use crate::context::QuirksMode;
 use crate::custom_properties::{
-    document_function_scope, CallingElement, ComputedCustomProperties, FunctionScope,
+    CallingElement, ComputedCustomProperties, FunctionScope, document_function_scope,
 };
 use crate::derives::*;
 use crate::dom::{AttributeProvider, TElement};
@@ -37,7 +37,7 @@ use crate::values::generics::ClampToNonNegative;
 use crate::values::specified::font::QueryFontMetricsFlags;
 use crate::values::specified::length::FontBaseSize;
 use crate::{ArcSlice, Atom, One};
-use euclid::{default, Point2D, Rect, Size2D};
+use euclid::{Point2D, Rect, Size2D, default};
 use servo_arc::Arc;
 use std::cell::RefCell;
 use std::cmp;
@@ -548,7 +548,9 @@ impl<'a> Context<'a> {
             for_non_inherited_property: false,
             rule_cache_conditions: RefCell::new(&mut conditions),
             scope: CascadeLevel::same_tree_author_normal(),
-            tree_counting: TreeCounting::default(),
+            tree_counting: TreeCounting::new(move || {
+                tree_counting::tree_counts(container.map(|c| c.element))
+            }),
             calling_element: None,
             container_size_query: RefCell::new(container_size_query),
         };

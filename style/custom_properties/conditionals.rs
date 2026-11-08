@@ -8,7 +8,7 @@ use super::*;
 use crate::parser::ParserContext;
 use crate::queries::FeatureType;
 use crate::queries::condition::{Operator, QueryCondition};
-use crate::queries::style_feature::StyleFeature;
+use crate::queries::style_feature::{RangeOperand, StyleFeature, StyleRangeValue};
 use crate::stylesheets::{CssRuleType, Origin};
 use selectors::kleene_value::KleeneValue;
 use style_traits::ParsingMode;
@@ -79,23 +79,38 @@ fn context(url_data: &UrlExtraData) -> ParserContext<'_> {
     )
 }
 
-pub(super) fn condition_names(value: &VariableValue) -> Vec<Name> {
-    fn collect(condition: &QueryCondition, names: &mut Vec<Name>) {
-        match condition {
-            QueryCondition::StyleFeature(StyleFeature::Declaration { name, .. }) => {
-                names.push(name.clone())
-            },
-            QueryCondition::Style(condition)
-            | QueryCondition::InParens(condition)
-            | QueryCondition::Not(condition) => collect(condition, names),
-            QueryCondition::Operation(conditions, _) => {
-                for condition in conditions {
-                    collect(condition, names);
+fn collect_condition_names(condition: &QueryCondition, names: &mut Vec<Name>) {
+    match condition {
+        QueryCondition::StyleFeature(StyleFeature::Declaration { name, .. }) => {
+            names.push(name.clone())
+        },
+        QueryCondition::StyleFeature(StyleFeature::Range {
+            first,
+            comparison,
+            second,
+        }) => {
+            for value in std::iter::once(first)
+                .chain(std::iter::once(&comparison.1))
+                .chain(second.iter().map(|(_, value)| value))
+            {
+                if let StyleRangeValue::Property(name) = value {
+                    names.push(name.clone());
                 }
-            },
-            _ => {},
-        }
+            }
+        },
+        QueryCondition::Style(condition)
+        | QueryCondition::InParens(condition)
+        | QueryCondition::Not(condition) => collect_condition_names(condition, names),
+        QueryCondition::Operation(conditions, _) => {
+            for condition in conditions {
+                collect_condition_names(condition, names);
+            }
+        },
+        _ => {},
     }
+}
+
+pub(super) fn condition_names(value: &VariableValue) -> Vec<Name> {
     let mut names = Vec::new();
     for reference in &value.references.refs {
         let SubstitutionFunction::If(branches) = &reference.function else {
@@ -108,7 +123,7 @@ pub(super) fn condition_names(value: &VariableValue) -> Vec<Name> {
                 &mut Parser::new(&mut input),
                 FeatureType::Container,
             ) {
-                collect(&condition, &mut names);
+                collect_condition_names(&condition, &mut names);
             }
         }
     }
@@ -139,7 +154,7 @@ pub(super) fn condition_values(value: &VariableValue) -> Vec<VariableValue> {
             ) {
                 condition.private_names = value.private_names.clone();
                 for reference in &mut condition.references.refs {
-                    if let SubstitutionFunction::Var(ref mut name) = reference.function {
+                    if let Some(name) = reference.function.variable_name_mut() {
                         if let Some((_, private)) = value
                             .private_names
                             .iter()
@@ -169,6 +184,7 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
     where
         'a: 'v,
     {
+        let mut tainted = false;
         for ConditionalBranch { condition, value } in branches {
             let mut input = ParserInput::new(&css[condition.start..condition.end]);
             let condition = VariableValue::parse(
@@ -184,19 +200,22 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
             let condition = condition
                 .as_ref()
                 .and_then(|condition| self.substitute_value(condition, frame).ok());
-            if condition
-                .is_some_and(|condition| self.condition_matches(&condition.css, url_data, frame))
-            {
-                return self.chunk(
-                    css,
-                    value.start,
-                    value.end,
-                    value.first_token_type,
-                    value.last_token_type,
-                    url_data,
-                    frame,
-                    references,
-                );
+            if condition.is_some_and(|condition| {
+                tainted |= !condition.attr_tainted.is_empty();
+                self.condition_matches(&condition.css, url_data, frame, &mut tainted)
+            }) {
+                return self
+                    .chunk(
+                        css,
+                        value.start,
+                        value.end,
+                        value.first_token_type,
+                        value.last_token_type,
+                        url_data,
+                        frame,
+                        references,
+                    )
+                    .map(|value| if tainted { value.attr_tainted() } else { value });
             }
             while references
                 .next_if(|reference| reference.end <= value.end)
@@ -211,6 +230,7 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
         css: &str,
         url_data: &UrlExtraData,
         frame: Option<usize>,
+        tainted: &mut bool,
     ) -> bool {
         let mut input = ParserInput::new(css);
         let mut parser = Parser::new(&mut input);
@@ -225,6 +245,12 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
                 QueryCondition::parse(&context(url_data), input, FeatureType::Container)
             })
             .is_ok_and(|condition| {
+                let mut names = Vec::new();
+                collect_condition_names(&condition, &mut names);
+                *tainted |= names.iter().any(|name| {
+                    self.variable(frame, name)
+                        .is_some_and(|value| !value.attr_tainted.is_empty())
+                });
                 self.query_matches(&condition, url_data, frame)
                     .to_bool(false)
             })
@@ -239,6 +265,27 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
         match condition {
             QueryCondition::StyleFeature(StyleFeature::Declaration { name, value }) => {
                 KleeneValue::from(self.style_query(frame, name, value.as_deref()))
+            },
+            QueryCondition::StyleFeature(StyleFeature::Range {
+                first,
+                comparison,
+                second,
+            }) => {
+                let result = (|| {
+                    let mut left = self.range_operand(first, url_data, frame)?;
+                    for (operator, value) in std::iter::once(comparison).chain(second) {
+                        let right = self.range_operand(value, url_data, frame)?;
+                        if !left
+                            .compare(right)
+                            .is_some_and(|order| operator.evaluate(order))
+                        {
+                            return Some(false);
+                        }
+                        left = right;
+                    }
+                    Some(true)
+                })();
+                KleeneValue::from(result.unwrap_or(false))
             },
             QueryCondition::Style(condition) | QueryCondition::InParens(condition) => {
                 self.query_matches(condition, url_data, frame)
@@ -257,6 +304,26 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
             QueryCondition::GeneralEnclosed(css) => self.enclosed_query(css, url_data),
             _ => KleeneValue::Unknown,
         }
+    }
+
+    fn range_operand(
+        &mut self,
+        value: &StyleRangeValue,
+        url_data: &UrlExtraData,
+        frame: Option<usize>,
+    ) -> Option<RangeOperand> {
+        let css = match value {
+            StyleRangeValue::Property(name) => self.variable(frame, name)?.css.into_owned(),
+            StyleRangeValue::Value(value) => {
+                self.substitute_value(value, frame).ok()?.css.into_owned()
+            },
+        };
+        let mut input = ParserInput::new(&css);
+        Parser::new(&mut input)
+            .parse_entirely(|input| {
+                RangeOperand::parse(&context(url_data), self.computed_context, input)
+            })
+            .ok()
     }
 
     fn enclosed_query(&self, css: &str, url_data: &UrlExtraData) -> KleeneValue {

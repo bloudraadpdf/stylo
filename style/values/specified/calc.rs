@@ -28,8 +28,8 @@ use crate::values::specified::length::{FontBaseSize, LineHeightBase};
 use crate::values::specified::resolution::ResolutionDimension;
 use crate::values::specified::time::TimeDimension;
 use crate::values::specified::{Angle, Resolution, Time};
-use crate::values::{serialize_number, serialize_percentage, CSSFloat, DashedIdent};
-use cssparser::{match_ignore_ascii_case, CowRcStr, Parser, ParserInput, SourceLocation, Token};
+use crate::values::{CSSFloat, DashedIdent, serialize_number, serialize_percentage};
+use cssparser::{CowRcStr, Parser, ParserInput, SourceLocation, Token, match_ignore_ascii_case};
 use debug_unreachable::debug_unreachable;
 use smallvec::SmallVec;
 use std::cmp;
@@ -222,15 +222,6 @@ pub enum Leaf {
     SiblingCount,
 }
 
-impl Leaf {
-    fn as_length(&self) -> Option<&NoCalcLength> {
-        match *self {
-            Self::Length(ref l) => Some(l),
-            _ => None,
-        }
-    }
-}
-
 impl ToCss for Leaf {
     fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
     where
@@ -363,24 +354,6 @@ where
         crate::values::serialize_specified_dimension(angle_degrees, "deg", false, dest)?;
     }
     dest.write_char(')')
-}
-
-impl CalcLengthPercentage {
-    fn same_unit_length_as(a: &Self, b: &Self) -> Option<(CSSFloat, CSSFloat)> {
-        debug_assert_eq!(a.clamping_mode, b.clamping_mode);
-        debug_assert_eq!(a.clamping_mode, AllowedNumericType::All);
-
-        let a = a.node.as_leaf()?;
-        let b = b.node.as_leaf()?;
-
-        if a.sort_key() != b.sort_key() {
-            return None;
-        }
-
-        let a = a.as_length()?.unitless_value();
-        let b = b.as_length()?.unitless_value();
-        return Some((a, b));
-    }
 }
 
 impl SpecifiedValueInfo for CalcLengthPercentage {}
@@ -1029,7 +1002,11 @@ impl GenericAnchorSizeFunction<Box<CalcNode>> {
             return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
         }
         GenericAnchorSizeFunction::parse_inner(context, input, |i| {
-            CalcNode::parse_anchor_fallback(context, i, AllowParse::new(CalcUnits::LENGTH_PERCENTAGE))
+            CalcNode::parse_anchor_fallback(
+                context,
+                i,
+                AllowParse::new(CalcUnits::LENGTH_PERCENTAGE),
+            )
         })
     }
 }
@@ -1204,15 +1181,28 @@ impl CalcNode {
                     Ok(node)
                 },
                 MathFunction::Clamp => {
-                    let min = Self::parse_argument(context, input, allowed)?;
+                    let min = if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
+                        None
+                    } else {
+                        Some(Self::parse_argument(context, input, allowed)?)
+                    };
                     input.expect_comma()?;
                     let center = Self::parse_argument(context, input, allowed)?;
                     input.expect_comma()?;
-                    let max = Self::parse_argument(context, input, allowed)?;
-                    Ok(Self::Clamp {
-                        min: Box::new(min),
-                        center: Box::new(center),
-                        max: Box::new(max),
+                    let max = if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
+                        None
+                    } else {
+                        Some(Self::parse_argument(context, input, allowed)?)
+                    };
+                    Ok(match (min, max) {
+                        (Some(min), Some(max)) => Self::Clamp {
+                            min: Box::new(min),
+                            center: Box::new(center),
+                            max: Box::new(max),
+                        },
+                        (None, Some(max)) => Self::MinMax(vec![center, max].into(), MinMaxOp::Min),
+                        (Some(min), None) => Self::MinMax(vec![min, center].into(), MinMaxOp::Max),
+                        (None, None) => center,
                     })
                 },
                 MathFunction::Round => {
@@ -1330,41 +1320,11 @@ impl CalcNode {
                     let a = Self::parse_argument(context, input, allow_all)?;
                     input.expect_comma()?;
                     let b = Self::parse_argument(context, input, allow_all)?;
-
-                    let radians = Self::try_resolve(input, || {
-                        if let Ok(a) = a.to_number() {
-                            let b = b.to_number()?;
-                            return Ok(a.atan2(b));
-                        }
-
-                        if let Ok(a) = a.to_percentage() {
-                            let b = b.to_percentage()?;
-                            return Ok(a.atan2(b));
-                        }
-
-                        if let Ok(a) = a.to_time() {
-                            let b = b.to_time()?;
-                            return Ok(a.seconds().atan2(b.seconds()));
-                        }
-
-                        if let Ok(a) = a.to_angle() {
-                            let b = b.to_angle()?;
-                            return Ok(a.radians().atan2(b.radians()));
-                        }
-
-                        if let Ok(a) = a.to_resolution() {
-                            let b = b.to_resolution()?;
-                            return Ok(a.dppx().atan2(b.dppx()));
-                        }
-
-                        let a = a.into_length_or_percentage(AllowedNumericType::All)?;
-                        let b = b.into_length_or_percentage(AllowedNumericType::All)?;
-                        let (a, b) = CalcLengthPercentage::same_unit_length_as(&a, &b).ok_or(())?;
-
-                        Ok(a.atan2(b))
+                    let node = Self::Atan2(Box::new(a), Box::new(b));
+                    node.unit().map_err(|()| {
+                        input.new_custom_error(StyleParseErrorKind::UnspecifiedError)
                     })?;
-
-                    Ok(Self::Leaf(Leaf::Angle(AngleDimension::Rad(radians))))
+                    Ok(node.resolved_or_self())
                 },
                 MathFunction::Pow => {
                     let a = Self::parse_numeric_argument(context, input, allowed)?;
@@ -1549,6 +1509,8 @@ impl CalcNode {
         input: &mut Parser<'i, 't>,
         allowed: AllowParse,
     ) -> Result<Self, ParseError<'i>> {
+        let allowed = allowed
+            .new_including(CalcUnits::ALL - CalcUnits::PERCENTAGE - CalcUnits::COLOR_COMPONENT);
         let mut product = SmallVec::<[CalcNode; 1]>::new();
         let first = Self::parse_one(context, input, allowed)?;
         product.push(first);
@@ -1608,7 +1570,7 @@ impl CalcNode {
                         InPlaceDivisionResult::Invalid => {
                             return Err(
                                 input.new_custom_error(StyleParseErrorKind::UnspecifiedError)
-                            )
+                            );
                         },
                     }
                 },
@@ -1626,16 +1588,6 @@ impl CalcNode {
         })
     }
 
-    fn try_resolve<'i, 't, F>(
-        input: &Parser<'i, 't>,
-        closure: F,
-    ) -> Result<CSSFloat, ParseError<'i>>
-    where
-        F: FnOnce() -> Result<CSSFloat, ()>,
-    {
-        closure().map_err(|()| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
-    }
-
     /// Tries to simplify this expression into a `<length>` or `<percentage>`
     /// value.
     pub fn into_length_or_percentage(
@@ -1647,7 +1599,7 @@ impl CalcNode {
         // Although we allow numbers inside CalcLengthPercentage, calculations that resolve to a
         // number result is still not allowed.
         let unit = self.unit()?;
-        if !CalcUnits::LENGTH_PERCENTAGE.intersects(unit) {
+        if unit.is_empty() || !CalcUnits::LENGTH_PERCENTAGE.contains(unit) {
             Err(())
         } else {
             Ok(CalcLengthPercentage {
@@ -1714,7 +1666,7 @@ impl CalcNode {
         let function = match MathFunction::from_ident(&*name) {
             Ok(f) => f,
             Err(()) => {
-                return Err(location.new_unexpected_token_error(Token::Function(name.clone())))
+                return Err(location.new_unexpected_token_error(Token::Function(name.clone())));
             },
         };
 
@@ -1805,7 +1757,7 @@ impl CalcNode {
         let unit = self
             .unit()
             .map_err(|()| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))?;
-        if !required.intersects(unit) {
+        if unit.is_empty() || !required.contains(unit) {
             return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
         }
         Ok(self)
@@ -2408,17 +2360,24 @@ mod tree_counting_tests {
             CssRuleType::Page,
         ] {
             let mut number_input = ParserInput::new("sibling-index()");
-            assert!(Parser::new(&mut number_input)
-                .parse_entirely(|input| specified::Number::parse(&context_for(rule_type), input))
-                .is_err());
+            assert!(
+                Parser::new(&mut number_input)
+                    .parse_entirely(|input| specified::Number::parse(
+                        &context_for(rule_type),
+                        input
+                    ))
+                    .is_err()
+            );
 
             let mut percentage_input = ParserInput::new("calc(10% * sibling-index())");
-            assert!(Parser::new(&mut percentage_input)
-                .parse_entirely(|input| specified::Percentage::parse(
-                    &context_for(rule_type),
-                    input
-                ))
-                .is_err());
+            assert!(
+                Parser::new(&mut percentage_input)
+                    .parse_entirely(|input| specified::Percentage::parse(
+                        &context_for(rule_type),
+                        input
+                    ))
+                    .is_err()
+            );
         }
     }
 }
@@ -2433,11 +2392,11 @@ mod math_function_tests {
     use cssparser::{Parser, ParserInput};
     use style_traits::{ParsingMode, ToCss};
 
-    fn parse_length_percentage(css: &str) -> Option<specified::LengthPercentage> {
+    fn context() -> ParserContext<'static> {
         let url_data = Box::leak(Box::new(UrlExtraData::from(
             url::Url::parse("https://example.invalid/").unwrap(),
         )));
-        let context = ParserContext::new(
+        ParserContext::new(
             Origin::Author,
             url_data,
             Some(CssRuleType::Style),
@@ -2446,10 +2405,13 @@ mod math_function_tests {
             Default::default(),
             None,
             None,
-        );
+        )
+    }
+
+    fn parse_length_percentage(css: &str) -> Option<specified::LengthPercentage> {
         let mut input = ParserInput::new(css);
         Parser::new(&mut input)
-            .parse_entirely(|input| specified::LengthPercentage::parse(&context, input))
+            .parse_entirely(|input| specified::LengthPercentage::parse(&context(), input))
             .ok()
     }
 
@@ -2489,9 +2451,30 @@ mod math_function_tests {
             "calc(1px / 1px)",
             "calc(10% * 10%)",
             "calc(1px / 1s)",
+            "calc(50% + 30deg)",
+            "min(1deg, 50%)",
+            "clamp(none, 50%, 30deg)",
         ] {
             assert!(parse_length_percentage(css).is_none(), "{css}");
         }
+    }
+
+    #[test]
+    fn calc_size_rejects_angle_percentage_results() {
+        for css in ["50% + 30deg", "min(1deg, 50%)", "clamp(none, 50%, 30deg)"] {
+            let mut input = ParserInput::new(css);
+            assert!(
+                Parser::new(&mut input)
+                    .parse_entirely(|input| super::CalcNode::parse_calc_size(
+                        &context(),
+                        input,
+                        false
+                    ))
+                    .is_err(),
+                "{css}"
+            );
+        }
+        assert!(parse_length_percentage("calc(50% * 1deg / 1deg)").is_some());
     }
 
     #[test]
@@ -2517,25 +2500,127 @@ mod math_function_tests {
     }
 
     fn number(css: &str) -> (String, f32) {
-        let url_data = Box::leak(Box::new(UrlExtraData::from(
-            url::Url::parse("https://example.invalid/").unwrap(),
-        )));
-        let context = ParserContext::new(
-            Origin::Author,
-            url_data,
-            Some(CssRuleType::Style),
-            ParsingMode::DEFAULT,
-            crate::context::QuirksMode::NoQuirks,
-            Default::default(),
-            None,
-            None,
-        );
         let mut input = ParserInput::new(css);
         let number = Parser::new(&mut input)
-            .parse_entirely(|input| specified::Number::parse(&context, input))
+            .parse_entirely(|input| specified::Number::parse(&context(), input))
             .unwrap_or_else(|_| panic!("{css} must parse"));
         let computed = with_computed_context(|context| number.to_computed_value(context));
         (number.to_css_string(), computed)
+    }
+
+    #[test]
+    fn clamp_accepts_unbounded_sides() {
+        for (css, expected) in [
+            ("clamp(none, 33px, 30px)", "calc(30px)"),
+            ("clamp(33px, 30px, none)", "calc(33px)"),
+            ("clamp(none, 30px, none)", "calc(30px)"),
+            ("clamp(none, 2px, 3em)", "min(2px, 3em)"),
+            ("clamp(1em, 2px, none)", "max(1em, 2px)"),
+        ] {
+            assert_eq!(
+                parse_length_percentage(css).unwrap().to_css_string(),
+                expected
+            );
+        }
+        assert!(parse_length_percentage("clamp(1px, none, 3px)").is_none());
+    }
+
+    #[test]
+    fn numeric_functions_preserve_nan_infinity_and_zero_signs() {
+        for css in [
+            "pow(NaN, 0)",
+            "pow(1, NaN)",
+            "pow(1, infinity)",
+            "pow(-1, -infinity)",
+            "log(2, 1)",
+            "log(5, -2)",
+            "round(infinity, NaN)",
+        ] {
+            assert_eq!(number(css).1, 0.0, "{css}");
+        }
+        for (css, expected) in [
+            ("round(down, -1, infinity)", -f32::MAX),
+            ("round(down, -1, -infinity)", -f32::MAX),
+            ("round(up, 1, infinity)", f32::MAX),
+            ("calc(1 / log(1, 0.5))", f32::MAX),
+            ("calc(1 / round(-1, infinity))", -f32::MAX),
+            ("calc(1 / round(up, -1, infinity))", -f32::MAX),
+        ] {
+            assert_eq!(number(css).1, expected, "{css}");
+        }
+    }
+
+    #[test]
+    fn sign_preserves_contextual_units_until_computation() {
+        for css in ["sign(1em)", "sign(-1em)", "sign(1cqw)", "sign(-1cqw)"] {
+            let mut input = ParserInput::new(css);
+            let value = Parser::new(&mut input)
+                .parse_entirely(|input| specified::Number::parse(&context(), input))
+                .unwrap();
+            assert_eq!(value.to_css_string(), css);
+            assert!(value.resolve().is_none());
+        }
+    }
+
+    #[test]
+    fn products_accept_dimensions_that_cancel_to_the_required_type() {
+        for (css, expected) in [
+            ("calc(1px * 3deg / 1deg / 1px)", 3.0),
+            ("calc(10em / 1px)", 160.0),
+            ("calc(20px / 1rem)", 1.25),
+            ("pow(1em / 1px, 2)", 256.0),
+        ] {
+            assert_eq!(number(css).1, expected, "{css}");
+        }
+        for css in ["calc(1px * 1deg)", "calc(1px / 1deg)", "sign(1%)"] {
+            let mut input = ParserInput::new(css);
+            assert!(
+                Parser::new(&mut input)
+                    .parse_entirely(|input| specified::Number::parse(&context(), input))
+                    .is_err(),
+                "{css}"
+            );
+        }
+    }
+
+    #[test]
+    fn negating_hypot_negates_its_result() {
+        assert_eq!(number("calc(2 - hypot(3, 4))").1, -3.0);
+        assert_eq!(number("calc(-1 * hypot(3, 4))").1, -5.0);
+    }
+
+    #[test]
+    fn atan2_resolves_contextual_and_percentage_arguments() {
+        for (css, expected) in [
+            ("atan2(1rem + 1px - 1px, -1rem)", 135.0),
+            ("atan2(1vh + 0px, -1vh + 0px)", 135.0),
+            ("atan2(1, sign(1em - 1px))", 45.0),
+        ] {
+            let mut input = ParserInput::new(css);
+            let angle = Parser::new(&mut input)
+                .parse_entirely(|input| specified::Angle::parse(&context(), input))
+                .unwrap();
+            let degrees =
+                with_computed_context(|context| angle.to_computed_value(context).degrees());
+            assert!((degrees - expected).abs() < 0.0001, "{css}: {degrees}");
+        }
+        for css in [
+            "calc(tan(atan2(50%, 1px)) * 1px)",
+            "calc(pow(tan(atan2(round(up, 1px, 100%), round(up, 1px, 100%))), 2) * 1px)",
+            "calc(1em * 1s / 1s)",
+            "calc(1em * 1dppx / 1dppx)",
+            "calc(1em * 1deg / 1deg)",
+        ] {
+            let expected = if css.contains("atan2(50%") {
+                50.0
+            } else if css.contains("atan2(") {
+                1.0
+            } else {
+                16.0
+            };
+            let px = used_px(css, 100.0);
+            assert!((px - expected).abs() < 0.001, "{css}: {px}");
+        }
     }
 
     #[test]

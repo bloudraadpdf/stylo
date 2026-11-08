@@ -6,7 +6,8 @@
 //!
 //! https://drafts.csswg.org/css-conditional-5/#typedef-style-feature
 
-use super::feature_expression::{consume_until_comparison, Operator};
+pub use super::feature_expression::Operator;
+use super::feature_expression::consume_until_comparison;
 use crate::custom_properties::{self, ComputedCustomProperties, Name, SpecifiedValue};
 use crate::derives::*;
 use crate::dom::AttributeTracker;
@@ -200,7 +201,7 @@ impl StyleFeature {
 
 /// A computed `<style-range-value>`.
 #[derive(Clone, Copy)]
-enum RangeOperand {
+pub(crate) enum RangeOperand {
     Number(f32),
     Percentage(f32),
     Length(f32),
@@ -210,7 +211,7 @@ enum RangeOperand {
 }
 
 impl RangeOperand {
-    fn compare(self, other: Self) -> Option<Ordering> {
+    pub(crate) fn compare(self, other: Self) -> Option<Ordering> {
         use RangeOperand::*;
         match (self, other) {
             (Number(a), Number(b))
@@ -225,7 +226,7 @@ impl RangeOperand {
         }
     }
 
-    fn parse<'i>(
+    pub(crate) fn parse<'i>(
         context: &ParserContext,
         computed: &computed::Context,
         input: &mut Parser<'i, '_>,

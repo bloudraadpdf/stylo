@@ -78,8 +78,40 @@ pub fn project_inline_style_declaration(
     declaration: &stylo_cssom_model::SpecifiedDeclaration,
     url_data: &UrlExtraData,
 ) -> Vec<stylo_cssom_model::RuleDeclaration> {
-    let source_base = specified_value_url_base(&declaration.value)
-        .or_else(|| declaration.shorthand_value.as_ref().and_then(specified_value_url_base));
+    let source_base = specified_value_url_base(&declaration.value).or_else(|| {
+        declaration
+            .shorthand_value
+            .as_ref()
+            .and_then(specified_value_url_base)
+    });
+    if let stylo_cssom_model::SpecifiedStyleValue::ParsedCalculation {
+        property, source, ..
+    } = &declaration.value
+    {
+        let stylo_cssom_model::SpecifiedPropertyName::Standard(longhand) = declaration.property
+        else {
+            unreachable!("a parsed calculation belongs to a standard property");
+        };
+        let value = projected_specified_style_value_text(source);
+        let base = source_base.unwrap_or_else(|| url_data.as_str());
+        let projected = if property.schema().kind == stylo_cssom_model::PropertyKind::Shorthand {
+            stylo_cssom_model::RuleDeclaration::from_pending_substitution(
+                longhand.schema().name,
+                *property,
+                value,
+                base,
+            )
+            .expect("a retained calculation belongs to its source shorthand")
+        } else {
+            stylo_cssom_model::RuleDeclaration::new(longhand.schema().name, value)
+                .with_source_base_url(base)
+        };
+        return vec![
+            projected.with_importance(
+                declaration.importance == stylo_cssom_model::Importance::Important,
+            ),
+        ];
+    }
     if let Some(source) = declaration
         .shorthand_source
         .filter(|source| source.has_pending_substitution())
@@ -127,6 +159,7 @@ fn specified_value_url_base(value: &stylo_cssom_model::SpecifiedStyleValue) -> O
         }
     }
     match value {
+        Value::ParsedCalculation { source, .. } => specified_value_url_base(source),
         Value::Components(values) => values.iter().find_map(component_base),
         Value::List { values, .. } => values.iter().find_map(specified_value_url_base),
         _ => None,
@@ -273,8 +306,16 @@ mod inline_compatibility_projection_tests {
         let url_data = crate::context::ABOUT_BLANK.clone().into();
         for (authored, canonical, expected) in [
             ("-ro-emoji", "-ro-emoji", "-bd-emoji"),
-            ("sans-serif, -ro-emoji", "sans-serif, -ro-emoji", "sans-serif, -bd-emoji"),
-            ("-ro-color-emoji, serif", "-ro-color-emoji, serif", "-bd-color-emoji, serif"),
+            (
+                "sans-serif, -ro-emoji",
+                "sans-serif, -ro-emoji",
+                "sans-serif, -bd-emoji",
+            ),
+            (
+                "-ro-color-emoji, serif",
+                "-ro-color-emoji, serif",
+                "-bd-color-emoji, serif",
+            ),
             ("\"-RO-EMOJI\"", "-RO-EMOJI", "-bd-emoji"),
             ("\"custom-ro-emoji\"", "custom-ro-emoji", "custom-ro-emoji"),
         ] {
@@ -309,24 +350,56 @@ mod inline_compatibility_projection_tests {
     #[test]
     fn shorthand_serialisation_crosses_independent_declarations_and_authored_groups() {
         for (source, expected) in [
-            ("border-top:1px;border-right:2px;border-bottom:3px;border-left:4px", "border-width: 1px 2px 3px 4px; border-style: none; border-color: currentcolor;"),
-            ("width:100px;--a:a;all:inherit;--b:b;height:inherit", "--a: a; all: inherit; --b: b;"),
-            ("margin-top:1px;color:red;margin-right:2px;margin-bottom:1px;margin-left:2px", "margin: 1px 2px; color: red;"),
-            ("margin:10px;margin-inline:10px;margin-block:10px;margin-inline-end:10px;margin-bottom:10px", "margin-top: 10px; margin-right: 10px; margin-left: 10px; margin-inline-start: 10px; margin-block: 10px; margin-inline-end: 10px; margin-bottom: 10px;"),
-            ("margin-top:10px;margin-left:10px;margin-right:10px;margin-bottom:10px;margin-inline-start:10px;margin-inline-end:10px;margin-block-start:10px;margin-block-end:10px", "margin: 10px; margin-inline: 10px; margin-block: 10px;"),
+            (
+                "border-top:1px;border-right:2px;border-bottom:3px;border-left:4px",
+                "border-width: 1px 2px 3px 4px; border-style: none; border-color: currentcolor;",
+            ),
+            (
+                "width:100px;--a:a;all:inherit;--b:b;height:inherit",
+                "--a: a; all: inherit; --b: b;",
+            ),
+            (
+                "margin-top:1px;color:red;margin-right:2px;margin-bottom:1px;margin-left:2px",
+                "margin: 1px 2px; color: red;",
+            ),
+            (
+                "margin:10px;margin-inline:10px;margin-block:10px;margin-inline-end:10px;margin-bottom:10px",
+                "margin-top: 10px; margin-right: 10px; margin-left: 10px; margin-inline-start: 10px; margin-block: 10px; margin-inline-end: 10px; margin-bottom: 10px;",
+            ),
+            (
+                "margin-top:10px;margin-left:10px;margin-right:10px;margin-bottom:10px;margin-inline-start:10px;margin-inline-end:10px;margin-block-start:10px;margin-block-end:10px",
+                "margin: 10px; margin-inline: 10px; margin-block: 10px;",
+            ),
             // Overflow 4 makes the prefixed shorthand unconditionally set
             // block-ellipsis:ellipsis; unprefixed none sets no-ellipsis.
             ("-webkit-line-clamp:none", "-webkit-line-clamp: none;"),
-            ("max-lines:auto;continue:normal;block-ellipsis:no-ellipsis", "line-clamp: none;"),
-            ("outline-width:2px;outline-style:dotted;outline-color:blue", "outline: 2px dotted blue;"),
+            (
+                "max-lines:auto;continue:normal;block-ellipsis:no-ellipsis",
+                "line-clamp: none;",
+            ),
+            (
+                "outline-width:2px;outline-style:dotted;outline-color:blue",
+                "outline: 2px dotted blue;",
+            ),
         ] {
-            let declarations = crate::declaration_parser::parse_inline_style_declarations(source, "about:blank".into());
-            assert_eq!(serialize_specified_declarations(&declarations), expected, "{source}");
+            let declarations = crate::declaration_parser::parse_inline_style_declarations(
+                source,
+                "about:blank".into(),
+            );
+            assert_eq!(
+                serialize_specified_declarations(&declarations),
+                expected,
+                "{source}"
+            );
         }
         let declarations = crate::declaration_parser::parse_inline_style_declarations(
-            "font:menu", "about:blank".into(),
+            "font:menu",
+            "about:blank".into(),
         );
-        assert_eq!(projected_specified_property_value(&declarations, "font-variant"), None);
+        assert_eq!(
+            projected_specified_property_value(&declarations, "font-variant"),
+            None
+        );
     }
 
     #[test]
@@ -336,9 +409,14 @@ mod inline_compatibility_projection_tests {
                 let expected = format!("width: 100px{priority}; height: {height}{priority};");
                 for source in [expected.clone(), format!("size:100px {height}{priority}")] {
                     let declarations = crate::declaration_parser::parse_inline_style_declarations(
-                        &source, "about:blank".into(),
+                        &source,
+                        "about:blank".into(),
                     );
-                    assert_eq!(serialize_specified_declarations(&declarations), expected, "{source}");
+                    assert_eq!(
+                        serialize_specified_declarations(&declarations),
+                        expected,
+                        "{source}"
+                    );
                 }
             }
         }
@@ -462,18 +540,27 @@ mod inline_compatibility_projection_tests {
     fn inline_url_projection_retains_each_declarations_parse_base() {
         let old_base = "https://example.test/old/";
         let current_base = "https://example.test/new/";
-        let current: style::stylesheets::UrlExtraData = url::Url::parse(current_base).unwrap().into();
+        let current: style::stylesheets::UrlExtraData =
+            url::Url::parse(current_base).unwrap().into();
         for (source, expected_value) in [
             ("background-image:url(./)", "url(\"./\")"),
             ("background-image:url(#local)", "url(\"#local\")"),
         ] {
-            let retained = crate::declaration_parser::parse_inline_style_declarations(source, old_base.into());
-            let assigned = crate::declaration_parser::parse_inline_style_declarations(source, current_base.into());
-            for (declarations, expected_base) in [(&retained, old_base), (&assigned, current_base)] {
+            let retained =
+                crate::declaration_parser::parse_inline_style_declarations(source, old_base.into());
+            let assigned = crate::declaration_parser::parse_inline_style_declarations(
+                source,
+                current_base.into(),
+            );
+            for (declarations, expected_base) in [(&retained, old_base), (&assigned, current_base)]
+            {
                 let projected = project_inline_style_declaration(&declarations[0], &current);
                 assert_eq!(projected[0].source_base_url(), Some(expected_base));
                 assert_eq!(projected[0].value(), expected_value);
-                assert_eq!(projected_specified_property_value(declarations, "background-image").as_deref(), Some(expected_value));
+                assert_eq!(
+                    projected_specified_property_value(declarations, "background-image").as_deref(),
+                    Some(expected_value)
+                );
             }
         }
     }
@@ -826,6 +913,14 @@ fn rewrite_projected_component_idents(
     }
 
     match value {
+        Value::ParsedCalculation {
+            serialization,
+            source: authored,
+            ..
+        } => {
+            rewrite_projected_component_idents(serialization, source, replacement);
+            rewrite_projected_component_idents(authored, source, replacement);
+        },
         Value::Components(values) => rewrite_components(values, source, replacement),
         Value::List { values, .. } => {
             for value in values {
@@ -843,8 +938,7 @@ pub fn serialize_specified_declarations(
     let mut emitted_shorthands = Vec::new();
     let index = SpecifiedDeclarationIndex::new(declarations);
     let shorthand_completeness = shorthand_completeness(&index);
-    let synthesised_shorthands =
-        synthesised_independent_shorthands(&index);
+    let synthesised_shorthands = synthesised_independent_shorthands(&index);
     let synthesised_members = synthesised_shorthands
         .iter()
         .flat_map(|shorthand| shorthand.members.iter().copied())
@@ -872,14 +966,21 @@ pub fn serialize_specified_declarations(
         let shorthand = declaration
             .shorthand_source
             .map(stylo_cssom_model::SpecifiedShorthandSource::property)
-            .filter(|shorthand| crate::declaration_parser::inline_shorthand_serializes(shorthand.schema()))
+            .filter(|shorthand| {
+                crate::declaration_parser::inline_shorthand_serializes(shorthand.schema())
+            })
             .filter(|shorthand| !emitted_shorthands.contains(shorthand))
             .filter(|_| shorthand_completeness[index])
             .filter(|shorthand| {
-                declarations.iter().enumerate().all(|(member, declaration)| {
-                    !declaration.shorthand_source.is_some_and(|source| source.property() == *shorthand)
-                        || !synthesised_members.contains(&member)
-                })
+                declarations
+                    .iter()
+                    .enumerate()
+                    .all(|(member, declaration)| {
+                        !declaration
+                            .shorthand_source
+                            .is_some_and(|source| source.property() == *shorthand)
+                            || !synthesised_members.contains(&member)
+                    })
             });
         if declaration.shorthand_source.is_some() && shorthand.is_none() {
             if declaration
@@ -995,16 +1096,15 @@ impl<'a> ShorthandMembers<'a> {
         // Once one of its longhands is replaced, the remaining system-derived
         // values cannot be reconstructed as a regular font shorthand.
         if self.declarations().any(|declaration| {
-                declaration
-                    .shorthand_source
-                    .is_some_and(|source| source.property().schema().name == "font")
-                    && declaration.shorthand_value.as_ref().is_some_and(|value| {
-                        crate::declaration_parser::is_system_font_keyword(
-                            &projected_specified_style_value_text(value),
-                        )
-                    })
-            })
-        {
+            declaration
+                .shorthand_source
+                .is_some_and(|source| source.property().schema().name == "font")
+                && declaration.shorthand_value.as_ref().is_some_and(|value| {
+                    crate::declaration_parser::is_system_font_keyword(
+                        &projected_specified_style_value_text(value),
+                    )
+                })
+        }) {
             return None;
         }
         let wide = self
@@ -1088,20 +1188,35 @@ fn synthesised_independent_shorthands(
         ordered_members.sort_unstable();
         if !crate::declaration_parser::compatibility::is_all(schema) {
             let mapping = |declaration: &stylo_cssom_model::SpecifiedDeclaration| {
-                let CanonicalProperty::Native(property) = CanonicalProperty::from_specified(&declaration.property)?;
-                let id = style::properties::PropertyId::parse_unchecked(property.schema().name, None).ok()?.longhand_id()?;
-                Some((id.logical_group()?, id.to_physical(style::logical_geometry::WritingMode::empty()) != id))
+                let CanonicalProperty::Native(property) =
+                    CanonicalProperty::from_specified(&declaration.property)?;
+                let id =
+                    style::properties::PropertyId::parse_unchecked(property.schema().name, None)
+                        .ok()?
+                        .longhand_id()?;
+                Some((
+                    id.logical_group()?,
+                    id.to_physical(style::logical_geometry::WritingMode::empty()) != id,
+                ))
             };
             // Do not move an inline-axis shorthand across block-axis members
             // of its logical group (or vice versa). They are distinct mapping
             // groups even though both have logical rather than physical names.
-            let member_mappings = members.declarations().filter_map(mapping).collect::<Vec<_>>();
+            let member_mappings = members
+                .declarations()
+                .filter_map(mapping)
+                .collect::<Vec<_>>();
             let first = ordered_members[0];
             let last = *ordered_members.last().unwrap();
             if (first..=last).any(|offset| {
-                !ordered_members.contains(&offset) && mapping(&declarations[offset]).is_some_and(|(group, logical)| {
-                    member_mappings.iter().any(|(member_group, member_logical)| *member_group == group && (*member_logical != logical || logical))
-                })
+                !ordered_members.contains(&offset)
+                    && mapping(&declarations[offset]).is_some_and(|(group, logical)| {
+                        member_mappings
+                            .iter()
+                            .any(|(member_group, member_logical)| {
+                                *member_group == group && (*member_logical != logical || logical)
+                            })
+                    })
             }) {
                 continue;
             }
@@ -1120,8 +1235,19 @@ fn synthesised_independent_shorthands(
         });
     }
     shorthands.sort_by(|left, right| {
-        let prefix = |name: &str| if name.starts_with("-webkit-") { 1 } else if name.starts_with('-') { 2 } else { 0 };
-        right.members.len().cmp(&left.members.len())
+        let prefix = |name: &str| {
+            if name.starts_with("-webkit-") {
+                1
+            } else if name.starts_with('-') {
+                2
+            } else {
+                0
+            }
+        };
+        right
+            .members
+            .len()
+            .cmp(&left.members.len())
             .then_with(|| prefix(left.schema.name).cmp(&prefix(right.schema.name)))
             .then_with(|| left.schema.name.cmp(right.schema.name))
     });
@@ -1294,6 +1420,9 @@ fn projected_specified_style_value_text(value: &stylo_cssom_model::SpecifiedStyl
 
 fn write_specified_style_value(value: &stylo_cssom_model::SpecifiedStyleValue, css: &mut String) {
     match value {
+        stylo_cssom_model::SpecifiedStyleValue::ParsedCalculation { serialization, .. } => {
+            write_specified_style_value(serialization, css);
+        },
         stylo_cssom_model::SpecifiedStyleValue::CssWide(keyword) => {
             css.push_str(crate::declaration_parser::compatibility::css_wide_keyword_text(*keyword));
         },

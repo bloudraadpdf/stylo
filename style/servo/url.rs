@@ -8,7 +8,7 @@ use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
 use crate::stylesheets::CorsMode;
 use crate::values::computed::{Context, ToComputedValue};
-use cssparser::{match_ignore_ascii_case, Parser};
+use cssparser::{Parser, match_ignore_ascii_case};
 use servo_arc::Arc;
 use std::fmt::{self, Write};
 use std::ops::Deref;
@@ -201,7 +201,9 @@ impl UrlRequestModifiers {
 
 impl ToShmem for CssUrl {
     fn to_shmem(&self, _builder: &mut SharedMemoryBuilder) -> to_shmem::Result<Self> {
-        unimplemented!("If servo wants to share stylesheets across processes, ToShmem for Url must be implemented");
+        unimplemented!(
+            "If servo wants to share stylesheets across processes, ToShmem for Url must be implemented"
+        );
     }
 }
 
@@ -218,7 +220,11 @@ impl CssUrl {
     ///
     pub fn parse_from_string(url: String, context: &ParserContext, cors_mode: CorsMode) -> Self {
         let serialization = Arc::new(url);
-        let resolved = context.url_data.0.join(&serialization).ok().map(Arc::new);
+        let resolved = if serialization.is_empty() {
+            None
+        } else {
+            context.url_data.0.join(&serialization).ok().map(Arc::new)
+        };
         CssUrl(Arc::new(CssUrlData {
             original: Some(serialization),
             resolved: resolved,
@@ -237,7 +243,8 @@ impl CssUrl {
     /// See https://drafts.csswg.org/css-values/#local-urls
     ///
     pub fn is_fragment(&self) -> bool {
-        self.original().is_some_and(|original| original.starts_with('#'))
+        self.original()
+            .is_some_and(|original| original.starts_with('#'))
     }
 
     /// Returns the resolved url if it was valid.
@@ -378,6 +385,11 @@ impl ToComputedValue for SpecifiedUrl {
         match self.resolved {
             Some(ref url) => ComputedUrl::Valid(Arc::new(ValidComputedUrl {
                 url: url.clone(),
+                local: self
+                    .original
+                    .as_ref()
+                    .filter(|url| url.starts_with('#'))
+                    .cloned(),
                 cors_mode: self.cors_mode,
                 modifiers: self.modifiers.clone(),
             })),
@@ -397,7 +409,7 @@ impl ToComputedValue for SpecifiedUrl {
     fn from_computed_value(computed: &ComputedUrl) -> Self {
         let data = match computed {
             ComputedUrl::Valid(computed) => CssUrlData {
-                original: None,
+                original: computed.local.clone(),
                 resolved: Some(computed.url.clone()),
                 cors_mode: computed.cors_mode,
                 modifiers: computed.modifiers.clone(),
@@ -436,6 +448,8 @@ pub struct InvalidComputedUrl {
 pub struct ValidComputedUrl {
     #[ignore_malloc_size_of = "Arc"]
     url: Arc<Url>,
+    #[ignore_malloc_size_of = "Arc"]
+    local: Option<Arc<String>>,
     cors_mode: CorsMode,
     modifiers: UrlRequestModifiers,
 }
@@ -480,7 +494,10 @@ impl ToCss for ComputedUrl {
         W: Write,
     {
         let string = match self {
-            ComputedUrl::Valid(computed) => computed.url.as_str(),
+            ComputedUrl::Valid(computed) => computed
+                .local
+                .as_ref()
+                .map_or_else(|| computed.url.as_str(), |local| local.as_str()),
             ComputedUrl::Invalid(computed) => computed.serialization.as_str(),
         };
 
@@ -496,9 +513,30 @@ mod tests {
     use super::CssUrl;
     use crate::custom_properties::AttrTaintedRange;
     use crate::parser::Parse;
-    use crate::test_support::{author_parser_context, test_url_data};
+    use crate::test_support::{author_parser_context, test_url_data, with_computed_context};
+    use crate::values::computed::ToComputedValue;
     use crate::values::specified::Image;
     use cssparser::{Parser, ParserInput};
+    use style_traits::ToCss;
+
+    #[test]
+    fn computed_urls_preserve_empty_and_fragment_only_references() {
+        let url_data = test_url_data();
+        let context = author_parser_context(&url_data);
+        for (url, expected, invalid) in [("", "url(\"\")", true), ("#foo", "url(\"#foo\")", false)]
+        {
+            let specified =
+                CssUrl::parse_from_string(url.into(), &context, crate::stylesheets::CorsMode::None);
+            assert_eq!(specified.is_invalid(), invalid);
+            with_computed_context(|context| {
+                let computed = specified.to_computed_value(context);
+                assert_eq!(computed.to_css_string(), expected);
+                let restored = CssUrl::from_computed_value(&computed);
+                assert_eq!(restored.to_css_string(), expected);
+                assert_eq!(restored.is_fragment(), url.starts_with('#'));
+            });
+        }
+    }
 
     fn parses<T: Parse>(css: &str, tainted: &[AttrTaintedRange]) -> bool {
         let url_data = test_url_data();

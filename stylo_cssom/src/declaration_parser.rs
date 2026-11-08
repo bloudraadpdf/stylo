@@ -372,10 +372,12 @@ fn inline_declaration_after_at_rules(css: &str) -> Option<&str> {
             Token::AtKeyword(_) => loop {
                 match parser.next().ok()? {
                     Token::CurlyBracketBlock => {
-                        parser.parse_nested_block(|nested| {
-                            while nested.next().is_ok() {}
-                            Ok::<_, cssparser::ParseError<'_, ()>>(())
-                        }).ok()?;
+                        parser
+                            .parse_nested_block(|nested| {
+                                while nested.next().is_ok() {}
+                                Ok::<_, cssparser::ParseError<'_, ()>>(())
+                            })
+                            .ok()?;
                         break;
                     },
                     Token::Semicolon => break,
@@ -439,6 +441,14 @@ fn inline_native_declarations(
                 declaration.shorthand_value.clone_from(&shorthand_value);
             }
         }
+        if let Some((property, value)) = authored.split_once(':') {
+            preserve_calculation_source(
+                &mut parsed,
+                property.trim(),
+                split_inline_declaration_importance(value).0,
+                base_url,
+            );
+        }
         declarations.extend(parsed.into_iter().map(|declaration| (order, declaration)));
     }
     declarations
@@ -451,6 +461,120 @@ pub fn specified_style_value_from_css(
     Some(specified_style_value_from_components(
         parse_specified_component_values(css, base_url)?,
     ))
+}
+
+fn preserve_calculation_source(
+    declarations: &mut [stylo_cssom_model::SpecifiedDeclaration],
+    property: &str,
+    value: &str,
+    base_url: &Arc<str>,
+) {
+    use stylo_cssom_model::{SpecifiedComponentValue as Component, SpecifiedStyleValue as Value};
+    fn contains_calculation(values: &[Component]) -> bool {
+        values.iter().any(|value| match value {
+            Component::Function { name, arguments } => {
+                matches!(
+                    name.to_ascii_lowercase().as_str(),
+                    "calc"
+                        | "min"
+                        | "max"
+                        | "clamp"
+                        | "round"
+                        | "mod"
+                        | "rem"
+                        | "sin"
+                        | "cos"
+                        | "tan"
+                        | "asin"
+                        | "acos"
+                        | "atan"
+                        | "atan2"
+                        | "pow"
+                        | "sqrt"
+                        | "hypot"
+                        | "log"
+                        | "exp"
+                        | "abs"
+                        | "sign"
+                ) || contains_calculation(arguments)
+            },
+            Component::Block { values, .. } => contains_calculation(values),
+            _ => false,
+        })
+    }
+    let Some(schema) = inline_style_cssom_property_schema(&property.to_ascii_lowercase()) else {
+        return;
+    };
+    let Some(source @ Value::Components(_)) = specified_style_value_from_css(value, base_url)
+    else {
+        return;
+    };
+    let Value::Components(ref components) = source else {
+        unreachable!()
+    };
+    if !contains_calculation(components) {
+        return;
+    }
+    for declaration in declarations {
+        if !matches!(
+            declaration.property,
+            stylo_cssom_model::SpecifiedPropertyName::Standard(_)
+        ) || declaration
+            .shorthand_source
+            .is_some_and(stylo_cssom_model::SpecifiedShorthandSource::has_pending_substitution)
+        {
+            continue;
+        }
+        declaration.value = Value::ParsedCalculation {
+            property: schema.id,
+            serialization: Box::new(declaration.value.clone()),
+            source: Box::new(source.clone()),
+        };
+    }
+}
+
+#[cfg(test)]
+mod calculation_source_tests {
+    use super::*;
+
+    #[test]
+    fn calculations_keep_source_units_for_longhand_and_shorthand_cascades() {
+        let base = Arc::from("about:blank");
+        let url_data = ABOUT_BLANK.clone().into();
+        for property in ["letter-spacing", "margin"] {
+            for mutation in [false, true] {
+                let declarations = if mutation {
+                    parse_inline_style_property_declarations(
+                        property,
+                        "abs(1cm)",
+                        CssomDeclarationPriority::Normal,
+                        &base,
+                    )
+                    .unwrap()
+                } else {
+                    parse_inline_style_declarations(&format!("{property}: abs(1cm)"), base.clone())
+                        .to_vec()
+                };
+                let canonical = inline_style_get_property_value(
+                    &parse_inline_style_block(&format!("{property}: abs(1cm)")),
+                    property,
+                );
+                assert_eq!(
+                    crate::specified::projected_specified_property_value(&declarations, property),
+                    canonical
+                );
+                for declaration in &declarations {
+                    let projected =
+                        crate::specified::project_inline_style_declaration(declaration, &url_data);
+                    assert_eq!(projected.len(), 1);
+                    let source = projected[0]
+                        .pending_substitution()
+                        .map_or_else(|| projected[0].value(), |pending| pending.tokens());
+                    assert!(source.contains("1cm"), "{property}: {source}");
+                }
+            }
+        }
+    }
 }
 
 fn specified_style_value_from_components(
@@ -690,6 +814,7 @@ pub fn parse_inline_style_property_declarations(
             declaration.shorthand_value = Some(value.clone());
         }
     }
+    preserve_calculation_source(&mut declarations, backing_property, value, base_url);
     Some(declarations)
 }
 
@@ -1259,7 +1384,9 @@ pub fn stylo_rule_declaration_block(
             declaration.value(),
             importance,
             context.rule_type(),
-            retained_url_data.as_ref().unwrap_or(&ABOUT_BLANK.clone().into()),
+            retained_url_data
+                .as_ref()
+                .unwrap_or(&ABOUT_BLANK.clone().into()),
             &namespaces,
         ) {
             return None;
@@ -1842,7 +1969,11 @@ mod tests {
             ("{}color:red;z-index:1", "z-index: 1;"),
         ] {
             let declarations = parse_inline_style_declarations(source, "about:blank".into());
-            assert_eq!(crate::specified::serialize_specified_declarations(&declarations), expected, "{source}");
+            assert_eq!(
+                crate::specified::serialize_specified_declarations(&declarations),
+                expected,
+                "{source}"
+            );
         }
     }
 
@@ -2502,8 +2633,7 @@ mod tests {
                 "about:blank".into(),
             );
             assert_eq!(
-                crate::specified::projected_specified_property_value(&from_list, "font")
-                    .as_deref(),
+                crate::specified::projected_specified_property_value(&from_list, "font").as_deref(),
                 Some(keyword),
             );
             for parsed in [&declarations[..], &from_list[..]] {

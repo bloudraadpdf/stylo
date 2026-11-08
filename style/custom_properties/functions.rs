@@ -496,6 +496,15 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
             Some(index) => self.calls.frames[index].function.registration(name).clone(),
             None => self.stylist.get_custom_property_registration(name).clone(),
         };
+        if binding.is_none()
+            && self
+                .custom_properties
+                .get(&registration, name)
+                .and_then(|value| value.as_universal())
+                .is_some_and(|value| value.has_references())
+        {
+            return false;
+        }
         let initial = match binding {
             Some(index) => self.calls.frames[index]
                 .function
