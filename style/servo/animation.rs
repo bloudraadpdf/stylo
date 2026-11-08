@@ -93,6 +93,11 @@ pub struct PropertyAnimation {
 }
 
 impl PropertyAnimation {
+    /// Returns the endpoints and timing function of this animation.
+    pub fn endpoints(&self) -> (&AnimationValue, &AnimationValue, &TimingFunction) {
+        (&self.from, &self.to, &self.timing_function)
+    }
+
     /// Returns the given property longhand id.
     pub fn property_id(&self) -> PropertyDeclarationId<'_> {
         debug_assert_eq!(self.from.id(), self.to.id());
@@ -468,6 +473,9 @@ pub struct Animation {
     /// The duration of this animation.
     pub duration: f64,
 
+    /// The effect duration set by script, which overrides subsequent CSS duration changes.
+    script_duration: Option<f64>,
+
     /// The delay of the animation.
     pub delay: f64,
 
@@ -497,6 +505,16 @@ pub struct Animation {
 }
 
 impl Animation {
+    /// Sets the effect duration without changing its CSS owning animation or playback time.
+    pub fn set_effect_duration(&mut self, seconds: f64) -> bool {
+        if seconds.is_nan() || seconds < 0.0 {
+            return false;
+        }
+        self.script_duration = Some(seconds);
+        self.duration = seconds;
+        true
+    }
+
     fn composited_keyframe_value(
         &self,
         keyframe: &ComputedKeyframe,
@@ -784,8 +802,13 @@ impl Animation {
         let old_direction = self.current_direction;
         let old_state = self.state.clone();
         let old_iteration_state = self.iteration_state.clone();
+        let script_duration = self.script_duration;
 
         *self = other.clone();
+        if let Some(duration) = script_duration {
+            self.script_duration = Some(duration);
+            self.duration = duration;
+        }
 
         let delay_change = self.delay - old_delay;
         self.started_at = old_started_at + delay_change;
@@ -2134,6 +2157,7 @@ pub fn maybe_start_animations<E>(
             computed_steps,
             started_at,
             duration,
+            script_duration: None,
             fill_mode: style.animation_fill_mode_mod(i),
             delay: delay as f64,
             iteration_state,
@@ -2345,6 +2369,7 @@ mod tests {
             computed_steps: Box::default(),
             started_at: 0.,
             duration: 0.001,
+            script_duration: None,
             delay: 0.,
             fill_mode: AnimationFillMode::None,
             iteration_state: KeyframesIterationState::Finite(0., 1.),
@@ -2363,6 +2388,32 @@ mod tests {
             duration,
             ..pending_animation()
         }
+    }
+
+    #[test]
+    fn script_effect_duration_survives_css_refresh_and_retained_transfer() {
+        let mut retained = named_animation("clip", -5.0, 10.0);
+        retained.state = AnimationState::Running;
+        assert!(retained.set_effect_duration(4.999));
+        retained.state = AnimationState::Finished;
+        let styled = named_animation("clip", -5.0, 10.0);
+        let mut transferred = retained.clone();
+        transferred.update_from_other(&styled, 0.0);
+        assert_eq!(transferred.duration, 4.999);
+        assert_eq!(transferred.started_at, -5.0);
+        assert_eq!(transferred.state, AnimationState::Finished);
+        transferred.update_from_other(&named_animation("clip", -5.0, 20.0), 0.0);
+        assert_eq!(transferred.duration, 4.999);
+        assert_eq!(transferred.state, AnimationState::Finished);
+        let mut delayed = styled.clone();
+        delayed.delay = 2.0;
+        transferred.update_from_other(&delayed, 0.0);
+        assert_eq!(transferred.duration, 4.999);
+        assert_eq!(transferred.delay, 2.0);
+        assert_eq!(transferred.started_at, -3.0);
+        assert!(!transferred.set_effect_duration(f64::NAN));
+        assert!(!transferred.set_effect_duration(-1.0));
+        assert_eq!(transferred.duration, 4.999);
     }
 
     #[test]
