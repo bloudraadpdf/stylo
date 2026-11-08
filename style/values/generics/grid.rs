@@ -9,7 +9,7 @@ use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
 use crate::values::computed::{Context, ToComputedValue};
 use crate::values::specified;
-use crate::values::{CSSFloat, CustomIdent};
+use crate::values::CustomIdent;
 use crate::{One, Zero};
 use cssparser::Parser;
 use std::fmt::{self, Write};
@@ -260,12 +260,11 @@ impl Parse for GridLine<specified::Integer> {
     ToShmem,
 )]
 #[repr(C, u8)]
-pub enum GenericTrackBreadth<L> {
+pub enum GenericTrackBreadth<L, F> {
     /// The generic type is almost always a non-negative `<length-percentage>`
     Breadth(L),
     /// A flex fraction specified in `fr` units.
-    #[css(dimension)]
-    Fr(CSSFloat),
+    Fr(F),
     /// `auto`
     Auto,
     /// `min-content`
@@ -276,7 +275,7 @@ pub enum GenericTrackBreadth<L> {
 
 pub use self::GenericTrackBreadth as TrackBreadth;
 
-impl<L> TrackBreadth<L> {
+impl<L, F> TrackBreadth<L, F> {
     /// Check whether this is a `<fixed-breadth>` (i.e., it only has `<length-percentage>`)
     ///
     /// <https://drafts.csswg.org/css-grid/#typedef-fixed-breadth>
@@ -302,28 +301,28 @@ impl<L> TrackBreadth<L> {
     ToShmem,
 )]
 #[repr(C, u8)]
-pub enum GenericTrackSize<L> {
+pub enum GenericTrackSize<L, F> {
     /// A flexible `<track-breadth>`
-    Breadth(GenericTrackBreadth<L>),
+    Breadth(GenericTrackBreadth<L, F>),
     /// A `minmax` function for a range over an inflexible `<track-breadth>`
     /// and a flexible `<track-breadth>`
     ///
     /// <https://drafts.csswg.org/css-grid/#valdef-grid-template-columns-minmax>
     #[css(function)]
-    Minmax(GenericTrackBreadth<L>, GenericTrackBreadth<L>),
+    Minmax(GenericTrackBreadth<L, F>, GenericTrackBreadth<L, F>),
     /// A `fit-content` function.
     ///
-    /// This stores a TrackBreadth<L> for convenience, but it can only be a
+    /// This stores a TrackBreadth<L, F> for convenience, but it can only be a
     /// LengthPercentage.
     ///
     /// <https://drafts.csswg.org/css-grid/#valdef-grid-template-columns-fit-content>
     #[css(function)]
-    FitContent(GenericTrackBreadth<L>),
+    FitContent(GenericTrackBreadth<L, F>),
 }
 
 pub use self::GenericTrackSize as TrackSize;
 
-impl<L> TrackSize<L> {
+impl<L, F> TrackSize<L, F> {
     /// The initial value.
     const INITIAL_VALUE: Self = TrackSize::Breadth(TrackBreadth::Auto);
 
@@ -362,13 +361,13 @@ impl<L> TrackSize<L> {
     }
 }
 
-impl<L> Default for TrackSize<L> {
+impl<L, F> Default for TrackSize<L, F> {
     fn default() -> Self {
         Self::initial_value()
     }
 }
 
-impl<L: ToCss> ToCss for TrackSize<L> {
+impl<L: ToCss, F: ToCss> ToCss for TrackSize<L, F> {
     fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
     where
         W: Write,
@@ -517,7 +516,7 @@ impl Parse for RepeatCount<specified::Integer> {
 )]
 #[css(function = "repeat")]
 #[repr(C)]
-pub struct GenericTrackRepeat<L, I> {
+pub struct GenericTrackRepeat<L, I, F> {
     /// The number of times for the value to be repeated (could also be `auto-fit` or `auto-fill`)
     pub count: RepeatCount<I>,
     /// `<line-names>` accompanying `<track_size>` values.
@@ -527,12 +526,12 @@ pub struct GenericTrackRepeat<L, I> {
     /// length is always one value more than that of the `<track-size>`.
     pub line_names: crate::OwnedSlice<crate::OwnedSlice<CustomIdent>>,
     /// `<track-size>` values.
-    pub track_sizes: crate::OwnedSlice<GenericTrackSize<L>>,
+    pub track_sizes: crate::OwnedSlice<GenericTrackSize<L, F>>,
 }
 
 pub use self::GenericTrackRepeat as TrackRepeat;
 
-impl<L: ToCss, I: ToCss> ToCss for TrackRepeat<L, I> {
+impl<L: ToCss, I: ToCss, F: ToCss> ToCss for TrackRepeat<L, I, F> {
     fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
     where
         W: Write,
@@ -581,16 +580,16 @@ impl<L: ToCss, I: ToCss> ToCss for TrackRepeat<L, I> {
     ToShmem,
 )]
 #[repr(C, u8)]
-pub enum GenericTrackListValue<LengthPercentage, Integer> {
+pub enum GenericTrackListValue<LengthPercentage, Integer, F> {
     /// A <track-size> value.
-    TrackSize(#[animation(field_bound)] GenericTrackSize<LengthPercentage>),
+    TrackSize(#[animation(field_bound)] GenericTrackSize<LengthPercentage, F>),
     /// A <track-repeat> value.
-    TrackRepeat(#[animation(field_bound)] GenericTrackRepeat<LengthPercentage, Integer>),
+    TrackRepeat(#[animation(field_bound)] GenericTrackRepeat<LengthPercentage, Integer, F>),
 }
 
 pub use self::GenericTrackListValue as TrackListValue;
 
-impl<L, I> TrackListValue<L, I> {
+impl<L, I, F> TrackListValue<L, I, F> {
     // FIXME: can't use TrackSize::initial_value() here b/c rustc error "is not yet stable as a const fn"
     const INITIAL_VALUE: Self = TrackListValue::TrackSize(TrackSize::Breadth(TrackBreadth::Auto));
 
@@ -607,7 +606,7 @@ impl<L, I> TrackListValue<L, I> {
     }
 }
 
-impl<L, I> Default for TrackListValue<L, I> {
+impl<L, I, F> Default for TrackListValue<L, I, F> {
     #[inline]
     fn default() -> Self {
         Self::INITIAL_VALUE
@@ -629,12 +628,12 @@ impl<L, I> Default for TrackListValue<L, I> {
     ToShmem,
 )]
 #[repr(C)]
-pub struct GenericTrackList<LengthPercentage, Integer> {
+pub struct GenericTrackList<LengthPercentage, Integer, F> {
     /// The index in `values` where our `<auto-repeat>` value is, if in bounds.
     #[css(skip)]
     pub auto_repeat_index: usize,
     /// A vector of `<track-size> | <track-repeat>` values.
-    pub values: crate::OwnedSlice<GenericTrackListValue<LengthPercentage, Integer>>,
+    pub values: crate::OwnedSlice<GenericTrackListValue<LengthPercentage, Integer, F>>,
     /// `<line-names>` accompanying `<track-size> | <track-repeat>` values.
     ///
     /// If there's no `<line-names>`, then it's represented by an empty vector.
@@ -645,7 +644,7 @@ pub struct GenericTrackList<LengthPercentage, Integer> {
 
 pub use self::GenericTrackList as TrackList;
 
-impl<L, I> TrackList<L, I> {
+impl<L, I, F> TrackList<L, I, F> {
     /// Whether this track list is an explicit track list (that is, doesn't have
     /// any repeat values).
     pub fn is_explicit(&self) -> bool {
@@ -658,7 +657,7 @@ impl<L, I> TrackList<L, I> {
     }
 }
 
-impl<L: ToCss, I: ToCss> ToCss for TrackList<L, I> {
+impl<L: ToCss, I: ToCss, F: ToCss> ToCss for TrackList<L, I, F> {
     fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
     where
         W: Write,
@@ -860,7 +859,7 @@ impl<I: ToCss> ToCss for LineNameList<I> {
 )]
 #[value_info(other_values = "subgrid")]
 #[repr(C, u8)]
-pub enum GenericGridTemplateComponent<L, I> {
+pub enum GenericGridTemplateComponent<L, I, F> {
     /// `none` value.
     None,
     /// The grid `<track-list>`
@@ -869,7 +868,7 @@ pub enum GenericGridTemplateComponent<L, I> {
         #[compute(field_bound)]
         #[resolve(field_bound)]
         #[shmem(field_bound)]
-        Box<GenericTrackList<L, I>>,
+        Box<GenericTrackList<L, I, F>>,
     ),
     /// A `subgrid <line-name-list>?`
     /// TODO: Support animations for this after subgrid is addressed in [grid-2] spec.
@@ -882,7 +881,7 @@ pub enum GenericGridTemplateComponent<L, I> {
 
 pub use self::GenericGridTemplateComponent as GridTemplateComponent;
 
-impl<L, I> GridTemplateComponent<L, I> {
+impl<L, I, F> GridTemplateComponent<L, I, F> {
     /// The initial value.
     const INITIAL_VALUE: Self = Self::None;
 
@@ -900,7 +899,7 @@ impl<L, I> GridTemplateComponent<L, I> {
     }
 }
 
-impl<L, I> Default for GridTemplateComponent<L, I> {
+impl<L, I, F> Default for GridTemplateComponent<L, I, F> {
     #[inline]
     fn default() -> Self {
         Self::INITIAL_VALUE

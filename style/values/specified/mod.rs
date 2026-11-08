@@ -1260,23 +1260,23 @@ impl Parse for PositiveInteger {
 }
 
 /// The specified value of a grid `<track-breadth>`
-pub type TrackBreadth = GenericTrackBreadth<LengthPercentage>;
+pub type TrackBreadth = GenericTrackBreadth<LengthPercentage, grid::Flex>;
 
 /// The specified value of a grid `<track-size>`
-pub type TrackSize = GenericTrackSize<LengthPercentage>;
+pub type TrackSize = GenericTrackSize<LengthPercentage, grid::Flex>;
 
 /// The specified value of a grid `<track-size>+`
 pub type ImplicitGridTracks = GenericImplicitGridTracks<TrackSize>;
 
 /// The specified value of a grid `<track-list>`
 /// (could also be `<auto-track-list>` or `<explicit-track-list>`)
-pub type TrackList = GenericTrackList<LengthPercentage, Integer>;
+pub type TrackList = GenericTrackList<LengthPercentage, Integer, grid::Flex>;
 
 /// The specified value of a `<grid-line>`.
 pub type GridLine = GenericGridLine<Integer>;
 
 /// `<grid-template-rows> | <grid-template-columns>`
-pub type GridTemplateComponent = GenericGridTemplateComponent<LengthPercentage, Integer>;
+pub type GridTemplateComponent = GenericGridTemplateComponent<LengthPercentage, Integer, grid::Flex>;
 
 /// rect(...)
 pub type ClipRect = generics::GenericClipRect<LengthOrAuto>;

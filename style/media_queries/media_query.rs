@@ -134,6 +134,11 @@ impl MediaQuery {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
+        let mut query_context = context.clone();
+        query_context.nesting_context = crate::parser::NestingContext::new_from_rule(
+            Some(crate::stylesheets::CssRuleType::Media),
+        );
+        let context = &query_context;
         let (qualifier, explicit_media_type) = input
             .try_parse(|input| -> Result<_, ()> {
                 let qualifier = input.try_parse(Qualifier::parse).ok();

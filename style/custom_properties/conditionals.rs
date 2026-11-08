@@ -27,7 +27,7 @@ pub(super) fn parse_branches<'i>(
         loop {
             match input.next()? {
                 Token::Colon => break,
-                Token::Semicolon => {
+                Token::Semicolon | Token::Delim('!') => {
                     return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
                 },
                 _ => {},
@@ -55,7 +55,7 @@ pub(super) fn parse_branches<'i>(
                 missing_closing_characters,
             )
         })?;
-        branches.push(ConditionalBranch { condition, value });
+        branches.push(ConditionalBranch { condition, value, selected: None, evaluated: true });
         if !input.is_exhausted() {
             input.expect_semicolon()?;
         }
@@ -117,7 +117,8 @@ pub(super) fn condition_names(value: &VariableValue) -> Vec<Name> {
         let SubstitutionFunction::If(branches) = &reference.function else {
             continue;
         };
-        for ConditionalBranch { condition, .. } in &**branches {
+        for ConditionalBranch { condition, evaluated, .. } in &**branches {
+            if !evaluated { continue; }
             let mut input = ParserInput::new(&value.css[condition.start..condition.end]);
             if let Ok(condition) = QueryCondition::parse(
                 &context(&value.url_data),
@@ -147,7 +148,8 @@ pub(super) fn condition_values(value: &VariableValue) -> Vec<VariableValue> {
         let SubstitutionFunction::If(branches) = &reference.function else {
             continue;
         };
-        for ConditionalBranch { condition, .. } in &**branches {
+        for ConditionalBranch { condition, evaluated, .. } in &**branches {
+            if !evaluated { continue; }
             let offset = condition.start;
             let mut input = ParserInput::new(&value.css[condition.start..condition.end]);
             if let Ok(mut condition) = VariableValue::parse(
@@ -182,6 +184,7 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
         css: &'v str,
         url_data: &UrlExtraData,
         branches: &[ConditionalBranch],
+        slot: usize,
         frame: Option<usize>,
         references: &mut ReferenceIter<'v>,
     ) -> Result<Substitution<'v>, ()>
@@ -189,7 +192,8 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
         'a: 'v,
     {
         let mut tainted = false;
-        for ConditionalBranch { condition, value } in branches {
+        let key = self.conditional_key(slot, frame);
+        for (index, ConditionalBranch { condition, value, .. }) in branches.iter().enumerate() {
             let offset = condition.start;
             let mut input = ParserInput::new(&css[condition.start..condition.end]);
             let condition = VariableValue::parse(
@@ -200,6 +204,7 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
             .ok();
             let condition = condition.map(|mut condition| {
                 condition.private_names = self.private_names.clone();
+                condition.references.random_source_offset = offset;
                 condition.copy_random_function_context(references.clone(), offset);
                 condition
             });
@@ -210,6 +215,7 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
                 tainted |= !condition.attr_tainted.is_empty();
                 self.condition_matches(&condition.css, url_data, frame, &mut tainted)
             }) {
+                self.conditional_branches.insert(key.clone(), Some(index));
                 return self
                     .chunk(
                         css,
@@ -228,6 +234,7 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
                 .is_some()
             {}
         }
+        self.conditional_branches.insert(key, None);
         Ok(Substitution::default())
     }
 
@@ -324,12 +331,17 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
                 self.substitute_value(value, frame).ok()?.css.into_owned()
             },
         };
-        let mut input = ParserInput::new(&css);
-        Parser::new(&mut input)
-            .parse_entirely(|input| {
-                RangeOperand::parse(&context(url_data), self.computed_context, input)
-            })
-            .ok()
+        let property = self.early_random_property();
+        let offset = self.reserve_early_random(&property, frame, 0);
+        let mut source = ParserInput::new(&css);
+        let mut input = Parser::new(&mut source);
+        let context = context(url_data).for_random_declaration_with_offset(&property, offset, &mut input);
+        self.reserve_early_random(&property, frame, context.random_function_count());
+        let scope = self.calls.random_scope(frame).unwrap_or_default().to_vec();
+        let previous = self.computed_context.replace_random_function_scope(scope);
+        let result = input.parse_entirely(|input| RangeOperand::parse(&context, self.computed_context, input));
+        let _ = self.computed_context.replace_random_function_scope(previous);
+        result.ok()
     }
 
     fn enclosed_query(&self, css: &str, url_data: &UrlExtraData) -> KleeneValue {

@@ -301,20 +301,29 @@ impl<'a, 'b> StyleQueryContainer<'a, 'b> {
 
     /// Replaces `var()`, `attr()` and `env()` against the container.
     pub(crate) fn substitute(&self, value: &SpecifiedValue) -> Option<SpecifiedValue> {
-        if !value.has_references() {
-            return Some(value.clone());
-        }
-        let mut attributes = AttributeTracker::new(self.container.attributes);
-        custom_properties::substitute(
-            value,
-            self.custom_properties(),
-            self.stylist,
-            self.context,
-            self.context.scope,
-            &mut attributes,
-        )
-        .ok()
-        .map(|substituted| substituted.into_value(&value.url_data))
+        let value = if !value.has_references() {
+            value.clone()
+        } else {
+            let mut attributes = AttributeTracker::new(self.container.attributes);
+            custom_properties::substitute(
+                value,
+                self.custom_properties(),
+                self.stylist,
+                self.context,
+                self.context.scope,
+                &mut attributes,
+            ).ok()?.into_value(&value.url_data)
+        };
+        (!self.rejects_random(&value)).then_some(value)
+    }
+
+    fn rejects_random(&self, value: &SpecifiedValue) -> bool {
+        if !self.context.in_container_query { return false; }
+        let mut input = ParserInput::new(value.css_text());
+        let scope = crate::values::random::RandomDeclarationContext::new(
+            crate::Atom::from(""), &mut Parser::new(&mut input),
+        );
+        !scope.positions.is_empty()
     }
 
     fn declaration_matches(&self, name: &Name, value: Option<&Arc<SpecifiedValue>>) -> bool {
@@ -367,6 +376,7 @@ impl<'a, 'b> StyleQueryContainer<'a, 'b> {
         value: &SpecifiedValue,
         parse: impl for<'i, 't> FnOnce(&ParserContext, &mut Parser<'i, 't>) -> Result<T, ParseError<'i>>,
     ) -> Option<T> {
+        if self.rejects_random(value) { return None; }
         let context = ParserContext::new(
             Origin::Author,
             &value.url_data,

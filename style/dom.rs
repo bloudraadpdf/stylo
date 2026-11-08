@@ -1041,6 +1041,20 @@ pub struct ExpandedAttributeName {
 pub trait AttributeProvider {
     /// Return the value of the attribute with the given expanded name if it exists.
     fn get_attr(&self, attr: &ExpandedAttributeName) -> Option<String>;
+
+    /// Look up a pseudo-element's attribute on its originating element in the declaration's tree.
+    fn get_attr_in_scope(&self, attr: &ExpandedAttributeName, _level: crate::rule_tree::CascadeLevel) -> Option<String> {
+        self.get_attr(attr)
+    }
+}
+
+/// The originating host of an outer-tree ::part reference; ordinary and slotted elements retain their own attributes.
+pub fn attribute_originating_element<E: TElement>(element: E, level: crate::rule_tree::CascadeLevel) -> Option<E> {
+    let mut origin = element;
+    for _ in 0..level.shadow_scope_steps().max(0) {
+        origin = origin.containing_shadow()?.host();
+    }
+    Some(origin)
 }
 
 /// A set of the attributes used to compute a style that uses `attr()`
@@ -1080,6 +1094,12 @@ impl<'a> AttributeTracker<'a> {
     pub fn query(&mut self, name: &ExpandedAttributeName) -> Option<String> {
         self.references.insert(name.clone());
         self.provider.get_attr(name)
+    }
+
+    /// Query at the declaration's tree scope while retaining the same expanded-name dependency.
+    pub fn query_in_scope(&mut self, name: &ExpandedAttributeName, level: crate::rule_tree::CascadeLevel) -> Option<String> {
+        self.references.insert(name.clone());
+        self.provider.get_attr_in_scope(name, level)
     }
 }
 

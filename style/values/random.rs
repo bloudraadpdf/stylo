@@ -252,7 +252,7 @@ impl<N> RandomKey<N> {
         let mut seen = false;
         while let Ok(ident) = input.try_parse(|input| input.expect_ident_cloned()) {
             seen = true;
-            if ident.starts_with("--") && ident.len() > 2 && key.name.is_none() {
+            if ident.starts_with("--") && key.name.is_none() {
                 key.name = Some(Atom::from(ident.as_ref()));
             } else if ident.eq_ignore_ascii_case("element-scoped") && !key.element_scoped {
                 key.element_scoped = true;
@@ -369,6 +369,18 @@ mod tests {
     use cssparser::ParserInput;
 
     #[test]
+    fn caller_property_is_available_without_a_random_function_at_the_lookup_position() {
+        let url = crate::test_support::test_url_data();
+        let context = crate::test_support::author_parser_context(&url);
+        let mut source = ParserInput::new("  --function()");
+        let mut input = Parser::new(&mut source);
+        let start = input.position();
+        let context = context.for_random_declaration("width", &mut input);
+        assert_eq!(context.random_declaration_property(), Some(&Atom::from("width")));
+        assert!(!context.random_function_identity(start).is_bound());
+    }
+
+    #[test]
     fn declaration_scanning_preserves_parser_state_and_separates_early_keys() {
         let css = "random(0,1) random-item(fixed random(0,1),random(0,1),2) random-item(auto,3,4)";
         let mut source = ParserInput::new(css);
@@ -402,6 +414,7 @@ mod tests {
             ),
             ("--x property-index-scoped", "--x ua-margin-2"),
             ("ua-width --x", "--x ua-width"),
+            ("--", "--"),
         ] {
             let mut source = ParserInput::new(css);
             let mut input = Parser::new(&mut source);

@@ -162,6 +162,15 @@ impl CascadeLevel {
         }
     }
 
+    /// Tree steps from the styled element to the declaration, independent of important-order reversal.
+    pub fn shadow_scope_steps(self) -> i8 {
+        match self {
+            Self::AuthorNormal { shadow_cascade_order } => shadow_cascade_order.steps(),
+            Self::AuthorImportant { shadow_cascade_order } => -shadow_cascade_order.steps(),
+            _ => 0,
+        }
+    }
+
     /// Returns whether this cascade level represents important rules of some
     /// sort.
     #[inline]

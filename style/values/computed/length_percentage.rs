@@ -361,7 +361,8 @@ impl LengthPercentage {
                     },
                     CalcLengthPercentageLeaf::Deg(_)
                     | CalcLengthPercentageLeaf::S(_)
-                    | CalcLengthPercentageLeaf::Dppx(_) => {
+                    | CalcLengthPercentageLeaf::Dppx(_)
+                    | CalcLengthPercentageLeaf::Fr(_) => {
                         unreachable!(
                             "a length-percentage calculation must have a length or percentage result"
                         )
@@ -762,6 +763,8 @@ pub enum CalcLengthPercentageLeaf {
     S(f32),
     #[css(dimension)]
     Dppx(f32),
+    #[css(dimension)]
+    Fr(f32),
 }
 
 impl calc::CalcNodeLeaf for CalcLengthPercentageLeaf {
@@ -773,6 +776,7 @@ impl calc::CalcNodeLeaf for CalcLengthPercentageLeaf {
             Self::Deg(_) => CalcUnits::ANGLE,
             Self::S(_) => CalcUnits::TIME,
             Self::Dppx(_) => CalcUnits::RESOLUTION,
+            Self::Fr(_) => CalcUnits::FLEX,
         }
     }
 
@@ -780,7 +784,7 @@ impl calc::CalcNodeLeaf for CalcLengthPercentageLeaf {
         Some(match *self {
             Self::Length(ref l) => l.px(),
             Self::Percentage(ref p) => p.0,
-            Self::Number(n) | Self::Deg(n) | Self::S(n) | Self::Dppx(n) => n,
+            Self::Number(n) | Self::Deg(n) | Self::S(n) | Self::Dppx(n) | Self::Fr(n) => n,
         })
     }
 
@@ -801,7 +805,7 @@ impl calc::CalcNodeLeaf for CalcLengthPercentageLeaf {
 
     fn as_number(&self) -> Option<f32> {
         match *self {
-            Self::Length(_) | Self::Percentage(_) | Self::Deg(_) | Self::S(_) | Self::Dppx(_) => {
+            Self::Length(_) | Self::Percentage(_) | Self::Deg(_) | Self::S(_) | Self::Dppx(_) | Self::Fr(_) => {
                 None
             },
             Self::Number(value) => Some(value),
@@ -838,10 +842,11 @@ impl calc::CalcNodeLeaf for CalcLengthPercentageLeaf {
             (&Number(ref one), &Number(ref other)) => one.partial_cmp(other),
             (&Deg(ref one), &Deg(ref other))
             | (&S(ref one), &S(ref other))
-            | (&Dppx(ref one), &Dppx(ref other)) => one.partial_cmp(other),
+            | (&Dppx(ref one), &Dppx(ref other))
+            | (&Fr(ref one), &Fr(ref other)) => one.partial_cmp(other),
             _ => unsafe {
                 match *self {
-                    Length(..) | Percentage(..) | Number(..) | Deg(..) | S(..) | Dppx(..) => {},
+                    Length(..) | Percentage(..) | Number(..) | Deg(..) | S(..) | Dppx(..) | Fr(..) => {},
                 }
                 debug_unreachable!("Forgot to handle unit in compare()")
             },
@@ -861,7 +866,7 @@ impl calc::CalcNodeLeaf for CalcLengthPercentageLeaf {
             (Number(one), Number(other)) => {
                 *one += *other;
             },
-            (Deg(one), Deg(other)) | (S(one), S(other)) | (Dppx(one), Dppx(other)) => {
+            (Deg(one), Deg(other)) | (S(one), S(other)) | (Dppx(one), Dppx(other)) | (Fr(one), Fr(other)) => {
                 *one += *other;
             },
             _ => return Err(()),
@@ -915,9 +920,10 @@ impl calc::CalcNodeLeaf for CalcLengthPercentageLeaf {
             (&Deg(one), &Deg(other)) => Self::Deg(op(one, other)),
             (&S(one), &S(other)) => Self::S(op(one, other)),
             (&Dppx(one), &Dppx(other)) => Self::Dppx(op(one, other)),
+            (&Fr(one), &Fr(other)) => Self::Fr(op(one, other)),
             _ => unsafe {
                 match *self {
-                    Length(..) | Percentage(..) | Number(..) | Deg(..) | S(..) | Dppx(..) => {},
+                    Length(..) | Percentage(..) | Number(..) | Deg(..) | S(..) | Dppx(..) | Fr(..) => {},
                 }
                 debug_unreachable!("Forgot to handle unit in try_op()")
             },
@@ -936,7 +942,7 @@ impl calc::CalcNodeLeaf for CalcLengthPercentageLeaf {
             Self::Percentage(value) => {
                 *value = Percentage(op(value.0));
             },
-            Self::Number(value) | Self::Deg(value) | Self::S(value) | Self::Dppx(value) => {
+            Self::Number(value) | Self::Deg(value) | Self::S(value) | Self::Dppx(value) | Self::Fr(value) => {
                 *value = op(*value);
             },
         })
@@ -952,6 +958,7 @@ impl calc::CalcNodeLeaf for CalcLengthPercentageLeaf {
             Self::Deg(value) => Some((value, CalcUnits::ANGLE)),
             Self::S(value) => Some((value, CalcUnits::TIME)),
             Self::Dppx(value) => Some((value, CalcUnits::RESOLUTION)),
+            Self::Fr(value) => Some((value, CalcUnits::FLEX)),
         }
     }
 
@@ -966,6 +973,7 @@ impl calc::CalcNodeLeaf for CalcLengthPercentageLeaf {
             CalcUnits::ANGLE => Some(Self::Deg(value)),
             CalcUnits::TIME => Some(Self::S(value)),
             CalcUnits::RESOLUTION => Some(Self::Dppx(value)),
+            CalcUnits::FLEX => Some(Self::Fr(value)),
             unit if unit.is_empty() => Some(Self::Number(value)),
             _ => None,
         }
@@ -979,6 +987,7 @@ impl calc::CalcNodeLeaf for CalcLengthPercentageLeaf {
             Self::Deg(..) => calc::SortKey::Deg,
             Self::S(..) => calc::SortKey::S,
             Self::Dppx(..) => calc::SortKey::Dppx,
+            Self::Fr(..) => calc::SortKey::Fr,
         }
     }
 }
@@ -1089,7 +1098,8 @@ fn fold_float_offset_calc_node<F: crate::values::computed::box_::FloatOffsetCalc
         | GenericCalcNode::Atan2(_, _)
         | GenericCalcNode::Leaf(CalcLengthPercentageLeaf::Deg(_))
         | GenericCalcNode::Leaf(CalcLengthPercentageLeaf::S(_))
-        | GenericCalcNode::Leaf(CalcLengthPercentageLeaf::Dppx(_)) => {
+        | GenericCalcNode::Leaf(CalcLengthPercentageLeaf::Dppx(_))
+        | GenericCalcNode::Leaf(CalcLengthPercentageLeaf::Fr(_)) => {
             Err(crate::values::computed::box_::UnsupportedFloatOffsetCalculation::Trigonometric)
         },
         GenericCalcNode::Random { .. } => {
@@ -1374,6 +1384,7 @@ impl specified::CalcLengthPercentage {
                 Leaf::Angle(value) => CalcLengthPercentageLeaf::Deg(value.degrees()),
                 Leaf::Time(value) => CalcLengthPercentageLeaf::S(value.seconds()),
                 Leaf::Resolution(value) => CalcLengthPercentageLeaf::Dppx(value.dppx()),
+                Leaf::Flex(value) => CalcLengthPercentageLeaf::Fr(value),
                 Leaf::ColorComponent(..) => {
                     unreachable!("float-offset grammar accepts only length-percentage calculations")
                 },
@@ -1419,12 +1430,13 @@ impl specified::CalcLengthPercentage {
                 Leaf::Angle(value) => CalcLengthPercentageLeaf::Deg(value.degrees()),
                 Leaf::Time(value) => CalcLengthPercentageLeaf::S(value.seconds()),
                 Leaf::Resolution(value) => CalcLengthPercentageLeaf::Dppx(value.dppx()),
+                Leaf::Flex(value) => CalcLengthPercentageLeaf::Fr(value),
                 Leaf::ColorComponent(..) => {
                     unreachable!("Shouldn't have parsed")
                 },
             });
 
-        LengthPercentage::new_calc(node, self.clamping_mode)
+        LengthPercentage::new_calc(node, self.clamping_mode).reduce_zero_dimension()
     }
 
     /// Compute font-size or line-height taking into account text-zoom if necessary.
@@ -1502,6 +1514,7 @@ impl specified::CalcLengthPercentage {
                 },
                 CalcLengthPercentageLeaf::Percentage(ref p) => Leaf::Percentage(p.0),
                 CalcLengthPercentageLeaf::Number(n) => Leaf::Number(*n),
+                CalcLengthPercentageLeaf::Fr(n) => Leaf::Flex(*n),
                 CalcLengthPercentageLeaf::Deg(n) => {
                     Leaf::Angle(specified::angle::AngleDimension::Deg(*n))
                 },

@@ -129,7 +129,7 @@ pub(crate) fn parse_parameter<'i>(
         let start = input.position();
         let mut value = VariableValue::parse(input, &context.url_data, &context.namespaces)?;
         value.set_random_function_context(&context, start);
-        if value.css.is_empty() || !default_matches(&value, &syntax) {
+        if value.css.is_empty() || !default_matches(&value, &syntax, &format!("--{name}")) {
             return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
         }
         Some(Arc::new(value))
@@ -144,7 +144,7 @@ pub(crate) fn parse_parameter<'i>(
     })
 }
 
-fn default_matches(value: &VariableValue, syntax: &Descriptor) -> bool {
+fn default_matches(value: &VariableValue, syntax: &Descriptor, property: &str) -> bool {
     if syntax.is_universal() || value.has_references() {
         return true;
     }
@@ -152,11 +152,12 @@ fn default_matches(value: &VariableValue, syntax: &Descriptor) -> bool {
     let mut input = Parser::new(&mut input);
     input
         .parse_entirely(|input| {
-            SpecifiedRegisteredValue::parse(
+            SpecifiedRegisteredValue::parse_with_property(
                 input,
                 syntax,
                 &value.url_data,
                 AllowComputationallyDependent::Yes,
+                property,
             )
         })
         .is_ok()

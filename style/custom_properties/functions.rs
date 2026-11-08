@@ -151,7 +151,7 @@ impl CustomFunction {
 /// The trees, innermost first, whose custom functions a declaration sees.
 ///
 /// <https://drafts.csswg.org/css-shadow-1/#css-tree-scoped-reference>
-pub type FunctionScope<'a> = Vec<&'a CascadeData>;
+pub type FunctionScope<'a> = Vec<(CascadeLevel, &'a CascadeData)>;
 
 /// The element-dependent part of custom function evaluation.
 pub trait CallingElement<'a> {
@@ -175,7 +175,18 @@ pub trait CallingElement<'a> {
 
 /// The function scope without an element: the document tree of the declaration's origin.
 pub fn document_function_scope(stylist: &Stylist, level: CascadeLevel) -> FunctionScope<'_> {
-    vec![stylist.cascade_data().borrow_for_origin(level.origin())]
+    vec![(level, stylist.cascade_data().borrow_for_origin(level.origin()))]
+}
+
+fn level_at_steps(steps: i8) -> CascadeLevel {
+    use crate::rule_tree::ShadowCascadeOrder;
+    let mut order = if steps < 0 { ShadowCascadeOrder::for_outermost_shadow_tree() } else { ShadowCascadeOrder::for_same_tree() };
+    if steps < 0 {
+        for _ in 1..steps.unsigned_abs() { order.dec(); }
+    } else {
+        for _ in 0..steps { order.inc(); }
+    }
+    CascadeLevel::AuthorNormal { shadow_cascade_order: order }
 }
 
 /// A calling element and, for a pseudo-element, its originating element's style.
@@ -190,15 +201,7 @@ pub struct ElementCallSite<'a, E> {
 
 impl<'a, E: TElement + 'a> ElementCallSite<'a, E> {
     fn tree(&self, level: CascadeLevel) -> Option<<E::ConcreteNode as TNode>::ConcreteShadowRoot> {
-        let steps = match level {
-            CascadeLevel::AuthorNormal {
-                shadow_cascade_order,
-            } => shadow_cascade_order.steps(),
-            CascadeLevel::AuthorImportant {
-                shadow_cascade_order,
-            } => -shadow_cascade_order.steps(),
-            _ => 0,
-        };
+        let steps = level.shadow_scope_steps();
         if steps < 0 {
             let mut slots = SmallVec::<[E; 4]>::new();
             let mut slot = self.element.assigned_slot();
@@ -226,15 +229,13 @@ impl<'a, E: TElement + 'a> CallingElement<'a> for ElementCallSite<'a, E> {
         }
         let mut scope = FunctionScope::new();
         let mut tree = self.tree(level);
+        let mut steps = level.shadow_scope_steps();
         while let Some(root) = tree {
-            scope.extend(root.style_data());
+            if let Some(data) = root.style_data() { scope.push((level_at_steps(steps), data)); }
             tree = root.host().containing_shadow();
+            steps = steps.saturating_add(1);
         }
-        scope.push(
-            self.stylist
-                .cascade_data()
-                .borrow_for_origin(Origin::Author),
-        );
+        scope.push((level_at_steps(steps), self.stylist.cascade_data().borrow_for_origin(Origin::Author)));
         scope
     }
 
@@ -269,7 +270,7 @@ fn lookup<'a>(
     scope[offset..]
         .iter()
         .enumerate()
-        .find_map(|(index, data)| Some((&**data.custom_function(&name.0)?, offset + index)))
+        .find_map(|(index, (_, data))| Some((&**data.custom_function(&name.0)?, offset + index)))
 }
 
 fn calls(value: &VariableValue) -> impl Iterator<Item = &DashedIdent> {
@@ -386,6 +387,7 @@ struct Frame<'a> {
     function: &'a CustomFunction,
     /// The definition tree: an index into the function scope.
     offset: usize,
+    level: CascadeLevel,
     caller: Option<usize>,
     random_scope: Vec<crate::Atom>,
     /// Resolved parameters; during argument resolution, only the earlier ones.
@@ -421,6 +423,10 @@ impl<'a> FunctionCalls<'a> {
             frames: Vec::new(),
             stack: Vec::new(),
         }
+    }
+
+    pub(super) fn level_for(&self, frame: Option<usize>, fallback: CascadeLevel) -> CascadeLevel {
+        frame.map_or_else(|| self.level.unwrap_or(fallback), |frame| self.frames[frame].level)
     }
 
     pub(super) fn random_scope(&self, frame: Option<usize>) -> Option<&[crate::Atom]> {
@@ -773,6 +779,7 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
             .get_or_insert_with(|| computed_context.function_scope(level));
         let offset = caller.map_or(0, |frame| self.calls.frames[frame].offset);
         let (function, offset) = lookup(scope, offset, name)?;
+        let level = scope[offset].0;
         computed_context
             .rule_cache_conditions
             .borrow_mut()
@@ -802,6 +809,7 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
         self.calls.frames.push(Frame {
             function,
             offset,
+            level,
             caller,
             random_scope,
             parameters: Vec::with_capacity(function.parameters.len()),
@@ -852,7 +860,7 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
 
 #[cfg(all(test, feature = "servo"))]
 mod tests {
-    use super::super::{AttrTaintedRange, DeferredCustomProperties, VariableValue};
+    use super::super::{AttrTaintedRange, DeferredCustomProperties, SubstitutionFunction, VariableValue};
     use super::super::{CustomPropertiesBuilder, DeferFontRelativeCustomPropertyResolution};
     use crate::Atom;
     use crate::applicable_declarations::CascadePriority;
@@ -1503,6 +1511,50 @@ mod tests {
         assert!(!values[0].as_ref().unwrap().attr_tainted.is_empty());
         assert!(values[1].as_ref().unwrap().attr_tainted.is_empty());
         assert!(!values[2].as_ref().unwrap().attr_tainted.is_empty());
+    }
+
+
+    #[test]
+    fn early_random_indices_follow_expanded_keys_conditions_and_identifiers() {
+        assert_templates(&[
+            ("numeric inserted into key reserves an early index", "#t{--key:fixed random(fixed 0, 0, 0);--actual:random-item(var(--key), A, B) random-item(--shared property-index-scoped, 1, 2, 3);--expected:A random-item(--shared ua-early---actual-3, 1, 2, 3)}"),
+            ("condition and item use one early stream", "#t{--actual:if(style(random(fixed 0, 0, 0) = 0):PASS;else:FAIL) random-item(--shared property-index-scoped, 1, 2, 3);--expected:PASS random-item(--shared ua-early---actual-2, 1, 2, 3)}"),
+            ("independent condition source slots", "#t{--actual:if(style(random-item(fixed 0, 0, 0) = 1):FAIL;style(random-item(fixed 1, 0, 1) = 1):PASS;else:FAIL);--expected:PASS}"),
+            ("identifier numeric scope", "#t{--actual:ident(\"p\" random(--shared property-index-scoped, 1, 3, 1));--expected:ident(\"p\" random(--shared ua-early---actual-1, 1, 3, 1))}"),
+            ("typed parameter default scope", "@property --actual{syntax:'<number>';inherits:true;initial-value:0}@property --expected{syntax:'<number>';inherits:true;initial-value:0}@function --f(--a <number>:random(--shared property-index-scoped, 1, 100)) returns <number>{result:var(--a)}#t{--actual:--f();--expected:random(--shared ua---f---a-1, 1, 100)}"),
+        ]);
+    }
+
+    #[test]
+    fn custom_function_calls_retain_the_original_calling_property() {
+        let sheet = parse_stylesheet("#t{--first:--f();--second:--f()}");
+        let guard = sheet.shared_lock.read();
+        let rule = sheet.contents(&guard).rules(&guard).iter().find_map(|rule| match rule {
+            CssRule::Style(rule) => Some(rule.read_with(&guard).block.clone()),
+            _ => None,
+        }).unwrap();
+        let block = rule.read_with(&guard);
+        let mut checked = 0;
+        for (declaration, _) in block.declaration_importance_iter() {
+            let PropertyDeclaration::Custom(declaration) = declaration else { continue; };
+            let crate::properties::CustomDeclarationValue::Unparsed(value) = &declaration.value else { continue; };
+            let SubstitutionFunction::Function { call_identity: Some(identity), .. } = &value.references.refs[0].function else { panic!("missing calling property"); };
+            assert_eq!(identity.property.as_ref(), format!("--{}", declaration.name));
+            checked += 1;
+        }
+        assert_eq!(checked, 2);
+    }
+
+
+    #[test]
+    fn conditional_dependency_graph_follows_only_evaluated_conditions_and_the_selected_value() {
+        assert_templates(&[
+            ("unused first self reference", "#t{--x:3;--actual:if(style(--x:0):var(--actual);else:PASS);--expected:PASS}"),
+            ("unused else self reference", "#t{--x:0;--actual:if(style(--x:0):PASS;else:var(--actual));--expected:PASS}"),
+            ("unreached later query cycle", "#t{--x:3;--y:var(--actual);--actual:if(style(--x:3):PASS;style(--y:3):FAIL;else:FAIL);--expected:PASS}"),
+            ("unselected later value cycle", "#t{--x:3;--y:0;--actual:if(style(--x:3):PASS;style(--y:3):var(--actual);else:FAIL);--expected:PASS}"),
+            ("all unused values cycle", "#t{--x:0;--y:0;--actual:if(style(--x:3):var(--actual);style(--y:3):var(--actual);else:PASS);--expected:PASS}"),
+        ]);
     }
 
 }

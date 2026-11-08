@@ -215,6 +215,8 @@ pub enum Leaf {
     Time(TimeDimension),
     /// `<resolution>`
     Resolution(ResolutionDimension),
+    /// `<flex>` in canonical `fr` units.
+    Flex(CSSFloat),
     /// A component of a color.
     ColorComponent(ChannelKeyword),
     /// `<percentage>`
@@ -239,6 +241,7 @@ impl ToCss for Leaf {
             Self::Resolution(ref r) => {
                 crate::values::serialize_specified_dimension(r.dppx(), "dppx", false, dest)
             },
+            Self::Flex(value) => crate::values::serialize_specified_dimension(value, "fr", false, dest),
             Self::Percentage(p) => serialize_percentage(p, dest),
             Self::Angle(ref a) => crate::values::serialize_specified_dimension(
                 a.degrees(),
@@ -590,6 +593,7 @@ impl generic::CalcNodeLeaf for Leaf {
             Leaf::Angle(_) => CalcUnits::ANGLE,
             Leaf::Time(_) => CalcUnits::TIME,
             Leaf::Resolution(_) => CalcUnits::RESOLUTION,
+            Leaf::Flex(_) => CalcUnits::FLEX,
             Leaf::ColorComponent(_) => CalcUnits::COLOR_COMPONENT,
             Leaf::Percentage(_) => CalcUnits::PERCENTAGE,
             Leaf::Number(_) => CalcUnits::empty(),
@@ -601,7 +605,7 @@ impl generic::CalcNodeLeaf for Leaf {
         Some(match *self {
             Self::Size => return None,
             Self::Length(ref l) => l.unitless_value(),
-            Self::Percentage(n) | Self::Number(n) => n,
+            Self::Percentage(n) | Self::Number(n) | Self::Flex(n) => n,
             Self::Resolution(ref r) => r.dppx(),
             Self::Angle(ref a) => a.degrees(),
             Self::Time(ref t) => t.seconds(),
@@ -652,13 +656,13 @@ impl generic::CalcNodeLeaf for Leaf {
             (&Angle(ref one), &Angle(ref other)) => one.degrees().partial_cmp(&other.degrees()),
             (&Time(ref one), &Time(ref other)) => one.seconds().partial_cmp(&other.seconds()),
             (&Resolution(ref one), &Resolution(ref other)) => one.dppx().partial_cmp(&other.dppx()),
-            (&Number(ref one), &Number(ref other)) => one.partial_cmp(other),
+            (&Number(ref one), &Number(ref other)) | (&Flex(ref one), &Flex(ref other)) => one.partial_cmp(other),
             (&ColorComponent(ref one), &ColorComponent(ref other)) => one.partial_cmp(other),
             (&SiblingIndex, &SiblingIndex) | (&SiblingCount, &SiblingCount) => None,
             _ => {
                 match *self {
                     Length(..) | Percentage(..) | Angle(..) | Time(..) | Number(..)
-                    | Resolution(..) | ColorComponent(..) | Size => {},
+                    | Resolution(..) | Flex(..) | ColorComponent(..) | Size => {},
                     SiblingIndex | SiblingCount => {},
                 }
                 unsafe {
@@ -675,6 +679,7 @@ impl generic::CalcNodeLeaf for Leaf {
             | Leaf::Angle(_)
             | Leaf::Time(_)
             | Leaf::Resolution(_)
+            | Leaf::Flex(_)
             | Leaf::Percentage(_)
             | Leaf::ColorComponent(_) => None,
             Leaf::SiblingIndex | Leaf::SiblingCount => None,
@@ -689,6 +694,7 @@ impl generic::CalcNodeLeaf for Leaf {
             Self::Percentage(..) => SortKey::Percentage,
             Self::Time(..) => SortKey::S,
             Self::Resolution(..) => SortKey::Dppx,
+            Self::Flex(..) => SortKey::Fr,
             Self::Angle(..) => SortKey::Deg,
             Self::Length(ref l) => match *l {
                 NoCalcLength::Absolute(..) => SortKey::Px,
@@ -772,6 +778,7 @@ impl generic::CalcNodeLeaf for Leaf {
             Self::Angle(ref angle) => (angle.degrees(), CalcUnits::ANGLE),
             Self::Time(ref time) => (time.seconds(), CalcUnits::TIME),
             Self::Resolution(ref resolution) => (resolution.dppx(), CalcUnits::RESOLUTION),
+            Self::Flex(value) => (value, CalcUnits::FLEX),
             _ => return None,
         })
     }
@@ -787,6 +794,7 @@ impl generic::CalcNodeLeaf for Leaf {
             CalcUnits::ANGLE => Self::Angle(AngleDimension::Deg(value)),
             CalcUnits::TIME => Self::Time(TimeDimension::from_seconds(value)),
             CalcUnits::RESOLUTION => Self::Resolution(ResolutionDimension::from_dppx(value)),
+            CalcUnits::FLEX => Self::Flex(value),
             unit if unit.is_empty() => Self::Number(value),
             _ => return None,
         })
@@ -810,7 +818,7 @@ impl generic::CalcNodeLeaf for Leaf {
         }
 
         match (self, other) {
-            (&mut Number(ref mut one), &Number(ref other)) => {
+            (&mut Number(ref mut one), &Number(ref other)) | (&mut Flex(ref mut one), &Flex(ref other)) => {
                 *one += *other;
             },
             (&mut Percentage(ref mut one), &Percentage(ref other)) => {
@@ -840,7 +848,7 @@ impl generic::CalcNodeLeaf for Leaf {
             },
             _ => {
                 match *other {
-                    Number(..) | Percentage(..) | Angle(..) | Time(..) | Resolution(..)
+                    Number(..) | Percentage(..) | Angle(..) | Time(..) | Resolution(..) | Flex(..)
                     | Length(..) | ColorComponent(..) | Size => {},
                     SiblingIndex | SiblingCount => {},
                 }
@@ -893,6 +901,7 @@ impl generic::CalcNodeLeaf for Leaf {
             (&Number(one), &Number(other)) => {
                 return Ok(Leaf::Number(op(one, other)));
             },
+            (&Flex(one), &Flex(other)) => return Ok(Leaf::Flex(op(one, other))),
             (&Percentage(one), &Percentage(other)) => {
                 return Ok(Leaf::Percentage(op(one, other)));
             },
@@ -936,7 +945,7 @@ impl generic::CalcNodeLeaf for Leaf {
             Leaf::Time(one) => *one = TimeDimension::from_seconds(op(one.seconds())),
             Leaf::Resolution(one) => *one = ResolutionDimension::from_dppx(op(one.dppx())),
             Leaf::Percentage(one) => *one = op(*one),
-            Leaf::Number(one) => *one = op(*one),
+            Leaf::Number(one) | Leaf::Flex(one) => *one = op(*one),
             Leaf::ColorComponent(..) => return Err(()),
             Leaf::SiblingIndex | Leaf::SiblingCount => return Err(()),
         })
@@ -1083,6 +1092,9 @@ impl CalcNode {
                     if let Ok(t) = TimeDimension::parse_dimension(value, unit) {
                         return Ok(CalcNode::Leaf(Leaf::Time(t)));
                     }
+                }
+                if allowed.includes(CalcUnits::FLEX) && unit.eq_ignore_ascii_case("fr") {
+                    return Ok(CalcNode::Leaf(Leaf::Flex(value)));
                 }
                 if allowed.includes(CalcUnits::RESOLUTION) {
                     if let Ok(t) = ResolutionDimension::parse_dimension(value, unit) {
@@ -2041,6 +2053,19 @@ impl CalcNode {
         Ok(node)
     }
 
+    /// Parse a calculation whose result is a flexible grid track fraction.
+    pub fn parse_flex<'i, 't>(context: &ParserContext, input: &mut Parser<'i, 't>, function: MathFunction) -> Result<Self, ParseError<'i>> {
+        Self::parse_typed_node(context, input, function, CalcUnits::FLEX)
+    }
+
+    /// Resolve a flexible grid track calculation in its element context.
+    pub fn resolve_flex(&self, context: &Context) -> Result<f32, ()> {
+        match self.resolve_contextual_leaves(context).resolve()? {
+            Leaf::Flex(value) => Ok(value),
+            _ => Err(()),
+        }
+    }
+
     /// Convenience parsing function for `<angle>`.
     pub fn parse_angle<'i, 't>(
         context: &ParserContext,
@@ -2276,6 +2301,42 @@ mod tree_counting_tests {
                 descriptor.compute(computed_context),
                 crate::font_face::ComputedFontStyleDescriptor::Oblique(-10.0, -10.0)
             ));
+        });
+    }
+
+    #[test]
+    fn flexible_track_calculations_keep_their_units_and_element_context() {
+        use crate::values::specified::grid::Flex;
+        with_computed_context(|computed_context| {
+            for (css, expected) in [
+                ("calc(3fr + 1fr * sign(10000px - 1em))", 4.0),
+                ("calc(3fr + 1fr * sign(1em - 1em))", 3.0),
+                ("calc(3fr + 1fr * sign(1em - 10000px))", 2.0),
+                ("random(fixed 0.5, 2fr, 6fr)", 4.0),
+                ("calc(1fr - 2fr)", 0.0),
+            ] {
+                let mut input = ParserInput::new(css);
+                let value = Parser::new(&mut input).parse_entirely(|input| Flex::parse(&context(), input)).unwrap();
+                assert_eq!(value.to_computed_value(computed_context).0, expected, "{css}");
+            }
+            for css in ["calc(1fr + 1px)", "calc(1fr * 1fr)", "-1fr"] {
+                let mut input = ParserInput::new(css);
+                assert!(Parser::new(&mut input).parse_entirely(|input| Flex::parse(&context(), input)).is_err(), "{css}");
+            }
+        });
+    }
+
+    #[test]
+    fn computed_mixes_reduce_zero_dimensions_and_retain_percentage_dependence() {
+        with_computed_context(|computed_context| {
+            for (css, expected) in [
+                ("calc(10% + calc-mix(1px 0%, 3% 0%))", "10%"),
+                ("calc(10px + calc-mix(1% 0%, 3px 0%))", "calc(0% + 10px)"),
+            ] {
+                let mut input = ParserInput::new(css);
+                let value = Parser::new(&mut input).parse_entirely(|input| crate::values::specified::LengthPercentage::parse(&context(), input)).unwrap();
+                assert_eq!(value.to_computed_value(computed_context).to_css_string(), expected, "{css}");
+            }
         });
     }
 
@@ -2996,6 +3057,8 @@ mod math_function_tests {
         ] {
             assert_eq!(number(css).1, expected, "{css}");
         }
+        assert!(number("random(fixed random(fixed 0.5, 1, 2), 10, 100)").1 < 100.0);
+        assert_eq!(number("random(fixed random(fixed 0.5, -2, -1), 10, 100)").1, 10.0);
     }
 
     #[test]

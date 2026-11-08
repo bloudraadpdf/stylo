@@ -31,6 +31,7 @@ fn calculation(lp: &NonNegativeLengthPercentage) -> CalcSizeCalculation {
         },
         CalcLengthPercentageLeaf::Percentage(p) => Leaf::Percentage(p.0),
         CalcLengthPercentageLeaf::Number(n) => Leaf::Number(n),
+        CalcLengthPercentageLeaf::Fr(n) => Leaf::Flex(n),
         CalcLengthPercentageLeaf::Deg(n) => {
             Leaf::Angle(crate::values::specified::angle::AngleDimension::Deg(n))
         },

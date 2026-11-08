@@ -324,6 +324,7 @@ pub enum SortKey {
     Dvw,
     Em,
     Ex,
+    Fr,
     Ic,
     Lh,
     Lvb,
@@ -613,6 +614,8 @@ bitflags! {
         const RESOLUTION = 1 << 4;
         /// A component of a color (r, g, b, h, s, l, alpha, etc.)
         const COLOR_COMPONENT = 1 << 5;
+        /// <flex>
+        const FLEX = 1 << 6;
 
         /// <length-percentage>
         const LENGTH_PERCENTAGE = Self::LENGTH.bits() | Self::PERCENTAGE.bits();
@@ -621,7 +624,7 @@ bitflags! {
         // NOTE: When you add to this, make sure to make Atan2 deal with these.
         /// Allow all units.
         const ALL = Self::LENGTH.bits() | Self::PERCENTAGE.bits() | Self::ANGLE.bits() |
-            Self::TIME.bits() | Self::RESOLUTION.bits() | Self::COLOR_COMPONENT.bits();
+            Self::TIME.bits() | Self::RESOLUTION.bits() | Self::COLOR_COMPONENT.bits() | Self::FLEX.bits();
     }
 }
 
@@ -660,12 +663,13 @@ impl CalcUnits {
 }
 
 /// The base types of a product, in the order of `CalcType::exponents`.
-const BASE_UNITS: [CalcUnits; 5] = [
+const BASE_UNITS: [CalcUnits; 6] = [
     CalcUnits::LENGTH,
     CalcUnits::PERCENTAGE,
     CalcUnits::ANGLE,
     CalcUnits::TIME,
     CalcUnits::RESOLUTION,
+    CalcUnits::FLEX,
 ];
 
 /// The type of a product: the power of each base type.
@@ -1960,6 +1964,7 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
             Self::Random { key, min, max, step } => {
                 let RandomKey::Fixed(fixed) = key else { return Err(()); };
                 let base = fixed.value.resolve_internal(leaf_to_output_fn)?.as_number().ok_or(())?;
+                let base = base.clamp(0.0, f32::from_bits(1.0f32.to_bits() - 1));
                 let min = min.resolve_internal(leaf_to_output_fn)?;
                 let max = max.resolve_internal(leaf_to_output_fn)?;
                 let step = step.as_ref().map(|s| s.resolve_internal(leaf_to_output_fn)).transpose()?;

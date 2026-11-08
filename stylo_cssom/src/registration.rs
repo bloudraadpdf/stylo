@@ -208,8 +208,16 @@ pub fn parse_registered_value(descriptor: &Descriptor, value: &str) -> Option<Sp
 
 /// Whether a registered custom property value is valid at parse time: it matches the syntax, or
 /// it has an arbitrary substitution function, which only computed-value time validates.
-pub fn registered_value_is_valid_at_parse_time(descriptor: &Descriptor, value: &str) -> bool {
-    parse_registered_value(descriptor, value).is_some()
+pub fn registered_value_is_valid_at_parse_time(property: &str, descriptor: &Descriptor, value: &str) -> bool {
+    parse_static_value(value, |input, url_data| {
+        SpecifiedValue::parse_with_property(
+            input,
+            descriptor,
+            url_data,
+            AllowComputationallyDependent::Yes,
+            property,
+        )
+    }).is_some()
         || parse_static_value(value, |input, url_data| {
             VariableValue::parse(input, url_data, &Namespaces::default())
         })
@@ -360,11 +368,14 @@ mod tests {
     #[test]
     fn substitution_functions_are_valid_at_parse_time() {
         let length = Descriptor::from_str("<length>", false).expect("the syntax must parse");
-        assert!(registered_value_is_valid_at_parse_time(&length, "1px"));
+        assert!(registered_value_is_valid_at_parse_time("--length", &length, "1px"));
         assert!(registered_value_is_valid_at_parse_time(
+            "--length",
             &length,
             "var(--missing, invalid)"
         ));
-        assert!(!registered_value_is_valid_at_parse_time(&length, "invalid"));
+        assert!(!registered_value_is_valid_at_parse_time("--length", &length, "invalid"));
+        assert!(registered_value_is_valid_at_parse_time("--length", &length, "random(1px, 3px)"));
+        assert!(!registered_value_is_valid_at_parse_time("--length", &length, "random(1, 3)"));
     }
 }

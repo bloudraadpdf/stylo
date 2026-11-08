@@ -198,6 +198,16 @@ impl<'a> ParserContext<'a> {
     /// Whether random auto/property scopes have an original declaration identity.
     pub fn random_declaration_is_bound(&self) -> bool { self.random_declaration.is_some() }
 
+    /// The original declaration property, independently of any function's source offset.
+    pub fn random_declaration_property(&self) -> Option<&crate::Atom> {
+        self.random_declaration.as_ref().map(|declaration| &declaration.property)
+    }
+
+    /// Numeric random occurrences in a fully substituted typed expression, before parser backtracking.
+    pub fn random_function_count(&self) -> usize {
+        self.random_declaration.as_ref().map_or(0, |declaration| declaration.positions.len())
+    }
+
     /// The early-substitution occurrence of a retained arbitrary random function.
     pub fn random_early_function_identity_by_byte(&self, byte: usize) -> crate::values::random::RandomFunctionIdentity {
         self.random_declaration.as_ref().map_or_else(

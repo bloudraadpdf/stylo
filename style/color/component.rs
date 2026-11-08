@@ -233,8 +233,10 @@ impl<ValueType: ColorComponentType> ColorComponent<ValueType> {
                 None => return Err(()),
             },
             ColorComponent::Calc(node) => {
-                let Ok(resolved_leaf) = node.resolve_map(|leaf| {
+                let percentage = node.unit() == Ok(CalcUnits::PERCENTAGE);
+                let Ok(mut resolved_leaf) = node.resolve_map(|leaf| {
                     Ok(match leaf {
+                        Leaf::Percentage(value) if percentage => Leaf::Number(*value),
                         Leaf::ColorComponent(channel_keyword) => match origin_color {
                             Some(origin_color) => {
                                 let value = origin_color
@@ -248,6 +250,12 @@ impl<ValueType: ColorComponentType> ColorComponent<ValueType> {
                 }) else {
                     return Err(());
                 };
+
+                if percentage {
+                    if let Leaf::Number(value) = resolved_leaf {
+                        resolved_leaf = Leaf::Percentage(value);
+                    }
+                }
 
                 Some(ValueType::try_from_leaf(&resolved_leaf)?)
             },

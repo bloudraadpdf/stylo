@@ -702,6 +702,8 @@ struct FunctionArgument {
 struct ConditionalBranch {
     condition: FunctionArgument,
     value: FunctionArgument,
+    selected: Option<bool>,
+    evaluated: bool,
 }
 
 impl SubstitutionFunction {
@@ -759,6 +761,8 @@ struct References {
     refs: Vec<SubstitutionFunctionReference>,
     non_custom_references: NonCustomReferences,
     unit_references: Vec<(usize, NonCustomReferences)>,
+    random_property: Option<Atom>,
+    random_source_offset: usize,
     any_env: bool,
     any_var: bool,
     any_attr: bool,
@@ -776,6 +780,7 @@ impl References {
                 SubstitutionFunction::RandomItem { arguments, selected_option, .. } => arguments.iter().skip(1).enumerate().any(|(index, argument)| {
                     *selected_option != Some(index) && *position >= argument.start && *position < argument.end
                 }),
+                SubstitutionFunction::If(branches) => branches.iter().any(|branch| branch.selected == Some(false) && *position >= branch.value.start && *position < branch.value.end),
                 _ => false,
             })
         }).fold(NonCustomReferences::empty(), |all, (_, references)| all | *references)
@@ -783,6 +788,9 @@ impl References {
 
     fn in_lazy_argument(&self, reference: &SubstitutionFunctionReference) -> bool {
         self.refs.iter().any(|outer| {
+            if let SubstitutionFunction::If(branches) = &outer.function {
+                return branches.iter().any(|branch| branch.selected == Some(false) && reference.start >= branch.value.start && reference.end <= branch.value.end);
+            }
             let (arguments, selected) = match &outer.function {
                 SubstitutionFunction::Attr { arguments, .. } => (arguments, None),
                 SubstitutionFunction::RandomItem { arguments, selected_option, .. } => (arguments, *selected_option),
@@ -892,6 +900,7 @@ impl VariableValue {
                 let mut input = cssparser::Parser::new(&mut input);
                 let mut value = Self::parse(&mut input, &self.url_data, &Namespaces::default()).ok()?;
                 value.copy_random_function_context(self.references.refs.iter(), argument.start);
+                value.references.random_property = self.references.random_property.clone();
                 Some(Arc::new(value))
             })
             .collect()
@@ -1107,7 +1116,8 @@ impl VariableValue {
 
     /// Retain the declaration identity before substitution changes token offsets.
     pub fn set_random_function_context(&mut self, context: &crate::parser::ParserContext, declaration_value_start: SourcePosition) {
-        let property = context.random_function_identity_by_byte(declaration_value_start.byte_index()).property;
+        let property = context.random_declaration_property().cloned();
+        self.references.random_property = property.clone();
         let mut calls = 0;
         for reference in &mut self.references.refs {
             match &mut reference.function {
@@ -1116,7 +1126,7 @@ impl VariableValue {
                 },
                 SubstitutionFunction::Function { call_identity, .. } => {
                     calls += 1;
-                    *call_identity = Some(crate::values::random::RandomFunctionIdentity { property: property.clone(), index: calls });
+                    *call_identity = property.as_ref().map(|property| crate::values::random::RandomFunctionIdentity { property: property.clone(), index: calls });
                 },
                 _ => {},
             }
@@ -1124,6 +1134,9 @@ impl VariableValue {
     }
 
     pub(super) fn scope_random_functions(&mut self, function: &str) {
+        if let Some(property) = &mut self.references.random_property {
+            *property = Atom::from(format!("{function}-{property}"));
+        }
         for reference in &mut self.references.refs {
             let identity = match &mut reference.function {
                 SubstitutionFunction::RandomItem { identity, .. } => identity,
@@ -2561,11 +2574,18 @@ fn substitute_all(
                 let registration = context.stylist.get_custom_property_registration(name);
                 let value = context.map.get(registration, name)?.as_universal()?;
                 let random_value;
-                let value = if value.references.refs.iter().any(|reference| matches!(reference.function, SubstitutionFunction::RandomItem { .. })) {
-                    let mut substitutor = Substitutor::new(context.map, context.stylist, context.computed_context,
+                let value = if value.references.refs.iter().any(|reference| matches!(reference.function, SubstitutionFunction::RandomItem { .. } | SubstitutionFunction::If(_))) {
+                    let mut preflight = context.map.clone();
+                    if let Some(deferred) = context.deferred_properties.as_deref() {
+                        for (name, value) in deferred.iter() {
+                            if let Some(value) = value { preflight.insert(context.stylist.get_custom_property_registration(name), name, value.clone()); }
+                        }
+                    }
+                    let mut substitutor = Substitutor::new(&preflight, context.stylist, context.computed_context,
                         EnvironmentResolutionMode::ResolveLiveEnvironment, attribute_tracker, context.function_levels.get(name).copied());
                     let owner = substitutor.calls.guard_property(name).ok()?;
-                    random_value = Arc::new(substitutor.random_dependencies(value));
+                    let _ = substitutor.substitute_value(value, None);
+                    random_value = Arc::new(substitutor.selected_dependencies(value));
                     substitutor.calls.release(owner);
                     &random_value
                 } else { value };
@@ -3260,6 +3280,12 @@ fn remove_and_insert_initial_value(
     }
 }
 
+#[derive(Default)]
+struct EarlyRandomState {
+    count: usize,
+    items: std::collections::HashMap<(bool, usize), (usize, bool)>,
+}
+
 /// Replaces arbitrary substitution functions in values of one declaration.
 struct Substitutor<'a, 'b, 't> {
     custom_properties: &'a ComputedCustomProperties,
@@ -3269,6 +3295,10 @@ struct Substitutor<'a, 'b, 't> {
     attribute_tracker: &'a mut AttributeTracker<'t>,
     calls: functions::FunctionCalls<'a>,
     private_names: ThinVec<(Name, Name)>,
+    random_property: Option<Atom>,
+    random_source_offset: usize,
+    early_random: std::collections::HashMap<(Atom, Vec<Atom>), EarlyRandomState>,
+    conditional_branches: std::collections::HashMap<(Atom, Vec<Atom>, usize), Option<usize>>,
 }
 
 type ReferenceIter<'a> = std::iter::Peekable<std::slice::Iter<'a, SubstitutionFunctionReference>>;
@@ -3290,6 +3320,10 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
             attribute_tracker,
             calls: functions::FunctionCalls::new(level),
             private_names: ThinVec::new(),
+            random_property: None,
+            random_source_offset: 0,
+            early_random: Default::default(),
+            conditional_branches: Default::default(),
         }
     }
 
@@ -3303,6 +3337,14 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
         'a: 'v,
     {
         let previous = std::mem::replace(&mut self.private_names, value.private_names.clone());
+        let previous_property = self.random_property.clone();
+        let previous_source = self.random_source_offset;
+        if let Some(property) = &value.references.random_property {
+            self.random_property = Some(property.clone());
+            self.random_source_offset = 0;
+        } else {
+            self.random_source_offset += value.references.random_source_offset;
+        }
         let mut references = value.references.refs.iter().peekable();
         let result = self.chunk(
             &value.css,
@@ -3315,6 +3357,8 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
             &mut references,
         );
         self.private_names = previous;
+        self.random_property = previous_property;
+        self.random_source_offset = previous_source;
         result
     }
 
@@ -3430,15 +3474,53 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
         Ok(Substitution::from_value(substituted))
     }
 
-    fn random_dependencies(&mut self, value: &VariableValue) -> VariableValue {
+    fn level_for(&self, frame: Option<usize>) -> CascadeLevel {
+        self.calls.level_for(frame, self.computed_context.scope)
+    }
+
+    fn early_random_property(&self) -> Atom {
+        self.random_property.as_ref().map_or_else(|| Atom::from(""), |property| Atom::from(format!("early-{property}")))
+    }
+
+    fn early_random_scope(&self, property: &Atom, frame: Option<usize>) -> (Atom, Vec<Atom>) {
+        (property.clone(), self.calls.random_scope(frame).unwrap_or_default().to_vec())
+    }
+
+    fn reserve_early_random(&mut self, property: &Atom, frame: Option<usize>, count: usize) -> usize {
+        let scope = self.early_random_scope(property, frame);
+        let state = self.early_random.entry(scope).or_default();
+        let offset = state.count;
+        state.count += count;
+        offset
+    }
+
+    fn conditional_key(&self, slot: usize, frame: Option<usize>) -> (Atom, Vec<Atom>, usize) {
+        let (property, scope) = self.early_random_scope(&self.early_random_property(), frame);
+        (property, scope, self.random_source_offset + slot)
+    }
+
+    fn selected_dependencies(&mut self, value: &VariableValue) -> VariableValue {
         self.private_names = value.private_names.clone();
+        self.random_property = value.references.random_property.clone();
         let mut resolved = value.clone();
         let mut excluded = Vec::new();
         for (index, reference) in value.references.refs.iter().enumerate() {
             if excluded.iter().any(|&(start, end)| reference.start >= start && reference.end <= end) { continue; }
+            if let SubstitutionFunction::If(branches) = &reference.function {
+                let key = self.conditional_key(reference.start, None);
+                let selected = self.conditional_branches.get(&key).copied().flatten();
+                if let SubstitutionFunction::If(resolved_branches) = &mut resolved.references.refs[index].function {
+                    for (index, branch) in resolved_branches.iter_mut().enumerate() {
+                        branch.selected = Some(selected == Some(index));
+                        branch.evaluated = selected.map_or(true, |selected| index <= selected);
+                    }
+                }
+                excluded.extend(branches.iter().enumerate().filter(|(index, _)| selected != Some(*index)).map(|(_, branch)| (branch.value.start, branch.value.end)));
+                continue;
+            }
             let SubstitutionFunction::RandomItem { arguments, identity, .. } = &reference.function else { continue; };
             let mut nested = value.references.refs[index + 1..].iter().peekable();
-            let selected = self.random_item_option(&value.css, &value.url_data, arguments, identity.as_ref(), None, &mut nested).ok().map(|(index, _)| index);
+            let selected = self.random_item_option(&value.css, &value.url_data, arguments, identity.as_ref(), reference.start, None, &mut nested).ok().map(|(index, _)| index);
             if let SubstitutionFunction::RandomItem { selected_option, .. } = &mut resolved.references.refs[index].function { *selected_option = selected; }
             for (index, argument) in arguments.iter().skip(1).enumerate() {
                 if selected != Some(index) { excluded.push((argument.start, argument.end)); }
@@ -3450,12 +3532,18 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
 
     fn random_item_option<'v>(
         &mut self, css: &'v str, url_data: &UrlExtraData, arguments: &[FunctionArgument],
-        identity: Option<&crate::values::random::RandomFunctionIdentity>, frame: Option<usize>,
+        identity: Option<&crate::values::random::RandomFunctionIdentity>, slot: usize, frame: Option<usize>,
         references: &mut ReferenceIter<'v>,
     ) -> Result<(usize, bool), ()> where 'a: 'v {
                 if self.computed_context.in_media_query || self.computed_context.in_container_query { return Err(()); }
                 let [key, options @ ..] = arguments else { return Err(()); };
                 if options.is_empty() { return Err(()); }
+                let property = identity.filter(|identity| identity.is_bound()).map(|identity| identity.property.clone()).unwrap_or_else(|| self.early_random_property());
+                let scope = self.early_random_scope(&property, frame);
+                let slot = identity.filter(|identity| identity.is_bound()).map_or((false, self.random_source_offset + slot), |identity| (true, identity.index));
+                if let Some(cached) = self.early_random.get(&scope).and_then(|state| state.items.get(&slot)) { return Ok(*cached); }
+                let index = self.reserve_early_random(&property, frame, 1) + 1;
+                let identity = crate::values::random::RandomFunctionIdentity { property: property.clone(), index };
                 let key = self.chunk(css, key.start, key.end, key.first_token_type, key.last_token_type, url_data, frame, references)?;
                 let tainted = !key.attr_tainted.is_empty();
                 let context = crate::parser::ParserContext::new(
@@ -3466,14 +3554,14 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
                     self.computed_context.quirks_mode,
                     Default::default(), None, None,
                 );
-                let fallback_identity = context.random_function_identity_by_byte(0);
-                let identity = identity.unwrap_or(&fallback_identity);
                 let mut source = ParserInput::new(&key.css);
                 let mut input = Parser::new(&mut source);
-                let context = context.for_random_declaration_with_offset(&identity.property, identity.index, &mut input);
+                let offset = self.reserve_early_random(&property, frame, 0);
+                let context = context.for_random_declaration_with_offset(&property, offset, &mut input);
+                self.reserve_early_random(&property, frame, context.random_function_count());
                 let key = input.parse_entirely(|input| {
                     crate::values::random::RandomKey::parse_with_identity(
-                        identity,
+                        &identity,
                         input,
                         |input| crate::values::specified::Number::parse(&context, input),
                     )
@@ -3492,6 +3580,7 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
                     ),
                 };
                 let index = ((base * options.len() as f64).floor() as usize).min(options.len() - 1);
+                self.early_random.entry(scope).or_default().items.insert(slot, (index, tainted));
                 Ok((index, tainted))
 
     }
@@ -3577,6 +3666,10 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
                 );
                 let mut input = ParserInput::new(&argument.css);
                 let mut input = Parser::new(&mut input);
+                let property = self.early_random_property();
+                let offset = self.reserve_early_random(&property, frame, 0);
+                let context = context.for_random_declaration_with_offset(&property, offset, &mut input);
+                self.reserve_early_random(&property, frame, context.random_function_count());
                 let mut ident = String::new();
                 while !input.is_exhausted() {
                     if let Ok(value) =
@@ -3586,8 +3679,11 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
                     } else {
                         let number = crate::values::specified::Integer::parse(&context, &mut input)
                             .map_err(|_| ())?;
-                        ident
-                            .push_str(&number.to_computed_value(self.computed_context).to_string());
+                        let scope = self.calls.random_scope(frame).unwrap_or_default().to_vec();
+                        let previous = self.computed_context.replace_random_function_scope(scope);
+                        let number = number.to_computed_value(self.computed_context);
+                        let _ = self.computed_context.replace_random_function_scope(previous);
+                        ident.push_str(&number.to_string());
                     }
                 }
                 if ident.is_empty() {
@@ -3607,7 +3703,7 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
                 })
             },
             SubstitutionFunction::RandomItem { arguments, identity, .. } => {
-                let (index, tainted) = self.random_item_option(css, url_data, arguments, identity.as_ref(), frame, references)?;
+                let (index, tainted) = self.random_item_option(css, url_data, arguments, identity.as_ref(), reference.start, frame, references)?;
                 let options = &arguments[1..];
                 let chosen = &options[index];
                 while references.next_if(|reference| reference.end <= chosen.start).is_some() {}
@@ -3615,7 +3711,7 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
                 Some(if tainted { value.attr_tainted() } else { value })
             },
             SubstitutionFunction::If(branches) => {
-                Some(self.conditional(css, url_data, branches, frame, references)?)
+                Some(self.conditional(css, url_data, branches, reference.start, frame, references)?)
             },
             SubstitutionFunction::Inherit(arguments) => {
                 let [name, fallback @ ..] = &**arguments else {
@@ -3748,11 +3844,17 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
                             .ok()
                     });
                 let value = if let Some((name, syntax)) = parsed {
-                    let entry = self.calls.guard_attribute(&name)?;
-                    let attribute = name
-                        .expanded_name()
-                        .as_ref()
-                        .and_then(|name| self.attribute_tracker.query(name));
+                    let entry = match syntax {
+                        AttributeType::Type(_) => Some(self.calls.guard_attribute(&name)?),
+                        _ => None,
+                    };
+                    let level = self.level_for(frame);
+                    if level.shadow_scope_steps() > 0 {
+                        self.computed_context.builder.add_flags(crate::computed_value_flags::ComputedValueFlags::DEPENDS_ON_ELEMENT_CONTEXT);
+                        self.computed_context.rule_cache_conditions.borrow_mut().set_uncacheable();
+                    }
+                    let attribute = name.expanded_name().as_ref()
+                        .and_then(|name| self.attribute_tracker.query_in_scope(name, level));
                     let value = attribute.map_or_else(
                         || {
                             // Special case when fallback and <attr-type> are omitted.
@@ -3819,7 +3921,7 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
                             .map(Substitution::attr_tainted)
                         },
                     );
-                    if self.calls.release(entry) {
+                    if entry.is_some_and(|entry| self.calls.release(entry)) {
                         None
                     } else {
                         value

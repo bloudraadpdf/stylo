@@ -726,11 +726,13 @@ impl<'a> Context<'a> {
     }
 
     pub(crate) fn sibling_index(&self) -> CSSFloat {
+        if self.scope.shadow_scope_steps() > 0 { return 0.0; }
         self.note_tree_counting_dependency();
         self.tree_counting.get().0 as CSSFloat
     }
 
     pub(crate) fn sibling_count(&self) -> CSSFloat {
+        if self.scope.shadow_scope_steps() > 0 { return 0.0; }
         self.note_tree_counting_dependency();
         self.tree_counting.get().1 as CSSFloat
     }
@@ -1481,24 +1483,37 @@ pub type ClipRect = generics::GenericClipRect<LengthOrAuto>;
 /// rect(...) | auto
 pub type ClipRectOrAuto = generics::GenericClipRectOrAuto<ClipRect>;
 
+/// A computed flexible grid track fraction.
+#[derive(Animate, Clone, Copy, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo,
+    ToAnimatedValue, ToComputedValue, ToResolvedValue, ToShmem, ToTyped)]
+#[repr(C)]
+pub struct Flex(pub CSSFloat);
+
+impl ToCss for Flex {
+    fn to_css<W: fmt::Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        self.0.to_css(dest)?;
+        fmt::Write::write_str(dest, "fr")
+    }
+}
+
 /// The computed value of a grid `<track-breadth>`
-pub type TrackBreadth = GenericTrackBreadth<LengthPercentage>;
+pub type TrackBreadth = GenericTrackBreadth<LengthPercentage, Flex>;
 
 /// The computed value of a grid `<track-size>`
-pub type TrackSize = GenericTrackSize<LengthPercentage>;
+pub type TrackSize = GenericTrackSize<LengthPercentage, Flex>;
 
 /// The computed value of a grid `<track-size>+`
 pub type ImplicitGridTracks = GenericImplicitGridTracks<TrackSize>;
 
 /// The computed value of a grid `<track-list>`
 /// (could also be `<auto-track-list>` or `<explicit-track-list>`)
-pub type TrackList = GenericTrackList<LengthPercentage, Integer>;
+pub type TrackList = GenericTrackList<LengthPercentage, Integer, Flex>;
 
 /// The computed value of a `<grid-line>`.
 pub type GridLine = GenericGridLine<Integer>;
 
 /// `<grid-template-rows> | <grid-template-columns>`
-pub type GridTemplateComponent = GenericGridTemplateComponent<LengthPercentage, Integer>;
+pub type GridTemplateComponent = GenericGridTemplateComponent<LengthPercentage, Integer, Flex>;
 
 impl ClipRect {
     /// Given a border box, resolves the clip rect against the border box

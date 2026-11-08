@@ -16,6 +16,56 @@ use cssparser::{Parser, Token};
 use std::mem;
 use style_traits::{ParseError, StyleParseErrorKind};
 
+/// A flexible grid track fraction retained until its calculation context is available.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
+pub enum Flex {
+    /// An authored `fr` dimension.
+    Dimension(CSSFloat),
+    /// A calculation with a flex result.
+    Calc(Box<crate::values::specified::CalcNode>),
+}
+
+impl style_traits::SpecifiedValueInfo for Flex {}
+
+impl Parse for Flex {
+    fn parse<'i, 't>(context: &ParserContext, input: &mut Parser<'i, 't>) -> Result<Self, ParseError<'i>> {
+        let location = input.current_source_location();
+        if let Ok(value) = input.try_parse(parse_flex) {
+            return Ok(Self::Dimension(value));
+        }
+        let name = input.expect_function()?.clone();
+        let function = crate::values::specified::CalcNode::math_function(context, &name, location)?;
+        crate::values::specified::CalcNode::parse_flex(context, input, function)
+            .map(|node| Self::Calc(Box::new(node)))
+    }
+}
+
+impl crate::values::computed::ToComputedValue for Flex {
+    type ComputedValue = crate::values::computed::Flex;
+
+    fn to_computed_value(&self, context: &crate::values::computed::Context) -> Self::ComputedValue {
+        let value = match self {
+            Self::Dimension(value) => *value,
+            Self::Calc(node) => node.resolve_flex(context)
+                .expect("a validated flex calculation must resolve in its element context"),
+        };
+        crate::values::computed::Flex(crate::values::normalize(value).clamp(0.0, f32::MAX))
+    }
+
+    fn from_computed_value(value: &Self::ComputedValue) -> Self {
+        Self::Dimension(value.0)
+    }
+}
+
+impl style_traits::ToCss for Flex {
+    fn to_css<W: std::fmt::Write>(&self, dest: &mut style_traits::CssWriter<W>) -> std::fmt::Result {
+        match self {
+            Self::Dimension(value) => crate::values::serialize_specified_dimension(*value, "fr", false, dest),
+            Self::Calc(node) => node.to_css(dest),
+        }
+    }
+}
+
 /// Parse a single flexible length.
 pub fn parse_flex<'i, 't>(input: &mut Parser<'i, 't>) -> Result<CSSFloat, ParseError<'i>> {
     let location = input.current_source_location();
@@ -27,7 +77,7 @@ pub fn parse_flex<'i, 't>(input: &mut Parser<'i, 't>) -> Result<CSSFloat, ParseE
     }
 }
 
-impl<L> TrackBreadth<L> {
+impl<L, F> TrackBreadth<L, F> {
     fn parse_keyword<'i, 't>(input: &mut Parser<'i, 't>) -> Result<Self, ParseError<'i>> {
         #[derive(Parse)]
         enum TrackKeyword {
@@ -44,7 +94,7 @@ impl<L> TrackBreadth<L> {
     }
 }
 
-impl Parse for TrackBreadth<LengthPercentage> {
+impl Parse for TrackBreadth<LengthPercentage, Flex> {
     fn parse<'i, 't>(
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
@@ -57,7 +107,7 @@ impl Parse for TrackBreadth<LengthPercentage> {
             return Ok(TrackBreadth::Breadth(lp));
         }
 
-        if let Ok(f) = input.try_parse(parse_flex) {
+        if let Ok(f) = input.try_parse(|input| Flex::parse(context, input)) {
             return Ok(TrackBreadth::Fr(f));
         }
 
@@ -65,7 +115,7 @@ impl Parse for TrackBreadth<LengthPercentage> {
     }
 }
 
-impl Parse for TrackSize<LengthPercentage> {
+impl Parse for TrackSize<LengthPercentage, Flex> {
     fn parse<'i, 't>(
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
@@ -99,7 +149,7 @@ impl Parse for TrackSize<LengthPercentage> {
     }
 }
 
-impl Parse for ImplicitGridTracks<TrackSize<LengthPercentage>> {
+impl Parse for ImplicitGridTracks<TrackSize<LengthPercentage, Flex>> {
     fn parse<'i, 't>(
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
@@ -145,7 +195,7 @@ enum RepeatType {
     Fixed,
 }
 
-impl TrackRepeat<LengthPercentage, Integer> {
+impl TrackRepeat<LengthPercentage, Integer, Flex> {
     fn parse_with_repeat_type<'i, 't>(
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
@@ -212,7 +262,7 @@ impl TrackRepeat<LengthPercentage, Integer> {
     }
 }
 
-impl Parse for TrackList<LengthPercentage, Integer> {
+impl Parse for TrackList<LengthPercentage, Integer, Flex> {
     fn parse<'i, 't>(
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
@@ -310,7 +360,7 @@ fn allow_grid_template_masonry() -> bool {
     style_config::get_bool("layout.css.grid-template-masonry-value.enabled")
 }
 
-impl Parse for GridTemplateComponent<LengthPercentage, Integer> {
+impl Parse for GridTemplateComponent<LengthPercentage, Integer, Flex> {
     fn parse<'i, 't>(
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
@@ -323,7 +373,7 @@ impl Parse for GridTemplateComponent<LengthPercentage, Integer> {
     }
 }
 
-impl GridTemplateComponent<LengthPercentage, Integer> {
+impl GridTemplateComponent<LengthPercentage, Integer, Flex> {
     /// Parses a `GridTemplateComponent<LengthPercentage>` except `none` keyword.
     pub fn parse_without_none<'i, 't>(
         context: &ParserContext,
@@ -458,7 +508,7 @@ mod tests {
 
     fn parse_grid_template_component(
         css: &str,
-    ) -> GridTemplateComponent<LengthPercentage, Integer> {
+    ) -> GridTemplateComponent<LengthPercentage, Integer, Flex> {
         let url_data = UrlExtraData::from(Url::parse("https://example.invalid/").unwrap());
         let context = ParserContext::new(
             Origin::Author,
@@ -474,7 +524,7 @@ mod tests {
         let mut parser = Parser::new(&mut input);
         parser
             .parse_entirely(|input| {
-                GridTemplateComponent::<LengthPercentage, Integer>::parse(&context, input)
+                GridTemplateComponent::<LengthPercentage, Integer, Flex>::parse(&context, input)
             })
             .expect("grid-template component should parse")
     }

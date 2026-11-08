@@ -1004,7 +1004,7 @@ impl PropertyDeclaration {
         input.skip_whitespace();
 
         let random_property = match &id {
-            PropertyId::NonCustom(id) => id.name().to_owned(),
+            PropertyId::NonCustom(id) => id.unaliased().name().to_owned(),
             PropertyId::Custom(name) => format!("--{}", name),
         };
         let random_context = context.for_random_declaration(&random_property, input);

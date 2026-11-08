@@ -1823,6 +1823,10 @@ impl<'le> TElement for GeckoElement<'le> {
 }
 
 impl<'le> AttributeProvider for GeckoElement<'le> {
+    fn get_attr_in_scope(&self, attr: &crate::dom::ExpandedAttributeName, level: crate::rule_tree::CascadeLevel) -> Option<String> {
+        crate::dom::attribute_originating_element(*self, level)?.get_attr(attr)
+    }
+
     fn get_attr(&self, attr: &crate::dom::ExpandedAttributeName) -> Option<String> {
         if attr.namespace != Namespace::default() {
             return None;
