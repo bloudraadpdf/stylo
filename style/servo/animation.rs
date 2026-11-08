@@ -2724,5 +2724,23 @@ mod tests {
             animation.calculate_value(0., BeforeFlag::Set),
             AnimationValue::Opacity(1.)
         );
+        let (from, to, timing) = animation.endpoints();
+        let rebound = super::PropertyAnimation {
+            from: from.clone(),
+            to: to.clone(),
+            timing_function: timing.clone(),
+            duration: 2.,
+            interpolate_size: InterpolateSize::NumericOnly,
+            #[cfg(feature = "servo")]
+            shadow: None,
+        };
+        assert_eq!(
+            rebound.calculate_value(0., BeforeFlag::Unset),
+            AnimationValue::Opacity(0.5)
+        );
+        assert_eq!(
+            rebound.calculate_value(0., BeforeFlag::Set),
+            AnimationValue::Opacity(1.)
+        );
     }
 }

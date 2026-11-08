@@ -538,6 +538,24 @@ mod calculation_source_tests {
     use super::*;
 
     #[test]
+    fn retained_grid_calculations_project_both_shorthand_and_expanded_declarations() {
+        let base: Arc<str> = Arc::from("about:blank");
+        let url_data = ABOUT_BLANK.clone().into();
+        for property in ["grid", "grid-template"] {
+            let css = format!("{property}: calc(50px - 10%) / calc(100px + 20%)");
+            let declarations = parse_inline_style_declarations(&css, base.clone());
+            assert!(!declarations.is_empty());
+            for declaration in declarations.iter() {
+                let projected = crate::specified::project_inline_style_declaration(declaration, &url_data);
+                assert_eq!(projected.len(), 1);
+                let source = projected[0].pending_substitution()
+                    .map_or_else(|| projected[0].value(), |pending| pending.tokens());
+                assert!(source.contains("calc("), "{property}: {source}");
+            }
+        }
+    }
+
+    #[test]
     fn calculations_keep_source_units_for_longhand_and_shorthand_cascades() {
         let base = Arc::from("about:blank");
         let url_data = ABOUT_BLANK.clone().into();
