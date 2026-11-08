@@ -347,13 +347,12 @@ trait PrivateMatchMethods: TElement {
             None => return false,
         };
 
-        if !self.has_css_transitions(context.shared, pseudo_element)
-            && !new_style.get_ui().specifies_transitions()
-        {
+        let has_transitions = self.has_css_transitions(context.shared, pseudo_element);
+        if !has_transitions && !new_style.get_ui().specifies_transitions() {
             return false;
         }
 
-        if old_style.clone_display().is_none() {
+        if old_style.clone_display().is_none() && !has_transitions {
             return false;
         }
 

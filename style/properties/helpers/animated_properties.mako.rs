@@ -527,6 +527,21 @@ fn animate_discrete<T: Clone>(this: &T, other: &T, procedure: Procedure) -> Resu
 
 impl Animate for AnimationValue {
     fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
+        #[cfg(feature = "servo")]
+        if let (Self::Display(from), Self::Display(to)) = (self, other) {
+            if from.is_none() || to.is_none() {
+                let Procedure::Interpolate { progress } = procedure else {
+                    return Err(());
+                };
+                return Ok(Self::Display(if from.is_none() {
+                    if progress > 0.0 { to.clone() } else { from.clone() }
+                } else if progress < 1.0 {
+                    from.clone()
+                } else {
+                    to.clone()
+                }));
+            }
+        }
         Ok(unsafe {
             use self::AnimationValue::*;
 

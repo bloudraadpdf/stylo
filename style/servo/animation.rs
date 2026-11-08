@@ -1410,12 +1410,6 @@ impl ElementAnimationSet {
             None => return,
         };
 
-        // If the style of this element is display:none, then cancel all active transitions.
-        if after_change_style.get_box().clone_display().is_none() {
-            self.cancel_active_transitions();
-            return;
-        }
-
         if !might_need_transitions_update {
             return;
         }
@@ -1456,6 +1450,13 @@ impl ElementAnimationSet {
             }
             transition.state = AnimationState::Canceled;
             self.dirty = true;
+        }
+        if after_change_style.clone_display().is_none() {
+            let mut sampled_style = after_change_style.clone();
+            self.apply_active_animations(context, &mut sampled_style);
+            if sampled_style.clone_display().is_none() {
+                self.cancel_active_transitions();
+            }
         }
     }
 
@@ -2163,6 +2164,34 @@ mod tests {
     use crate::properties::ComputedValues;
     use crate::values::animated::{Animate, Procedure};
     use crate::Atom;
+
+    #[cfg(feature = "servo")]
+    #[test]
+    fn display_none_interpolation_keeps_the_visible_endpoint_until_exit_finishes() {
+        use crate::values::computed::Display;
+
+        let visible = AnimationValue::Display(Display::Block);
+        let hidden = AnimationValue::Display(Display::None);
+        for progress in [0.0, 0.25, 0.5, 0.75, 1.0] {
+            let interpolation = Procedure::Interpolate { progress };
+            assert_eq!(
+                visible.animate(&hidden, interpolation).unwrap(),
+                if progress < 1.0 {
+                    visible.clone()
+                } else {
+                    hidden.clone()
+                },
+            );
+            assert_eq!(
+                hidden.animate(&visible, interpolation).unwrap(),
+                if progress > 0.0 {
+                    visible.clone()
+                } else {
+                    hidden.clone()
+                },
+            );
+        }
+    }
 
     #[cfg(feature = "servo")]
     #[test]
