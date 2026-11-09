@@ -520,6 +520,24 @@ pub struct Animation {
 }
 
 impl Animation {
+    /// Rendering side effects required while this CSS animation is applied,
+    /// including its delay before the effect contributes any sampled values.
+    pub fn anticipated_change_bits(&self) -> crate::values::specified::box_::WillChangeBits {
+        use crate::values::specified::box_::{change_bits_for_longhand, WillChangeBits};
+        if self.state == AnimationState::Canceled
+            || (self.state == AnimationState::Finished
+                && !matches!(self.fill_mode, AnimationFillMode::Forwards | AnimationFillMode::Both))
+        {
+            return WillChangeBits::empty();
+        }
+        self.properties_changed.iter().fold(WillChangeBits::empty(), |bits, property| {
+            match property {
+                PropertyDeclarationId::Longhand(id) => bits | change_bits_for_longhand(id),
+                PropertyDeclarationId::Custom(_) => bits,
+            }
+        })
+    }
+
     /// Sets the external progress sample used for effect phase and iteration progress.
     pub fn sample_progress_timeline(
         &mut self,
@@ -2730,6 +2748,25 @@ mod tests {
             .animations
             .iter()
             .all(|animation| animation.state == AnimationState::Canceled));
+    }
+
+    #[test]
+    fn delayed_animations_anticipate_their_animated_properties_until_disassociated() {
+        use crate::properties::{LonghandId, PropertyDeclarationId};
+        use crate::values::specified::box_::WillChangeBits;
+        let mut animation = pending_animation();
+        animation.delay = 100.;
+        animation.started_at = 100.;
+        animation.properties_changed.insert(PropertyDeclarationId::Longhand(LonghandId::Scale));
+        animation.properties_changed.insert(PropertyDeclarationId::Longhand(LonghandId::Opacity));
+        let expected = WillChangeBits::TRANSFORM | WillChangeBits::OPACITY | WillChangeBits::BACKDROP_ROOT;
+        assert_eq!(animation.anticipated_change_bits(), expected);
+        animation.state = AnimationState::Finished;
+        assert!(animation.anticipated_change_bits().is_empty());
+        animation.fill_mode = AnimationFillMode::Forwards;
+        assert_eq!(animation.anticipated_change_bits(), expected);
+        animation.state = AnimationState::Canceled;
+        assert!(animation.anticipated_change_bits().is_empty());
     }
 
     #[test]
