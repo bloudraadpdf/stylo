@@ -1579,7 +1579,7 @@ pub type ShorthandsWithPropertyReferencesCache =
 
 impl UnparsedValue {
     /// Retain projected tokens with the source declaration's URL context.
-    pub fn with_url_data(&self, url_data: UrlExtraData) -> Self {
+    pub fn with_url_data(&self, url_data: crate::stylesheets::UrlExtraData) -> Self {
         let mut variable_value = self.variable_value.clone();
         variable_value.url_data = url_data;
         Self {

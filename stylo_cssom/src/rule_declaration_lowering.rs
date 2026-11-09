@@ -200,7 +200,8 @@ fn merge_native_pending(
             );
             continue;
         }
-        let selected = if retained_context.contains(declaration.id())
+        let selected = if (retained_context.contains(declaration.id())
+            && projected_declaration.is_some())
             || matches!(declaration, style::properties::PropertyDeclaration::WithVariables(value)
             if value.value.from_shorthand().is_some())
         {
