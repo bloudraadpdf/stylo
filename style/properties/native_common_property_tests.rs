@@ -100,6 +100,24 @@ fn assert_serialization(name: &str, input: &str, expected: Option<&str>) {
 }
 
 #[test]
+fn insertion_caret_properties_accept_the_ui4_grammar() {
+    for value in ["auto", "bar", "block", "underscore"] {
+        assert_serialization("caret-shape", value, Some(value));
+    }
+    for value in ["auto", "manual"] {
+        assert_serialization("caret-animation", value, Some(value));
+    }
+    for value in ["auto", "red", "red blue", "red auto", "currentcolor currentcolor"] {
+        assert_serialization("caret-color", value, Some(value));
+    }
+    for value in ["auto auto", "auto red", "red blue green", "red, blue", "red none"] {
+        assert_serialization("caret-color", value, None);
+    }
+    assert_serialization("caret-shape", "manual", None);
+    assert_serialization("caret-animation", "block", None);
+}
+
+#[test]
 fn text_stroke_preserves_fractional_widths_and_expands_the_shorthand() {
     assert_serialization("-webkit-text-stroke-width", "0.1px", Some("0.1px"));
     assert_serialization("-webkit-text-stroke-width", "-1px", None);

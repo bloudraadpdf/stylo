@@ -16,6 +16,26 @@ use style_traits::{
     CssWriter, KeywordsCollectFn, ParseError, SpecifiedValueInfo, StyleParseErrorKind, ToCss,
 };
 
+/// Shape of the insertion caret.
+#[allow(missing_docs)]
+#[derive(Clone, Copy, Debug, Eq, MallocSizeOf, Parse, PartialEq, SpecifiedValueInfo, ToComputedValue, ToCss, ToResolvedValue, ToShmem, ToTyped)]
+#[repr(u8)]
+pub enum CaretShape {
+    Auto,
+    Bar,
+    Block,
+    Underscore,
+}
+
+/// Whether the user agent animates the insertion caret.
+#[allow(missing_docs)]
+#[derive(Clone, Copy, Debug, Eq, MallocSizeOf, Parse, PartialEq, SpecifiedValueInfo, ToComputedValue, ToCss, ToResolvedValue, ToShmem, ToTyped)]
+#[repr(u8)]
+pub enum CaretAnimation {
+    Auto,
+    Manual,
+}
+
 /// A specified value for the `cursor` property.
 pub type Cursor = generics::GenericCursor<CursorImage>;
 

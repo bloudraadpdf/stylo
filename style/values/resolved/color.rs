@@ -32,7 +32,7 @@ impl ToResolvedValue for computed::Color {
 impl ToResolvedValue for computed::CaretColor {
     // A resolved caret-color value is an rgba color, with auto resolving to
     // currentcolor.
-    type ResolvedValue = computed::Color;
+    type ResolvedValue = Self;
 
     #[inline]
     fn to_resolved_value(self, context: &Context) -> Self::ResolvedValue {
@@ -40,13 +40,20 @@ impl ToResolvedValue for computed::CaretColor {
             generics::ColorOrAuto::Color(color) => color,
             generics::ColorOrAuto::Auto => generics::Color::currentcolor(),
         };
-        color.to_resolved_value(context)
+        let text_color = match self.1 {
+            Some(generics::ColorOrAuto::Color(color)) => {
+                Some(generics::ColorOrAuto::Color(color.to_resolved_value(context)))
+            }
+            Some(generics::ColorOrAuto::Auto) | None => None,
+        };
+        generics::CaretColor(
+            generics::ColorOrAuto::Color(color.to_resolved_value(context)),
+            text_color,
+        )
     }
 
     #[inline]
     fn from_resolved_value(resolved: Self::ResolvedValue) -> Self {
-        generics::CaretColor(generics::ColorOrAuto::Color(
-            computed::Color::from_resolved_value(resolved),
-        ))
+        resolved
     }
 }

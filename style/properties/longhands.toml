@@ -721,10 +721,31 @@ spec = "https://drafts.csswg.org/css-tables/#propdef-caption-side"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
+[caret-animation]
+type = "ui::CaretAnimation"
+initial = "computed::ui::CaretAnimation::Auto"
+struct = "inherited_ui"
+engine = "servo"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-ui-4/#caret-animation"
+servo_restyle_damage = "repaint"
+affects = "paint"
+
+[caret-shape]
+type = "ui::CaretShape"
+initial = "computed::ui::CaretShape::Auto"
+struct = "inherited_ui"
+engine = "servo"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-ui-4/#caret-shape"
+servo_restyle_damage = "repaint"
+affects = "paint"
+
 [caret-color]
 type = "color::CaretColor"
 initial = "generics::color::CaretColor::auto()"
 struct = "inherited_ui"
+boxed = true
 spec = "https://drafts.csswg.org/css-ui/#caret-color"
 ignored_when_colors_disabled = true
 servo_restyle_damage = "repaint"
@@ -2084,10 +2105,10 @@ animation_type = "discrete"
 affects = "layout"
 
 [outline-color]
-type = "Color"
-initial = "computed_value::T::currentcolor()"
+type = "ColorOrAuto"
+initial = "generics::color::ColorOrAuto::Auto"
 struct = "outline"
-initial_specified_value = "specified::Color::currentcolor()"
+initial_specified_value = "generics::color::ColorOrAuto::Auto"
 ignored_when_colors_disabled = true
 spec = "https://drafts.csswg.org/css-ui/#propdef-outline-color"
 servo_restyle_damage = "repaint"

@@ -1132,6 +1132,17 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
         }
     }
 
+    fn adjust_for_outline_color(&mut self) {
+        use crate::values::computed::{Color, OutlineStyle};
+        use crate::values::generics::color::ColorOrAuto;
+        let outline = self.style.get_outline();
+        if outline.outline_style != OutlineStyle::Auto
+            && matches!(outline.outline_color, ColorOrAuto::Auto)
+        {
+            self.style.mutate_outline().set_outline_color(ColorOrAuto::Color(Color::currentcolor()));
+        }
+    }
+
     /// Adjusts the style to account for various fixups that don't fit naturally into the cascade.
     pub fn adjust<E>(
         &mut self,
@@ -1184,6 +1195,7 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
         self.adjust_for_position();
         self.adjust_for_overflow();
         self.adjust_for_justify_items();
+        self.adjust_for_outline_color();
         #[cfg(feature = "gecko")]
         {
             self.adjust_for_contain();
@@ -1207,6 +1219,25 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
 #[cfg(all(test, feature = "servo"))]
 #[path = "style_adjuster/marker_tests.rs"]
 mod marker_tests;
+
+#[cfg(all(test, feature = "servo"))]
+mod outline_tests {
+    use super::*;
+    use crate::values::computed::OutlineStyle;
+    use crate::values::generics::color::ColorOrAuto;
+    use crate::values::specified::BorderStyle;
+
+    #[test]
+    fn automatic_outline_color_only_stays_automatic_for_automatic_outlines() {
+        let device = crate::test_support::test_device();
+        for style in [OutlineStyle::Auto, OutlineStyle::BorderStyle(BorderStyle::Solid)] {
+            let mut builder = StyleBuilder::for_inheritance(&device, None, None, None);
+            builder.mutate_outline().set_outline_style(style);
+            StyleAdjuster::new(&mut builder).adjust_for_outline_color();
+            assert_eq!(matches!(builder.get_outline().outline_color, ColorOrAuto::Auto), style == OutlineStyle::Auto);
+        }
+    }
+}
 
 #[cfg(all(test, feature = "servo"))]
 mod background_tests {

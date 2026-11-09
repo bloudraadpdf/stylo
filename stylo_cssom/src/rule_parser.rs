@@ -4081,6 +4081,8 @@ mod tests {
             PropertyDeclaration::CaretColor(value) => {
                 PropertyDeclaration::CaretColor(value.clone())
             },
+            PropertyDeclaration::CaretAnimation(value) => PropertyDeclaration::CaretAnimation(value.clone()),
+            PropertyDeclaration::CaretShape(value) => PropertyDeclaration::CaretShape(value.clone()),
             PropertyDeclaration::Clip(value) => PropertyDeclaration::Clip(value.clone()),
             PropertyDeclaration::ClipPath(value) => PropertyDeclaration::ClipPath(value.clone()),
             PropertyDeclaration::Color(value) => PropertyDeclaration::Color(value.clone()),

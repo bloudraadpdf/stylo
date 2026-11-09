@@ -1505,7 +1505,13 @@ impl Parse for CaretColor {
         context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self, ParseError<'i>> {
-        ColorOrAuto::parse(context, input).map(GenericCaretColor)
+        let color = ColorOrAuto::parse(context, input)?;
+        let text_color = if matches!(color, ColorOrAuto::Auto) {
+            None
+        } else {
+            input.try_parse(|input| ColorOrAuto::parse(context, input)).ok()
+        };
+        Ok(GenericCaretColor(color, text_color))
     }
 }
 

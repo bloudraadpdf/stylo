@@ -3526,16 +3526,29 @@ pub mod outline {
         let mut style = None;
         let mut width = None;
         let mut parsed = 0;
+        let mut automatic = 0;
         loop {
             parsed += 1;
-            try_parse_one!(context, input, color, specified::Color::parse);
+            if input.try_parse(|input| input.expect_ident_matching("auto")).is_ok() {
+                automatic += 1;
+                continue;
+            }
+            if color.is_none() {
+                if let Ok(value) = input.try_parse(|input| specified::Color::parse(context, input)) {
+                    color = Some(specified::ColorOrAuto::Color(value));
+                    continue;
+                }
+            }
             try_parse_one!(context, input, style, outline_style::parse);
             try_parse_one!(context, input, width, outline_width::parse);
             parsed -= 1;
             break;
         }
-        if parsed == 0 {
+        if parsed == 0 || automatic > usize::from(color.is_none()) + usize::from(style.is_none()) {
             return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+        if automatic > 0 && style.is_none() {
+            style = Some(specified::OutlineStyle::Auto);
         }
         Ok(expanded! {
             outline_color: unwrap_or_initial!(outline_color, color),

@@ -340,8 +340,7 @@ pub enum GenericColorOrAuto<C> {
 
 pub use self::GenericColorOrAuto as ColorOrAuto;
 
-/// Caret color is effectively a ColorOrAuto, but resolves `auto` to
-/// currentColor.
+/// The caret color and the optional color of text underneath a block caret.
 #[derive(
     Animate,
     Clone,
@@ -358,13 +357,13 @@ pub use self::GenericColorOrAuto as ColorOrAuto;
     ToShmem,
     ToTyped,
 )]
-#[repr(transparent)]
-pub struct GenericCaretColor<C>(pub GenericColorOrAuto<C>);
+#[repr(C)]
+pub struct GenericCaretColor<C>(pub GenericColorOrAuto<C>, pub Option<GenericColorOrAuto<C>>);
 
 impl<C> GenericCaretColor<C> {
     /// Returns the `auto` value.
     pub fn auto() -> Self {
-        GenericCaretColor(GenericColorOrAuto::Auto)
+        GenericCaretColor(GenericColorOrAuto::Auto, None)
     }
 }
 

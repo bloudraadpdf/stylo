@@ -649,6 +649,8 @@ class Longhand(Property):
                 "BorderStyle",
                 "table::CaptionSide",
                 "Clear",
+                "ui::CaretAnimation",
+                "ui::CaretShape",
                 "Contain",
                 "ContentVisibility",
                 "ContainerType",
