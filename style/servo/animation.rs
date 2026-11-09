@@ -1925,6 +1925,9 @@ impl ElementAnimationSet {
                 IgnoreTransitions::CanceledAndFinished => {
                     if transition.state == AnimationState::Canceled
                         || transition.state == AnimationState::Finished
+                        // Sampling can precede the host's Finished-state bookkeeping, including after a seek.
+                        // CSS Transitions 1 section 4 removes the transition's cascade contribution at end time.
+                        || transition.has_ended(now)
                     {
                         continue;
                     }
@@ -2313,6 +2316,53 @@ mod tests {
     use crate::properties::ComputedValues;
     use crate::values::animated::{Animate, Procedure};
     use crate::Atom;
+
+    #[cfg(feature = "servo")]
+    #[test]
+    fn transition_cascade_sampling_ends_without_waiting_for_host_state_updates() {
+        use super::{IgnoreTransitions, TimingFunction, Transition};
+        use crate::values::generics::easing::TimingKeyword;
+
+        let sample = |set: &ElementAnimationSet, time, ignored| {
+            set.get_value_map_for_transitions(time, ignored)
+                .and_then(|values| values.values().next().cloned())
+        };
+        let active = |set: &ElementAnimationSet, time| {
+            sample(set, time, IgnoreTransitions::CanceledAndFinished)
+        };
+        for state in [AnimationState::Pending, AnimationState::Running] {
+            let mut transition = Transition::new(
+                3.,
+                1.,
+                2.,
+                AnimationValue::Opacity(0.),
+                AnimationValue::Opacity(1.),
+                &TimingFunction::Keyword(TimingKeyword::Linear),
+                InterpolateSize::NumericOnly,
+                None,
+            );
+            transition.state = state.clone();
+            let mut set = ElementAnimationSet {
+                transitions: vec![transition],
+                ..Default::default()
+            };
+            assert_eq!(active(&set, 2.), Some(AnimationValue::Opacity(0.)));
+            assert_eq!(active(&set, 4.), Some(AnimationValue::Opacity(0.5)));
+            assert_eq!(active(&set, 5.), None);
+            assert_eq!(active(&set, 6.), None);
+            // Before-change matching still needs the endpoint of a completed transition.
+            assert_eq!(
+                sample(&set, 6., IgnoreTransitions::Canceled),
+                Some(AnimationValue::Opacity(1.))
+            );
+            assert_eq!(set.transitions[0].state, state);
+            // A backward seek changes the active interval without replacing the native transition.
+            set.transitions[0].start_time = 5.;
+            assert_eq!(active(&set, 6.), Some(AnimationValue::Opacity(0.5)));
+            set.transitions[0].state = AnimationState::Canceled;
+            assert_eq!(active(&set, 6.), None);
+        }
+    }
 
     #[cfg(feature = "servo")]
     #[test]
