@@ -90,6 +90,24 @@ use std::sync::{LazyLock, Mutex};
 #[cfg(feature = "servo")]
 pub type StylistSheet = crate::stylesheets::DocumentStyleSheet;
 
+/// The control appearance in which a user-agent declaration block participates.
+#[cfg(feature = "servo")]
+#[derive(Clone, Copy, Debug, Eq, MallocSizeOf, PartialEq)]
+pub enum UaAppearanceMode {
+    /// Platform appearance and its ordinary CSS defaults.
+    Native,
+    /// The overridable basic appearance defaults of CSS Forms.
+    Base,
+}
+
+#[cfg(feature = "servo")]
+#[derive(MallocSizeOf)]
+struct UaAppearanceSource {
+    mode: UaAppearanceMode,
+    #[ignore_malloc_size_of = "Shared user-agent declaration block"]
+    _declarations: Arc<Locked<PropertyDeclarationBlock>>,
+}
+
 /// The type of the stylesheets that the stylist contains.
 #[cfg(feature = "gecko")]
 pub type StylistSheet = crate::gecko::data::GeckoStyleSheet;
@@ -640,6 +658,9 @@ pub struct Stylist {
     author_custom_property_registrations:
         Option<PrecomputedHashMap<Atom, Arc<PropertyRegistration>>>,
 
+    #[cfg(feature = "servo")]
+    ua_appearance_sources: FxHashMap<usize, UaAppearanceSource>,
+
     /// The total number of times the stylist has been rebuilt.
     num_rebuilds: usize,
 }
@@ -861,9 +882,53 @@ impl Stylist {
             script_custom_properties: Default::default(),
             initial_values_for_custom_properties: Default::default(),
             author_custom_property_registrations: None,
+            #[cfg(feature = "servo")]
+            ua_appearance_sources: Default::default(),
             initial_values_for_custom_properties_flags: Default::default(),
             num_rebuilds: 0,
         }
+    }
+
+    /// Replaces the conditional UA sources. Retaining the blocks prevents identity reuse.
+    /// Basic control sources must not change the control's `appearance` declaration.
+    #[cfg(feature = "servo")]
+    pub fn set_ua_appearance_sources(
+        &mut self,
+        sources: Vec<(UaAppearanceMode, Arc<Locked<PropertyDeclarationBlock>>)>,
+    ) {
+        self.ua_appearance_sources = sources.into_iter().map(|(mode, declarations)| {
+            let identity = declarations.raw_ptr().as_ptr() as usize;
+            (identity, UaAppearanceSource { mode, _declarations: declarations })
+        }).collect();
+    }
+
+    #[cfg(feature = "servo")]
+    pub(crate) fn ua_appearance_source_mode(&self, identity: usize) -> Option<UaAppearanceMode> {
+        self.ua_appearance_sources.get(&identity).map(|source| source.mode)
+    }
+
+    #[cfg(feature = "servo")]
+    pub(crate) fn has_ua_appearance_sources(&self) -> bool {
+        !self.ua_appearance_sources.is_empty()
+    }
+
+    /// Whether a retained rule source participated in this style's appearance mode.
+    #[cfg(feature = "servo")]
+    pub fn ua_appearance_source_applies_to_style(
+        &self,
+        source: &Arc<Locked<PropertyDeclarationBlock>>,
+        priority: CascadePriority,
+        style: &ComputedValues,
+    ) -> bool {
+        if priority.cascade_level().origin() != Origin::UserAgent {
+            return true;
+        }
+        let mode = if matches!(style.get_box().clone_appearance(), crate::values::specified::Appearance::Base | crate::values::specified::Appearance::BaseSelect) {
+            UaAppearanceMode::Base
+        } else {
+            UaAppearanceMode::Native
+        };
+        self.ua_appearance_source_mode(source.raw_ptr().as_ptr() as usize).is_none_or(|required| required == mode)
     }
 
     /// Returns the document cascade data.

@@ -320,6 +320,131 @@ where
     E: TElement + 'a,
     I: Iterator<Item = (&'a PropertyDeclaration, CascadePriority, usize)>,
 {
+    #[cfg(feature = "servo")]
+    if stylist.has_ua_appearance_sources() && rules.self_and_ancestors().any(|node| {
+        node.cascade_level().origin() == Origin::UserAgent && node.style_source().is_some_and(|source| {
+            stylist.ua_appearance_source_mode(source.get().raw_ptr().as_ptr() as usize).is_some()
+        })
+    }) {
+        let declarations = iter.collect::<Vec<_>>();
+        let basic = |appearance: specified::Appearance| {
+            matches!(appearance, specified::Appearance::Base | specified::Appearance::BaseSelect)
+        };
+        let use_base = if pseudo.is_some() {
+            let originating_base = parent_style.is_some_and(|style| basic(style.get_box().clone_appearance()));
+            let mut ancestor_base = false;
+            if !originating_base && matches!(pseudo, Some(PseudoElement::Checkmark)) {
+                let mut ancestor = element.and_then(|element| element.parent_element());
+                while let Some(element) = ancestor {
+                    ancestor_base = element.borrow_data().is_some_and(|data| {
+                        data.styles.get_primary().is_some_and(|style| basic(style.get_box().clone_appearance()))
+                    });
+                    if ancestor_base { break; }
+                    ancestor = element.parent_element();
+                }
+            }
+            originating_base || ancestor_base
+        } else if let CascadeMode::Visited { unvisited_context } = cascade_mode {
+            basic(unvisited_context.builder.get_box().clone_appearance())
+        } else {
+            let mut conditions = RuleCacheConditions::default();
+            let probe = apply_declarations_unconditional(
+                stylist, pseudo, rules, guards,
+                ua_appearance_declarations(&declarations, stylist, None),
+                parent_style, layout_parent_style, first_line_reparenting, try_tactic,
+                cascade_mode, cascade_input_flags, None, &mut conditions, element,
+            );
+            basic(probe.get_box().clone_appearance())
+        };
+        let mode = if use_base { crate::stylist::UaAppearanceMode::Base } else { crate::stylist::UaAppearanceMode::Native };
+        // The same matched rule tree can select different UA sources after inherited variables change.
+        rule_cache_conditions.set_uncacheable();
+        return apply_declarations_unconditional(
+            stylist, pseudo, rules, guards,
+            ua_appearance_declarations(&declarations, stylist, Some(mode)),
+            parent_style, layout_parent_style, first_line_reparenting, try_tactic,
+            cascade_mode, cascade_input_flags, None, rule_cache_conditions, element,
+        );
+    }
+    apply_declarations_unconditional(
+        stylist, pseudo, rules, guards, iter, parent_style, layout_parent_style,
+        first_line_reparenting, try_tactic, cascade_mode, cascade_input_flags,
+        rule_cache, rule_cache_conditions, element,
+    )
+}
+
+#[cfg(feature = "servo")]
+fn ua_appearance_declarations<'a>(
+    declarations: &'a [(&'a PropertyDeclaration, CascadePriority, usize)],
+    stylist: &'a Stylist,
+    mode: Option<crate::stylist::UaAppearanceMode>,
+) -> impl Iterator<Item = (&'a PropertyDeclaration, CascadePriority, usize)> + 'a {
+    declarations.iter().filter_map(move |&(declaration, priority, identity)| {
+        ua_appearance_source_selected(stylist, priority, identity, mode)
+            .then_some((declaration, priority, identity))
+    })
+}
+
+#[cfg(feature = "servo")]
+fn ua_appearance_source_selected(
+    stylist: &Stylist,
+    priority: CascadePriority,
+    identity: usize,
+    mode: Option<crate::stylist::UaAppearanceMode>,
+) -> bool {
+    priority.cascade_level().origin() != Origin::UserAgent ||
+        stylist.ua_appearance_source_mode(identity).is_none_or(|required| Some(required) == mode)
+}
+
+#[cfg(all(test, feature = "servo"))]
+mod ua_appearance_source_tests {
+    use super::*;
+    use crate::shared_lock::SharedRwLock;
+    use crate::stylist::UaAppearanceMode;
+
+    #[test]
+    fn conditional_ua_sources_filter_only_the_selected_ua_mode() {
+        let lock = SharedRwLock::new();
+        let base = Arc::new(lock.wrap(crate::properties::PropertyDeclarationBlock::new()));
+        let native = Arc::new(lock.wrap(crate::properties::PropertyDeclarationBlock::new()));
+        let mut stylist = Stylist::new(crate::test_support::test_device(), selectors::matching::QuirksMode::NoQuirks);
+        stylist.set_ua_appearance_sources(vec![(UaAppearanceMode::Base, base.clone()), (UaAppearanceMode::Native, native.clone())]);
+        let ua = CascadePriority::new(CascadeLevel::UANormal, LayerOrder::root());
+        let author = CascadePriority::new(CascadeLevel::same_tree_author_normal(), LayerOrder::root());
+        let base = base.raw_ptr().as_ptr() as usize;
+        let native = native.raw_ptr().as_ptr() as usize;
+        assert!(!ua_appearance_source_selected(&stylist, ua, base, None));
+        assert!(!ua_appearance_source_selected(&stylist, ua, native, None));
+        assert!(ua_appearance_source_selected(&stylist, ua, base, Some(UaAppearanceMode::Base)));
+        assert!(!ua_appearance_source_selected(&stylist, ua, native, Some(UaAppearanceMode::Base)));
+        assert!(ua_appearance_source_selected(&stylist, ua, native, Some(UaAppearanceMode::Native)));
+        assert!(!ua_appearance_source_selected(&stylist, ua, base, Some(UaAppearanceMode::Native)));
+        assert!(ua_appearance_source_selected(&stylist, author, base, Some(UaAppearanceMode::Native)));
+        stylist.set_ua_appearance_sources(Vec::new());
+        assert!(ua_appearance_source_selected(&stylist, ua, base, None));
+    }
+}
+
+fn apply_declarations_unconditional<'a, E, I>(
+    stylist: &'a Stylist,
+    pseudo: Option<&'a PseudoElement>,
+    rules: &StrongRuleNode,
+    guards: &StylesheetGuards,
+    iter: I,
+    parent_style: Option<&'a ComputedValues>,
+    layout_parent_style: Option<&ComputedValues>,
+    first_line_reparenting: FirstLineReparenting<'a>,
+    try_tactic: &'a PositionTryFallbacksTryTactic,
+    cascade_mode: CascadeMode,
+    cascade_input_flags: ComputedValueFlags,
+    rule_cache: Option<&'a RuleCache>,
+    rule_cache_conditions: &'a mut RuleCacheConditions,
+    element: Option<E>,
+) -> Arc<ComputedValues>
+where
+    E: TElement + 'a,
+    I: Iterator<Item = (&'a PropertyDeclaration, CascadePriority, usize)>,
+{
     debug_assert!(layout_parent_style.is_none() || parent_style.is_some());
     let device = stylist.device();
     let inherited_style = parent_style.unwrap_or(device.default_computed_values());
