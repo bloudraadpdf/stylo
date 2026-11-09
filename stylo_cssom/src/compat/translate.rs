@@ -318,7 +318,7 @@ fn translate_compat_with_registrations<'css>(
     }
 }
 
-fn rewrite_grid_lanes_properties(css: &str) -> Option<String> {
+pub(crate) fn rewrite_grid_lanes_properties(css: &str) -> Option<String> {
     const FIT_TOLERANCE: &[u8] = b"fit-tolerance";
     const GRID_LANES_PACK: &[u8] = b"grid-lanes-pack";
 

@@ -148,6 +148,8 @@ pub fn css_supports(query: CssSupportsQuery<'_>) -> bool {
             .unwrap_or(false)
         },
         CssSupportsQuery::Condition(condition) => {
+            let projected = crate::compat::translate::rewrite_grid_lanes_properties(condition);
+            let condition = projected.as_deref().unwrap_or(condition);
             parse_fragment_with(condition, |context, input| {
                 parse_condition_or_declaration(input).map(|condition| condition.eval(context))
             })
@@ -306,6 +308,22 @@ mod tests {
                 inline_style_cssom_authored_value("grid-lanes-pack", Some(carrier.to_owned())),
                 Some(expected.to_owned())
             );
+        }
+    }
+
+    #[test]
+    fn supports_conditions_share_grid_lanes_declaration_projection() {
+        for (condition, expected) in [
+            ("(grid-lanes-pack: normal)", true),
+            ("(grid-lanes-pack: dense)", true),
+            ("not (grid-lanes-pack: dense)", false),
+            ("(grid-lanes-pack: normal) and (display: grid)", true),
+            ("(grid-lanes-pack: auto)", false),
+            ("not (grid-lanes-pack: auto)", true),
+            ("(font-family: \"grid-lanes-pack: dense\")", true),
+            ("(my-grid-lanes-pack: dense)", false),
+        ] {
+            assert_eq!(supports(CssSupportsInput::condition(condition)), expected, "{condition}");
         }
     }
 
