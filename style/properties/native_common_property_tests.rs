@@ -1052,8 +1052,8 @@ fn length_wrapper_properties_participate_in_zoom_inheritance() {
 }
 
 fn with_zoom_test_prefs(test: impl FnOnce()) {
-    let _grid = crate::test_support::BoolPrefGuard::set("layout.grid.enabled", true);
     let _lock = crate::test_support::pref_lock().lock().unwrap();
+    let _grid = crate::test_support::BoolPrefGuard::set("layout.grid.enabled", true);
     let _zoom = crate::test_support::BoolPrefGuard::set("layout.unimplemented", true);
     let _columns = crate::test_support::BoolPrefGuard::set("layout.columns.enabled", true);
     test();
