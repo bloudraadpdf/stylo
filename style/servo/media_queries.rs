@@ -69,6 +69,38 @@ pub trait FontMetricsProvider: Debug + Sync {
     }
 }
 
+/// A user's preferred contrast level, independently of forced-color rendering.
+#[derive(Clone, Copy, Debug, Default, Eq, FromPrimitive, Parse, PartialEq, ToCss)]
+#[repr(u8)]
+pub enum PreferenceContrast {
+    /// No contrast preference was expressed.
+    #[default]
+    NoPreference,
+    /// Prefer greater contrast.
+    More,
+    /// Prefer reduced contrast.
+    Less,
+    /// Use a custom contrast palette.
+    Custom,
+}
+
+/// User preferences for the existing non-color-scheme media features.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct UserPreferences {
+    /// Reduce non-essential motion.
+    pub reduced_motion: bool,
+    /// Reduce transparent and translucent effects.
+    pub reduced_transparency: bool,
+    /// Reduce data transfer.
+    pub reduced_data: bool,
+    /// The requested contrast level.
+    pub contrast: PreferenceContrast,
+    /// Use the device's forced-color palette.
+    pub forced_colors: bool,
+    /// The output colors are inverted.
+    pub inverted_colors: bool,
+}
+
 /// A device is a structure that represents the current media a given document
 /// is displayed in.
 ///
@@ -166,6 +198,8 @@ pub struct Device {
     /// Whether the user prefers light mode or dark mode
     #[ignore_malloc_size_of = "Pure stack type"]
     prefers_color_scheme: PrefersColorScheme,
+    #[ignore_malloc_size_of = "Pure stack type"]
+    user_preferences: UserPreferences,
     /// The page's supported schemes, independent of the user or embedding preference.
     #[ignore_malloc_size_of = "Pure stack type"]
     page_color_scheme_support: ColorSchemeFlags,
@@ -235,6 +269,7 @@ impl Device {
             used_font_metrics: AtomicBool::new(false),
             used_viewport_units: AtomicBool::new(false),
             prefers_color_scheme,
+            user_preferences: UserPreferences::default(),
             page_color_scheme_support: ColorSchemeFlags::empty(),
             navigation_phase: NavigationPhase::Idle,
             environment: CssEnvironment::default(),
@@ -697,7 +732,30 @@ impl Device {
 
     /// Returns whether document colors are enabled.
     pub fn forced_colors(&self) -> ForcedColors {
-        ForcedColors::None
+        if self.user_preferences.forced_colors { ForcedColors::Active } else { ForcedColors::None }
+    }
+
+    /// Replaces preferences, reporting whether the embedder must invalidate media styles.
+    pub fn set_user_preferences(&mut self, preferences: UserPreferences) -> bool {
+        if self.user_preferences == preferences {
+            return false;
+        }
+        self.user_preferences = preferences;
+        true
+    }
+
+    /// The raw preferences, before the forced palette determines its contrast level.
+    pub fn user_preferences(&self) -> UserPreferences {
+        self.user_preferences
+    }
+
+    fn contrast_preference(&self) -> PreferenceContrast {
+        if self.user_preferences.forced_colors {
+            // This device's forced Canvas/CanvasText palette is white/black.
+            PreferenceContrast::More
+        } else {
+            self.user_preferences.contrast
+        }
     }
 
     /// Returns the default background color.
@@ -756,6 +814,9 @@ impl Device {
     }
 
     pub(crate) fn is_dark_color_scheme(&self, color_scheme: ColorSchemeFlags) -> bool {
+        if self.user_preferences.forced_colors {
+            return false;
+        }
         let color_scheme = if color_scheme.contains(ColorSchemeFlags::NORMAL) {
             self.page_color_scheme_support
         } else {
@@ -899,28 +960,35 @@ macro_rules! discrete_feature {
     };
 }
 
-discrete_feature!(
-    ReducedPreference { NoPreference, Reduce },
-    eval_reduced_preference(_context),
-    ReducedPreference::NoPreference,
-    false
-);
-discrete_feature!(
-    ContrastPreference {
-        NoPreference,
-        More,
-        Less,
-        Custom
-    },
-    eval_contrast_preference(_context),
-    ContrastPreference::NoPreference,
-    false
-);
+#[derive(Clone, Copy, Debug, FromPrimitive, Parse, PartialEq, ToCss)]
+#[repr(u8)]
+enum ReducedPreference { NoPreference, Reduce }
+
+fn reduced_preference_matches(reduce: bool, query: Option<ReducedPreference>) -> bool {
+    query.map_or(reduce, |value| value == if reduce { ReducedPreference::Reduce } else { ReducedPreference::NoPreference })
+}
+
+fn eval_reduced_motion(context: &Context, query: Option<ReducedPreference>) -> bool {
+    reduced_preference_matches(context.device().user_preferences.reduced_motion, query)
+}
+
+fn eval_reduced_transparency(context: &Context, query: Option<ReducedPreference>) -> bool {
+    reduced_preference_matches(context.device().user_preferences.reduced_transparency, query)
+}
+
+fn eval_reduced_data(context: &Context, query: Option<ReducedPreference>) -> bool {
+    reduced_preference_matches(context.device().user_preferences.reduced_data, query)
+}
+
+fn eval_contrast_preference(context: &Context, query: Option<PreferenceContrast>) -> bool {
+    let current = context.device().contrast_preference();
+    query.map_or(current != PreferenceContrast::NoPreference, |value| value == current)
+}
 discrete_feature!(
     InvertedColors { None, Inverted },
-    eval_inverted_colors(_context),
-    InvertedColors::None,
-    false
+    eval_inverted_colors(context),
+    if context.device().user_preferences.inverted_colors { InvertedColors::Inverted } else { InvertedColors::None },
+    context.device().user_preferences.inverted_colors
 );
 discrete_feature!(
     DynamicRange { Standard, High },
@@ -1134,25 +1202,25 @@ pub static MEDIA_FEATURES: [QueryFeatureDescription; 35] = [
     feature!(
         atom!("prefers-reduced-motion"),
         AllowsRanges::No,
-        keyword_evaluator!(eval_reduced_preference, ReducedPreference),
+        keyword_evaluator!(eval_reduced_motion, ReducedPreference),
         FeatureFlags::empty(),
     ),
     feature!(
         atom!("prefers-reduced-transparency"),
         AllowsRanges::No,
-        keyword_evaluator!(eval_reduced_preference, ReducedPreference),
+        keyword_evaluator!(eval_reduced_transparency, ReducedPreference),
         FeatureFlags::empty(),
     ),
     feature!(
         atom!("prefers-reduced-data"),
         AllowsRanges::No,
-        keyword_evaluator!(eval_reduced_preference, ReducedPreference),
+        keyword_evaluator!(eval_reduced_data, ReducedPreference),
         FeatureFlags::empty(),
     ),
     feature!(
         atom!("prefers-contrast"),
         AllowsRanges::No,
-        keyword_evaluator!(eval_contrast_preference, ContrastPreference),
+        keyword_evaluator!(eval_contrast_preference, PreferenceContrast),
         FeatureFlags::empty(),
     ),
     feature!(
@@ -1250,6 +1318,59 @@ pub static MEDIA_FEATURES: [QueryFeatureDescription; 35] = [
 #[cfg(test)]
 mod page_color_scheme_support_tests {
     use super::*;
+
+    #[test]
+    fn reduced_preferences_are_independent_and_resettable() {
+        let mut device = crate::test_support::test_device();
+        assert!(!device.set_user_preferences(UserPreferences::default()));
+        for (preferences, expected) in [
+            (UserPreferences { reduced_motion: true, ..Default::default() }, [true, false, false]),
+            (UserPreferences { reduced_transparency: true, ..Default::default() }, [false, true, false]),
+            (UserPreferences { reduced_data: true, ..Default::default() }, [false, false, true]),
+            (UserPreferences::default(), [false, false, false]),
+        ] {
+            assert!(device.set_user_preferences(preferences));
+            assert_eq!(device.user_preferences(), preferences);
+            assert!(!device.set_user_preferences(preferences));
+            Context::for_media_query_evaluation(&device, QuirksMode::NoQuirks, |context| {
+                let evaluators: [fn(&Context, Option<ReducedPreference>) -> bool; 3] = [
+                    eval_reduced_motion, eval_reduced_transparency, eval_reduced_data,
+                ];
+                for (evaluate, reduce) in evaluators.into_iter().zip(expected) {
+                    assert_eq!(evaluate(context, None), reduce);
+                    assert_eq!(evaluate(context, Some(ReducedPreference::Reduce)), reduce);
+                    assert_eq!(evaluate(context, Some(ReducedPreference::NoPreference)), !reduce);
+                }
+            });
+        }
+    }
+
+    #[test]
+    fn contrast_and_output_preferences_keep_raw_color_preference_separate() {
+        let mut device = crate::test_support::test_device();
+        device.set_color_scheme(PrefersColorScheme::Dark);
+        device.set_page_color_scheme_support(ColorSchemeFlags::DARK);
+        for contrast in [PreferenceContrast::More, PreferenceContrast::Less, PreferenceContrast::Custom, PreferenceContrast::NoPreference] {
+            device.set_user_preferences(UserPreferences { contrast, ..Default::default() });
+            Context::for_media_query_evaluation(&device, QuirksMode::NoQuirks, |context| {
+                assert_eq!(eval_contrast_preference(context, None), contrast != PreferenceContrast::NoPreference);
+                assert!(eval_contrast_preference(context, Some(contrast)));
+                assert!(!eval_inverted_colors(context, None));
+                assert!(!eval_forced_colors(context, None));
+            });
+            assert_eq!(device.page_color_scheme(), PrefersColorScheme::Dark);
+        }
+        device.set_user_preferences(UserPreferences { forced_colors: true, inverted_colors: true, ..Default::default() });
+        Context::for_media_query_evaluation(&device, QuirksMode::NoQuirks, |context| {
+            assert!(eval_contrast_preference(context, Some(PreferenceContrast::More)));
+            assert!(eval_inverted_colors(context, Some(InvertedColors::Inverted)));
+            assert!(eval_forced_colors(context, Some(ForcedColors::Active)));
+        });
+        assert_eq!(device.page_color_scheme(), PrefersColorScheme::Light);
+        assert_eq!(device.color_scheme(), PrefersColorScheme::Dark);
+        device.set_user_preferences(UserPreferences::default());
+        assert_eq!(device.page_color_scheme(), PrefersColorScheme::Dark);
+    }
 
     #[test]
     fn setting_page_support_reports_only_changes_and_retains_the_user_preference() {
