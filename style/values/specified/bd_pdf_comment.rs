@@ -14,11 +14,11 @@
 //! gated on bladsy upstream support and emits a
 //! `RenderWarning::UnsupportedPdfFeature` until that lands.
 
-use crate::OwnedStr;
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
 use crate::values::specified::color::Color;
 use crate::values::specified::length::NonNegativeLength;
+use crate::{OwnedSlice, OwnedStr};
 use cssparser::Parser;
 
 /// Specified value of `-bd-pdf-comment`.
@@ -183,10 +183,7 @@ pub enum BdPdfCommentStateModel {
 /// Specified value of `-bd-pdf-comment-contents` and
 /// `-bd-pdf-comment-title`.
 ///
-/// v1 grammar: `none | <string>`. `attr()` / `content()` /
-/// concatenation are reserved for a follow-up — the IR layer
-/// already supports richer content tokens, but the parse rule
-/// stays minimal until renderer plumbing catches up.
+/// `none | <string> | content()`. Attribute substitution is resolved by the cascade.
 #[derive(
     Clone,
     Debug,
@@ -205,6 +202,9 @@ pub enum BdPdfCommentString {
     None,
     /// `<string>` — literal annotation text.
     Literal(OwnedStr),
+    /// Text of the annotated element.
+    #[css(keyword = "content()")]
+    Content,
 }
 
 impl BdPdfCommentString {
@@ -229,8 +229,54 @@ impl Parse for BdPdfCommentString {
         if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
+        if input
+            .try_parse(|i| i.expect_function_matching("content"))
+            .is_ok()
+        {
+            return input.parse_nested_block(|i| {
+                i.expect_exhausted()?;
+                Ok(Self::Content)
+            });
+        }
         let s = input.expect_string()?;
         Ok(Self::Literal(s.as_ref().to_owned().into()))
+    }
+}
+
+/// A comment range identifier and its optional namespace.
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(C, u8)]
+pub enum BdPdfCommentRange {
+    /// No range marker.
+    None,
+    /// Identifier followed by an optional namespace.
+    Names(#[css(iterable)] OwnedSlice<OwnedStr>),
+}
+
+impl Parse for BdPdfCommentRange {
+    fn parse<'i, 't>(
+        _: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, style_traits::ParseError<'i>> {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
+            return Ok(Self::None);
+        }
+        let mut names = vec![input.expect_string()?.as_ref().to_owned().into()];
+        if let Ok(name) = input.try_parse(|i| i.expect_string_cloned()) {
+            names.push(name.as_ref().to_owned().into());
+        }
+        Ok(Self::Names(names.into()))
     }
 }
 

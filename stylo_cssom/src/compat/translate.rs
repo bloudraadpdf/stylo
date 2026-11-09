@@ -6227,14 +6227,21 @@ fn translate_property(lower_property: &str, raw_value: &str) -> Translated {
                     native_property: "-bd-pdf-comment-contents",
                     native_value: "none".to_string(),
                 }
-            } else if v.contains("content(") {
-                Translated::ValueDropped
             } else {
                 Translated::Native {
                     native_property: "-bd-pdf-comment-contents",
                     native_value: v.to_string(),
                 }
             }
+        },
+
+        "-ro-comment-start" => Translated::Native {
+            native_property: "-bd-pdf-comment-start",
+            native_value: raw_value.trim().to_string(),
+        },
+        "-ro-comment-end" => Translated::Native {
+            native_property: "-bd-pdf-comment-end",
+            native_value: raw_value.trim().to_string(),
         },
 
         "-ro-comment-title" => {
@@ -7941,6 +7948,8 @@ pub(crate) fn required_compat_for(lower_property: &str) -> Option<CompatMode> {
         | "-ro-comment-style"
         | "-ro-comment-color"
         | "-ro-comment-content"
+        | "-ro-comment-start"
+        | "-ro-comment-end"
         | "-ro-comment-title"
         | "-ro-comment-author"
         | "-ro-comment-date"
@@ -8637,6 +8646,38 @@ mod pdfreactor_oblique_tests {
 
 #[cfg(test)]
 mod pdfreactor_comment_tests {
+
+    #[test]
+    fn comment_range_and_content_values_use_the_native_parser() {
+        for (source, count) in [
+            (
+                "-bd-pdf-comment-start:'id';-bd-pdf-comment-end:'id' 'group';-bd-pdf-comment-contents:content()",
+                3,
+            ),
+            ("-bd-pdf-comment-start:'a' 'b' 'c'", 0),
+            ("-bd-pdf-comment-contents:content(invalid)", 0),
+        ] {
+            let parsed = crate::declaration_parser::parse_inline_style_block(source);
+            assert_eq!(parsed.as_typed().declarations().len(), count, "{source}");
+        }
+    }
+
+    #[test]
+    fn translation_keeps_comment_ranges_and_element_content() {
+        let source = "span{-ro-comment-start:'id' 'group';-ro-comment-end:'id' 'group';-ro-comment-content:content()}";
+        let result = translate_compat(source, CompatMode::PdfReactor);
+        for property in [
+            "-bd-pdf-comment-start",
+            "-bd-pdf-comment-end",
+            "-bd-pdf-comment-contents",
+        ] {
+            assert!(
+                result.rewritten.contains(property),
+                "{property}: {}",
+                result.rewritten
+            );
+        }
+    }
     use super::{CompatMode, translate_compat};
 
     #[test]

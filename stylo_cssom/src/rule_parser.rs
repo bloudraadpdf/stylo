@@ -4415,6 +4415,12 @@ mod tests {
             PropertyDeclaration::BdPdfCommentContents(value) => {
                 PropertyDeclaration::BdPdfCommentContents(value.clone())
             },
+            PropertyDeclaration::BdPdfCommentStart(value) => {
+                PropertyDeclaration::BdPdfCommentStart(value.clone())
+            },
+            PropertyDeclaration::BdPdfCommentEnd(value) => {
+                PropertyDeclaration::BdPdfCommentEnd(value.clone())
+            },
             PropertyDeclaration::BdPdfCommentTitle(value) => {
                 PropertyDeclaration::BdPdfCommentTitle(value.clone())
             },

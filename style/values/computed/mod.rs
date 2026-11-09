@@ -117,7 +117,7 @@ pub use self::bd_pdf_colour::{BdPdfOverprint, BdPdfOverprintContent, BdPdfPageCo
 pub use self::bd_pdf_comment::{
     BdPdfCommentAuthor, BdPdfCommentColour, BdPdfCommentDate, BdPdfCommentDateFormat,
     BdPdfCommentIcon, BdPdfCommentKind, BdPdfCommentOpen, BdPdfCommentPosition, BdPdfCommentState,
-    BdPdfCommentStateModel, BdPdfCommentString, BdPdfCommentSubject, BdPdfLinkArea,
+    BdPdfCommentStateModel, BdPdfCommentRange, BdPdfCommentString, BdPdfCommentSubject, BdPdfLinkArea,
     BdPdfLinkBorder, BdPdfLinkBorderColor, BdPdfLinkBorderStyle, BdPdfLinkBorderWidth,
 };
 pub use self::bd_pdf_conformance::{BdPdfConformanceValue, BdPdfVersionValue};

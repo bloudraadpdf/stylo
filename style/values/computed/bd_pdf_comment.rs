@@ -12,7 +12,7 @@ use crate::values::specified::bd_pdf_comment as specified;
 
 pub use specified::{
     BdPdfCommentAuthor, BdPdfCommentDate, BdPdfCommentDateFormat, BdPdfCommentIcon,
-    BdPdfCommentKind, BdPdfCommentOpen, BdPdfCommentPosition, BdPdfCommentState,
+    BdPdfCommentKind, BdPdfCommentOpen, BdPdfCommentPosition, BdPdfCommentRange, BdPdfCommentState,
     BdPdfCommentStateModel, BdPdfCommentString, BdPdfCommentSubject,
 };
 

@@ -3016,6 +3016,24 @@ spec = "Nonstandard (moegoe -bd-* fork extension; G7 PDF annotations)"
 animation_type = "none"
 affects = ""
 
+[-bd-pdf-comment-start]
+type = "BdPdfCommentRange"
+initial = "computed::BdPdfCommentRange::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfCommentRange::None"
+spec = "Nonstandard (moegoe PDF comment range markers)"
+animation_type = "none"
+affects = ""
+
+[-bd-pdf-comment-end]
+type = "BdPdfCommentRange"
+initial = "computed::BdPdfCommentRange::None"
+struct = "counters"
+initial_specified_value = "specified::BdPdfCommentRange::None"
+spec = "Nonstandard (moegoe PDF comment range markers)"
+animation_type = "none"
+affects = ""
+
 [-bd-pdf-comment-title]
 type = "BdPdfCommentString"
 initial = "computed::BdPdfCommentString::None"
