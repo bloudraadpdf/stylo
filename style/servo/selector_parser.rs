@@ -393,6 +393,16 @@ impl ::selectors::parser::PseudoElement for PseudoElement {
 /// The number of eager pseudo-elements. Keep this in sync with cascade_type.
 pub const EAGER_PSEUDO_COUNT: usize = 5;
 
+#[cfg(test)]
+mod form_part_tests {
+    #[test]
+    fn generated_form_children_take_their_layout_parents_item_fixups() {
+        assert!(!super::PseudoElement::Checkmark.skip_item_display_fixup());
+        assert!(!super::PseudoElement::ColorSwatch.skip_item_display_fixup());
+        assert!(super::PseudoElement::Backdrop.skip_item_display_fixup());
+    }
+}
+
 impl PseudoElement {
     /// Whether the pseudo-element generates a box outside the box of its originating element: ::scroll-marker-group
     /// and ::scroll-button() generate sibling boxes, except on the root element, whose box contains them (CSS Overflow 5
@@ -587,12 +597,18 @@ impl PseudoElement {
     }
 
     /// Whether this pseudo-element skips flex/grid container display-based fixup: ::before and ::after boxes are
-    /// children of their originating element, and ::scroll-marker-group and ::scroll-button() boxes are siblings of it,
+    /// children of their originating element, as are ::checkmark and ::color-swatch; ::scroll-marker-group and ::scroll-button() boxes are siblings of it,
     /// so each is an item of an item container that is its layout parent (CSS Overflow 5 §3.1.4, §3.2).
     #[inline]
     pub fn skip_item_display_fixup(&self) -> bool {
         !self.is_before_or_after()
-            && !matches!(self, Self::ScrollMarkerGroup | Self::ScrollButton(_))
+            && !matches!(
+                self,
+                Self::Checkmark
+                    | Self::ColorSwatch
+                    | Self::ScrollMarkerGroup
+                    | Self::ScrollButton(_)
+            )
     }
 
     /// Whether this pseudo-element is precomputed.
