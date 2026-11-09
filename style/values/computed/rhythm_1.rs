@@ -19,13 +19,30 @@ use style_traits::{CssWriter, ToCss};
 pub use specified::{BlockStepAlign, BlockStepInsert, BlockStepRound};
 
 /// Computed value of `block-step-size`.
-#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToResolvedValue, ToShmem, ToTyped)]
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem, ToTyped)]
 #[repr(C, u8)]
 pub enum BlockStepSize {
     /// `none` — initial; opt-out of block-step sizing.
     None,
     /// Computed length quantum.
     Length(NonNegativeLength),
+}
+
+impl crate::values::resolved::ToResolvedValue for BlockStepSize {
+    type ResolvedValue = Self;
+
+    fn to_resolved_value(self, context: &crate::values::resolved::Context) -> Self {
+        match self {
+            Self::None => Self::None,
+            Self::Length(length) => Self::Length(crate::values::resolved::ToResolvedValue::to_resolved_value(
+                length, context,
+            )),
+        }
+    }
+
+    fn from_resolved_value(value: Self) -> Self {
+        value
+    }
 }
 
 impl BlockStepSize {
@@ -64,9 +81,7 @@ impl ToComputedValue for specified::BlockStepSize {
     fn from_computed_value(computed: &Self::ComputedValue) -> Self {
         match computed {
             BlockStepSize::None => specified::BlockStepSize::None,
-            BlockStepSize::Length(l) => {
-                specified::BlockStepSize::Length(ToComputedValue::from_computed_value(l))
-            },
+            BlockStepSize::Length(l) => specified::BlockStepSize::Length(ToComputedValue::from_computed_value(l)),
         }
     }
 }
