@@ -483,6 +483,10 @@ where
 
     std::mem::drop(cascade);
 
+    if matches!(cascade_mode, CascadeMode::Unvisited { .. }) {
+        // This normalization depends only on reset properties, so its result is cacheable.
+        StyleAdjuster::new(&mut context.builder).adjust_for_outline_color();
+    }
     context.builder.clear_modified_reset();
 
     if matches!(cascade_mode, CascadeMode::Unvisited { .. }) {
