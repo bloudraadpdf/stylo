@@ -454,6 +454,20 @@ impl ComputedKeyframe {
     }
 }
 
+#[derive(Clone, Copy, MallocSizeOf)]
+enum AnimationTimelinePhase {
+    Document,
+    Progress {
+        sample: Option<ProgressTimelineSample>,
+    },
+}
+
+#[derive(Clone, Copy, MallocSizeOf)]
+struct ProgressTimelineSample {
+    local_time: f64,
+    at_timeline_boundary: bool,
+}
+
 /// A CSS Animation
 #[derive(Clone, MallocSizeOf)]
 pub struct Animation {
@@ -481,6 +495,7 @@ pub struct Animation {
 
     /// The `animation-fill-mode` property of this animation.
     pub fill_mode: AnimationFillMode,
+    timeline_phase: AnimationTimelinePhase,
 
     /// The current iteration state for the animation.
     pub iteration_state: KeyframesIterationState,
@@ -505,6 +520,22 @@ pub struct Animation {
 }
 
 impl Animation {
+    /// Sets the external progress sample used for effect phase and iteration progress.
+    pub fn sample_progress_timeline(
+        &mut self,
+        local_time: Option<f64>,
+        at_timeline_boundary: bool,
+    ) {
+        if let AnimationTimelinePhase::Progress { sample } = &mut self.timeline_phase {
+            *sample = local_time
+                .filter(|time| time.is_finite())
+                .map(|local_time| ProgressTimelineSample {
+                    local_time,
+                    at_timeline_boundary,
+                });
+        }
+    }
+
     /// Sets the effect duration without changing its CSS owning animation or playback time.
     pub fn set_effect_duration(&mut self, seconds: f64) -> bool {
         if seconds.is_nan() || seconds < 0.0 {
@@ -735,7 +766,12 @@ impl Animation {
     /// Whether or not the current iteration is over. Note that this method assumes that
     /// the animation is still running.
     fn iteration_over(&self, time: f64) -> bool {
-        time > (self.started_at + self.current_iteration_duration())
+        match self.timeline_phase {
+            AnimationTimelinePhase::Progress { sample: Some(_) } => {
+                self.elapsed_iterations(time) > self.current_iteration_end_progress()
+            },
+            _ => time > (self.started_at + self.current_iteration_duration()),
+        }
     }
 
     /// Assuming this animation is running, whether or not it is on the last iteration.
@@ -751,6 +787,24 @@ impl Animation {
     /// from the phase before its interval to the phase after it at its start
     /// (Web Animations 1 section 4.8.3).
     fn elapsed_iterations(&self, time: f64) -> f64 {
+        if let AnimationTimelinePhase::Progress {
+            sample: Some(sample),
+        } = self.timeline_phase
+        {
+            let active_time = sample.local_time - self.delay;
+            if self.duration == 0.0 {
+                return if active_time < 0.0 {
+                    f64::NEG_INFINITY
+                } else {
+                    f64::INFINITY
+                };
+            }
+            let current = match self.iteration_state {
+                KeyframesIterationState::Finite(current, _)
+                | KeyframesIterationState::Infinite(current) => current,
+            };
+            return active_time / self.duration - current;
+        }
         if self.duration == 0. {
             return if time < self.started_at {
                 f64::NEG_INFINITY
@@ -803,8 +857,14 @@ impl Animation {
         let old_state = self.state.clone();
         let old_iteration_state = self.iteration_state.clone();
         let script_duration = self.script_duration;
+        let timeline_phase = self.timeline_phase;
 
         *self = other.clone();
+        if matches!(self.timeline_phase, AnimationTimelinePhase::Progress { .. })
+            && matches!(timeline_phase, AnimationTimelinePhase::Progress { .. })
+        {
+            self.timeline_phase = timeline_phase;
+        }
         if let Some(duration) = script_duration {
             self.script_duration = Some(duration);
             self.duration = duration;
@@ -873,20 +933,51 @@ impl Animation {
         let total_progress = match self.state {
             AnimationState::Running | AnimationState::Pending | AnimationState::Finished => {
                 self.elapsed_iterations(now)
-            }
+            },
             AnimationState::Paused(progress) => progress,
             AnimationState::Canceled => return None,
         };
 
-        let before_phase = total_progress < 0.;
-        if before_phase && self.fill_mode != AnimationFillMode::Backwards && self.fill_mode != AnimationFillMode::Both {
+        let (before_phase, after_phase) = match self.timeline_phase {
+            AnimationTimelinePhase::Document => (total_progress < 0.0, self.has_ended(now)),
+            AnimationTimelinePhase::Progress { sample: None } => return None,
+            AnimationTimelinePhase::Progress {
+                sample: Some(sample),
+            } => {
+                let iterations = match self.iteration_state {
+                    KeyframesIterationState::Finite(_, max) => max,
+                    KeyframesIterationState::Infinite(_) => f64::INFINITY,
+                };
+                let active_duration = if self.duration == 0.0 || iterations == 0.0 {
+                    0.0
+                } else {
+                    self.duration * iterations
+                };
+                let end = (self.delay + active_duration).max(0.0);
+                let before = self.delay.min(end).max(0.0);
+                let after = (self.delay + active_duration).min(end).max(0.0);
+                (
+                    sample.local_time < before,
+                    sample.local_time > after
+                        || (sample.local_time == after && !sample.at_timeline_boundary),
+                )
+            },
+        };
+        if before_phase
+            && self.fill_mode != AnimationFillMode::Backwards
+            && self.fill_mode != AnimationFillMode::Both
+        {
             return None;
         }
-        let after_phase = self.has_ended(now);
-        if after_phase && self.fill_mode != AnimationFillMode::Forwards && self.fill_mode != AnimationFillMode::Both {
+        if after_phase
+            && self.fill_mode != AnimationFillMode::Forwards
+            && self.fill_mode != AnimationFillMode::Both
+        {
             return None;
         }
-        let total_progress = total_progress.min(self.current_iteration_end_progress()).max(0.0);
+        let total_progress = total_progress
+            .min(self.current_iteration_end_progress())
+            .max(0.0);
 
         // Reversing an iteration mirrors the progress and nothing else
         // (Web Animations 1 § 4.9.1 "Calculating the directed progress"). The
@@ -961,8 +1052,9 @@ impl Animation {
         let percentage_between_keyframes =
             (next_keyframe.start_percentage - prev_keyframe.start_percentage).abs() as f64;
         let duration_between_keyframes = percentage_between_keyframes * self.duration;
-        let progress_between_keyframes =
-            (directed_progress - prev_keyframe.start_percentage as f64) / percentage_between_keyframes;
+        let progress_between_keyframes = (directed_progress
+            - prev_keyframe.start_percentage as f64)
+            / percentage_between_keyframes;
 
         #[cfg(feature = "servo")]
         let shadow_sampled = if let (Some(from), Some(to)) = (
@@ -970,10 +1062,11 @@ impl Animation {
             self.composited_shadow(next_keyframe, map),
         ) {
             let epsilon = 1.0 / (200.0 * duration_between_keyframes);
-            let progress =
-                prev_keyframe
-                    .timing_function
-                    .calculate_output(progress_between_keyframes, before_flag, epsilon);
+            let progress = prev_keyframe.timing_function.calculate_output(
+                progress_between_keyframes,
+                before_flag,
+                epsilon,
+            );
             let sample = from
                 .animate(&to, Procedure::Interpolate { progress })
                 .unwrap_or_else(|_| if progress < 0.5 { from } else { to });
@@ -2159,6 +2252,11 @@ pub fn maybe_start_animations<E>(
             duration,
             script_duration: None,
             fill_mode: style.animation_fill_mode_mod(i),
+            timeline_phase: if style.animation_timeline_mod(i).is_auto() {
+                AnimationTimelinePhase::Document
+            } else {
+                AnimationTimelinePhase::Progress { sample: None }
+            },
             delay: delay as f64,
             iteration_state,
             state,
@@ -2220,7 +2318,10 @@ mod tests {
     #[cfg(feature = "servo")]
     #[test]
     fn shadow_transition_lifecycle_compares_the_whole_list_when_offset_is_unchanged() {
-        let stylist = crate::stylist::Stylist::new(crate::test_support::test_device(), selectors::matching::QuirksMode::NoQuirks);
+        let stylist = crate::stylist::Stylist::new(
+            crate::test_support::test_device(),
+            selectors::matching::QuirksMode::NoQuirks,
+        );
         use crate::properties::longhands;
         use crate::values::animated::box_shadow::AnimatedBoxShadowList;
         use crate::values::computed::{BoxShadowOffset, BoxShadowPosition, Length};
@@ -2289,7 +2390,10 @@ mod tests {
     #[cfg(feature = "servo")]
     #[test]
     fn coordinated_shadow_transition_samples_transparent_padding_for_every_component() {
-        let stylist = crate::stylist::Stylist::new(crate::test_support::test_device(), selectors::matching::QuirksMode::NoQuirks);
+        let stylist = crate::stylist::Stylist::new(
+            crate::test_support::test_device(),
+            selectors::matching::QuirksMode::NoQuirks,
+        );
         use crate::properties::{longhands, LonghandId, PropertyDeclarationId};
         use crate::values::animated::box_shadow::AnimatedBoxShadowList;
         use crate::values::computed::{BoxShadowOffset, Length};
@@ -2372,6 +2476,7 @@ mod tests {
             script_duration: None,
             delay: 0.,
             fill_mode: AnimationFillMode::None,
+            timeline_phase: super::AnimationTimelinePhase::Document,
             iteration_state: KeyframesIterationState::Finite(0., 1.),
             state: AnimationState::Pending,
             direction: AnimationDirection::Normal,
@@ -2388,6 +2493,93 @@ mod tests {
             duration,
             ..pending_animation()
         }
+    }
+
+    #[test]
+    fn progress_timeline_endpoints_remain_active_without_changing_document_fill() {
+        use super::AnimationTimelinePhase;
+        for fill in [
+            AnimationFillMode::None,
+            AnimationFillMode::Forwards,
+            AnimationFillMode::Backwards,
+            AnimationFillMode::Both,
+        ] {
+            let mut document = named_animation("document", 0.0, 1.0);
+            document.state = AnimationState::Running;
+            document.fill_mode = fill;
+            document.sample_progress_timeline(Some(1.0), true);
+            assert_eq!(
+                document.directed_progress_at(1.0).map(|value| value.0),
+                matches!(fill, AnimationFillMode::Forwards | AnimationFillMode::Both)
+                    .then_some(1.0)
+            );
+            let mut progress = document.clone();
+            progress.timeline_phase = AnimationTimelinePhase::Progress { sample: None };
+            assert!(progress.directed_progress_at(0.0).is_none());
+            progress.sample_progress_timeline(Some(0.0), true);
+            assert_eq!(
+                progress.directed_progress_at(0.0).map(|value| value.0),
+                Some(0.0)
+            );
+            progress.sample_progress_timeline(Some(1.0), true);
+            assert_eq!(
+                progress.directed_progress_at(1.0).map(|value| value.0),
+                Some(1.0)
+            );
+            assert_eq!(
+                progress
+                    .directed_progress_at(1_000_000.0)
+                    .map(|value| value.0),
+                Some(1.0)
+            );
+            progress.sample_progress_timeline(Some(0.5), false);
+            assert_eq!(
+                progress.directed_progress_at(0.5).map(|value| value.0),
+                Some(0.5)
+            );
+            progress.sample_progress_timeline(Some(1.1), true);
+            assert_eq!(
+                progress.directed_progress_at(1.1).map(|value| value.0),
+                matches!(fill, AnimationFillMode::Forwards | AnimationFillMode::Both)
+                    .then_some(1.0)
+            );
+        }
+    }
+
+    #[test]
+    fn progress_boundary_survives_style_refresh_but_not_a_document_timeline_change() {
+        use super::AnimationTimelinePhase;
+        let mut retained = named_animation("progress", 0.0, 1.0);
+        retained.state = AnimationState::Running;
+        retained.timeline_phase = AnimationTimelinePhase::Progress { sample: None };
+        let refreshed = retained.clone();
+        retained.sample_progress_timeline(Some(1.0), true);
+        retained.update_from_other(&refreshed, 1.0);
+        assert_eq!(
+            retained.directed_progress_at(1.0).map(|value| value.0),
+            Some(1.0)
+        );
+        let mut document = refreshed;
+        document.timeline_phase = AnimationTimelinePhase::Document;
+        retained.update_from_other(&document, 1.0);
+        assert!(retained.directed_progress_at(1.0).is_none());
+    }
+
+    #[test]
+    fn progress_boundary_inclusion_does_not_fill_beyond_a_clipped_active_interval() {
+        let mut animation = named_animation("negative-delay", -2.0, 1.0);
+        animation.delay = -2.0;
+        animation.state = AnimationState::Finished;
+        animation.timeline_phase = super::AnimationTimelinePhase::Progress { sample: None };
+        animation.sample_progress_timeline(Some(0.0), true);
+        assert_eq!(
+            animation.directed_progress_at(0.0).map(|value| value.0),
+            Some(1.0)
+        );
+        animation.sample_progress_timeline(Some(0.1), true);
+        assert!(animation.directed_progress_at(0.1).is_none());
+        animation.sample_progress_timeline(None, false);
+        assert!(animation.directed_progress_at(0.1).is_none());
     }
 
     #[test]
