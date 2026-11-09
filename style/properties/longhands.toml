@@ -3000,9 +3000,9 @@ affects = ""
 
 [-bd-pdf-comment]
 type = "BdPdfCommentKind"
-initial = "computed::BdPdfCommentKind::None"
+initial = "computed::BdPdfCommentKind::Auto"
 struct = "counters"
-initial_specified_value = "specified::BdPdfCommentKind::None"
+initial_specified_value = "specified::BdPdfCommentKind::Auto"
 spec = "Nonstandard (moegoe -bd-* fork extension; G7 PDF annotations)"
 animation_type = "none"
 affects = ""

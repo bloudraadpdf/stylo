@@ -14,11 +14,11 @@
 //! gated on bladsy upstream support and emits a
 //! `RenderWarning::UnsupportedPdfFeature` until that lands.
 
+use crate::OwnedStr;
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
 use crate::values::specified::color::Color;
 use crate::values::specified::length::NonNegativeLength;
-use crate::OwnedStr;
 use cssparser::Parser;
 
 /// Specified value of `-bd-pdf-comment`.
@@ -44,8 +44,10 @@ use cssparser::Parser;
 #[allow(missing_docs)]
 pub enum BdPdfCommentKind {
     #[default]
+    Auto,
     None,
     Note,
+    Invisible,
     Highlight,
     Underline,
     Strikeout,

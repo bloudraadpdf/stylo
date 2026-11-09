@@ -6186,25 +6186,9 @@ fn translate_property(lower_property: &str, raw_value: &str) -> Translated {
             native_value: raw_value.trim().to_ascii_lowercase(),
         },
 
-        "-ro-comment-style" => {
-            let v = raw_value.trim().to_ascii_lowercase();
-            let mapped = match v.as_str() {
-                "note" => Some("note"),
-                "highlight" => Some("highlight"),
-                "underline" => Some("underline"),
-                "strikeout" => Some("strikeout"),
-                "squiggly" => Some("squiggly"),
-
-                "invisible" => None,
-                _ => None,
-            };
-            match mapped {
-                Some(native) => Translated::Native {
-                    native_property: "-bd-pdf-comment",
-                    native_value: native.to_string(),
-                },
-                None => Translated::ValueDropped,
-            }
+        "-ro-comment-style" => Translated::Native {
+            native_property: "-bd-pdf-comment",
+            native_value: raw_value.trim().to_string(),
         },
 
         "-ro-comment-color" => Translated::Native {
@@ -8624,5 +8608,28 @@ mod pdfreactor_oblique_tests {
             );
         }
         assert!(translate_compat("p { font-style: oblique }", CompatMode::None).is_borrowed());
+    }
+}
+
+#[cfg(test)]
+mod pdfreactor_comment_tests {
+    use super::{CompatMode, translate_compat};
+
+    #[test]
+    fn comment_styles_retain_deferred_values_for_the_native_parser() {
+        for value in [
+            "note",
+            "invisible",
+            "attr(commentstyle -ro-ident)",
+            "var(--style)",
+        ] {
+            let source = format!("span{{-ro-comment-style:{value}}}");
+            let result = translate_compat(&source, CompatMode::PdfReactor);
+            assert!(result.rewritten.contains("-bd-pdf-comment:"), "{value}");
+            assert!(
+                !result.rewritten.contains("-bd-pdf-comment: auto"),
+                "{value}"
+            );
+        }
     }
 }
