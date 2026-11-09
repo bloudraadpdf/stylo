@@ -364,6 +364,29 @@ fn lower_rule(
     if source.grammar() != crate::rule_parser::stylo_rule_grammar(native) {
         return Err(DeclarationLoweringError::RuleGrammar);
     }
+    if let CssRule::Page(page) = native
+        && requires_source_lowering(source.payload().nested())
+    {
+        let (destination, declarations) = {
+            let guard = lock.read();
+            let page = page.read_with(&guard);
+            let mut declarations = page.block.read_with(&guard).clone();
+            for child in &page.rules.read_with(&guard).0 {
+                if let CssRule::NestedDeclarations(child) = child {
+                    for (declaration, importance) in child
+                        .read_with(&guard)
+                        .block
+                        .read_with(&guard)
+                        .declaration_importance_iter()
+                    {
+                        let _ = declarations.push(declaration.clone(), importance);
+                    }
+                }
+            }
+            (page.block.clone(), declarations)
+        };
+        *destination.write_with(&mut lock.write()) = declarations;
+    }
     if matches!(native, CssRule::PositionTry(_)) {
         position_try_sources.push(
             source
