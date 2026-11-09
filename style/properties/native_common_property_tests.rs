@@ -7,6 +7,45 @@ use super::{
 };
 use crate::stylesheets::{CssRuleType, UrlExtraData};
 
+#[test]
+fn native_appearance_disabling_properties_exclude_border_clipping() {
+    let disabling = super::LonghandIdSet::border_background_properties();
+    for name in [
+        "border-top-clip",
+        "border-right-clip",
+        "border-bottom-clip",
+        "border-left-clip",
+        "border-block-start-clip",
+        "border-block-end-clip",
+        "border-inline-start-clip",
+        "border-inline-end-clip",
+        "border-shape",
+        "background-repeat",
+    ] {
+        let property =
+            PropertyId::parse_enabled_for_all_content(name).expect("the property is supported");
+        assert!(
+            !disabling.contains(property.longhand_id().expect("the property is a longhand")),
+            "{name}"
+        );
+    }
+    for name in [
+        "border-top-color",
+        "border-top-style",
+        "border-top-width",
+        "border-top-left-radius",
+        "border-image-source",
+        "background-color",
+    ] {
+        let property =
+            PropertyId::parse_enabled_for_all_content(name).expect("the property is supported");
+        assert!(
+            disabling.contains(property.longhand_id().expect("the property is a longhand")),
+            "{name}"
+        );
+    }
+}
+
 fn block(css: &str) -> super::PropertyDeclarationBlock {
     let url: UrlExtraData = url::Url::parse("https://example.test/style.css")
         .unwrap()
