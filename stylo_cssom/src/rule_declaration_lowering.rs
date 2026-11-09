@@ -178,15 +178,35 @@ fn merge_native_pending(
     }
     let mut result = PropertyDeclarationBlock::new();
     for (declaration, importance) in restored.declaration_importance_iter() {
+        let projected_declaration = projected
+            .declaration_importance_iter()
+            .find(|(candidate, _)| candidate.id() == declaration.id());
+        if let (
+            style::properties::PropertyDeclaration::WithVariables(source),
+            Some((style::properties::PropertyDeclaration::WithVariables(projected), importance)),
+        ) = (declaration, projected_declaration)
+            && source.value.from_shorthand().is_none()
+            && retained_context.contains(declaration.id())
+        {
+            let mut projected = projected.clone();
+            projected.value = Arc::new(
+                projected
+                    .value
+                    .with_url_data(source.value.variable_value().url_data.clone()),
+            );
+            let _ = result.push(
+                style::properties::PropertyDeclaration::WithVariables(projected),
+                importance,
+            );
+            continue;
+        }
         let selected = if retained_context.contains(declaration.id())
             || matches!(declaration, style::properties::PropertyDeclaration::WithVariables(value)
             if value.value.from_shorthand().is_some())
         {
             Some((declaration, importance))
         } else {
-            projected
-                .declaration_importance_iter()
-                .find(|(candidate, _)| candidate.id() == declaration.id())
+            projected_declaration
         };
         if let Some((declaration, importance)) = selected {
             let _ = result.push(declaration.clone(), importance);

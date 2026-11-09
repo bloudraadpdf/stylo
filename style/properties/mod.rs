@@ -1578,6 +1578,16 @@ pub type ShorthandsWithPropertyReferencesCache =
     FxHashMap<(ShorthandId, LonghandId), PropertyDeclaration>;
 
 impl UnparsedValue {
+    /// Retain projected tokens with the source declaration's URL context.
+    pub fn with_url_data(&self, url_data: UrlExtraData) -> Self {
+        let mut variable_value = self.variable_value.clone();
+        variable_value.url_data = url_data;
+        Self {
+            variable_value,
+            from_shorthand: self.from_shorthand,
+        }
+    }
+
     /// The retained token stream and its original URL context.
     pub fn variable_value(&self) -> &custom_properties::VariableValue {
         &self.variable_value
