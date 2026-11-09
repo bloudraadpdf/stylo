@@ -166,6 +166,9 @@ pub struct Device {
     /// Whether the user prefers light mode or dark mode
     #[ignore_malloc_size_of = "Pure stack type"]
     prefers_color_scheme: PrefersColorScheme,
+    /// The page's supported schemes, independent of the user or embedding preference.
+    #[ignore_malloc_size_of = "Pure stack type"]
+    page_color_scheme_support: ColorSchemeFlags,
     /// The navigation phase of the document, which `@navigation` rules query.
     #[ignore_malloc_size_of = "Pure stack type"]
     navigation_phase: NavigationPhase,
@@ -232,6 +235,7 @@ impl Device {
             used_font_metrics: AtomicBool::new(false),
             used_viewport_units: AtomicBool::new(false),
             prefers_color_scheme,
+            page_color_scheme_support: ColorSchemeFlags::empty(),
             navigation_phase: NavigationPhase::Idle,
             environment: CssEnvironment::default(),
             font_metrics_provider,
@@ -718,6 +722,15 @@ impl Device {
     /// Returns the color scheme of this [`Device`].
     pub fn color_scheme(&self) -> PrefersColorScheme {
         self.prefers_color_scheme
+    }
+
+    /// Sets the parsed page support and reports whether media and system colors need updating.
+    pub fn set_page_color_scheme_support(&mut self, support: ColorSchemeFlags) -> bool {
+        if self.page_color_scheme_support == support {
+            return false;
+        }
+        self.page_color_scheme_support = support;
+        true
     }
 
     /// Set the [`NavigationPhase`] of this [`Device`].
@@ -1219,3 +1232,20 @@ pub static MEDIA_FEATURES: [QueryFeatureDescription; 35] = [
         FeatureFlags::empty(),
     ),
 ];
+
+#[cfg(test)]
+mod page_color_scheme_support_tests {
+    use super::*;
+
+    #[test]
+    fn setting_page_support_reports_only_changes_and_retains_the_user_preference() {
+        let mut device = crate::test_support::test_device();
+        device.set_color_scheme(PrefersColorScheme::Dark);
+        assert!(!device.set_page_color_scheme_support(ColorSchemeFlags::empty()));
+        assert!(device.set_page_color_scheme_support(ColorSchemeFlags::DARK));
+        assert_eq!(device.page_color_scheme_support, ColorSchemeFlags::DARK);
+        assert!(!device.set_page_color_scheme_support(ColorSchemeFlags::DARK));
+        assert!(device.set_page_color_scheme_support(ColorSchemeFlags::LIGHT | ColorSchemeFlags::DARK));
+        assert_eq!(device.color_scheme(), PrefersColorScheme::Dark);
+    }
+}
