@@ -4,10 +4,10 @@
 
 //! Computed angles.
 
-use crate::Zero;
 use crate::derives::*;
-use crate::values::CSSFloat;
 use crate::values::distance::{ComputeSquaredDistance, SquaredDistance};
+use crate::values::CSSFloat;
+use crate::Zero;
 use std::f64::consts::PI;
 use std::fmt::{self, Write};
 use std::ops::Neg;
@@ -33,6 +33,7 @@ type AngleFloat = f64;
     Serialize,
     ToAnimatedZero,
     ToResolvedValue,
+    ToShmem,
 )]
 #[repr(C)]
 pub struct Angle(AngleFloat);
@@ -113,7 +114,8 @@ impl ComputeSquaredDistance for Angle {
     fn compute_squared_distance(&self, other: &Self) -> Result<SquaredDistance, ()> {
         // Use the formula for calculating the distance between angles defined in SVG:
         // https://www.w3.org/TR/SVG/animate.html#complexDistances
-        self.radians64().compute_squared_distance(&other.radians64())
+        self.radians64()
+            .compute_squared_distance(&other.radians64())
     }
 }
 
@@ -134,14 +136,22 @@ mod tests {
     #[test]
     fn extrapolated_radians_preserve_the_same_matrix_as_an_authored_angle() {
         let actual = Angle::from_radians(10.0)
-            .animate(&Angle::from_radians(20.0), Procedure::Interpolate { progress: 2.0 })
+            .animate(
+                &Angle::from_radians(20.0),
+                Procedure::Interpolate { progress: 2.0 },
+            )
             .unwrap();
         let expected = Angle::from_radians(30.0);
         assert!((actual.radians64() - expected.radians64()).abs() < 1e-12);
-        assert!((actual.radians64().tan() * 110.0 - expected.radians64().tan() * 110.0).abs() < 1e-10);
+        assert!(
+            (actual.radians64().tan() * 110.0 - expected.radians64().tan() * 110.0).abs() < 1e-10
+        );
         assert_eq!(actual.degrees(), expected.degrees());
         let degrees = Angle::from_degrees(10.0)
-            .animate(&Angle::from_degrees(20.0), Procedure::Interpolate { progress: 2.0 })
+            .animate(
+                &Angle::from_degrees(20.0),
+                Procedure::Interpolate { progress: 2.0 },
+            )
             .unwrap();
         assert_eq!(degrees.degrees(), 30.0);
     }

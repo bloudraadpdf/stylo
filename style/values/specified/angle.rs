@@ -51,11 +51,14 @@ impl Zero for AngleDimension {
 impl AngleDimension {
     fn computed(&self) -> ComputedAngle {
         let degrees = self.degrees();
-        ComputedAngle::from_degrees(if degrees.is_finite() && degrees != 0.0 {
-            degrees
-        } else {
-            0.0
-        })
+        if !degrees.is_finite() || degrees == 0.0 {
+            return ComputedAngle::from_degrees(0.0);
+        }
+        #[cfg(not(feature = "gecko"))]
+        if let Self::Rad(radians) = self {
+            return ComputedAngle::from_radians(*radians);
+        }
+        ComputedAngle::from_degrees(degrees)
     }
 
     /// Returns the amount of degrees this angle represents.
@@ -128,6 +131,8 @@ pub struct Angle(AngleValue);
 enum AngleValue {
     Dimension(AngleDimension),
     Calc(Box<CalcNode>),
+    #[cfg(not(feature = "gecko"))]
+    Computed(ComputedAngle),
 }
 
 impl Zero for Angle {
@@ -154,6 +159,8 @@ impl ToCss for Angle {
                 dest,
             ),
             AngleValue::Calc(node) => node.to_css(dest),
+            #[cfg(not(feature = "gecko"))]
+            AngleValue::Computed(value) => value.to_css(dest),
         }
     }
 }
@@ -170,7 +177,14 @@ impl ToComputedValue for Angle {
     }
 
     fn from_computed_value(computed: &Self::ComputedValue) -> Self {
-        Self::from_degrees(computed.degrees(), false)
+        #[cfg(feature = "gecko")]
+        {
+            Self::from_degrees(computed.degrees(), false)
+        }
+        #[cfg(not(feature = "gecko"))]
+        {
+            Self(AngleValue::Computed(*computed))
+        }
     }
 }
 
@@ -182,7 +196,9 @@ impl Angle {
         line_height_base: LineHeightBase,
     ) -> ComputedAngle {
         let degrees = match &self.0 {
-            AngleValue::Dimension(value) => value.degrees(),
+            AngleValue::Dimension(value) => return value.computed(),
+            #[cfg(not(feature = "gecko"))]
+            AngleValue::Computed(value) => return *value,
             AngleValue::Calc(node) => node
                 .resolve_angle(context, base_size, line_height_base)
                 .expect("a validated angle calculation must resolve in its element context"),
@@ -213,14 +229,22 @@ impl Angle {
     pub fn degrees_without_context(&self) -> Result<CSSFloat, ()> {
         match &self.0 {
             AngleValue::Dimension(value) => Ok(value.degrees()),
+            #[cfg(not(feature = "gecko"))]
+            AngleValue::Computed(value) => Ok(value.degrees()),
             AngleValue::Calc(node) => node.resolve_angle_without_context(),
         }
     }
 
     /// Computes an angle which does not require element context.
     pub fn to_computed_value_without_context(&self) -> Result<ComputedAngle, ()> {
-        self.degrees_without_context()
-            .map(|degrees| AngleDimension::Deg(degrees).computed())
+        match &self.0 {
+            AngleValue::Dimension(value) => Ok(value.computed()),
+            #[cfg(not(feature = "gecko"))]
+            AngleValue::Computed(value) => Ok(*value),
+            AngleValue::Calc(_) => self
+                .degrees_without_context()
+                .map(|degrees| AngleDimension::Deg(degrees).computed()),
+        }
     }
 
     /// Whether this specified angle came from a calculation.
@@ -313,10 +337,54 @@ impl Neg for Angle {
                 };
                 Self(AngleValue::Dimension(value))
             },
+            #[cfg(not(feature = "gecko"))]
+            AngleValue::Computed(value) => Self(AngleValue::Computed(-value)),
             AngleValue::Calc(mut node) => {
                 node.negate();
                 Self(AngleValue::Calc(node))
             },
+        }
+    }
+}
+
+#[cfg(all(test, not(feature = "gecko")))]
+mod tests {
+    use super::*;
+    use crate::values::animated::{Animate, Procedure};
+
+    #[test]
+    fn specified_radians_retain_precision_through_computation_and_extrapolation() {
+        let angle = |radians| {
+            Angle::parse_dimension(radians, "rad", false)
+                .unwrap()
+                .to_computed_value_without_context()
+                .unwrap()
+        };
+        let sampled = angle(10.0)
+            .animate(&angle(20.0), Procedure::Interpolate { progress: 2.0 })
+            .unwrap();
+        let expected = ComputedAngle::from_radians(30.0);
+        let recascaded = Angle::from_computed_value(&sampled)
+            .to_computed_value_without_context()
+            .unwrap();
+        assert_eq!(recascaded, sampled);
+        assert!(
+            (recascaded.radians64().tan() * 110.0 - expected.radians64().tan() * 110.0).abs()
+                < 1e-10
+        );
+        assert!((sampled.radians64() - expected.radians64()).abs() < 1e-12);
+        assert!(
+            (sampled.radians64().tan() * 110.0 - expected.radians64().tan() * 110.0).abs() < 1e-10
+        );
+        assert_eq!(
+            AngleDimension::Rad(10.0).computed(),
+            ComputedAngle::from_radians(10.0)
+        );
+        for radians in [0.0, -0.0, f32::INFINITY, f32::NEG_INFINITY] {
+            assert_eq!(
+                AngleDimension::Rad(radians).computed(),
+                ComputedAngle::from_degrees(0.0)
+            );
         }
     }
 }
