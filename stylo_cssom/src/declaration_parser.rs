@@ -2100,11 +2100,11 @@ mod tests {
             crate::specified::projected_specified_property_value(&declarations, "color");
         assert_eq!(
             cascade_value.as_deref(),
-            Some("color(srgb none 0.19607843 0.39215686 / none)"),
+            Some("color(srgb none 0.196078 0.392157 / none)"),
         );
         assert_eq!(
             inline_style_cssom_authored_value("color", cascade_value).as_deref(),
-            Some("color(srgb none 0.19607843 0.39215686 / none)"),
+            Some("color(srgb none 0.196078 0.392157 / none)"),
         );
     }
 

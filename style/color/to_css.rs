@@ -93,13 +93,10 @@ fn serialize_direct_rgb_channel<W: Write>(
     dest: &mut CssWriter<W>,
 ) -> fmt::Result {
     if let Some(value) = value {
-        let byte = (value * 255.0).round();
-        if (0.0..=255.0).contains(&byte) && (value * 255.0 - byte).abs() < 0.00001 {
-            if byte == 0.0 {
-                return dest.write_str("0");
-            }
-            let decimal = format!("{:.8}", f64::from(byte) / 255.0);
-            return dest.write_str(decimal.trim_end_matches('0').trim_end_matches('.'));
+        if value.is_finite() {
+            let decimal = format!("{value:.6}");
+            let number = decimal.trim_end_matches('0').trim_end_matches('.');
+            return dest.write_str(if number == "-0" { "0" } else { number });
         }
     }
     ModernComponent(&value).to_css(dest)
@@ -291,9 +288,22 @@ mod tests {
             None::<f32>,
             1.0,
         );
-        assert_eq!(color.to_css_string(), "color(srgb 0.50196078 none none)");
+        assert_eq!(color.to_css_string(), "color(srgb 0.501961 none none)");
         let zero = AbsoluteColor::new(ColorSpace::Srgb, -0.0, -0.0, -0.0, 0.0);
         assert_eq!(zero.to_css_string(), "color(srgb 0 0 0 / 0)");
+        for channel in 0..=1023 {
+            let value = f64::from(channel) / 1023.0;
+            let css = AbsoluteColor::new(ColorSpace::Srgb, value, None::<f32>, None::<f32>, 1.0)
+                .to_css_string();
+            let serialized: f64 = css
+                .strip_prefix("color(srgb ")
+                .unwrap()
+                .strip_suffix(" none none)")
+                .unwrap()
+                .parse()
+                .unwrap();
+            assert_eq!((serialized * 1023.0).round() as u32, channel);
+        }
     }
 
     #[test]

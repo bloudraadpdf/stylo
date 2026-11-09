@@ -1298,7 +1298,7 @@ mod specified_color_tests {
             ("rgb(none none none)", "color(srgb none none none)"),
             (
                 "rgb(128 none none / none)",
-                "color(srgb 0.50196078 none none / none)",
+                "color(srgb 0.501961 none none / none)",
             ),
             (
                 "rgb(20% none none / 50%)",

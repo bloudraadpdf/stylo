@@ -1359,7 +1359,7 @@ mod color_tests {
     #[test]
     fn missing_channels_survive_specified_and_nested_serialization() {
         for (css, expected) in [
-            ("rgb(128 none none)", "color(srgb 0.50196078 none none)"),
+            ("rgb(128 none none)", "color(srgb 0.501961 none none)"),
             ("hsl(120 80% none)", "hsl(120 80% none)"),
             ("hwb(120 none 50%)", "hwb(120 none 50%)"),
             (
@@ -1372,6 +1372,21 @@ mod color_tests {
             ),
         ] {
             assert_eq!(parse(css).unwrap().to_css_string(), expected, "{css}");
+        }
+    }
+
+    #[test]
+    fn computed_srgb_functions_serialize_with_cssom_decimal_precision() {
+        for css in [
+            "color-mix(in srgb, rgb(123 45 67) 100%, white)",
+            "rgb(from rgb(123 45 67) r g b)",
+        ] {
+            let color = parse(css).unwrap().to_computed_color(None).unwrap();
+            assert_eq!(
+                color.to_css_string(),
+                "color(srgb 0.482353 0.176471 0.262745)",
+                "{css}"
+            );
         }
     }
 
