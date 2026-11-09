@@ -1869,6 +1869,9 @@ fn parse_attr_type<'i, 't>(input: &mut Parser<'i, 't>) -> Result<AttributeType, 
         Token::Ident(ref ident) => {
             if ident.eq_ignore_ascii_case("raw-string") {
                 AttributeType::RawString
+            } else if ident.eq_ignore_ascii_case("-bd-ident") {
+                AttributeType::Type(Descriptor::from_str("<custom-ident>", false)
+                    .map_err(|_| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))?)
             } else {
                 let unit = AttrUnit::from_ident(ident)
                     .map_err(|_| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))?;
@@ -4172,6 +4175,23 @@ mod tests {
             },
             _ => panic!("expected an attr() reference"),
         }
+    }
+
+    #[test]
+    fn native_ident_attribute_type_matches_the_standard_custom_ident_syntax() {
+        let (_, legacy) = parsed_attr(&parse_value(
+            "attr(commentstyle -bd-ident)",
+            &Namespaces::default(),
+        ));
+        let (_, standard) = parsed_attr(&parse_value(
+            "attr(commentstyle type(<custom-ident>))",
+            &Namespaces::default(),
+        ));
+        let (AttributeType::Type(legacy), AttributeType::Type(standard)) = (legacy, standard)
+        else {
+            panic!("identifier attributes must use a syntax descriptor");
+        };
+        assert_eq!(legacy, standard);
     }
 
     #[test]
