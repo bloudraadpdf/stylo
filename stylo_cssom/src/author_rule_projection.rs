@@ -4,18 +4,40 @@ pub fn project_rule_sources(
     rules: &[RuleNode],
     rewrite: &mut impl FnMut(&str) -> String,
 ) -> Vec<RuleNode> {
-    map_rule_sources(rules, &mut |rule| {
+    let mut output = Vec::new();
+    for rule in rules {
         let source = rule.projection_serialization();
         let rewritten = rewrite(&source);
-        if rule.grammar() == stylo_cssom_model::RuleGrammar::Unknown
-            && rewritten != source
-            && let Some(parsed) = crate::rule_parser::ParsedCssRule::parse(&rewritten)
-        {
-            return parsed.to_rule_node();
+        if rewritten.trim().is_empty() {
+            continue;
         }
-        let projected = rule.clone().with_projection_serialization(rewritten);
-        map_pending_declarations(projected, &mut *rewrite, None, None)
-    })
+        let reparsed = if rewritten != source
+            && (rule.grammar() == stylo_cssom_model::RuleGrammar::Unknown
+                || rule.grammar() == stylo_cssom_model::RuleGrammar::Style
+                    && crate::rule_parser::starts_at_rule(&source))
+        {
+            crate::authored_rules::ParsedStylesheet::parse(&rewritten)
+                .ok()
+                .map(|parsed| parsed.rule_nodes().to_vec())
+        } else {
+            None
+        };
+        let projected = reparsed.unwrap_or_else(|| {
+            let projected = rule.clone().with_projection_serialization(rewritten);
+            vec![map_pending_declarations(
+                projected,
+                &mut *rewrite,
+                None,
+                None,
+            )]
+        });
+        for rule in projected {
+            let css = rule.projection_serialization();
+            let nested = project_rule_sources(rule.payload().nested(), rewrite);
+            output.push(rule.with_projected_nested(nested, css));
+        }
+    }
+    output
 }
 
 pub(crate) fn map_pending_declarations(
@@ -124,4 +146,30 @@ pub fn map_rule_sources(
             Some(projected.with_projected_nested(nested, css))
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn compatibility_projection_keeps_generated_preference_rules_during_expansion() {
+        crate::context::initialise_required_servo_style_prefs();
+        let parsed = crate::authored_rules::ParsedStylesheet::parse(
+            ":root{--ink:red}p{color:var(--ink)}@-ro-preferences{first-page-side:verso}",
+        )
+        .unwrap();
+        let root = stylo_cssom_model::InternalStylesheetRoot::new(
+            stylo_cssom_model::StyleOrigin::Author,
+            parsed.rule_nodes().to_vec(),
+        );
+        let (projected, _) = crate::compat::translate::project_compat_root(
+            &root,
+            crate::compat::CompatMode::PdfReactor,
+        );
+        let expanded =
+            crate::rule_declaration_lowering::expand_view_transition_rules(projected.rules())
+                .unwrap();
+        assert!(expanded.iter().any(|rule| rule
+            .projection_serialization()
+            .contains("-bd-first-page-side: verso")));
+    }
 }
