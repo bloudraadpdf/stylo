@@ -71,8 +71,27 @@ pub fn requires_source_lowering(rules: &[RuleNode]) -> bool {
     })
 }
 
-fn split_rule_block(css: &str) -> Option<(&str, &str)> {
-    let mut input = cssparser::ParserInput::new(css);
+fn serialize_component_values<'i>(
+    input: &mut cssparser::Parser<'i, '_>,
+    output: &mut String,
+) -> Result<(), cssparser::ParseError<'i, ()>> {
+    use cssparser::{ToCss, Token};
+    while let Ok(token) = input.next_including_whitespace_and_comments().cloned() {
+        token.to_css(output).expect("writing a String cannot fail");
+        let closing = match token {
+            Token::Function(_) | Token::ParenthesisBlock => ')',
+            Token::SquareBracketBlock => ']',
+            Token::CurlyBracketBlock => '}',
+            _ => continue,
+        };
+        input.parse_nested_block(|nested| serialize_component_values(nested, output))?;
+        output.push(closing);
+    }
+    Ok(())
+}
+
+fn split_rule_block(css: &str) -> Option<(&str, std::borrow::Cow<'_, str>)> {
+    let mut input = crate::rule_parser::stylesheet_parser_input(css);
     let mut parser = cssparser::Parser::new(&mut input);
     parser
         .parse_until_before(cssparser::Delimiter::CurlyBracketBlock, |prelude| {
@@ -87,9 +106,25 @@ fn split_rule_block(css: &str) -> Option<(&str, &str)> {
     ) {
         return None;
     }
-    let body = css[parser.position().byte_index()..]
-        .trim_end()
-        .strip_suffix('}')?;
+    let body_start = parser.position().byte_index();
+    let end = parser
+        .parse_nested_block(|body| {
+            while body.next_including_whitespace_and_comments().is_ok() {}
+            Ok::<_, cssparser::ParseError<'_, ()>>(body.position().byte_index())
+        })
+        .ok()?;
+    let body = &css[body_start..end];
+    let body = if css.as_bytes().get(end) == Some(&b'}') {
+        std::borrow::Cow::Borrowed(body)
+    } else {
+        // CSS Syntax closes blocks/functions/strings at EOF. Tokenize before
+        // appending generated delimiters: an authored trailing escape must
+        // consume EOF, not the newly appended closing brace.
+        let mut input = crate::rule_parser::stylesheet_parser_input(body);
+        let mut repaired = String::new();
+        serialize_component_values(&mut cssparser::Parser::new(&mut input), &mut repaired).ok()?;
+        std::borrow::Cow::Owned(repaired)
+    };
     Some((&css[..start], body))
 }
 
@@ -102,7 +137,7 @@ pub fn expand_view_transition_rules(
         if rule.grammar() == RuleGrammar::Style {
             let (selector, body) =
                 split_rule_block(&css).ok_or(DeclarationLoweringError::RuleGrammar)?;
-            let expansion = crate::view_transition_root_rewrite::expand_style_rule(selector, body);
+            let expansion = crate::view_transition_root_rewrite::expand_style_rule(selector, &body);
             for (index, selector) in expansion.source_selectors.iter().enumerate() {
                 let projected = if index == 0 {
                     rule.clone()
@@ -202,7 +237,10 @@ fn merge_native_pending(
         }
         let selected = if (retained_context.contains(declaration.id())
             && projected_declaration.is_some()
-            && !matches!(declaration, style::properties::PropertyDeclaration::WithVariables(_)))
+            && !matches!(
+                declaration,
+                style::properties::PropertyDeclaration::WithVariables(_)
+            ))
             || matches!(declaration, style::properties::PropertyDeclaration::WithVariables(value)
             if value.value.from_shorthand().is_some())
         {
@@ -264,6 +302,8 @@ fn native_children(
         CssRule::Navigation(rule) => rule.rules.clone(),
         CssRule::When(rule) => rule.rules.clone(),
         CssRule::Else(rule) => rule.rules.clone(),
+        CssRule::Mixin(rule) => return rule.rules.clone(),
+        CssRule::Function(rule) => rule.rules.clone(),
         _ => return None,
     })
 }
@@ -314,6 +354,45 @@ fn lower_rule_list(
         rules: Vec::new(),
     };
     for (source, css) in source.iter().zip(&serialized) {
+        if source.grammar() == RuleGrammar::FunctionDeclarations {
+            use style::stylesheets::function_rule::{FunctionDescriptor, FunctionDescriptors};
+            let block = source
+                .payload()
+                .declaration_block()
+                .ok_or(DeclarationLoweringError::DeclarationContext)?;
+            let mut descriptors = FunctionDescriptors::default();
+            for declaration in block.declarations() {
+                let retained_url = declaration
+                    .source_base_url()
+                    .and_then(|url| url::Url::parse(url).ok())
+                    .map(|url| {
+                        style::stylesheets::UrlExtraData::from(url).with_referrer_source(
+                            declaration
+                                .source_referrer()
+                                .and_then(|url| url::Url::parse(url).ok()),
+                        )
+                    });
+                let mut context = parser.context.clone();
+                if let Some(url) = &retained_url {
+                    context.url_data = url;
+                }
+                let mut input = crate::rule_parser::stylesheet_parser_input(declaration.value());
+                let descriptor = FunctionDescriptor::parse(
+                    &context,
+                    declaration.name().into(),
+                    &mut cssparser::Parser::new(&mut input),
+                )
+                .map_err(|_| DeclarationLoweringError::DeclarationValue)?;
+                descriptors.push(descriptor);
+            }
+            parser.rules.push(CssRule::FunctionDeclarations(Arc::new(
+                style::stylesheets::FunctionDeclarationsRule {
+                    descriptors,
+                    source_location: cssparser::SourceLocation { line: 0, column: 1 },
+                },
+            )));
+            continue;
+        }
         if source.grammar() == RuleGrammar::NestedDeclarations {
             let source = source
                 .payload()
@@ -546,6 +625,236 @@ mod tests {
     use style::shared_lock::{DeepCloneWithLock, ToCssWithGuard};
     use style::stylesheets::StylesheetInDocument;
 
+    fn lower_contextual_stylesheet(
+        css: &str,
+    ) -> Result<
+        (style::shared_lock::SharedRwLock, super::LoweredStylesheet),
+        super::DeclarationLoweringError,
+    > {
+        crate::context::initialise_required_servo_style_prefs();
+        let parsed = crate::authored_rules::ParsedStylesheet::parse(css).unwrap();
+        let base = crate::CssStylesheetBaseUrl::from_absolute(
+            url::Url::parse("https://styles.test/style.css").unwrap(),
+        );
+        let source = crate::authored_rules::project_stylesheet_pending_contexts(
+            parsed.rule_nodes(),
+            &base,
+            None,
+        );
+        let source = super::expand_view_transition_rules(&source)?;
+        let projected = source
+            .iter()
+            .map(stylo_cssom_model::RuleNode::projection_serialization)
+            .collect::<Vec<_>>()
+            .join("\n");
+        let lock = style::shared_lock::SharedRwLock::new();
+        let native = style::stylesheets::Stylesheet::from_str(
+            &projected,
+            style::stylesheets::UrlExtraData::from(
+                url::Url::parse("https://styles.test/style.css").unwrap(),
+            ),
+            style::stylesheets::Origin::Author,
+            servo_arc::Arc::new(lock.wrap(style::media_queries::MediaList::empty())),
+            lock.clone(),
+            None,
+            None,
+            selectors::matching::QuirksMode::NoQuirks,
+            style::stylesheets::AllowImportRules::Yes,
+        );
+        let lowered = super::lower_pending_declarations(
+            &source,
+            style::stylesheets::DocumentStyleSheet(servo_arc::Arc::new(native), None),
+            &lock,
+        )?;
+        Ok((lock, lowered))
+    }
+
+    #[test]
+    fn view_transition_expansion_retains_css_eof_token_recovery() {
+        fn assert_component_tokens_equal<'i>(
+            left: &mut cssparser::Parser<'i, '_>,
+            right: &mut cssparser::Parser<'i, '_>,
+        ) -> Result<(), cssparser::ParseError<'i, ()>> {
+            loop {
+                match (
+                    left.next_including_whitespace_and_comments().cloned(),
+                    right.next_including_whitespace_and_comments().cloned(),
+                ) {
+                    (Err(_), Err(_)) => return Ok(()),
+                    (Ok(left_token), Ok(right_token)) => {
+                        assert_eq!(left_token, right_token);
+                        if matches!(
+                            left_token,
+                            cssparser::Token::Function(_)
+                                | cssparser::Token::ParenthesisBlock
+                                | cssparser::Token::SquareBracketBlock
+                                | cssparser::Token::CurlyBracketBlock
+                        ) {
+                            left.parse_nested_block(|left| {
+                                right.parse_nested_block(|right| {
+                                    assert_component_tokens_equal(left, right)
+                                })
+                            })?;
+                        }
+                    },
+                    tokens => panic!("component token counts differ: {tokens:?}"),
+                }
+            }
+        }
+
+        crate::context::initialise_required_servo_style_prefs();
+        for css in [
+            r"p{--x:foo\",
+            r"p{--x:1foo\",
+            r"p{--x:url(foo\",
+            r#"p{--x:"foo\"#,
+            "p{--a:green;color:var(--a",
+            "p{background:url(\"green.png",
+            "p{background:url(green.png",
+            "::view-transition-group(card){transform:translateX(var(--x",
+        ] {
+            let parsed = crate::authored_rules::ParsedStylesheet::parse(css).unwrap();
+            let expanded = super::expand_view_transition_rules(parsed.rule_nodes()).expect(css);
+            let reparsed = crate::authored_rules::ParsedStylesheet::parse(
+                &expanded[0].projection_serialization(),
+            )
+            .unwrap();
+            let original = parsed.rule_nodes()[0]
+                .payload()
+                .declaration_block()
+                .unwrap();
+            let repaired = reparsed.rule_nodes()[0]
+                .payload()
+                .declaration_block()
+                .unwrap();
+            assert_eq!(
+                original.declarations().len(),
+                repaired.declarations().len(),
+                "{css}"
+            );
+            for (original, repaired) in original.declarations().iter().zip(repaired.declarations())
+            {
+                assert_eq!(original.name(), repaired.name(), "{css}");
+                assert_eq!(original.important(), repaired.important(), "{css}");
+                // Escaped U+FFFD and literal U+FFFD are the same token value.
+                // Compare decoded component tokens, including nested blocks,
+                // rather than requiring the same escape spelling after EOF repair.
+                let values = match (
+                    original.pending_substitution(),
+                    repaired.pending_substitution(),
+                ) {
+                    (Some(original), Some(repaired)) => {
+                        assert_eq!(original.shorthand(), repaired.shorthand(), "{css}");
+                        assert_eq!(original.base_url(), repaired.base_url(), "{css}");
+                        (original.tokens(), repaired.tokens())
+                    },
+                    (None, None) => (original.value(), repaired.value()),
+                    _ => panic!("pending substitution classification changed: {css}"),
+                };
+                let mut left = cssparser::ParserInput::new(values.0);
+                let mut right = cssparser::ParserInput::new(values.1);
+                assert_component_tokens_equal(
+                    &mut cssparser::Parser::new(&mut left),
+                    &mut cssparser::Parser::new(&mut right),
+                )
+                .expect(css);
+            }
+            lower_contextual_stylesheet(css).expect(css);
+        }
+    }
+
+    #[test]
+    fn contextual_mixin_lowering_keeps_result_blocks_and_local_descriptors() {
+        for (css, locals) in [
+            (
+                "@mixin --colour(--c){@result{color:var(--c)}}p{@apply --colour(green)}",
+                false,
+            ),
+            (
+                "@mixin --colour(){--c:green;@result{color:var(--c)}}p{@apply --colour}",
+                true,
+            ),
+            (
+                "@mixin --colour(){--c:green;@result{@media (min-width:0px){color:var(--c)}}}p{@apply --colour}",
+                true,
+            ),
+        ] {
+            let (lock, lowered) = lower_contextual_stylesheet(css).expect(css);
+            let guard = lock.read();
+            let style::stylesheets::CssRule::Mixin(mixin) =
+                &lowered.stylesheet.contents(&guard).rules(&guard)[0]
+            else {
+                panic!("mixin definition was lost");
+            };
+            let children = mixin.rules.as_ref().unwrap().read_with(&guard);
+            assert_eq!(
+                children.0.iter().any(|rule| matches!(
+                    rule,
+                    style::stylesheets::CssRule::FunctionDeclarations(_)
+                )),
+                locals,
+                "{css}"
+            );
+            assert!(
+                children
+                    .0
+                    .iter()
+                    .any(|rule| matches!(rule, style::stylesheets::CssRule::Mixin(_))),
+                "result block was lost: {css}"
+            );
+        }
+    }
+
+    #[test]
+    fn contextual_page_background_lowering_keeps_page_shorthand_components() {
+        crate::context::initialise_required_servo_style_prefs();
+        let css = "@page{size:600px 300px;margin:20px;border:20px solid blue;padding:20px;background-image:url(cat.png);background-repeat:no-repeat}";
+        let parsed = crate::authored_rules::ParsedStylesheet::parse(css).unwrap();
+        let block = parsed.rule_nodes()[0]
+            .payload()
+            .declaration_block()
+            .unwrap();
+        for declaration in block.declarations() {
+            let single = stylo_cssom_model::RuleDeclarationBlock::from_declarations(
+                block.domain(),
+                vec![declaration.clone()],
+            );
+            assert!(
+                super::native_declarations(&single).is_ok(),
+                "canonical page component did not restore: {}: {}",
+                declaration.name(),
+                declaration.value()
+            );
+        }
+        lower_contextual_stylesheet(css)
+            .expect("the page box background and border must lower in page context");
+        let forbidden = stylo_cssom_model::RuleDeclarationBlock::from_declarations(
+            stylo_cssom_model::RuleDeclarationDomain::Page,
+            vec![stylo_cssom_model::RuleDeclaration::new(
+                "transform",
+                "scale(1)",
+            )],
+        );
+        assert!(
+            super::native_declarations(&forbidden).is_err(),
+            "unrelated element-only properties remain invalid in page context"
+        );
+        let mut author = crate::declaration_parser::parse_cssom_declaration_block(
+            "",
+            crate::declaration_parser::CssomDeclarationContext::Page,
+        );
+        assert!(
+            !crate::declaration_parser::cssom_declaration_set_property(
+                &mut author,
+                "border-image-source",
+                "url(cat.png)",
+                crate::declaration_parser::CssomDeclarationPriority::Normal,
+                crate::declaration_parser::CssomDeclarationContext::Page
+            ),
+            "restoring a shorthand reset must not widen author grammar"
+        );
+    }
+
     #[test]
     fn contextual_lowering_keeps_a_fully_parsed_compatibility_value() {
         crate::context::initialise_required_servo_style_prefs();
@@ -566,14 +875,15 @@ mod tests {
         )
         .unwrap();
         let native = super::native_declarations(
-            projected.rule_nodes()[0].payload().declaration_block().unwrap(),
+            projected.rule_nodes()[0]
+                .payload()
+                .declaration_block()
+                .unwrap(),
         )
         .unwrap();
-        let lowered = super::merge_native_pending(
-            source[0].payload().declaration_block().unwrap(),
-            &native,
-        )
-        .unwrap();
+        let lowered =
+            super::merge_native_pending(source[0].payload().declaration_block().unwrap(), &native)
+                .unwrap();
         assert!(matches!(
             lowered.declaration_importance_iter().next(),
             Some((style::properties::PropertyDeclaration::Content(_), _))

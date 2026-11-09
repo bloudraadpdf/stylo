@@ -1413,7 +1413,14 @@ pub fn stylo_rule_declaration_block(
             declaration.name(),
             declaration.value(),
             importance,
-            context.rule_type(),
+            canonical_component_rule_type(
+                declaration.name(),
+                context,
+                retained_url_data
+                    .as_ref()
+                    .unwrap_or(&ABOUT_BLANK.clone().into()),
+                &namespaces,
+            )?,
             retained_url_data
                 .as_ref()
                 .unwrap_or(&ABOUT_BLANK.clone().into()),
@@ -1423,6 +1430,39 @@ pub fn stylo_rule_declaration_block(
         }
     }
     Some(parsed.0)
+}
+
+/// A canonical block includes reset-only shorthand components, even when the
+/// component cannot be authored independently in that rule (for example the
+/// `border-image` resets of `border` in @page). This is reconstruction of an
+/// already parsed block; CSSOM author mutations keep their restricted grammar.
+fn canonical_component_rule_type(
+    name: &str,
+    domain: CssomDeclarationContext,
+    url_data: &UrlExtraData,
+    namespaces: &Namespaces,
+) -> Option<CssRuleType> {
+    let restricted = declaration_parser_context(domain.rule_type(), url_data, namespaces);
+    if PropertyId::parse(name, &restricted).is_ok() {
+        return Some(domain.rule_type());
+    }
+    if !matches!(
+        domain,
+        CssomDeclarationContext::Page | CssomDeclarationContext::Margin
+    ) {
+        return None;
+    }
+    let ordinary = declaration_parser_context(CssRuleType::Style, url_data, namespaces);
+    let longhand = PropertyId::parse(name, &ordinary).ok()?.longhand_id()?;
+    longhand
+        .shorthands()
+        .any(|shorthand| {
+            PropertyId::parse(shorthand.name(), &restricted)
+                .ok()
+                .and_then(|id| id.as_shorthand().ok())
+                == Some(shorthand)
+        })
+        .then_some(CssRuleType::Style)
 }
 
 struct PendingShorthandExpansion {
