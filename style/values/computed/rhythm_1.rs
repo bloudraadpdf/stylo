@@ -81,7 +81,9 @@ impl ToComputedValue for specified::BlockStepSize {
     fn from_computed_value(computed: &Self::ComputedValue) -> Self {
         match computed {
             BlockStepSize::None => specified::BlockStepSize::None,
-            BlockStepSize::Length(l) => specified::BlockStepSize::Length(ToComputedValue::from_computed_value(l)),
+            BlockStepSize::Length(l) => {
+                specified::BlockStepSize::Length(ToComputedValue::from_computed_value(l))
+            },
         }
     }
 }

@@ -2,23 +2,33 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-use super::{PropertyDeclaration, PropertyId, ShorthandId, declaration_block::parse_style_attribute};
+use super::{
+    declaration_block::parse_style_attribute, PropertyDeclaration, PropertyId, ShorthandId,
+};
 use crate::stylesheets::{CssRuleType, UrlExtraData};
 
 #[test]
 fn deferred_transform_matrices_resolve_reference_boxes_recursively() {
-    use crate::values::computed::transform::{Matrix, PerspectiveFunction, Transform, TransformOperation};
+    use crate::values::computed::transform::{
+        Matrix, PerspectiveFunction, Transform, TransformOperation,
+    };
     use crate::values::computed::{Length, LengthPercentage, Percentage};
     use crate::values::generics::transform;
-    let list = |operations: Vec<TransformOperation>| -> Transform { transform::Transform(operations.into()) };
-    let reference =
-        |width| euclid::default::Rect::from_size(euclid::default::Size2D::new(Length::new(width), Length::new(100.0)));
+    let list = |operations: Vec<TransformOperation>| -> Transform {
+        transform::Transform(operations.into())
+    };
+    let reference = |width| {
+        euclid::default::Rect::from_size(euclid::default::Size2D::new(
+            Length::new(width),
+            Length::new(100.0),
+        ))
+    };
     let mut matrix = Matrix::identity();
     matrix.e = 10.0;
     let from = list(vec![TransformOperation::Matrix(matrix)]);
-    let to = list(vec![TransformOperation::TranslateX(LengthPercentage::new_percent(
-        Percentage(0.5),
-    ))]);
+    let to = list(vec![TransformOperation::TranslateX(
+        LengthPercentage::new_percent(Percentage(0.5)),
+    )]);
     let interpolate = |from: Transform, to: Transform, progress| {
         list(vec![TransformOperation::InterpolateMatrix {
             from_list: from,
@@ -35,7 +45,9 @@ fn deferred_transform_matrices_resolve_reference_boxes_recursively() {
         assert!((matrix.m41 - expected).abs() < 0.001);
     }
     let nested = interpolate(halfway, to.clone(), 0.5);
-    let (matrix, _) = nested.to_resolved_transform_3d_matrix(Some(&reference(200.0))).unwrap();
+    let (matrix, _) = nested
+        .to_resolved_transform_3d_matrix(Some(&reference(200.0)))
+        .unwrap();
     assert!((matrix.m41 - 77.5).abs() < 0.001);
     let accumulated = list(vec![TransformOperation::AccumulateMatrix {
         from_list: from,
@@ -49,7 +61,11 @@ fn deferred_transform_matrices_resolve_reference_boxes_recursively() {
     let mut singular = Matrix::identity();
     singular.a = 0.0;
     for progress in [0.25, 0.5] {
-        let animation = interpolate(list(vec![TransformOperation::Matrix(singular)]), to.clone(), progress);
+        let animation = interpolate(
+            list(vec![TransformOperation::Matrix(singular)]),
+            to.clone(),
+            progress,
+        );
         let (matrix, _) = animation
             .to_resolved_transform_3d_matrix(Some(&reference(200.0)))
             .unwrap();
@@ -60,7 +76,9 @@ fn deferred_transform_matrices_resolve_reference_boxes_recursively() {
         TransformOperation::Perspective(PerspectiveFunction::Length(Length::new(200.0))),
         TransformOperation::TranslateX(LengthPercentage::new_percent(Percentage(0.5))),
     ]);
-    let (expected, _) = perspective.to_transform_3d_matrix(Some(&reference(200.0))).unwrap();
+    let (expected, _) = perspective
+        .to_transform_3d_matrix(Some(&reference(200.0)))
+        .unwrap();
     let (actual, is_3d) = interpolate(to, perspective, 1.0)
         .to_resolved_transform_3d_matrix(Some(&reference(200.0)))
         .unwrap();
@@ -85,7 +103,8 @@ fn native_appearance_disabling_properties_exclude_border_clipping() {
         "border-shape",
         "background-repeat",
     ] {
-        let property = PropertyId::parse_enabled_for_all_content(name).expect("the property is supported");
+        let property =
+            PropertyId::parse_enabled_for_all_content(name).expect("the property is supported");
         assert!(
             !disabling.contains(property.longhand_id().expect("the property is a longhand")),
             "{name}"
@@ -99,7 +118,8 @@ fn native_appearance_disabling_properties_exclude_border_clipping() {
         "border-image-source",
         "background-color",
     ] {
-        let property = PropertyId::parse_enabled_for_all_content(name).expect("the property is supported");
+        let property =
+            PropertyId::parse_enabled_for_all_content(name).expect("the property is supported");
         assert!(
             disabling.contains(property.longhand_id().expect("the property is a longhand")),
             "{name}"
@@ -108,7 +128,9 @@ fn native_appearance_disabling_properties_exclude_border_clipping() {
 }
 
 fn block(css: &str) -> super::PropertyDeclarationBlock {
-    let url: UrlExtraData = url::Url::parse("https://example.test/style.css").unwrap().into();
+    let url: UrlExtraData = url::Url::parse("https://example.test/style.css")
+        .unwrap()
+        .into();
     parse_style_attribute(
         css,
         &url,
@@ -132,21 +154,13 @@ fn animation_ranges_preserve_boundary_defaults_and_reset_with_animation() {
         ("animation-range-end", "entry 0%", "entry 0%"),
         ("animation-range-end", "entry 100%", "entry"),
         ("animation-range-start", "0", "0px"),
-        (
-            "animation-range-start",
-            "contain calc(10px + 10%)",
-            "contain calc(10% + 10px)",
-        ),
+        ("animation-range-start", "contain calc(10px + 10%)", "contain calc(10% + 10px)"),
         ("animation-range", "entry 0% exit 0%", "entry exit 0%"),
         ("animation-range", "entry 0% exit 100%", "entry exit"),
         ("animation-range", "entry 0% entry 100%", "entry"),
         ("animation-range", "0% 100%", "0% 100%"),
         ("animation-range", "entry normal", "entry normal"),
-        (
-            "animation-range",
-            "entry calc(0%) entry calc(100%)",
-            "entry calc(0%) entry calc(100%)",
-        ),
+        ("animation-range", "entry calc(0%) entry calc(100%)", "entry calc(0%) entry calc(100%)"),
     ] {
         assert_serialization(name, input, Some(expected));
     }
@@ -167,10 +181,7 @@ fn keyframes_reject_animation_duration_but_keep_timing_function() {
     let url: UrlExtraData = url::Url::parse("about:blank").unwrap().into();
     let declarations = parse_style_attribute(
         "margin-top:10px;animation-timing-function:ease;animation-duration:1s;animation-name:fade;animation:fade 1s",
-        &url,
-        None,
-        selectors::matching::QuirksMode::NoQuirks,
-        CssRuleType::Keyframe,
+        &url, None, selectors::matching::QuirksMode::NoQuirks, CssRuleType::Keyframe,
     );
     assert_eq!(declarations.declaration_importance_iter().count(), 2);
 }
@@ -189,12 +200,13 @@ fn text_autospace_size_accepts_signed_numbers_and_cascades_independently() {
         assert_serialization("text-autospace-size", input, None);
     }
     let declarations = block("text-autospace-size:0.5;text-spacing:none");
-    assert_eq!(serialized_value(&declarations, "text-autospace-size"), "0.5");
-    assert!(
-        !ShorthandId::TextSpacing
-            .longhands()
-            .any(|id| id == super::LonghandId::TextAutospaceSize)
+    assert_eq!(
+        serialized_value(&declarations, "text-autospace-size"),
+        "0.5"
     );
+    assert!(!ShorthandId::TextSpacing
+        .longhands()
+        .any(|id| id == super::LonghandId::TextAutospaceSize));
 }
 
 fn assert_serialization(name: &str, input: &str, expected: Option<&str>) {
@@ -230,8 +242,14 @@ fn text_stroke_preserves_fractional_widths_and_expands_the_shorthand() {
     assert_serialization("-webkit-text-stroke-width", "0.1px", Some("0.1px"));
     assert_serialization("-webkit-text-stroke-width", "-1px", None);
     let declaration = block("-webkit-text-stroke:0.5px lime");
-    assert_eq!(serialized_value(&declaration, "-webkit-text-stroke-width"), "0.5px");
-    assert_eq!(serialized_value(&declaration, "-webkit-text-stroke-color"), "lime");
+    assert_eq!(
+        serialized_value(&declaration, "-webkit-text-stroke-width"),
+        "0.5px"
+    );
+    assert_eq!(
+        serialized_value(&declaration, "-webkit-text-stroke-color"),
+        "lime"
+    );
 }
 
 #[test]
@@ -278,7 +296,11 @@ fn sizing_shorthands_expand_both_axes_and_css_wide_values() {
             ("100px", "100px", "100px"),
             ("100px 200px", "100px", "200px"),
             ("20% min-content", "20%", "min-content"),
-            ("fit-content(40px)", "fit-content(40px)", "fit-content(40px)"),
+            (
+                "fit-content(40px)",
+                "fit-content(40px)",
+                "fit-content(40px)",
+            ),
             ("initial", "initial", "initial"),
             ("inherit", "inherit", "inherit"),
             ("unset", "unset", "unset"),
@@ -295,14 +317,19 @@ fn sizing_shorthands_expand_both_axes_and_css_wide_values() {
             }
         }
         for invalid in ["10px 20px 30px", "-1px", "initial auto", "portrait", "A4"] {
-            assert!(block(&format!("{name}:{invalid}")).is_empty(), "{name}:{invalid}");
+            assert!(
+                block(&format!("{name}:{invalid}")).is_empty(),
+                "{name}:{invalid}"
+            );
         }
     }
 }
 
 #[test]
 fn size_property_does_not_expand_in_page_rules() {
-    let url: UrlExtraData = url::Url::parse("https://example.test/style.css").unwrap().into();
+    let url: UrlExtraData = url::Url::parse("https://example.test/style.css")
+        .unwrap()
+        .into();
     let declarations = parse_style_attribute(
         "size:100px 200px",
         &url,
@@ -313,7 +340,10 @@ fn size_property_does_not_expand_in_page_rules() {
     assert_eq!(declarations.len(), 1);
     let mut size = String::new();
     declarations
-        .property_value_to_css(&PropertyId::NonCustom(super::LonghandId::Size.into()), &mut size)
+        .property_value_to_css(
+            &PropertyId::NonCustom(super::LonghandId::Size.into()),
+            &mut size,
+        )
         .unwrap();
     assert_eq!(size, "100px 200px");
     assert_eq!(serialized_value(&declarations, "width"), "");
@@ -332,7 +362,8 @@ fn size_is_not_a_preferred_serialization_shorthand() {
 #[test]
 fn anchor_center_applies_to_self_alignment_only() {
     let _lock = crate::test_support::pref_lock().lock().unwrap();
-    let _pref = crate::test_support::BoolPrefGuard::set("layout.css.anchor-positioning.enabled", true);
+    let _pref =
+        crate::test_support::BoolPrefGuard::set("layout.css.anchor-positioning.enabled", true);
     for name in ["align-items", "justify-items"] {
         assert_serialization(name, "anchor-center", None);
     }
@@ -344,7 +375,10 @@ fn anchor_center_applies_to_self_alignment_only() {
 #[test]
 fn fit_tolerance_uses_the_current_grid_lanes_property_name() {
     let _lock = crate::test_support::pref_lock().lock().unwrap();
-    let _pref = crate::test_support::BoolPrefGuard::set("layout.css.grid-template-masonry-value.enabled", true);
+    let _pref = crate::test_support::BoolPrefGuard::set(
+        "layout.css.grid-template-masonry-value.enabled",
+        true,
+    );
     assert_serialization("fit-tolerance", "0", Some("0px"));
     assert_serialization("fit-tolerance", "25%", Some("25%"));
     assert!(block("flow-tolerance:0").is_empty());
@@ -355,8 +389,15 @@ fn fit_tolerance_uses_the_current_grid_lanes_property_name() {
 #[test]
 fn masonry_slack_alias_preserves_fit_tolerance_keyword_semantics() {
     let _lock = crate::test_support::pref_lock().lock().unwrap();
-    let _pref = crate::test_support::BoolPrefGuard::set("layout.css.grid-template-masonry-value.enabled", true);
-    for (input, backing) in [("normal", "infinite"), ("infinite", "auto"), ("10px", "10px")] {
+    let _pref = crate::test_support::BoolPrefGuard::set(
+        "layout.css.grid-template-masonry-value.enabled",
+        true,
+    );
+    for (input, backing) in [
+        ("normal", "infinite"),
+        ("infinite", "auto"),
+        ("10px", "10px"),
+    ] {
         let declarations = block(&format!("fit-tolerance:{input}"));
         assert_eq!(serialized_value(&declarations, "masonry-slack"), backing);
     }
@@ -379,7 +420,13 @@ fn scroll_initial_target_accepts_only_none_and_nearest() {
 
 #[test]
 fn break_inside_accepts_only_auto_and_avoid_values() {
-    for value in ["auto", "avoid", "avoid-page", "avoid-column", "avoid-region"] {
+    for value in [
+        "auto",
+        "avoid",
+        "avoid-page",
+        "avoid-column",
+        "avoid-region",
+    ] {
         assert_serialization("break-inside", value, Some(value));
     }
     for value in ["region", "page", "column", "always", "auto avoid"] {
@@ -465,7 +512,10 @@ fn grid_lanes_shorthand_validates_and_serializes_each_component() {
 
 #[test]
 fn grid_lanes_direction_retains_specified_reversal_order() {
-    for value in ["row track-reverse fill-reverse", "column fill-reverse track-reverse"] {
+    for value in [
+        "row track-reverse fill-reverse",
+        "column fill-reverse track-reverse",
+    ] {
         assert_serialization("grid-lanes-direction", value, Some(value));
     }
 }
@@ -480,7 +530,10 @@ fn grid_spans_preserve_calculations_until_computed_value_clamping() {
         ("span calc(0)", "span calc(0)"),
         ("span calc(-2) i", "span calc(-2) i"),
         ("calc(-2) span", "span calc(-2)"),
-        ("span calc(sibling-index() - 2)", "span calc(-2 + sibling-index())"),
+        (
+            "span calc(sibling-index() - 2)",
+            "span calc(-2 + sibling-index())",
+        ),
     ] {
         assert_serialization("grid-column-start", value, Some(expected));
     }
@@ -494,7 +547,14 @@ fn text_group_alignment_has_a_closed_keyword_grammar() {
     for value in ["none", "start", "end", "left", "right", "center"] {
         assert_serialization("text-group-align", value, Some(value));
     }
-    for value in ["auto", "match-parent", "justify", "left right", "none center", "5px"] {
+    for value in [
+        "auto",
+        "match-parent",
+        "justify",
+        "left right",
+        "none center",
+        "5px",
+    ] {
         assert_serialization("text-group-align", value, None);
     }
 }
@@ -533,11 +593,19 @@ fn native_common_properties_validate_and_serialize_their_grammars() {
     for (name, input, expected) in [
         ("align-content", "flow-start", Some("flow-start")),
         ("justify-content", "safe flow-end", Some("safe flow-end")),
-        ("align-items", "unsafe flow-start", Some("unsafe flow-start")),
+        (
+            "align-items",
+            "unsafe flow-start",
+            Some("unsafe flow-start"),
+        ),
         ("justify-items", "flow-end", Some("flow-end")),
         ("align-self", "safe flow-start", Some("safe flow-start")),
         ("justify-self", "unsafe flow-end", Some("unsafe flow-end")),
-        ("place-content", "flow-start flow-end", Some("flow-start flow-end")),
+        (
+            "place-content",
+            "flow-start flow-end",
+            Some("flow-start flow-end"),
+        ),
         ("place-items", "flow-end", Some("flow-end")),
         ("place-self", "safe flow-start", Some("safe flow-start")),
         ("align-content", "flow-start flow-end", None),
@@ -551,16 +619,32 @@ fn native_common_properties_validate_and_serialize_their_grammars() {
             Some("superellipse(calc(2))"),
         ),
         ("corner-top-shape", "scoop scoop", Some("scoop")),
-        ("corner-inline-end-shape", "bevel notch", Some("bevel notch")),
+        (
+            "corner-inline-end-shape",
+            "bevel notch",
+            Some("bevel notch"),
+        ),
         ("corner-block-start-shape", "round scoop bevel", None),
-        ("border", "hairline dotted green", Some("hairline dotted green")),
+        (
+            "border",
+            "hairline dotted green",
+            Some("hairline dotted green"),
+        ),
         ("border-width", "5px hairline", Some("5px hairline")),
         ("border-left-width", "hairline", Some("hairline")),
         ("flex-wrap", "balance", Some("balance")),
         ("flex-wrap", "wrap balance", Some("balance")),
         ("flex-wrap", "balance wrap", Some("balance")),
-        ("flex-wrap", "wrap-reverse balance", Some("wrap-reverse balance")),
-        ("flex-wrap", "balance wrap-reverse", Some("wrap-reverse balance")),
+        (
+            "flex-wrap",
+            "wrap-reverse balance",
+            Some("wrap-reverse balance"),
+        ),
+        (
+            "flex-wrap",
+            "balance wrap-reverse",
+            Some("wrap-reverse balance"),
+        ),
         ("flex-wrap", "nowrap balance", None),
         ("flex-wrap", "balance balance", None),
         ("flex-wrap", "wrap wrap-reverse", None),
@@ -576,7 +660,11 @@ fn native_common_properties_validate_and_serialize_their_grammars() {
         ("view-transition-group", "contain", Some("contain")),
         ("view-transition-group", "nearest", Some("nearest")),
         ("view-transition-group", "none", Some("none")),
-        ("view-transition-group", r"group\ name", Some(r"group\ name")),
+        (
+            "view-transition-group",
+            r"group\ name",
+            Some(r"group\ name"),
+        ),
         ("view-transition-group", "default", None),
         ("view-transition-group", "contain nearest", None),
         ("grid-lanes-direction", "normal", Some("normal")),
@@ -587,7 +675,11 @@ fn native_common_properties_validate_and_serialize_their_grammars() {
             Some("column track-reverse fill-reverse"),
         ),
         ("grid-lanes-direction", "normal fill-reverse", None),
-        ("grid-lanes-direction", "row fill-reverse fill-reverse", None),
+        (
+            "grid-lanes-direction",
+            "row fill-reverse fill-reverse",
+            None,
+        ),
         ("grid-lanes-direction", "row column", None),
         ("-webkit-box-orient", "horizontal", Some("horizontal")),
         ("-webkit-box-orient", "vertical", Some("vertical")),
@@ -629,7 +721,11 @@ fn corner_shorthands_parse_independent_shape_and_radius_components() {
         ("corner", "30%", Some("30%")),
         ("corner", "bevel", Some("bevel")),
         ("corner", "round", Some("0px")),
-        ("corner", "bevel scoop 1px 2px 3px", Some("bevel scoop 1px 2px 3px")),
+        (
+            "corner",
+            "bevel scoop 1px 2px 3px",
+            Some("bevel scoop 1px 2px 3px"),
+        ),
         ("corner-top-left", "10px", Some("10px")),
         ("corner-top-left", "scoop", Some("scoop")),
         ("corner-top", "normal / normal / normal", None),
@@ -663,13 +759,23 @@ fn corner_shorthands_parse_independent_shape_and_radius_components() {
             (format!("corner-{first}-shape"), "bevel"),
             (format!("corner-{second}-shape"), "scoop"),
         ] {
-            assert_eq!(serialized_value(&declarations, &name), expected, "{side}: {name}");
+            assert_eq!(
+                serialized_value(&declarations, &name),
+                expected,
+                "{side}: {name}"
+            );
         }
     }
     let declarations = block("corner-shape: bevel; corner: 10px");
-    assert_eq!(serialized_value(&declarations, "corner-top-left-shape"), "round");
+    assert_eq!(
+        serialized_value(&declarations, "corner-top-left-shape"),
+        "round"
+    );
     let declarations = block("border-radius: 10px; corner: scoop");
-    assert_eq!(serialized_value(&declarations, "border-top-left-radius"), "0px");
+    assert_eq!(
+        serialized_value(&declarations, "border-top-left-radius"),
+        "0px"
+    );
 }
 
 #[test]
@@ -691,19 +797,38 @@ fn side_radius_shorthands_preserve_both_corner_axes() {
             ("10px 10px", "10px", "10px", "10px"),
             ("10px 20%", "10px 20%", "10px", "20%"),
             ("10px / 20px", "10px / 20px", "10px 20px", "10px 20px"),
-            ("10px 20px / 30% 40%", "10px 20px / 30% 40%", "10px 30%", "20px 40%"),
+            (
+                "10px 20px / 30% 40%",
+                "10px 20px / 30% 40%",
+                "10px 30%",
+                "20px 40%",
+            ),
             ("inherit", "inherit", "inherit", "inherit"),
         ] {
             let declarations = block(&format!("{name}:{input}"));
-            assert_eq!(serialized_value(&declarations, &name), expected, "{name}: {input}");
-            assert_eq!(serialized_value(&declarations, &first), first_value, "{name}: {first}");
+            assert_eq!(
+                serialized_value(&declarations, &name),
+                expected,
+                "{name}: {input}"
+            );
+            assert_eq!(
+                serialized_value(&declarations, &first),
+                first_value,
+                "{name}: {first}"
+            );
             assert_eq!(
                 serialized_value(&declarations, &second),
                 second_value,
                 "{name}: {second}"
             );
         }
-        for invalid in ["-1px", "1px -2%", "1px / -2px", "1px 2px 3px", "1px / 2px / 3px"] {
+        for invalid in [
+            "-1px",
+            "1px -2%",
+            "1px / -2px",
+            "1px 2px 3px",
+            "1px / 2px / 3px",
+        ] {
             assert_serialization(&name, invalid, None);
         }
     }
@@ -730,7 +855,11 @@ fn logical_position_keywords_preserve_their_axis_and_offsets() {
     for (name, input, expected) in [
         ("background-position-x", "x-start", Some("x-start")),
         ("background-position-x", "x-end 10px", Some("x-end 10px")),
-        ("background-position-y", "y-start -20%", Some("y-start -20%")),
+        (
+            "background-position-y",
+            "y-start -20%",
+            Some("y-start -20%"),
+        ),
         ("background-position-y", "y-end", Some("y-end")),
         (
             "background-position-x",
@@ -742,7 +871,11 @@ fn logical_position_keywords_preserve_their_axis_and_offsets() {
             "0.5em, y-start, y-end",
             Some("0.5em, y-start, y-end"),
         ),
-        ("background-position", "y-start x-end", Some("x-end y-start")),
+        (
+            "background-position",
+            "y-start x-end",
+            Some("x-end y-start"),
+        ),
         (
             "background-position",
             "x-start 2px y-end 3px",
@@ -752,7 +885,11 @@ fn logical_position_keywords_preserve_their_axis_and_offsets() {
         ("background-position-x", "y-start", None),
         ("background-position-y", "x-end", None),
         ("background-position-x", "x-start center", None),
-        ("background-image", "linear-gradient(to x-start, red, blue)", None),
+        (
+            "background-image",
+            "linear-gradient(to x-start, red, blue)",
+            None,
+        ),
         ("transform-origin", "x-start y-end", None),
     ] {
         assert_serialization(name, input, expected);
@@ -761,7 +898,9 @@ fn logical_position_keywords_preserve_their_axis_and_offsets() {
 
 #[test]
 fn font_width_alias_and_percentage_calculations_serialize_canonically() {
-    let PropertyId::NonCustom(id) = PropertyId::parse_enabled_for_all_content("font-stretch").unwrap() else {
+    let PropertyId::NonCustom(id) =
+        PropertyId::parse_enabled_for_all_content("font-stretch").unwrap()
+    else {
         panic!("font-stretch must be a standard property");
     };
     assert_eq!(id.unaliased().name(), "font-width");
@@ -810,7 +949,10 @@ fn overflow_clip_margin_preserves_signed_offsets_and_one_shared_edge() {
         for (input, expected) in [
             ("-10px", Some("-10px")),
             ("-10px content-box", Some("content-box -10px")),
-            ("border-box calc(10px - 20px)", Some("border-box calc(-10px)")),
+            (
+                "border-box calc(10px - 20px)",
+                Some("border-box calc(-10px)"),
+            ),
             ("0px content-box", Some("content-box")),
             ("50px 50px", None),
             ("calc(100% - 10px)", None),
@@ -908,20 +1050,13 @@ fn scroll_timeline_properties_preserve_names_axes_and_shorthand_defaults() {
     for (name, input, expected) in [
         ("scroll-timeline-name", "--main, none", "--main, none"),
         ("scroll-timeline-axis", "inline, y", "inline, y"),
-        (
-            "scroll-timeline",
-            "--main block, --other inline",
-            "--main, --other inline",
-        ),
+        ("scroll-timeline", "--main block, --other inline", "--main, --other inline"),
         ("scroll-timeline", "none", "none"),
     ] {
         assert_serialization(name, input, Some(expected));
     }
     let declarations = block("scroll-timeline:--main inline, --other");
-    assert_eq!(
-        serialized_value(&declarations, "scroll-timeline-name"),
-        "--main, --other"
-    );
+    assert_eq!(serialized_value(&declarations, "scroll-timeline-name"), "--main, --other");
     assert_eq!(serialized_value(&declarations, "scroll-timeline-axis"), "inline, block");
     for (name, invalid) in [
         ("scroll-timeline-name", "main"),
@@ -981,33 +1116,19 @@ fn scroll_padding_edges_participate_in_zoom_inheritance() {
 #[test]
 fn length_wrapper_properties_participate_in_zoom_inheritance() {
     with_zoom_test_prefs(|| {
-        let properties = super::LonghandIdSet::zoom_dependent();
-        for name in [
-            "border-top-width",
-            "border-top-left-radius",
-            "outline-width",
-            "outline-offset",
-            "column-rule-width",
-            "row-rule-width",
-            "column-gap",
-            "row-gap",
-            "column-width",
-            "margin-top",
-            "flex-basis",
-        ] {
-            let id = PropertyId::parse_enabled_for_all_content(name)
-                .unwrap()
-                .longhand_id()
-                .unwrap();
-            assert!(properties.contains(id), "{name}");
-        }
-        for name in ["border-top-style", "column-rule-style", "zoom"] {
-            let id = PropertyId::parse_enabled_for_all_content(name)
-                .unwrap()
-                .longhand_id()
-                .unwrap();
-            assert!(!properties.contains(id), "{name}");
-        }
+    let properties = super::LonghandIdSet::zoom_dependent();
+    for name in [
+        "border-top-width", "border-top-left-radius", "outline-width", "outline-offset",
+        "column-rule-width", "row-rule-width", "column-gap", "row-gap", "column-width",
+        "margin-top", "flex-basis",
+    ] {
+        let id = PropertyId::parse_enabled_for_all_content(name).unwrap().longhand_id().unwrap();
+        assert!(properties.contains(id), "{name}");
+    }
+    for name in ["border-top-style", "column-rule-style", "zoom"] {
+        let id = PropertyId::parse_enabled_for_all_content(name).unwrap().longhand_id().unwrap();
+        assert!(!properties.contains(id), "{name}");
+    }
     });
 }
 
@@ -1021,7 +1142,7 @@ fn with_zoom_test_prefs(test: impl FnOnce()) {
 
 fn cascade_zoom_test_style(css: &str, parent: Option<&super::ComputedValues>) -> servo_arc::Arc<super::ComputedValues> {
     use crate::context::QuirksMode;
-    use crate::properties::{CASCADE_PROPERTY, LonghandId, StyleBuilder};
+    use crate::properties::{LonghandId, StyleBuilder, CASCADE_PROPERTY};
     use crate::rule_cache::RuleCacheConditions;
     use crate::stylesheets::container_rule::ContainerSizeQuery;
     use crate::values::computed::Context;
@@ -1029,17 +1150,10 @@ fn cascade_zoom_test_style(css: &str, parent: Option<&super::ComputedValues>) ->
     let device = crate::test_support::test_device();
     let builder = StyleBuilder::for_inheritance(&device, None, parent, None);
     let mut conditions = RuleCacheConditions::default();
-    let mut context = Context::new(
-        builder,
-        QuirksMode::NoQuirks,
-        &mut conditions,
-        ContainerSizeQuery::none(),
-    );
+    let mut context = Context::new(builder, QuirksMode::NoQuirks, &mut conditions, ContainerSizeQuery::none());
     for (declaration, _) in block(css).declaration_importance_iter() {
         let id = declaration.id().as_longhand().unwrap();
-        unsafe {
-            CASCADE_PROPERTY[id as usize](declaration, &mut context);
-        }
+        unsafe { CASCADE_PROPERTY[id as usize](declaration, &mut context); }
         if id == LonghandId::Zoom {
             context.builder.recompute_effective_zooms();
         }
@@ -1050,43 +1164,31 @@ fn cascade_zoom_test_style(css: &str, parent: Option<&super::ComputedValues>) ->
 #[test]
 fn keyword_line_widths_scale_once_before_border_snapping() {
     with_zoom_test_prefs(|| {
-        use style_traits::ToCss;
-        for (keyword, css_px) in [("thin", 1.0), ("medium", 3.0), ("thick", 5.0)] {
-            let computed = cascade_zoom_test_style(
-                &format!("zoom:2;border-top-width:{keyword};outline-width:{keyword};column-rule-width:{keyword}"),
-                None,
-            );
-            assert_eq!(computed.get_border().border_top_width.0.to_f32_px(), css_px * 2.0);
-            assert_eq!(computed.get_outline().outline_width.0.to_f32_px(), css_px * 2.0);
-            assert_eq!(
-                computed.get_column().column_rule_width.to_css_string(),
-                format!("{}px", css_px * 2.0)
-            );
-        }
+    use style_traits::ToCss;
+    for (keyword, css_px) in [("thin", 1.0), ("medium", 3.0), ("thick", 5.0)] {
+        let computed = cascade_zoom_test_style(&format!("zoom:2;border-top-width:{keyword};outline-width:{keyword};column-rule-width:{keyword}"), None);
+        assert_eq!(computed.get_border().border_top_width.0.to_f32_px(), css_px * 2.0);
+        assert_eq!(computed.get_outline().outline_width.0.to_f32_px(), css_px * 2.0);
+        assert_eq!(computed.get_column().column_rule_width.to_css_string(), format!("{}px", css_px * 2.0));
+    }
     });
 }
 
 #[test]
 fn inherited_length_wrappers_scale_relative_to_parent_zoom() {
     with_zoom_test_prefs(|| {
-        use style_traits::ToCss;
-        let parent = cascade_zoom_test_style(
-            "zoom:2;border-top-width:4px;border-top-left-radius:5px;outline-offset:3px;margin-top:6px;flex-basis:7px;column-gap:8px;row-gap:25%;column-width:auto",
-            None,
-        );
-        let child = cascade_zoom_test_style(
-            "zoom:3;border-top-width:inherit;border-top-left-radius:inherit;outline-offset:inherit;margin-top:inherit;flex-basis:inherit;column-gap:inherit;row-gap:inherit;column-width:inherit",
-            Some(&parent),
-        );
-        assert_eq!(child.effective_zoom.value(), 6.0);
-        assert_eq!(child.get_border().border_top_width.0.to_f32_px(), 24.0);
-        assert_eq!(child.get_border().border_top_left_radius.to_css_string(), "30px");
-        assert_eq!(child.get_outline().outline_offset.to_f32_px(), 18.0);
-        assert_eq!(child.get_margin().margin_top.to_css_string(), "36px");
-        assert_eq!(child.get_position().flex_basis.to_css_string(), "42px");
-        assert_eq!(child.get_position().column_gap.to_css_string(), "48px");
-        assert_eq!(child.get_position().row_gap.to_css_string(), "25%");
-        assert_eq!(child.get_column().column_width.to_css_string(), "auto");
+    use style_traits::ToCss;
+    let parent = cascade_zoom_test_style("zoom:2;border-top-width:4px;border-top-left-radius:5px;outline-offset:3px;margin-top:6px;flex-basis:7px;column-gap:8px;row-gap:25%;column-width:auto", None);
+    let child = cascade_zoom_test_style("zoom:3;border-top-width:inherit;border-top-left-radius:inherit;outline-offset:inherit;margin-top:inherit;flex-basis:inherit;column-gap:inherit;row-gap:inherit;column-width:inherit", Some(&parent));
+    assert_eq!(child.effective_zoom.value(), 6.0);
+    assert_eq!(child.get_border().border_top_width.0.to_f32_px(), 24.0);
+    assert_eq!(child.get_border().border_top_left_radius.to_css_string(), "30px");
+    assert_eq!(child.get_outline().outline_offset.to_f32_px(), 18.0);
+    assert_eq!(child.get_margin().margin_top.to_css_string(), "36px");
+    assert_eq!(child.get_position().flex_basis.to_css_string(), "42px");
+    assert_eq!(child.get_position().column_gap.to_css_string(), "48px");
+    assert_eq!(child.get_position().row_gap.to_css_string(), "25%");
+    assert_eq!(child.get_column().column_width.to_css_string(), "auto");
     });
 }
 
@@ -1096,10 +1198,7 @@ fn inherited_background_sizes_scale_lengths_but_preserve_auto_and_percentages() 
     with_zoom_test_prefs(|| {
         let parent = cascade_zoom_test_style("zoom:2;background-size:9px 25%,auto,contain,cover", None);
         let child = cascade_zoom_test_style("zoom:3;background-size:inherit", Some(&parent));
-        assert_eq!(
-            child.get_background().background_size.to_css_string(),
-            "54px 25%, auto, contain, cover"
-        );
+        assert_eq!(child.get_background().background_size.to_css_string(), "54px 25%, auto, contain, cover");
     });
 }
 
@@ -1107,14 +1206,8 @@ fn inherited_background_sizes_scale_lengths_but_preserve_auto_and_percentages() 
 fn inherited_composite_layout_lengths_follow_zoom_without_scaling_other_components() {
     use style_traits::ToCss;
     with_zoom_test_prefs(|| {
-        let parent = cascade_zoom_test_style(
-            "zoom:2;baseline-shift:3px;block-step-size:7px;text-underline-offset:5px;grid-template-columns:4px 1fr 25%;grid-auto-columns:2px auto;animation-range-start:6px,entry 25%;animation-range-end:9px,normal",
-            None,
-        );
-        let child = cascade_zoom_test_style(
-            "zoom:3;baseline-shift:inherit;block-step-size:inherit;text-underline-offset:inherit;grid-template-columns:inherit;grid-auto-columns:inherit;animation-range-start:inherit;animation-range-end:inherit",
-            Some(&parent),
-        );
+        let parent = cascade_zoom_test_style("zoom:2;baseline-shift:3px;block-step-size:7px;text-underline-offset:5px;grid-template-columns:4px 1fr 25%;grid-auto-columns:2px auto;animation-range-start:6px,entry 25%;animation-range-end:9px,normal", None);
+        let child = cascade_zoom_test_style("zoom:3;baseline-shift:inherit;block-step-size:inherit;text-underline-offset:inherit;grid-template-columns:inherit;grid-auto-columns:inherit;animation-range-start:inherit;animation-range-end:inherit", Some(&parent));
         assert_eq!(child.get_box().baseline_shift.to_css_string(), "18px");
         assert_eq!(child.get_box().block_step_size.to_css_string(), "42px");
         {
@@ -1125,52 +1218,48 @@ fn inherited_composite_layout_lengths_follow_zoom_without_scaling_other_componen
                 for_property: id.into(),
                 current_longhand: Some(id),
             };
-            assert_eq!(
-                child
-                    .get_box()
-                    .block_step_size
-                    .clone()
-                    .to_resolved_value(&context)
-                    .to_css_string(),
-                "7px"
-            );
-            assert_eq!(
-                child.computed_value_to_string(crate::properties::PropertyDeclarationId::Longhand(id)),
-                "7px"
-            );
+            assert_eq!(child.get_box().block_step_size.clone().to_resolved_value(&context).to_css_string(), "7px");
+            assert_eq!(child.computed_value_to_string(crate::properties::PropertyDeclarationId::Longhand(id)), "7px");
         }
-        assert_eq!(child.get_inherited_text().text_underline_offset.to_css_string(), "30px");
+        assert_eq!(
+            child
+                .get_inherited_text()
+                .text_underline_offset
+                .to_css_string(),
+            "30px"
+        );
         assert_eq!(
             child.get_position().grid_template_columns.to_css_string(),
             "24px 1fr 25%"
         );
-        assert_eq!(child.get_position().grid_auto_columns.to_css_string(), "12px auto");
-        assert_eq!(child.get_ui().animation_range_start.to_css_string(), "36px, entry 25%");
-        assert_eq!(child.get_ui().animation_range_end.to_css_string(), "54px, normal");
+        assert_eq!(
+            child.get_position().grid_auto_columns.to_css_string(),
+            "12px auto"
+        );
+        assert_eq!(
+            child.get_ui().animation_range_start.to_css_string(),
+            "36px, entry 25%"
+        );
+        assert_eq!(
+            child.get_ui().animation_range_end.to_css_string(),
+            "54px, normal"
+        );
     });
 }
 
 #[test]
 fn zoomed_gap_rules_resolve_to_unscaled_cssom_lengths() {
     with_zoom_test_prefs(|| {
-        use crate::values::resolved::{Context, ToResolvedValue};
-        use style_traits::ToCss;
-        let computed = cascade_zoom_test_style("zoom:2;column-rule-width:5px", None);
-        let id = super::LonghandId::ColumnRuleWidth;
-        let context = Context {
-            style: &computed,
-            for_property: id.into(),
-            current_longhand: Some(id),
-        };
-        assert_eq!(
-            computed
-                .get_column()
-                .column_rule_width
-                .clone()
-                .to_resolved_value(&context)
-                .to_css_string(),
-            "5px"
-        );
+    use crate::values::resolved::{Context, ToResolvedValue};
+    use style_traits::ToCss;
+    let computed = cascade_zoom_test_style("zoom:2;column-rule-width:5px", None);
+    let id = super::LonghandId::ColumnRuleWidth;
+    let context = Context {
+        style: &computed,
+        for_property: id.into(),
+        current_longhand: Some(id),
+    };
+    assert_eq!(computed.get_column().column_rule_width.clone().to_resolved_value(&context).to_css_string(), "5px");
     });
 }
 
@@ -1202,7 +1291,10 @@ fn border_clip_uses_current_grammar_and_copies_the_list_to_each_side() {
         assert_serialization("border-clip", value, Some(value));
         let declaration = block(&format!("border-clip:{value}"));
         for side in ["top", "right", "bottom", "left"] {
-            assert_eq!(serialized_value(&declaration, &format!("border-{side}-clip")), value);
+            assert_eq!(
+                serialized_value(&declaration, &format!("border-{side}-clip")),
+                value
+            );
         }
     }
     for value in ["normal", "-1px", "-1fr", "none 2px", "1px, 2px"] {
@@ -1219,7 +1311,8 @@ fn box_shadow_longhands_expand_and_reset_independently() {
     );
     assert_serialization("box-shadow-blur", "-1px", None);
     assert_serialization("box-shadow-spread", "-1px, 2px", Some("-1px, 2px"));
-    let declarations = block("box-shadow: red 1px 2px 3px 4px inset; box-shadow-color: blue; box-shadow: none");
+    let declarations =
+        block("box-shadow: red 1px 2px 3px 4px inset; box-shadow-color: blue; box-shadow: none");
     for (name, value) in [
         ("offset", "none"),
         ("blur", "0px"),
@@ -1227,7 +1320,10 @@ fn box_shadow_longhands_expand_and_reset_independently() {
         ("position", "outset"),
         ("color", "transparent"),
     ] {
-        assert_eq!(serialized_value(&declarations, &format!("box-shadow-{name}")), value);
+        assert_eq!(
+            serialized_value(&declarations, &format!("box-shadow-{name}")),
+            value
+        );
     }
 }
 
@@ -1246,7 +1342,10 @@ fn absent_shadow_offset_interpolates_as_two_zero_offsets() {
     );
     assert_eq!(
         offset
-            .animate(&BoxShadowOffset::None, Procedure::Interpolate { progress: 0.5 })
+            .animate(
+                &BoxShadowOffset::None,
+                Procedure::Interpolate { progress: 0.5 }
+            )
             .unwrap(),
         BoxShadowOffset::Offset(Length::new(5.0), Length::new(10.0))
     );
@@ -1255,8 +1354,16 @@ fn absent_shadow_offset_interpolates_as_two_zero_offsets() {
 #[test]
 fn box_shadow_shorthand_omits_only_default_components() {
     assert_serialization("box-shadow", "1px 2px", Some("1px 2px"));
-    assert_serialization("box-shadow", "currentcolor 1px 2px 0px 0px outset", Some("1px 2px"));
-    assert_serialization("box-shadow", "1px 2px 0px 3px inset", Some("1px 2px 0px 3px inset"));
+    assert_serialization(
+        "box-shadow",
+        "currentcolor 1px 2px 0px 0px outset",
+        Some("1px 2px"),
+    );
+    assert_serialization(
+        "box-shadow",
+        "1px 2px 0px 3px inset",
+        Some("1px 2px 0px 3px inset"),
+    );
     assert_serialization("box-shadow", "none", Some("none"));
     assert_serialization("box-shadow", "currentcolor none", Some("currentcolor none"));
     assert_serialization("box-shadow", "1px", None);
@@ -1269,7 +1376,9 @@ fn all_shorthand_schema_members_include_pref_controlled_properties() {
     assert!(potential.contains(&super::LonghandId::BoxShadowOffset));
     assert!(!potential.contains(&super::LonghandId::Direction));
     assert!(!potential.contains(&super::LonghandId::UnicodeBidi));
-    assert!(ShorthandId::All.longhands().all(|id| potential.contains(&id)));
+    assert!(ShorthandId::All
+        .longhands()
+        .all(|id| potential.contains(&id)));
 }
 
 #[test]
