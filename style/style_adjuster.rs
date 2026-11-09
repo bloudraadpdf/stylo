@@ -1132,7 +1132,7 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
         }
     }
 
-    fn adjust_for_outline_color(&mut self) {
+    pub(crate) fn adjust_for_outline_color(&mut self) {
         use crate::values::computed::{Color, OutlineStyle};
         use crate::values::generics::color::ColorOrAuto;
         let outline = self.style.get_outline();
@@ -1195,7 +1195,6 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
         self.adjust_for_position();
         self.adjust_for_overflow();
         self.adjust_for_justify_items();
-        self.adjust_for_outline_color();
         #[cfg(feature = "gecko")]
         {
             self.adjust_for_contain();
@@ -1230,7 +1229,11 @@ mod outline_tests {
     #[test]
     fn automatic_outline_color_only_stays_automatic_for_automatic_outlines() {
         let device = crate::test_support::test_device();
-        for style in [OutlineStyle::Auto, OutlineStyle::BorderStyle(BorderStyle::Solid)] {
+        for style in [
+            OutlineStyle::Auto,
+            OutlineStyle::BorderStyle(BorderStyle::None),
+            OutlineStyle::BorderStyle(BorderStyle::Solid),
+        ] {
             let mut builder = StyleBuilder::for_inheritance(&device, None, None, None);
             builder.mutate_outline().set_outline_style(style);
             StyleAdjuster::new(&mut builder).adjust_for_outline_color();
