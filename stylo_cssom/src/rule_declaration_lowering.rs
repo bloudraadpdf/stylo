@@ -201,7 +201,8 @@ fn merge_native_pending(
             continue;
         }
         let selected = if (retained_context.contains(declaration.id())
-            && projected_declaration.is_some())
+            && projected_declaration.is_some()
+            && !matches!(declaration, style::properties::PropertyDeclaration::WithVariables(_)))
             || matches!(declaration, style::properties::PropertyDeclaration::WithVariables(value)
             if value.value.from_shorthand().is_some())
         {
@@ -544,6 +545,40 @@ pub fn lower_pending_declarations(
 mod tests {
     use style::shared_lock::{DeepCloneWithLock, ToCssWithGuard};
     use style::stylesheets::StylesheetInDocument;
+
+    #[test]
+    fn contextual_lowering_keeps_a_fully_parsed_compatibility_value() {
+        crate::context::initialise_required_servo_style_prefs();
+        let authored = crate::authored_rules::ParsedStylesheet::parse(
+            "a::after{content:target-counter(attr(href),attr(data-counter -ro-ident))}",
+        )
+        .unwrap();
+        let base = crate::CssStylesheetBaseUrl::from_absolute(
+            url::Url::parse("https://styles.test/style.css").unwrap(),
+        );
+        let source = crate::authored_rules::project_stylesheet_pending_contexts(
+            authored.rule_nodes(),
+            &base,
+            None,
+        );
+        let projected = crate::authored_rules::ParsedStylesheet::parse(
+            "a::after{content:target-counter(attr(href),attr(data-counter -bd-ident))}",
+        )
+        .unwrap();
+        let native = super::native_declarations(
+            projected.rule_nodes()[0].payload().declaration_block().unwrap(),
+        )
+        .unwrap();
+        let lowered = super::merge_native_pending(
+            source[0].payload().declaration_block().unwrap(),
+            &native,
+        )
+        .unwrap();
+        assert!(matches!(
+            lowered.declaration_importance_iter().next(),
+            Some((style::properties::PropertyDeclaration::Content(_), _))
+        ));
+    }
 
     #[test]
     fn imported_scope_keeps_top_level_selector_parsing() {
