@@ -16,6 +16,26 @@ pub fn property_schema(name: &str) -> Option<&'static PropertySchemaRow> {
 }
 
 #[test]
+fn page_size_descriptor_keeps_its_domain_separate_from_the_element_shorthand() {
+    use stylo_cssom_model::{AdapterRoute, PropertyKind};
+
+    let id = PropertyId::NonCustom(style::properties::LonghandId::Size.into());
+    let descriptor = property_schema_for_id(&id).expect("page size has a native descriptor row");
+    assert_eq!(descriptor.kind, PropertyKind::PageDescriptor);
+    assert_eq!(descriptor.parser, AdapterRoute::Stylo);
+    assert_eq!(descriptor.serializer, AdapterRoute::Stylo);
+    assert_eq!(descriptor.multiplicity, None);
+    assert_eq!(descriptor.specified_numeric_reification, None);
+    assert_eq!(descriptor.computed_reification, None);
+
+    let shorthand = property_schema("size").expect("element size has its own shorthand row");
+    assert_eq!(shorthand.kind, PropertyKind::Shorthand);
+    assert_ne!(shorthand.id, descriptor.id);
+    assert!(shorthand.multiplicity.is_some());
+    assert!(shorthand.specified_numeric_reification.is_some());
+}
+
+#[test]
 fn webkit_text_fill_color_has_computed_color_reification() {
     let row = property_schema("-webkit-text-fill-color").expect("supported longhand has a schema");
     assert_eq!(
