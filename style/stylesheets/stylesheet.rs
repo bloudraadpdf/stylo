@@ -360,6 +360,7 @@ impl SanitizationKind {
             CssRule::CustomMedia(..) |
             CssRule::Supports(..) |
             CssRule::Navigation(..) |
+            CssRule::Location(..) |
             CssRule::When(..) |
             CssRule::Else(..) |
             CssRule::Import(..) |

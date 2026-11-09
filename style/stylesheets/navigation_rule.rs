@@ -8,7 +8,7 @@ use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
 use crate::shared_lock::{DeepCloneWithLock, Locked};
 use crate::shared_lock::{SharedRwLock, SharedRwLockReadGuard, ToCssWithGuard};
-use crate::stylesheets::CssRules;
+use crate::stylesheets::{CssRules, UrlExtraData};
 use crate::values::{specified::url::SpecifiedUrl, DashedIdent};
 use cssparser::{Parser, SourceLocation, Token};
 #[cfg(feature = "gecko")]
@@ -27,6 +27,48 @@ pub enum NavigationPhase {
     Preview,
 }
 
+/// The typed navigation state supplied by the document's Navigation API.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[allow(missing_docs)]
+pub struct CurrentNavigationState {
+    pub from_url: String,
+    pub to_url: String,
+    pub phase: CurrentNavigationPhase,
+    pub navigation_type: NavigationType,
+    pub old_index: i64,
+    pub new_index: i64,
+    pub source_element: Option<usize>,
+}
+
+/// The current navigation's precommit or committed phase.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, MallocSizeOf, Parse, ToCss, ToShmem)]
+#[allow(missing_docs)]
+pub enum CurrentNavigationPhase {
+    Loading,
+    Ready,
+    Committed,
+}
+
+/// The session-history operation of a current navigation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[allow(missing_docs)]
+pub enum NavigationType {
+    Push,
+    Replace,
+    Reload,
+    Traverse,
+}
+
+/// A navigation type test, including the direction of a traversal.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, MallocSizeOf, Parse, ToCss, ToShmem)]
+#[allow(missing_docs)]
+pub enum NavigationHistoryQuery {
+    Reload,
+    Traverse,
+    Back,
+    Forward,
+}
+
 /// The URL of a navigation queried by a location test.
 #[derive(Clone, Copy, Debug, MallocSizeOf, Parse, ToCss, ToShmem)]
 #[allow(missing_docs)]
@@ -43,6 +85,48 @@ pub enum NavigationLocation {
     Name(DashedIdent),
     /// A URL resolved against the stylesheet URL.
     Url(SpecifiedUrl),
+    /// A URLPattern resolved against the containing stylesheet.
+    Pattern(NavigationUrlPattern),
+}
+
+/// The quoted URLPattern argument and its stylesheet URL context.
+#[derive(Clone, Debug, MallocSizeOf, ToShmem)]
+pub struct NavigationUrlPattern {
+    argument: String,
+    url_data: UrlExtraData,
+}
+
+impl NavigationUrlPattern {
+    #[cfg(feature = "servo")]
+    fn matcher(&self) -> Option<urlpattern::UrlPattern<regex::Regex>> {
+        let init = urlpattern::UrlPatternInit::parse_constructor_string::<regex::Regex>(
+            &self.argument,
+            Some(self.url_data.0.as_ref().clone()),
+        )
+        .ok()?;
+        urlpattern::UrlPattern::parse(init, Default::default()).ok()
+    }
+
+    #[cfg(feature = "servo")]
+    fn matches(&self, address: &str) -> bool {
+        let Some(pattern) = self.matcher() else {
+            return false;
+        };
+        let Ok(url) = address.parse() else {
+            return false;
+        };
+        pattern
+            .test(urlpattern::UrlPatternMatchInput::Url(url))
+            .unwrap_or(false)
+    }
+}
+
+impl ToCss for NavigationUrlPattern {
+    fn to_css<W: Write>(&self, dest: &mut CssWriter<W>) -> fmt::Result {
+        dest.write_str("url-pattern(")?;
+        cssparser::serialize_string(&self.argument, dest)?;
+        dest.write_char(')')
+    }
 }
 
 impl NavigationLocation {
@@ -52,6 +136,24 @@ impl NavigationLocation {
     ) -> Result<Self, ParseError<'i>> {
         if let Ok(name) = input.try_parse(|input| DashedIdent::parse(context, input)) {
             return Ok(Self::Name(name));
+        }
+        if input
+            .try_parse(|input| input.expect_function_matching("url-pattern"))
+            .is_ok()
+        {
+            let argument =
+                input.parse_nested_block(|input| Ok(input.expect_string_cloned()?.to_string()))?;
+            let pattern = NavigationUrlPattern {
+                argument,
+                url_data: context.url_data.clone(),
+            };
+            #[cfg(feature = "servo")]
+            if pattern.matcher().is_none() {
+                return Err(
+                    input.new_custom_error(style_traits::StyleParseErrorKind::UnspecifiedError)
+                );
+            }
+            return Ok(Self::Pattern(pattern));
         }
         SpecifiedUrl::parse(context, input).map(Self::Url)
     }
@@ -64,6 +166,12 @@ pub enum NavigationCondition {
     Preview,
     /// A typed navigation URL test.
     Location(NavigationRelation, NavigationLocation),
+    /// A navigation joining two locations, in either direction.
+    Between(NavigationLocation, NavigationLocation),
+    /// A current navigation phase test.
+    Phase(CurrentNavigationPhase),
+    /// A session-history operation test.
+    History(NavigationHistoryQuery),
     /// A nested boolean condition.
     Parenthesized(Box<Self>),
     /// Negation.
@@ -134,14 +242,36 @@ impl NavigationCondition {
                         return Ok(Self::Preview);
                     }
                     if input
-                        .try_parse(|input| {
-                            input.expect_ident_matching("phase")?;
-                            input.expect_colon()?;
-                            input.expect_ident_matching("preview")
-                        })
+                        .try_parse(|input| input.expect_ident_matching("between"))
                         .is_ok()
                     {
-                        return Ok(Self::Preview);
+                        input.expect_colon()?;
+                        let first = NavigationLocation::parse(context, input)?;
+                        input.expect_ident_matching("and")?;
+                        return Ok(Self::Between(
+                            first,
+                            NavigationLocation::parse(context, input)?,
+                        ));
+                    }
+                    if input
+                        .try_parse(|input| input.expect_ident_matching("phase"))
+                        .is_ok()
+                    {
+                        input.expect_colon()?;
+                        if input
+                            .try_parse(|input| input.expect_ident_matching("preview"))
+                            .is_ok()
+                        {
+                            return Ok(Self::Preview);
+                        }
+                        return Ok(Self::Phase(CurrentNavigationPhase::parse(input)?));
+                    }
+                    if input
+                        .try_parse(|input| input.expect_ident_matching("history"))
+                        .is_ok()
+                    {
+                        input.expect_colon()?;
+                        return Ok(Self::History(NavigationHistoryQuery::parse(input)?));
                     }
                     let relation = NavigationRelation::parse(input)?;
                     input.expect_colon()?;
@@ -171,11 +301,89 @@ impl NavigationCondition {
     pub fn matches(&self, phase: NavigationPhase) -> bool {
         match self {
             Self::Preview => phase == NavigationPhase::Preview,
-            Self::Location(..) | Self::GeneralEnclosed(_) => false,
+            Self::Location(..)
+            | Self::Between(..)
+            | Self::Phase(_)
+            | Self::History(_)
+            | Self::GeneralEnclosed(_) => false,
             Self::Parenthesized(condition) => condition.matches(phase),
             Self::Not(condition) => !condition.matches(phase),
             Self::And(conditions) => conditions.iter().all(|condition| condition.matches(phase)),
             Self::Or(conditions) => conditions.iter().any(|condition| condition.matches(phase)),
+        }
+    }
+
+    /// Evaluate against the current document state and its named locations.
+    #[cfg(feature = "servo")]
+    pub fn matches_navigation(
+        &self,
+        phase: NavigationPhase,
+        state: Option<&CurrentNavigationState>,
+        locations: &[super::LocationRule],
+        document_base: Option<&str>,
+    ) -> bool {
+        let location = |location: &NavigationLocation, url: &str| match location {
+            NavigationLocation::Name(name) => locations
+                .iter()
+                .rev()
+                .find(|rule| rule.name == *name)
+                .is_some_and(|rule| rule.matches_with_document_base(url, document_base)),
+            NavigationLocation::Url(value) => value
+                .url()
+                .as_ref()
+                .is_some_and(|value| value.as_str() == url),
+            NavigationLocation::Pattern(pattern) => pattern.matches(url),
+        };
+        match self {
+            Self::Preview => phase == NavigationPhase::Preview,
+            Self::Location(relation, target) => state.is_some_and(|state| {
+                location(
+                    target,
+                    match relation {
+                        NavigationRelation::From => &state.from_url,
+                        NavigationRelation::To => &state.to_url,
+                        NavigationRelation::At => {
+                            if state.phase == CurrentNavigationPhase::Committed {
+                                &state.to_url
+                            } else {
+                                &state.from_url
+                            }
+                        },
+                    },
+                )
+            }),
+            Self::Between(first, second) => state.is_some_and(|state| {
+                (location(first, &state.from_url) && location(second, &state.to_url))
+                    || (location(second, &state.from_url) && location(first, &state.to_url))
+            }),
+            Self::Phase(phase) => state.is_some_and(|state| state.phase == *phase),
+            Self::History(kind) => state.is_some_and(|state| match kind {
+                NavigationHistoryQuery::Reload => state.navigation_type == NavigationType::Reload,
+                NavigationHistoryQuery::Traverse => {
+                    state.navigation_type == NavigationType::Traverse
+                },
+                NavigationHistoryQuery::Back => {
+                    state.navigation_type == NavigationType::Traverse
+                        && state.new_index < state.old_index
+                },
+                NavigationHistoryQuery::Forward => {
+                    state.navigation_type == NavigationType::Traverse
+                        && state.new_index > state.old_index
+                },
+            }),
+            Self::Parenthesized(condition) => {
+                condition.matches_navigation(phase, state, locations, document_base)
+            },
+            Self::Not(condition) => {
+                !condition.matches_navigation(phase, state, locations, document_base)
+            },
+            Self::And(conditions) => conditions.iter().all(|condition| {
+                condition.matches_navigation(phase, state, locations, document_base)
+            }),
+            Self::Or(conditions) => conditions.iter().any(|condition| {
+                condition.matches_navigation(phase, state, locations, document_base)
+            }),
+            Self::GeneralEnclosed(_) => false,
         }
     }
 }
@@ -189,6 +397,23 @@ impl ToCss for NavigationCondition {
                 relation.to_css(dest)?;
                 dest.write_str(": ")?;
                 location.to_css(dest)?;
+                dest.write_char(')')
+            },
+            Self::Between(first, second) => {
+                dest.write_str("(between: ")?;
+                first.to_css(dest)?;
+                dest.write_str(" and ")?;
+                second.to_css(dest)?;
+                dest.write_char(')')
+            },
+            Self::Phase(value) => {
+                dest.write_str("(phase: ")?;
+                value.to_css(dest)?;
+                dest.write_char(')')
+            },
+            Self::History(value) => {
+                dest.write_str("(history: ")?;
+                value.to_css(dest)?;
                 dest.write_char(')')
             },
             Self::Parenthesized(condition) => {

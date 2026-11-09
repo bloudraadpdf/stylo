@@ -287,6 +287,7 @@ pub enum AtRulePrelude {
     Supports(SupportsCondition),
     /// An `@navigation` rule prelude, with its condition.
     Navigation(NavigationCondition),
+    Location(crate::values::DashedIdent),
     /// A @keyframes rule, with its animation name and vendor prefix if exists.
     Keyframes(KeyframesName, Option<VendorPrefix>),
     /// A @page rule prelude, with its page name if it exists.
@@ -357,6 +358,7 @@ impl AtRulePrelude {
             Self::Container(..) => "container",
             Self::Supports(..) => "supports",
             Self::Navigation(..) => "navigation",
+            Self::Location(..) => "location",
             Self::Keyframes(..) => "keyframes",
             Self::Page(..) => "page",
             Self::Property(..) => "property",
@@ -642,6 +644,7 @@ impl<'a, 'i> NestedRuleParser<'a, 'i> {
             | AtRulePrelude::Scope(..)
             | AtRulePrelude::StartingStyle
             | AtRulePrelude::Navigation(..)
+            | AtRulePrelude::Location(..)
             | AtRulePrelude::When(..)
             | AtRulePrelude::Else(..) => true,
 
@@ -878,6 +881,7 @@ impl<'a, 'i> AtRuleParser<'i> for NestedRuleParser<'a, 'i> {
                 AtRulePrelude::Supports(cond)
             },
             "navigation" => AtRulePrelude::Navigation(NavigationCondition::parse(&self.context, input)?),
+            "location" => AtRulePrelude::Location(crate::values::DashedIdent::parse(&self.context, input)?),
             // CSS Conditional 5 §3.1 — `@when <when-condition> { … }`.
             // The condition mixes `supports(...)` and `media(...)`
             // functional leaves with `not` / `and` / `or` combinators.
@@ -1126,6 +1130,9 @@ impl<'a, 'i> AtRuleParser<'i> for NestedRuleParser<'a, 'i> {
                 rules: self.parse_nested_rules(input, CssRuleType::Navigation),
                 source_location,
             })),
+            AtRulePrelude::Location(name) => CssRule::Location(Arc::new(
+                super::LocationRule::parse(name, &self.context, input, source_location)?,
+            )),
             AtRulePrelude::Keyframes(name, vendor_prefix) => {
                 self.nest_for_rule(CssRuleType::Keyframe, |p| {
                     let top = &mut **p;

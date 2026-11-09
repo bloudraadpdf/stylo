@@ -5058,7 +5058,7 @@ impl CascadeData {
                     // @media rules referencing it being handled.
                     continue;
                 },
-                CssRule::Navigation(..) => {
+                CssRule::Navigation(..) | CssRule::Location(..) => {
                     // The navigation phase is no media feature: a caller of
                     // `Device::set_navigation_phase` forces the stylesheets dirty.
                     continue;

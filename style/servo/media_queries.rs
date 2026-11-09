@@ -208,6 +208,12 @@ pub struct Device {
     /// The navigation phase of the document, which `@navigation` rules query.
     #[ignore_malloc_size_of = "Pure stack type"]
     navigation_phase: NavigationPhase,
+    #[ignore_malloc_size_of = "Navigation state owned by document"]
+    current_navigation_state: Option<crate::stylesheets::CurrentNavigationState>,
+    /// The document base URL, including its current HTML base element.
+    document_base_url: String,
+    #[ignore_malloc_size_of = "Named pattern rules owned by stylesheet"]
+    navigation_locations: Vec<crate::stylesheets::LocationRule>,
     /// The CssEnvironment object responsible of getting CSS environment
     /// variables.
     environment: CssEnvironment,
@@ -274,6 +280,9 @@ impl Device {
             user_preferences: UserPreferences::default(),
             page_color_scheme_support: ColorSchemeFlags::empty(),
             navigation_phase: NavigationPhase::Idle,
+            current_navigation_state: None,
+            document_base_url: String::new(),
+            navigation_locations: Vec::new(),
             environment: CssEnvironment::default(),
             font_metrics_provider,
             default_computed_values,
@@ -815,6 +824,47 @@ impl Device {
         self.navigation_phase
     }
 
+    /// Install the document context before evaluating conditional location definitions.
+    pub fn set_current_navigation_context(
+        &mut self,
+        state: Option<crate::stylesheets::CurrentNavigationState>,
+        document_base_url: String,
+    ) -> bool {
+        let changed =
+            self.current_navigation_state != state || self.document_base_url != document_base_url;
+        self.current_navigation_state = state;
+        self.document_base_url = document_base_url;
+        changed
+    }
+
+    /// Install document navigation state and effective locations; report any change.
+    pub fn set_current_navigation_state(
+        &mut self,
+        state: Option<crate::stylesheets::CurrentNavigationState>,
+        locations: Vec<crate::stylesheets::LocationRule>,
+        document_base_url: String,
+    ) -> bool {
+        let context_changed = self.set_current_navigation_context(state, document_base_url);
+        let locations_changed = self.navigation_locations.len() != locations.len()
+            || self
+                .navigation_locations
+                .iter()
+                .zip(&locations)
+                .any(|(old, new)| !old.same_pattern(new));
+        self.navigation_locations = locations;
+        context_changed || locations_changed
+    }
+
+    /// Evaluate a navigation condition in this device's document.
+    pub fn matches_navigation(&self, condition: &crate::stylesheets::NavigationCondition) -> bool {
+        condition.matches_navigation(
+            self.navigation_phase,
+            self.current_navigation_state.as_ref(),
+            &self.navigation_locations,
+            Some(&self.document_base_url),
+        )
+    }
+
     pub(crate) fn is_dark_color_scheme(&self, color_scheme: ColorSchemeFlags) -> bool {
         if self.user_preferences.forced_colors {
             return false;
@@ -1316,6 +1366,67 @@ pub static MEDIA_FEATURES: [QueryFeatureDescription; 35] = [
         FeatureFlags::empty(),
     ),
 ];
+
+#[cfg(test)]
+mod navigation_state_tests {
+    use crate::stylesheets::{
+        CssRule, CurrentNavigationPhase, CurrentNavigationState, NavigationType,
+    };
+
+    #[test]
+    fn navigation_updates_report_state_location_and_document_base_changes() {
+        let mut device = crate::test_support::test_device();
+        let base = "https://example.invalid/".to_owned();
+        let state = CurrentNavigationState {
+            from_url: base.clone(),
+            to_url: format!("{base}next"),
+            phase: CurrentNavigationPhase::Loading,
+            navigation_type: NavigationType::Push,
+            old_index: 0,
+            new_index: 1,
+            source_element: None,
+        };
+        assert!(device.set_current_navigation_state(Some(state.clone()), Vec::new(), base.clone()));
+        assert!(!device.set_current_navigation_state(
+            Some(state.clone()),
+            Vec::new(),
+            base.clone()
+        ));
+        let sheet = crate::test_support::parse_stylesheet(
+            "@location --next { pathname: '/next'; } @navigation (to: --next) {}",
+        );
+        let guard = sheet.shared_lock.read();
+        let contents = sheet.contents.read_with(&guard);
+        let rules = contents.rules.read_with(&guard);
+        let CssRule::Location(rule) = &rules.0[0] else {
+            panic!("a named location")
+        };
+        let locations = vec![(**rule).clone()];
+        let CssRule::Navigation(navigation) = &rules.0[1] else {
+            panic!("a navigation condition")
+        };
+        assert!(!device.matches_navigation(&navigation.condition));
+        assert!(device.set_current_navigation_state(
+            Some(state.clone()),
+            locations.clone(),
+            base.clone()
+        ));
+        assert!(!device.set_current_navigation_state(
+            Some(state.clone()),
+            locations.clone(),
+            base.clone()
+        ));
+        assert!(device.matches_navigation(&navigation.condition));
+        assert!(device.set_current_navigation_state(
+            Some(state),
+            locations,
+            format!("{base}other/")
+        ));
+        assert!(device.set_current_navigation_state(None, Vec::new(), base.clone()));
+        assert!(!device.set_current_navigation_state(None, Vec::new(), base));
+        assert!(!device.matches_navigation(&navigation.condition));
+    }
+}
 
 #[cfg(test)]
 mod page_color_scheme_support_tests {

@@ -829,6 +829,7 @@ pub enum NonTSPseudoClass {
     Seeking,
     ServoNonZeroBorder,
     Target,
+    NavigationSource,
     TargetAfter,
     TargetBefore,
     TargetCurrent,
@@ -965,6 +966,7 @@ impl ToCss for NonTSPseudoClass {
             Self::Seeking => ":seeking",
             Self::ServoNonZeroBorder => ":-servo-nonzero-border",
             Self::Target => ":target",
+            Self::NavigationSource => ":navigation-source",
             Self::TargetAfter => ":target-after",
             Self::TargetBefore => ":target-before",
             Self::TargetCurrent => ":target-current",
@@ -1033,6 +1035,7 @@ impl NonTSPseudoClass {
             | Self::Lang(_)
             | Self::ServoNonZeroBorder
             | Self::TargetAfter
+            | Self::NavigationSource
             | Self::TargetBefore
             | Self::TargetCurrent
             | Self::VolumeLocked => ElementState::empty(),
@@ -1171,6 +1174,7 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             "required" => NonTSPseudoClass::Required,
             "seeking" => NonTSPseudoClass::Seeking,
             "target" => NonTSPseudoClass::Target,
+            "navigation-source" => NonTSPseudoClass::NavigationSource,
             "target-after" => NonTSPseudoClass::TargetAfter,
             "target-before" => NonTSPseudoClass::TargetBefore,
             "target-current" => NonTSPseudoClass::TargetCurrent,

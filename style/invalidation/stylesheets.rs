@@ -676,6 +676,7 @@ impl StylesheetInvalidationSet {
                 }
             },
             CounterStyle(..)
+            | Location(..)
             | Property(..)
             | Function(..)
             | Mixin(..)

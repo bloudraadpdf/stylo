@@ -78,6 +78,7 @@ where
         *effective = true;
         match *rule {
             CssRule::Namespace(_)
+            | CssRule::Location(_)
             | CssRule::FontFace(_)
             | CssRule::CounterStyle(_)
             | CssRule::CustomMedia(_)
@@ -375,7 +376,14 @@ impl NestedRuleIterationCondition for EffectiveRules {
     }
 
     fn process_navigation(device: &Device, rule: &NavigationRule) -> bool {
-        rule.condition.matches(device.navigation_phase())
+        #[cfg(feature = "servo")]
+        {
+            device.matches_navigation(&rule.condition)
+        }
+        #[cfg(feature = "gecko")]
+        {
+            rule.condition.matches(device.navigation_phase())
+        }
     }
 
     fn process_when(

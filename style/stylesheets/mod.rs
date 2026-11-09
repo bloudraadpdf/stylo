@@ -18,6 +18,7 @@ pub mod import_rule;
 pub mod keyframes_rule;
 pub mod layer_rule;
 mod loader;
+mod location_rule;
 mod margin_rule;
 mod media_rule;
 pub mod mixin_rule;
@@ -80,13 +81,17 @@ pub use self::import_rule::ImportRule;
 pub use self::keyframes_rule::KeyframesRule;
 pub use self::layer_rule::{LayerBlockRule, LayerStatementRule};
 pub use self::loader::StylesheetLoader;
+pub use self::location_rule::{LocationBase, LocationRule};
 pub use self::margin_rule::{MarginRule, MarginRuleType};
 pub use self::media_rule::{
     CustomMediaCondition, CustomMediaEvaluator, CustomMediaMap, CustomMediaRule, MediaRule,
 };
 pub use self::mixin_rule::{MixinRule, MixinRuleKind};
 pub use self::namespace_rule::NamespaceRule;
-pub use self::navigation_rule::{NavigationCondition, NavigationPhase, NavigationRule};
+pub use self::navigation_rule::{
+    CurrentNavigationPhase, CurrentNavigationState, NavigationCondition, NavigationPhase,
+    NavigationRule, NavigationType,
+};
 pub use self::nested_declarations_rule::NestedDeclarationsRule;
 pub use self::origin::{Origin, OriginSet, OriginSetIterator, PerOrigin, PerOriginIter};
 pub use self::page_rule::{PagePseudoClassFlags, PageRule, PageSelector, PageSelectors};
@@ -406,6 +411,8 @@ pub enum CssRule {
     Supports(Arc<SupportsRule>),
     /// `@navigation <condition> { … }` (CSS View Transitions 2, two-phase cross-document navigation).
     Navigation(Arc<NavigationRule>),
+    /// A named navigation URL pattern.
+    Location(Arc<LocationRule>),
     /// CSS Conditional 5 §3.1 — `@when <when-condition> { … }`. The
     /// rule contributes its body to the cascade iff its branch is the
     /// active member of its `@when` / `@else` chain. Chain membership
@@ -488,6 +495,10 @@ impl CssRule {
             },
             CssRule::Navigation(ref arc) => {
                 arc.unconditional_shallow_size_of(ops) + arc.size_of(guard, ops)
+            },
+            CssRule::Location(ref arc) => {
+                arc.unconditional_shallow_size_of(ops)
+                    + malloc_size_of::MallocSizeOf::size_of(arc.as_ref(), ops)
             },
             CssRule::When(ref arc) => {
                 arc.unconditional_shallow_size_of(ops) + arc.size_of(guard, ops)
@@ -585,6 +596,8 @@ pub enum CssRuleRef<'a> {
     Region(&'a RegionRule),
     Supports(&'a SupportsRule),
     Navigation(&'a NavigationRule),
+    /// A named navigation URL pattern.
+    Location(&'a LocationRule),
     /// CSS Conditional 5 §3.1 — `@when` rule reference.
     When(&'a WhenRule),
     /// CSS Conditional 5 §3.2 — `@else` rule reference.
@@ -626,6 +639,7 @@ impl<'a> From<&'a CssRule> for CssRuleRef<'a> {
             CssRule::Region(r) => CssRuleRef::Region(r.as_ref()),
             CssRule::Supports(r) => CssRuleRef::Supports(r.as_ref()),
             CssRule::Navigation(r) => CssRuleRef::Navigation(r.as_ref()),
+            CssRule::Location(r) => CssRuleRef::Location(r.as_ref()),
             CssRule::When(r) => CssRuleRef::When(r.as_ref()),
             CssRule::Else(r) => CssRuleRef::Else(r.as_ref()),
             CssRule::Page(r) => CssRuleRef::Page(r.as_ref()),
@@ -719,6 +733,8 @@ pub enum CssRuleType {
     ViewTransition = 33,
     // CSS View Transitions 2, two-phase cross-document navigation: `@navigation`.
     Navigation = 34,
+    /// CSS Navigation 1 named locations.
+    Location = 40,
     Mixin = 35,
     Apply = 36,
     Contents = 37,
@@ -818,6 +834,7 @@ impl CssRule {
             CssRule::Namespace(_) => CssRuleType::Namespace,
             CssRule::Supports(_) => CssRuleType::Supports,
             CssRule::Navigation(_) => CssRuleType::Navigation,
+            CssRule::Location(_) => CssRuleType::Location,
             CssRule::When(_) => CssRuleType::When,
             CssRule::Else(_) => CssRuleType::Else,
             CssRule::Page(_) => CssRuleType::Page,
@@ -981,6 +998,9 @@ impl DeepCloneWithLock for CssRule {
             CssRule::Navigation(ref arc) => {
                 CssRule::Navigation(Arc::new(arc.deep_clone_with_lock(lock, guard)))
             },
+            CssRule::Location(ref arc) => {
+                CssRule::Location(Arc::new(arc.deep_clone_with_lock(lock, guard)))
+            },
             CssRule::When(ref arc) => {
                 CssRule::When(Arc::new(arc.deep_clone_with_lock(lock, guard)))
             },
@@ -1053,6 +1073,7 @@ impl ToCssWithGuard for CssRule {
             CssRule::CustomMedia(ref rule) => rule.to_css(guard, dest),
             CssRule::Supports(ref rule) => rule.to_css(guard, dest),
             CssRule::Navigation(ref rule) => rule.to_css(guard, dest),
+            CssRule::Location(ref rule) => rule.to_css(guard, dest),
             CssRule::When(ref rule) => rule.to_css(guard, dest),
             CssRule::Else(ref rule) => rule.to_css(guard, dest),
             CssRule::Page(ref lock) => lock.read_with(guard).to_css(guard, dest),

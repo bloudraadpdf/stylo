@@ -1107,6 +1107,7 @@ impl ParsedCssRule {
                 },
             },
             CssRule::Navigation(rule) => grouping_rule(rule.rules.read_with(guard)),
+            CssRule::Location(_) => ParsedCssRuleKind::Other,
             CssRule::When(rule) => grouping_rule(rule.rules.read_with(guard)),
             CssRule::Else(rule) => grouping_rule(rule.rules.read_with(guard)),
             CssRule::StartingStyle(rule) => grouping_rule(rule.rules.read_with(guard)),
@@ -1932,6 +1933,7 @@ pub fn stylo_rule_grammar(rule: &CssRule) -> stylo_cssom_model::RuleGrammar {
         CssRule::Region(_) => RuleGrammar::Region,
         CssRule::Supports(_) => RuleGrammar::Supports,
         CssRule::Navigation(_) => RuleGrammar::Navigation,
+        CssRule::Location(_) => RuleGrammar::Unknown,
         CssRule::When(_) => RuleGrammar::When,
         CssRule::Else(_) => RuleGrammar::Else,
         CssRule::Page(_) => RuleGrammar::Page,
@@ -5114,6 +5116,7 @@ mod tests {
             CssRule::Region(_) => "Region",
             CssRule::Supports(_) => "Supports",
             CssRule::Navigation(_) => "Navigation",
+            CssRule::Location(_) => "Location",
             CssRule::When(_) => "When",
             CssRule::Else(_) => "Else",
             CssRule::Page(_) => "Page",
@@ -5392,6 +5395,294 @@ mod tests {
                     .is_empty(),
                 "the current Servo configuration must reject {css}"
             );
+        }
+    }
+
+    #[test]
+    fn named_navigation_locations_match_both_directions_and_clear_with_state() {
+        crate::context::initialise_required_servo_style_prefs();
+        let (stylesheet, lock) = crate::context::parse_stylesheet_fragment_with_url_data(
+            "@location --foo { base-url: url('https://example.test/'); pathname: '/target/foo/*'; } \
+             @location --bar { base-url: url('https://example.test/'); pathname: '*'; search: 'target'; } \
+             @navigation (between: --foo and --bar) {} @navigation (phase: committed) {} \
+             @navigation (history: back) {}",
+            style::stylesheets::Origin::Author,
+            style::stylesheets::UrlExtraData::from(
+                url::Url::parse("https://example.test/main.css").unwrap(),
+            ),
+        );
+        let guard = lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules.read_with(&guard);
+        assert_eq!(rules.0.len(), 5);
+        let locations = rules.0[..2]
+            .iter()
+            .map(|rule| {
+                let CssRule::Location(rule) = rule else {
+                    panic!("location rule")
+                };
+                (**rule).clone()
+            })
+            .collect::<Vec<_>>();
+        assert!(locations[0].matches("https://example.test/target/foo/one"));
+        assert!(!locations[0].matches("https://example.test/other/foo/one"));
+        let mut state = style::stylesheets::CurrentNavigationState {
+            from_url: "https://example.test/target/foo/one".into(),
+            to_url: "https://example.test/other?target".into(),
+            phase: style::stylesheets::CurrentNavigationPhase::Committed,
+            navigation_type: style::stylesheets::NavigationType::Traverse,
+            old_index: 2,
+            new_index: 1,
+            source_element: None,
+        };
+        for rule in &rules.0[2..] {
+            let CssRule::Navigation(rule) = rule else {
+                panic!("navigation rule")
+            };
+            assert!(rule.condition.matches_navigation(
+                style::stylesheets::NavigationPhase::Idle,
+                Some(&state),
+                &locations,
+                None
+            ));
+            assert!(!rule.condition.matches_navigation(
+                style::stylesheets::NavigationPhase::Idle,
+                None,
+                &locations,
+                None
+            ));
+        }
+        std::mem::swap(&mut state.from_url, &mut state.to_url);
+        let CssRule::Navigation(rule) = &rules.0[2] else {
+            unreachable!()
+        };
+        assert!(rule.condition.matches_navigation(
+            style::stylesheets::NavigationPhase::Idle,
+            Some(&state),
+            &locations,
+            None
+        ));
+    }
+
+    #[test]
+    fn navigation_queries_match_phase_history_and_url_relations() {
+        use style::stylesheets::{
+            CurrentNavigationPhase as Phase, CurrentNavigationState, NavigationPhase,
+            NavigationType,
+        };
+        crate::context::initialise_required_servo_style_prefs();
+        let conditions = [
+            "(phase: loading)",
+            "(phase: ready)",
+            "(phase: committed)",
+            "(history: traverse)",
+            "(history: back)",
+            "(history: forward)",
+            "(history: reload)",
+            "(from: url('https://example.test/from'))",
+            "(to: url('https://example.test/to'))",
+            "(at: url('https://example.test/from'))",
+            "(at: url('https://example.test/to'))",
+            "(between: url('https://example.test/from') and url('https://example.test/to'))",
+            "(between: url('https://example.test/to') and url('https://example.test/from'))",
+            "(between: url('https://example.test/from') and url('https://example.test/other'))",
+            "(type: back)",
+            "(history: push)",
+            "(history: replace)",
+            "not (type: back)",
+        ];
+        let css = conditions
+            .iter()
+            .map(|condition| format!("@navigation {condition} {{}} "))
+            .collect::<String>();
+        let (stylesheet, lock) =
+            crate::context::parse_stylesheet_fragment(&css, style::stylesheets::Origin::Author);
+        let guard = lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules.read_with(&guard);
+        assert_eq!(rules.0.len(), conditions.len());
+        let cases: &[(Phase, NavigationType, i64, i64, &[usize])] = &[
+            (
+                Phase::Loading,
+                NavigationType::Traverse,
+                2,
+                1,
+                &[0, 3, 4, 7, 8, 9, 11, 12, 17],
+            ),
+            (
+                Phase::Ready,
+                NavigationType::Traverse,
+                1,
+                2,
+                &[1, 3, 5, 7, 8, 9, 11, 12, 17],
+            ),
+            (
+                Phase::Committed,
+                NavigationType::Reload,
+                2,
+                2,
+                &[2, 6, 7, 8, 10, 11, 12, 17],
+            ),
+            (
+                Phase::Committed,
+                NavigationType::Traverse,
+                2,
+                2,
+                &[2, 3, 7, 8, 10, 11, 12, 17],
+            ),
+            (
+                Phase::Loading,
+                NavigationType::Push,
+                2,
+                3,
+                &[0, 7, 8, 9, 11, 12, 17],
+            ),
+            (
+                Phase::Ready,
+                NavigationType::Replace,
+                2,
+                2,
+                &[1, 7, 8, 9, 11, 12, 17],
+            ),
+        ];
+        for &(phase, navigation_type, old_index, new_index, matches) in cases {
+            let state = CurrentNavigationState {
+                from_url: "https://example.test/from".into(),
+                to_url: "https://example.test/to".into(),
+                phase,
+                navigation_type,
+                old_index,
+                new_index,
+                source_element: None,
+            };
+            for (index, rule) in rules.0.iter().enumerate() {
+                let CssRule::Navigation(rule) = rule else {
+                    panic!("navigation rule")
+                };
+                assert_eq!(
+                    rule.condition.matches_navigation(
+                        NavigationPhase::Idle,
+                        Some(&state),
+                        &[],
+                        None
+                    ),
+                    matches.contains(&index),
+                    "{} for {state:?}",
+                    conditions[index]
+                );
+                assert_eq!(
+                    rule.condition
+                        .matches_navigation(NavigationPhase::Idle, None, &[], None),
+                    index == 17,
+                    "{} without state",
+                    conditions[index]
+                );
+            }
+        }
+        for (index, keyword) in [(3, "traverse"), (4, "back"), (5, "forward"), (6, "reload")] {
+            assert!(
+                rules.0[index]
+                    .to_css_string(&guard)
+                    .starts_with(&format!("@navigation (history: {keyword})"))
+            );
+        }
+        for index in 14..17 {
+            let CssRule::Navigation(rule) = &rules.0[index] else {
+                unreachable!()
+            };
+            assert!(
+                matches!(
+                    rule.condition,
+                    style::stylesheets::NavigationCondition::GeneralEnclosed(_)
+                ),
+                "{} remains unsupported",
+                conditions[index]
+            );
+        }
+    }
+
+    #[test]
+    fn navigation_inline_url_patterns_resolve_the_stylesheet_base_and_captures() {
+        use style::stylesheets::{
+            CurrentNavigationPhase, CurrentNavigationState, NavigationPhase, NavigationType,
+            UrlExtraData,
+        };
+        crate::context::initialise_required_servo_style_prefs();
+        let css = "@navigation (at: url-pattern('../movies/:id')) {} \
+                   @navigation (from: url-pattern('/start')) {} \
+                   @navigation (between: url-pattern('/start') and url-pattern('../movies/:id')) {} \
+                   @navigation (at: url-pattern(../movies/:id)) {} \
+                   @navigation (at: url-pattern('../movies/:id' extra)) {}";
+        let (stylesheet, lock) = crate::context::parse_stylesheet_fragment_with_url_data(
+            css,
+            style::stylesheets::Origin::Author,
+            UrlExtraData::from(url::Url::parse("https://example.test/styles/main.css").unwrap()),
+        );
+        let guard = lock.read();
+        let contents = stylesheet.contents.read_with(&guard);
+        let rules = contents.rules.read_with(&guard);
+        assert_eq!(rules.0.len(), 5);
+        assert!(
+            rules.0[0]
+                .to_css_string(&guard)
+                .starts_with("@navigation (at: url-pattern(\"../movies/:id\"))")
+        );
+        for (destination, phase, expected) in [
+            (
+                "https://example.test/movies/123",
+                CurrentNavigationPhase::Committed,
+                [true, true, true, false, false],
+            ),
+            (
+                "https://example.test/movies/123",
+                CurrentNavigationPhase::Ready,
+                [false, true, true, false, false],
+            ),
+            (
+                "https://other.test/movies/123",
+                CurrentNavigationPhase::Committed,
+                [false, true, false, false, false],
+            ),
+            (
+                "https://example.test/movies/123/cast",
+                CurrentNavigationPhase::Committed,
+                [false, true, false, false, false],
+            ),
+            (
+                "https://example.test/movies/",
+                CurrentNavigationPhase::Committed,
+                [false, true, false, false, false],
+            ),
+        ] {
+            let state = CurrentNavigationState {
+                from_url: "https://example.test/start".into(),
+                to_url: destination.into(),
+                phase,
+                navigation_type: NavigationType::Push,
+                old_index: 0,
+                new_index: 1,
+                source_element: None,
+            };
+            for (index, rule) in rules.0.iter().enumerate() {
+                let CssRule::Navigation(rule) = rule else {
+                    panic!("navigation rule")
+                };
+                assert_eq!(
+                    rule.condition.matches_navigation(
+                        NavigationPhase::Idle,
+                        Some(&state),
+                        &[],
+                        Some("https://wrong-base.test/")
+                    ),
+                    expected[index],
+                    "rule {index} for {state:?}"
+                );
+                assert!(
+                    !rule
+                        .condition
+                        .matches_navigation(NavigationPhase::Idle, None, &[], None)
+                );
+            }
         }
     }
 
