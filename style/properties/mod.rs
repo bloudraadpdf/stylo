@@ -1659,6 +1659,14 @@ impl UnparsedValue {
             }
         }
 
+        if std::env::var_os("MOEGOE_TRACE_MIXIN_BINDINGS").is_some()
+            && self.variable_value.css.starts_with("if(")
+        {
+            eprintln!(
+                "MIXIN_BINDINGS input={:?} properties={custom_properties:?}",
+                self.variable_value
+            );
+        }
         let substituted = match custom_properties::substitute_with_environment_resolution(
             &self.variable_value,
             custom_properties,
