@@ -6201,7 +6201,7 @@ fn translate_property(lower_property: &str, raw_value: &str) -> Translated {
             if v.eq_ignore_ascii_case("none") {
                 Translated::Native {
                     native_property: "-bd-pdf-comment-contents",
-                    native_value: "auto".to_string(),
+                    native_value: "none".to_string(),
                 }
             } else if v.contains("content(") {
                 Translated::ValueDropped
@@ -6218,7 +6218,7 @@ fn translate_property(lower_property: &str, raw_value: &str) -> Translated {
             if v.eq_ignore_ascii_case("none") {
                 Translated::Native {
                     native_property: "-bd-pdf-comment-title",
-                    native_value: "auto".to_string(),
+                    native_value: "none".to_string(),
                 }
             } else {
                 Translated::Native {
@@ -8614,6 +8614,16 @@ mod pdfreactor_oblique_tests {
 #[cfg(test)]
 mod pdfreactor_comment_tests {
     use super::{CompatMode, translate_compat};
+
+    #[test]
+    fn comment_none_retains_the_native_string_reset() {
+        for property in ["content", "title"] {
+            let source = format!("span{{-ro-comment-{property}:none}}");
+            let result = translate_compat(&source, CompatMode::PdfReactor);
+            let native = if property == "content" { "contents" } else { property };
+            assert!(result.rewritten.contains(&format!("-bd-pdf-comment-{native}: none")));
+        }
+    }
 
     #[test]
     fn comment_styles_retain_deferred_values_for_the_native_parser() {
