@@ -546,9 +546,11 @@ mod calculation_source_tests {
             let declarations = parse_inline_style_declarations(&css, base.clone());
             assert!(!declarations.is_empty());
             for declaration in declarations.iter() {
-                let projected = crate::specified::project_inline_style_declaration(declaration, &url_data);
+                let projected =
+                    crate::specified::project_inline_style_declaration(declaration, &url_data);
                 assert_eq!(projected.len(), 1);
-                let source = projected[0].pending_substitution()
+                let source = projected[0]
+                    .pending_substitution()
                     .map_or_else(|| projected[0].value(), |pending| pending.tokens());
                 assert!(source.contains("calc("), "{property}: {source}");
             }
@@ -715,6 +717,7 @@ fn parse_compatibility_declaration(
     context: &ParserContext<'_>,
 ) -> Option<stylo_cssom_model::SpecifiedDeclaration> {
     let trimmed = value.trim();
+    let mut canonical_value = None;
     match property {
         stylo_cssom_model::InlineCompatibilityProperty::FitTolerance
             if trimmed.eq_ignore_ascii_case("auto") =>
@@ -725,9 +728,7 @@ fn parse_compatibility_declaration(
             if !matches!(trimmed.to_ascii_lowercase().as_str(), "normal" | "infinite") =>
         {
             let block = parse_inline_style_block(&format!("masonry-slack:{trimmed}"));
-            if inline_style_get_property_value(&block, "masonry-slack").is_none() {
-                return None;
-            }
+            canonical_value = Some(inline_style_get_property_value(&block, "masonry-slack")?);
         },
         stylo_cssom_model::InlineCompatibilityProperty::GridLanesPack
             if !matches!(trimmed.to_ascii_lowercase().as_str(), "normal" | "dense") =>
@@ -737,7 +738,8 @@ fn parse_compatibility_declaration(
         _ => {},
     }
     let base_url = Arc::from(context.url_data.as_str());
-    let components = parse_specified_component_values(trimmed, &base_url)?;
+    let components =
+        parse_specified_component_values(canonical_value.as_deref().unwrap_or(trimmed), &base_url)?;
     if components.is_empty() {
         return None;
     }
@@ -2356,6 +2358,24 @@ mod tests {
     }
 
     #[test]
+    fn fit_tolerance_serializes_native_lengths() {
+        for (value, expected) in [("0", "0px"), ("-0", "0px"), ("+0", "0px"), ("0%", "0%")] {
+            let declaration = parse_inline_compatibility_declaration(
+                "fit-tolerance",
+                value,
+                stylo_cssom_model::Importance::Normal,
+                &Arc::from("about:blank"),
+            )
+            .unwrap();
+            assert_eq!(
+                crate::specified::serialize_projected_specified_style_value(&declaration.value)
+                    .into_css_text(),
+                expected
+            );
+        }
+    }
+
+    #[test]
     fn inline_compatibility_declarations_remain_typed_and_authored() {
         use stylo_cssom_model::{
             InlineCompatibilityProperty as Compat, SpecifiedPropertyName as Property,
@@ -2488,13 +2508,13 @@ mod tests {
             (
                 "masonry-slack:20px;fit-tolerance:0",
                 "fit-tolerance",
-                "0",
+                "0px",
                 stylo_cssom_model::Importance::Normal,
             ),
             (
                 "fit-tolerance:0!important;masonry-slack:20px",
                 "fit-tolerance",
-                "0",
+                "0px",
                 stylo_cssom_model::Importance::Important,
             ),
             (
