@@ -6298,7 +6298,8 @@ fn translate_property(lower_property: &str, raw_value: &str) -> Translated {
             let v = raw_value.trim().to_ascii_lowercase();
             let mapped = match v.as_str() {
                 "auto" => Some("auto"),
-                "page-left" | "page-right" => Some("margin"),
+                "page-left" => Some("page-left"),
+                "page-right" => Some("page-right"),
                 _ => None,
             };
             match mapped {
@@ -8646,6 +8647,17 @@ mod pdfreactor_oblique_tests {
 
 #[cfg(test)]
 mod pdfreactor_comment_tests {
+
+    #[test]
+    fn comment_positions_keep_the_requested_page_side() {
+        for side in ["left", "right"] {
+            let source = format!("span{{-ro-comment-position:page-{side}}}");
+            let translated = translate_compat(&source, CompatMode::PdfReactor);
+            assert!(translated.rewritten.contains(&format!("-bd-pdf-comment-position: page-{side}")));
+            let parsed = crate::declaration_parser::parse_inline_style_block(&format!("-bd-pdf-comment-position:page-{side}"));
+            assert_eq!(parsed.as_typed().declarations().len(), 1);
+        }
+    }
 
     #[test]
     fn comment_range_and_content_values_use_the_native_parser() {

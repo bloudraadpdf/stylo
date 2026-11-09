@@ -547,6 +547,8 @@ pub enum BdPdfCommentPosition {
     Anchor,
     Body,
     Margin,
+    PageLeft,
+    PageRight,
 }
 
 /// Specified value of `-bd-pdf-link-border`.
