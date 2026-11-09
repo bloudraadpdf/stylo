@@ -4,12 +4,55 @@ use style::{
     parser::Parse,
     properties::PropertyDeclaration,
     stylesheets::supports_rule::{
-        Declaration as SupportsDeclaration, parse_condition_or_declaration,
+        parse_condition_or_declaration, Declaration as SupportsDeclaration,
     },
 };
 
 pub fn parse_value<T: Parse>(source: &str) -> Option<T> {
     parse_fragment_with(source, T::parse)
+}
+
+#[derive(Clone, Copy)]
+pub enum ColorWellColorSpace {
+    LimitedSrgb,
+    DisplayP3,
+}
+
+/// HTML's colour-well value, independent of the element's CSS foreground.
+pub fn color_well_value(
+    source: &str,
+    alpha: bool,
+    space: ColorWellColorSpace,
+) -> style::color::AbsoluteColor {
+    use style::color::{AbsoluteColor, ColorSpace};
+    let mut color = parse_value::<style::values::specified::Color>(source)
+        .and_then(|color| color.to_computed_color(None))
+        .map(|color| color.resolve_to_absolute(&AbsoluteColor::BLACK))
+        .unwrap_or(AbsoluteColor::BLACK);
+    if !alpha {
+        color.alpha = 1.0;
+    }
+    match space {
+        ColorWellColorSpace::LimitedSrgb => {
+            color = color.to_color_space(ColorSpace::Srgb);
+            let channels = color
+                .components
+                .map(|channel| (channel.clamp(0.0, 1.0) * 255.0).round() / 255.0);
+            if alpha {
+                AbsoluteColor::new(
+                    ColorSpace::Srgb,
+                    channels.0,
+                    channels.1,
+                    channels.2,
+                    color.alpha,
+                )
+            } else {
+                AbsoluteColor::new(ColorSpace::Srgb, channels.0, channels.1, channels.2, 1.0)
+                    .into_srgb_legacy()
+            }
+        },
+        ColorWellColorSpace::DisplayP3 => color.to_color_space(ColorSpace::DisplayP3),
+    }
 }
 
 /// Return whether a CSS component value contains a container-relative length.
@@ -190,7 +233,44 @@ pub fn keyword_is(source: &str, expected: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{CssSupportsInput, parse_font_shorthand, supports};
+    #[test]
+    fn color_wells_sanitise_before_their_value_enters_the_cascade() {
+        use super::{color_well_value, ColorWellColorSpace};
+        use style::color::{AbsoluteColor, ColorSpace};
+        for source in ["invalid", "red; --injected: blue", "var(--color)"] {
+            assert_eq!(
+                color_well_value(source, false, ColorWellColorSpace::LimitedSrgb),
+                AbsoluteColor::BLACK
+            );
+        }
+        let opaque = color_well_value(
+            "rgb(100% 0% 0% / 0)",
+            false,
+            ColorWellColorSpace::LimitedSrgb,
+        );
+        assert_eq!(opaque.alpha, 1.0);
+        assert_eq!(opaque.components.0, 1.0);
+        let transparent = color_well_value(
+            "rgb(100% 0% 0% / .25)",
+            true,
+            ColorWellColorSpace::LimitedSrgb,
+        );
+        assert_eq!(transparent.alpha, 0.25);
+        let rounded = color_well_value(
+            "color(srgb .5 .2 .1)",
+            false,
+            ColorWellColorSpace::LimitedSrgb,
+        );
+        assert_eq!(rounded.components.0, 128.0 / 255.0);
+        let p3 = color_well_value(
+            "color(display-p3 .3 .4 .5 / .25)",
+            true,
+            ColorWellColorSpace::DisplayP3,
+        );
+        assert_eq!(p3.color_space, ColorSpace::DisplayP3);
+        assert_eq!(p3.alpha, 0.25);
+    }
+    use super::{parse_font_shorthand, supports, CssSupportsInput};
     use style::properties::PropertyDeclaration;
     use style::values::computed::font::{ScriptSpecificGenericFontFamily, SingleFontFamily};
     use style::values::specified::FontFamily;
