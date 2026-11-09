@@ -1106,8 +1106,8 @@ impl ComputeSquaredDistance for ComputedTransform {
         // previous behavior.
         if squared_dist.is_err() {
             let rect = euclid::Rect::zero();
-            let matrix1: Matrix3D = self.to_transform_3d_matrix(Some(&rect))?.0.into();
-            let matrix2: Matrix3D = other.to_transform_3d_matrix(Some(&rect))?.0.into();
+            let matrix1: Matrix3D = self.to_resolved_transform_3d_matrix(Some(&rect))?.0.into();
+            let matrix2: Matrix3D = other.to_resolved_transform_3d_matrix(Some(&rect))?.0.into();
             return matrix1.compute_squared_distance(&matrix2);
         }
 
@@ -1348,9 +1348,9 @@ impl ComputedTransformOperation {
         right: &[Self],
         procedure: Procedure,
     ) -> Result<Self, MismatchedTransformMatrixError> {
-        let (left, left_3d) = Transform::components_to_transform_3d_matrix(left, None)
+        let (left, left_3d) = Transform::resolved_components_to_transform_3d_matrix(left, None)
             .map_err(|()| MismatchedTransformMatrixError::UnresolvedReferenceBox)?;
-        let (right, right_3d) = Transform::components_to_transform_3d_matrix(right, None)
+        let (right, right_3d) = Transform::resolved_components_to_transform_3d_matrix(right, None)
             .map_err(|()| MismatchedTransformMatrixError::UnresolvedReferenceBox)?;
         let matrix = Matrix3D::from(left)
             .animate(&Matrix3D::from(right), procedure)
@@ -1585,7 +1585,7 @@ impl Animate for ComputedRotate {
                     let t = ComputedTransformOperation::Rotate3D(tx, ty, tz, ta);
                     let v =
                         Transform(vec![f].into()).animate(&Transform(vec![t].into()), procedure)?;
-                    let (m, _) = v.to_transform_3d_matrix(None)?;
+                    let (m, _) = v.to_resolved_transform_3d_matrix(None)?;
                     // Decompose the matrix and retrive the quaternion vector.
                     decompose_3d_matrix(Matrix3D::from(m))?.quaternion
                 } else {

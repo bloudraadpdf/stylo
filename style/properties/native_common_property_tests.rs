@@ -8,6 +8,87 @@ use super::{
 use crate::stylesheets::{CssRuleType, UrlExtraData};
 
 #[test]
+fn deferred_transform_matrices_resolve_reference_boxes_recursively() {
+    use crate::values::computed::transform::{
+        Matrix, PerspectiveFunction, Transform, TransformOperation,
+    };
+    use crate::values::computed::{Length, LengthPercentage, Percentage};
+    use crate::values::generics::transform;
+    let list = |operations: Vec<TransformOperation>| -> Transform {
+        transform::Transform(operations.into())
+    };
+    let reference = |width| {
+        euclid::default::Rect::from_size(euclid::default::Size2D::new(
+            Length::new(width),
+            Length::new(100.0),
+        ))
+    };
+    let mut matrix = Matrix::identity();
+    matrix.e = 10.0;
+    let from = list(vec![TransformOperation::Matrix(matrix)]);
+    let to = list(vec![TransformOperation::TranslateX(
+        LengthPercentage::new_percent(Percentage(0.5)),
+    )]);
+    let interpolate = |from: Transform, to: Transform, progress| {
+        list(vec![TransformOperation::InterpolateMatrix {
+            from_list: from,
+            to_list: to,
+            progress: Percentage(progress),
+        }])
+    };
+    let halfway = interpolate(from.clone(), to.clone(), 0.5);
+    assert!(halfway.to_resolved_transform_3d_matrix(None).is_err());
+    for (width, expected) in [(100.0, 30.0), (200.0, 55.0)] {
+        let (matrix, _) = halfway
+            .to_resolved_transform_3d_matrix(Some(&reference(width)))
+            .unwrap();
+        assert!((matrix.m41 - expected).abs() < 0.001);
+    }
+    let nested = interpolate(halfway, to.clone(), 0.5);
+    let (matrix, _) = nested
+        .to_resolved_transform_3d_matrix(Some(&reference(200.0)))
+        .unwrap();
+    assert!((matrix.m41 - 77.5).abs() < 0.001);
+    let accumulated = list(vec![TransformOperation::AccumulateMatrix {
+        from_list: from,
+        to_list: to.clone(),
+        count: 2,
+    }]);
+    let (matrix, _) = accumulated
+        .to_resolved_transform_3d_matrix(Some(&reference(200.0)))
+        .unwrap();
+    assert!((matrix.m41 - 120.0).abs() < 0.001);
+    let mut singular = Matrix::identity();
+    singular.a = 0.0;
+    for progress in [0.25, 0.5] {
+        let animation = interpolate(
+            list(vec![TransformOperation::Matrix(singular)]),
+            to.clone(),
+            progress,
+        );
+        let (matrix, _) = animation
+            .to_resolved_transform_3d_matrix(Some(&reference(200.0)))
+            .unwrap();
+        assert_eq!(matrix.m11, if progress < 0.5 { 0.0 } else { 1.0 });
+        assert_eq!(matrix.m41, if progress < 0.5 { 0.0 } else { 100.0 });
+    }
+    let perspective = list(vec![
+        TransformOperation::Perspective(PerspectiveFunction::Length(Length::new(200.0))),
+        TransformOperation::TranslateX(LengthPercentage::new_percent(Percentage(0.5))),
+    ]);
+    let (expected, _) = perspective
+        .to_transform_3d_matrix(Some(&reference(200.0)))
+        .unwrap();
+    let (actual, is_3d) = interpolate(to, perspective, 1.0)
+        .to_resolved_transform_3d_matrix(Some(&reference(200.0)))
+        .unwrap();
+    assert!(is_3d);
+    for (actual, expected) in actual.to_array().into_iter().zip(expected.to_array()) {
+        assert!((actual - expected).abs() < 0.001);
+    }
+}
+
+#[test]
 fn native_appearance_disabling_properties_exclude_border_clipping() {
     let disabling = super::LonghandIdSet::border_background_properties();
     for name in [

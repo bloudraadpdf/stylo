@@ -21,6 +21,79 @@ pub type TransformOperation =
 /// A computed CSS `transform`
 pub type Transform = generic::GenericTransform<TransformOperation>;
 
+impl Transform {
+    /// Resolves deferred matrix interpolation and accumulation against a layout reference box.
+    pub fn to_resolved_transform_3d_matrix(
+        &self,
+        reference_box: Option<&euclid::default::Rect<Length>>,
+    ) -> Result<(Transform3D<CSSFloat>, bool), ()> {
+        Self::resolved_components_to_transform_3d_matrix(&self.0, reference_box)
+    }
+
+    pub(crate) fn resolved_components_to_transform_3d_matrix(
+        operations: &[TransformOperation],
+        reference_box: Option<&euclid::default::Rect<Length>>,
+    ) -> Result<(Transform3D<CSSFloat>, bool), ()> {
+        use crate::values::animated::{Animate, Procedure};
+        if !operations.iter().any(|operation| {
+            matches!(
+                operation,
+                TransformOperation::InterpolateMatrix { .. }
+                    | TransformOperation::AccumulateMatrix { .. }
+            )
+        }) {
+            return Self::components_to_transform_3d_matrix(operations, reference_box);
+        }
+        let mut resolved = Vec::with_capacity(operations.len());
+        for operation in operations {
+            let (from, to, procedure) = match operation {
+                TransformOperation::InterpolateMatrix {
+                    from_list,
+                    to_list,
+                    progress,
+                } => (
+                    from_list,
+                    to_list,
+                    Procedure::Interpolate {
+                        progress: f64::from(progress.0),
+                    },
+                ),
+                TransformOperation::AccumulateMatrix {
+                    from_list,
+                    to_list,
+                    count,
+                } => (
+                    from_list,
+                    to_list,
+                    Procedure::Accumulate {
+                        count: u64::try_from(*count).map_err(|_| ())?,
+                    },
+                ),
+                _ => {
+                    resolved.push(operation.clone());
+                    continue;
+                },
+            };
+            let (from, from_3d) = from.to_resolved_transform_3d_matrix(reference_box)?;
+            let (to, to_3d) = to.to_resolved_transform_3d_matrix(reference_box)?;
+            let from = Matrix3D::from(from);
+            let to = Matrix3D::from(to);
+            let matrix = from
+                .animate(&to, procedure)
+                .unwrap_or_else(|()| match procedure {
+                    Procedure::Interpolate { progress } if progress < 0.5 => from,
+                    _ => to,
+                });
+            resolved.push(if from_3d || to_3d {
+                TransformOperation::Matrix3D(matrix)
+            } else {
+                TransformOperation::Matrix(matrix.into_2d()?)
+            });
+        }
+        Self::components_to_transform_3d_matrix(&resolved, reference_box)
+    }
+}
+
 /// The computed value of a CSS `<transform-origin>`
 pub type TransformOrigin =
     generic::GenericTransformOrigin<LengthPercentage, LengthPercentage, Length>;
