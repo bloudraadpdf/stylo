@@ -1052,6 +1052,7 @@ fn length_wrapper_properties_participate_in_zoom_inheritance() {
 }
 
 fn with_zoom_test_prefs(test: impl FnOnce()) {
+    let _grid = crate::test_support::BoolPrefGuard::set("layout.grid.enabled", true);
     let _lock = crate::test_support::pref_lock().lock().unwrap();
     let _zoom = crate::test_support::BoolPrefGuard::set("layout.unimplemented", true);
     let _columns = crate::test_support::BoolPrefGuard::set("layout.columns.enabled", true);
@@ -1117,6 +1118,40 @@ fn inherited_background_sizes_scale_lengths_but_preserve_auto_and_percentages() 
         let parent = cascade_zoom_test_style("zoom:2;background-size:9px 25%,auto,contain,cover", None);
         let child = cascade_zoom_test_style("zoom:3;background-size:inherit", Some(&parent));
         assert_eq!(child.get_background().background_size.to_css_string(), "54px 25%, auto, contain, cover");
+    });
+}
+
+#[test]
+fn inherited_composite_layout_lengths_follow_zoom_without_scaling_other_components() {
+    use style_traits::ToCss;
+    with_zoom_test_prefs(|| {
+        let parent = cascade_zoom_test_style("zoom:2;baseline-shift:3px;block-step-size:7px;text-underline-offset:5px;grid-template-columns:4px 1fr 25%;grid-auto-columns:2px auto;animation-range-start:6px,entry 25%;animation-range-end:9px,normal", None);
+        let child = cascade_zoom_test_style("zoom:3;baseline-shift:inherit;block-step-size:inherit;text-underline-offset:inherit;grid-template-columns:inherit;grid-auto-columns:inherit;animation-range-start:inherit;animation-range-end:inherit", Some(&parent));
+        assert_eq!(child.get_box().baseline_shift.to_css_string(), "18px");
+        assert_eq!(child.get_box().block_step_size.to_css_string(), "42px");
+        assert_eq!(
+            child
+                .get_inherited_text()
+                .text_underline_offset
+                .to_css_string(),
+            "30px"
+        );
+        assert_eq!(
+            child.get_position().grid_template_columns.to_css_string(),
+            "24px 1fr 25%"
+        );
+        assert_eq!(
+            child.get_position().grid_auto_columns.to_css_string(),
+            "12px auto"
+        );
+        assert_eq!(
+            child.get_ui().animation_range_start.to_css_string(),
+            "36px, entry 25%"
+        );
+        assert_eq!(
+            child.get_ui().animation_range_end.to_css_string(),
+            "54px, normal"
+        );
     });
 }
 

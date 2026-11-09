@@ -527,7 +527,11 @@ class Longhand(Property):
             return False
         # TODO: Get this from SpecifiedValueInfo or so instead; see bug 1887627.
         return self.predefined_type.rsplit("::", 1)[-1] in {
+            "AnimationRangeEnd",
+            "AnimationRangeStart",
             "BackgroundSize",
+            "BaselineShift",
+            "BlockStepSize",
             "BorderCornerRadius",
             "BorderSideOffset",
             "BorderSideWidth",
@@ -536,6 +540,8 @@ class Longhand(Property):
             "FlexBasis",
             "FontSize",
             "GapRuleWidthList",
+            "GridTemplateComponent",
+            "ImplicitGridTracks",
             "Inset",
             "Length",
             "LengthPercentage",
@@ -563,6 +569,7 @@ class Longhand(Property):
             "TextDecorationLength",
             "TextDecorationInset",
             "TextIndent",
+            "TextUnderlineOffset",
             "Transform",
             "Translate",
             "ViewTimelineInset",
