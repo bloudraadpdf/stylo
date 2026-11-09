@@ -6186,9 +6186,33 @@ fn translate_property(lower_property: &str, raw_value: &str) -> Translated {
             native_value: raw_value.trim().to_ascii_lowercase(),
         },
 
-        "-ro-comment-style" => Translated::Native {
-            native_property: "-bd-pdf-comment",
-            native_value: raw_value.trim().to_string(),
+        "-ro-comment-style" => {
+            let value = raw_value.trim();
+            let keyword = value.to_ascii_lowercase();
+            let admitted = matches!(
+                keyword.as_str(),
+                "note" | "invisible" | "highlight" | "underline" | "strikeout" | "squiggly"
+            ) || crate::declaration_parser::parse_inline_style_block(&format!(
+                "-bd-pdf-comment:{value}"
+            ))
+            .as_typed()
+            .declarations()
+            .iter()
+            .any(|declaration| {
+                matches!(
+                    declaration,
+                    style::properties::PropertyDeclaration::WithVariables(_)
+                        | style::properties::PropertyDeclaration::CSSWideKeyword(_)
+                )
+            });
+            if admitted {
+                Translated::Native {
+                    native_property: "-bd-pdf-comment",
+                    native_value: value.to_string(),
+                }
+            } else {
+                Translated::ValueDropped
+            }
         },
 
         "-ro-comment-color" => Translated::Native {
@@ -8616,12 +8640,29 @@ mod pdfreactor_comment_tests {
     use super::{CompatMode, translate_compat};
 
     #[test]
+    fn comment_styles_reject_native_only_keywords() {
+        for value in ["none", "auto", "invalid"] {
+            let source = format!("span{{-ro-comment-style:{value}}}");
+            let result = translate_compat(&source, CompatMode::PdfReactor);
+            assert!(!result.rewritten.contains("-bd-pdf-comment:"), "{value}");
+        }
+    }
+
+    #[test]
     fn comment_none_retains_the_native_string_reset() {
         for property in ["content", "title"] {
             let source = format!("span{{-ro-comment-{property}:none}}");
             let result = translate_compat(&source, CompatMode::PdfReactor);
-            let native = if property == "content" { "contents" } else { property };
-            assert!(result.rewritten.contains(&format!("-bd-pdf-comment-{native}: none")));
+            let native = if property == "content" {
+                "contents"
+            } else {
+                property
+            };
+            assert!(
+                result
+                    .rewritten
+                    .contains(&format!("-bd-pdf-comment-{native}: none"))
+            );
         }
     }
 
