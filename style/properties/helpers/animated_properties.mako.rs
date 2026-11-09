@@ -386,6 +386,14 @@ impl AnimationValue {
                             .clone_${prop.ident}();
                         % endif
 
+                        % if prop.name == "color" and engine == "servo":
+                        let computed = if declaration.keyword == CSSWideKeyword::Initial {
+                            longhands::color::get_initial_specified_value().to_computed_value(context)
+                        } else {
+                            computed
+                        };
+                        % endif
+
                         % if prop.animation_type != "discrete":
                         let computed = computed.to_animated_value(&crate::values::animated::Context {
                             style

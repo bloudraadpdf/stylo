@@ -71,6 +71,9 @@ pub mod ${property.ident} {
                     CSSWideKeyword::Initial => {
                         % if not property.style_struct.inherited:
                             declaration.debug_crash("Unexpected initial or unset for non-inherited property");
+                        % elif property.name == "color" and engine == "servo":
+                            let value = get_initial_specified_value().to_computed_value(context);
+                            context.builder.set_color(value);
                         % else:
                             context.builder.reset_${property.ident}();
                         % endif

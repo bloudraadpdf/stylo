@@ -799,6 +799,7 @@ affects = "paint"
 [color]
 type = "ColorPropertyValue"
 initial = "crate::color::AbsoluteColor::BLACK"
+initial_specified_value = "specified::ColorPropertyValue(specified::Color::System(specified::color::SystemColor::Canvastext))"
 struct = "inherited_text"
 ignored_when_colors_disabled = true
 spec = "https://drafts.csswg.org/css-color/#color"
