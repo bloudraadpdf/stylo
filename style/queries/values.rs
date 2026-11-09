@@ -37,7 +37,7 @@ impl Orientation {
 }
 
 /// Values for the prefers-color-scheme media feature.
-#[derive(Clone, Copy, Debug, FromPrimitive, Parse, PartialEq, ToCss)]
+#[derive(Clone, Copy, Debug, Eq, FromPrimitive, Parse, PartialEq, ToCss)]
 #[repr(u8)]
 #[allow(missing_docs)]
 pub enum PrefersColorScheme {

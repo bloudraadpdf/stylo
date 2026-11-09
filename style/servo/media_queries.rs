@@ -84,9 +84,11 @@ pub enum PreferenceContrast {
     Custom,
 }
 
-/// User preferences for the existing non-color-scheme media features.
+/// Effective user preferences for media features and supported color schemes.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct UserPreferences {
+    /// An explicit origin-scoped color preference, independent of page scheme negotiation.
+    pub color_scheme: Option<PrefersColorScheme>,
     /// Reduce non-essential motion.
     pub reduced_motion: bool,
     /// Reduce transparent and translucent effects.
@@ -779,7 +781,7 @@ impl Device {
 
     /// Returns the color scheme of this [`Device`].
     pub fn color_scheme(&self) -> PrefersColorScheme {
-        self.prefers_color_scheme
+        self.user_preferences.color_scheme.unwrap_or(self.prefers_color_scheme)
     }
 
     /// Sets the parsed page support and reports whether media and system colors need updating.
@@ -826,7 +828,7 @@ impl Device {
         let supports_dark = color_scheme.contains(ColorSchemeFlags::DARK);
         match (supports_light, supports_dark) {
             (false, true) => true,
-            (true, true) => self.prefers_color_scheme == PrefersColorScheme::Dark,
+            (true, true) => self.color_scheme() == PrefersColorScheme::Dark,
             _ => false,
         }
     }
@@ -933,7 +935,7 @@ fn eval_device_pixel_ratio(context: &Context) -> f32 {
 
 fn eval_prefers_color_scheme(context: &Context, query_value: Option<PrefersColorScheme>) -> bool {
     match query_value {
-        Some(v) => context.device().page_color_scheme() == v,
+        Some(v) => context.device().user_preferences.color_scheme.unwrap_or_else(|| context.device().page_color_scheme()) == v,
         None => true,
     }
 }
@@ -1318,6 +1320,25 @@ pub static MEDIA_FEATURES: [QueryFeatureDescription; 35] = [
 #[cfg(test)]
 mod page_color_scheme_support_tests {
     use super::*;
+
+    #[test]
+    fn explicit_color_override_controls_queries_and_used_scheme_without_changing_page_support() {
+        let mut device = crate::test_support::test_device();
+        let support = device.page_color_scheme_support;
+        device.set_user_preferences(UserPreferences { color_scheme: Some(PrefersColorScheme::Dark), ..Default::default() });
+        assert_eq!(device.color_scheme(), PrefersColorScheme::Dark);
+        assert_eq!(device.page_color_scheme_support, support);
+        Context::for_media_query_evaluation(&device, QuirksMode::NoQuirks, |context| {
+            assert!(eval_prefers_color_scheme(context, Some(PrefersColorScheme::Dark)));
+            assert!(!eval_prefers_color_scheme(context, Some(PrefersColorScheme::Light)));
+        });
+        assert!(device.is_dark_color_scheme(ColorSchemeFlags::LIGHT | ColorSchemeFlags::DARK));
+        device.set_user_preferences(UserPreferences::default());
+        assert_eq!(device.color_scheme(), PrefersColorScheme::Light);
+        Context::for_media_query_evaluation(&device, QuirksMode::NoQuirks, |context| {
+            assert!(eval_prefers_color_scheme(context, Some(PrefersColorScheme::Light)));
+        });
+    }
 
     #[test]
     fn reduced_preferences_are_independent_and_resettable() {
