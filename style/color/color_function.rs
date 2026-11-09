@@ -277,7 +277,7 @@ impl ColorFunction<AbsoluteColor> {
                     origin.c2(),
                     alpha!(relative.alpha(), Some(origin)),
                 )
-            },
+            }
             ColorFunction::Rgb(origin_color, r, g, b, alpha) => {
                 // Missing components require modern syntax to survive serialization.
                 let use_color_syntax = origin_color.is_some()
@@ -337,7 +337,7 @@ impl ColorFunction<AbsoluteColor> {
                         alpha!(alpha, origin_color.as_ref()).unwrap_or(0.0),
                     )
                 }
-            },
+            }
             ColorFunction::Hsl(origin_color, h, s, l, alpha) => {
                 // Percent reference range for S and L: 0% = 0.0, 100% = 100.0
                 const LIGHTNESS_RANGE: ColorFloat = 100.0;
@@ -363,19 +363,14 @@ impl ColorFunction<AbsoluteColor> {
                     h.resolve(origin_color.as_ref())?
                         .map(|angle| normalize_hue(angle.degrees())),
                     s.resolve(origin_color.as_ref())?.map(|s| {
-                        if use_rgb_sytax {
-                            s.to_number(SATURATION_RANGE).clamp(0.0, SATURATION_RANGE)
+                        if origin_color.is_none() {
+                            s.to_number(SATURATION_RANGE).max(0.0)
                         } else {
                             s.to_number(SATURATION_RANGE)
                         }
                     }),
-                    l.resolve(origin_color.as_ref())?.map(|l| {
-                        if use_rgb_sytax {
-                            l.to_number(LIGHTNESS_RANGE).clamp(0.0, LIGHTNESS_RANGE)
-                        } else {
-                            l.to_number(LIGHTNESS_RANGE)
-                        }
-                    }),
+                    l.resolve(origin_color.as_ref())?
+                        .map(|l| l.to_number(LIGHTNESS_RANGE)),
                     alpha!(alpha, origin_color.as_ref()),
                 );
 
@@ -384,7 +379,7 @@ impl ColorFunction<AbsoluteColor> {
                 }
 
                 result
-            },
+            }
             ColorFunction::Hwb(origin_color, h, w, b, alpha) => {
                 // If the origin color:
                 // - was *NOT* specified, then we stick with the old way of serializing the
@@ -421,7 +416,7 @@ impl ColorFunction<AbsoluteColor> {
                 }
 
                 result
-            },
+            }
             ColorFunction::Lab(origin_color, l, a, b, alpha) => {
                 // for L: 0% = 0.0, 100% = 100.0
                 // for a and b: -100% = -125, 100% = 125
@@ -443,7 +438,7 @@ impl ColorFunction<AbsoluteColor> {
                     alpha!(alpha, origin_color.as_ref()),
                     origin_color.is_none(),
                 )
-            },
+            }
             ColorFunction::Lch(origin_color, l, c, h, alpha) => {
                 // for L: 0% = 0.0, 100% = 100.0
                 // for C: 0% = 0, 100% = 150
@@ -465,7 +460,7 @@ impl ColorFunction<AbsoluteColor> {
                     alpha!(alpha, origin_color.as_ref()),
                     origin_color.is_none(),
                 )
-            },
+            }
             ColorFunction::Oklab(origin_color, l, a, b, alpha) => {
                 // for L: 0% = 0.0, 100% = 1.0
                 // for a and b: -100% = -0.4, 100% = 0.4
@@ -487,7 +482,7 @@ impl ColorFunction<AbsoluteColor> {
                     alpha!(alpha, origin_color.as_ref()),
                     origin_color.is_none(),
                 )
-            },
+            }
             ColorFunction::Oklch(origin_color, l, c, h, alpha) => {
                 // for L: 0% = 0.0, 100% = 1.0
                 // for C: 0% = 0.0 100% = 0.4
@@ -509,7 +504,7 @@ impl ColorFunction<AbsoluteColor> {
                     alpha!(alpha, origin_color.as_ref()),
                     origin_color.is_none(),
                 )
-            },
+            }
             ColorFunction::Color(origin_color, r, g, b, alpha, color_space) => {
                 let origin_color = origin_color.as_ref().map(|o| {
                     let mut result = o.to_color_space_for_relative(*color_space);
@@ -529,7 +524,7 @@ impl ColorFunction<AbsoluteColor> {
                     b.resolve(origin_color.as_ref())?.map(|c| c.to_number(1.0)),
                     alpha!(alpha, origin_color.as_ref()),
                 )
-            },
+            }
             ColorFunction::BdSpot(_name, _tint, _is_separation) => {
                 // F2 named-spot colours cannot resolve to an `AbsoluteColor`
                 // without the document `@-bd-colour` registry, which is not
@@ -541,7 +536,7 @@ impl ColorFunction<AbsoluteColor> {
                 // it surfaces unresolved cascade leakage as transparent
                 // pixels rather than a wrong colour.
                 AbsoluteColor::TRANSPARENT_BLACK
-            },
+            }
             ColorFunction::CustomProfile(..) => AbsoluteColor::TRANSPARENT_BLACK,
             ColorFunction::BdDeviceN(_pairs, fallback) => {
                 // F2 DeviceN colours: when no DeviceN-aware backend is
@@ -555,7 +550,7 @@ impl ColorFunction<AbsoluteColor> {
                     Optional::Some(fallback) => **fallback,
                     Optional::None => AbsoluteColor::TRANSPARENT_BLACK,
                 }
-            },
+            }
             ColorFunction::DeviceCmyk(c, m, y, k, alpha, fallback) => {
                 if let Some(fallback) = fallback.as_ref() {
                     let mut fallback = **fallback;
@@ -586,7 +581,7 @@ impl ColorFunction<AbsoluteColor> {
                     result.flags = ColorFlags::IS_LEGACY_SRGB;
                     result
                 }
-            },
+            }
         })
     }
 }
@@ -621,21 +616,21 @@ impl ColorFunction<SpecifiedColor> {
                     || green.is_none()
                     || blue.is_none()
                     || alpha.is_none()
-            },
+            }
             Self::Hsl(origin, hue, saturation, lightness, alpha) => {
                 origin.is_some()
                     || hue.is_none()
                     || saturation.is_none()
                     || lightness.is_none()
                     || alpha.is_none()
-            },
+            }
             Self::Hwb(origin, hue, whiteness, blackness, alpha) => {
                 origin.is_some()
                     || hue.is_none()
                     || whiteness.is_none()
                     || blackness.is_none()
                     || alpha.is_none()
-            },
+            }
             Self::Lab(..)
             | Self::Lch(..)
             | Self::Oklab(..)
@@ -669,25 +664,25 @@ impl ColorFunction<SpecifiedColor> {
             }),
             Self::Rgb(origin, c0, c1, c2, alpha) => {
                 compute!(Rgb, origin, c0, c1, c2, alpha)
-            },
+            }
             Self::Hsl(origin, c0, c1, c2, alpha) => {
                 compute!(Hsl, origin, c0, c1, c2, alpha)
-            },
+            }
             Self::Hwb(origin, c0, c1, c2, alpha) => {
                 compute!(Hwb, origin, c0, c1, c2, alpha)
-            },
+            }
             Self::Lab(origin, c0, c1, c2, alpha) => {
                 compute!(Lab, origin, c0, c1, c2, alpha)
-            },
+            }
             Self::Lch(origin, c0, c1, c2, alpha) => {
                 compute!(Lch, origin, c0, c1, c2, alpha)
-            },
+            }
             Self::Oklab(origin, c0, c1, c2, alpha) => {
                 compute!(Oklab, origin, c0, c1, c2, alpha)
-            },
+            }
             Self::Oklch(origin, c0, c1, c2, alpha) => {
                 compute!(Oklch, origin, c0, c1, c2, alpha)
-            },
+            }
             Self::Color(origin, c0, c1, c2, alpha, color_space) => Self::Color(
                 origin.clone(),
                 c0.to_computed_value(context),
@@ -776,7 +771,7 @@ impl ColorFunction<SpecifiedColor> {
                         && !has_nan_calc(c0)
                         && !has_nan_calc(c1)
                         && !has_nan_calc(alpha))
-            },
+            }
             Self::Alpha(..)
             | Self::Rgb(..)
             | Self::Hsl(..)
@@ -806,7 +801,7 @@ impl ColorFunction<SpecifiedColor> {
                     fallback.into(),
                 )
                 .resolve_to_absolute()
-            },
+            }
             Self::BdSpot(name, tint, is_separation) => {
                 // moegoe F2 — the spot reference cannot resolve to an
                 // `AbsoluteColor` at this layer (the `@-bd-colour`
@@ -816,12 +811,12 @@ impl ColorFunction<SpecifiedColor> {
                 let absolute: ColorFunction<AbsoluteColor> =
                     ColorFunction::BdSpot(name.clone(), tint.clone(), *is_separation);
                 absolute.resolve_to_absolute()
-            },
+            }
             Self::CustomProfile(name, components, alpha) => {
                 let absolute: ColorFunction<AbsoluteColor> =
                     ColorFunction::CustomProfile(name.clone(), components.clone(), alpha.clone());
                 absolute.resolve_to_absolute()
-            },
+            }
             Self::BdDeviceN(pairs, fallback) => {
                 // moegoe F2 — resolve the fallback colour eagerly so
                 // the absolute-typed variant carries the projected sRGB
@@ -836,14 +831,14 @@ impl ColorFunction<SpecifiedColor> {
                 let absolute: ColorFunction<AbsoluteColor> =
                     ColorFunction::BdDeviceN(pairs.clone(), fallback.into());
                 absolute.resolve_to_absolute()
-            },
+            }
             _ => {
                 // Map the color function to one with an absolute origin color.
                 let resolvable = self
                     .map_origin_color(|o| o.resolve_to_absolute())
                     .ok_or(())?;
                 resolvable.resolve_to_absolute()
-            },
+            }
         }
     }
 }
@@ -945,7 +940,7 @@ impl<Color> ColorFunction<Color> {
                     }
                     .into(),
                 ))
-            },
+            }
             ColorFunction::BdSpot(name, tint, is_separation) => Some(ColorFunction::BdSpot(
                 name.clone(),
                 tint.clone(),
@@ -980,7 +975,7 @@ impl ColorFunction<ComputedColor> {
                     "the color could not be resolved even with a currentcolor specified?"
                 );
                 AbsoluteColor::TRANSPARENT_BLACK
-            },
+            }
         }
     }
 }
@@ -1140,35 +1135,35 @@ impl<C: ColorFunctionCssContext> style_traits::ToCss for ColorFunction<C> {
             Self::Rgb(origin_color, _, _, _, alpha) => {
                 dest.write_str("rgb(")?;
                 (origin_color, alpha)
-            },
+            }
             Self::Hsl(origin_color, _, _, _, alpha) => {
                 dest.write_str("hsl(")?;
                 (origin_color, alpha)
-            },
+            }
             Self::Hwb(origin_color, _, _, _, alpha) => {
                 dest.write_str("hwb(")?;
                 (origin_color, alpha)
-            },
+            }
             Self::Lab(origin_color, _, _, _, alpha) => {
                 dest.write_str("lab(")?;
                 (origin_color, alpha)
-            },
+            }
             Self::Lch(origin_color, _, _, _, alpha) => {
                 dest.write_str("lch(")?;
                 (origin_color, alpha)
-            },
+            }
             Self::Oklab(origin_color, _, _, _, alpha) => {
                 dest.write_str("oklab(")?;
                 (origin_color, alpha)
-            },
+            }
             Self::Oklch(origin_color, _, _, _, alpha) => {
                 dest.write_str("oklch(")?;
                 (origin_color, alpha)
-            },
+            }
             Self::Color(origin_color, _, _, _, alpha, _) => {
                 dest.write_str("color(")?;
                 (origin_color, alpha)
-            },
+            }
             Self::DeviceCmyk(..) => unreachable!("handled above"),
             Self::CustomProfile(..) => unreachable!("handled above"),
             Self::BdSpot(..) => unreachable!("handled above"),
@@ -1272,7 +1267,7 @@ impl<C: ColorFunctionCssContext> style_traits::ToCss for ColorFunction<C> {
                     serialize_components!(c0, c1, c2);
                     serialize_alpha!(alpha);
                 }
-            },
+            }
             Self::Hsl(origin, c0, c1, c2, alpha) => {
                 if C::SPECIFIED && origin.is_none() {
                     serialize_hsl_hwb!(c0, c1, c2, alpha, |value: &NumberOrPercentageComponent| {
@@ -1282,7 +1277,7 @@ impl<C: ColorFunctionCssContext> style_traits::ToCss for ColorFunction<C> {
                     serialize_components!(c0, c1, c2);
                     serialize_alpha!(alpha);
                 }
-            },
+            }
             Self::Hwb(origin, c0, c1, c2, alpha) => {
                 if C::SPECIFIED && origin.is_none() {
                     serialize_hsl_hwb!(c0, c1, c2, alpha, |value: &NumberOrPercentageComponent| {
@@ -1292,7 +1287,7 @@ impl<C: ColorFunctionCssContext> style_traits::ToCss for ColorFunction<C> {
                     serialize_components!(c0, c1, c2);
                     serialize_alpha!(alpha);
                 }
-            },
+            }
             Self::Lab(origin, c0, c1, c2, alpha) => {
                 if C::SPECIFIED && origin.is_none() {
                     serialize_canonical_components!(
@@ -1310,7 +1305,7 @@ impl<C: ColorFunctionCssContext> style_traits::ToCss for ColorFunction<C> {
                     serialize_components!(c0, c1, c2);
                     serialize_alpha!(alpha);
                 }
-            },
+            }
             Self::Lch(origin, c0, c1, c2, alpha) => {
                 if C::SPECIFIED && origin.is_none() {
                     serialize_canonical_components!(
@@ -1328,7 +1323,7 @@ impl<C: ColorFunctionCssContext> style_traits::ToCss for ColorFunction<C> {
                     serialize_components!(c0, c1, c2);
                     serialize_alpha!(alpha);
                 }
-            },
+            }
             Self::Oklab(origin, c0, c1, c2, alpha) => {
                 if C::SPECIFIED && origin.is_none() {
                     serialize_canonical_components!(
@@ -1344,7 +1339,7 @@ impl<C: ColorFunctionCssContext> style_traits::ToCss for ColorFunction<C> {
                     serialize_components!(c0, c1, c2);
                     serialize_alpha!(alpha);
                 }
-            },
+            }
             Self::Oklch(origin, c0, c1, c2, alpha) => {
                 if C::SPECIFIED && origin.is_none() {
                     serialize_canonical_components!(
@@ -1360,7 +1355,7 @@ impl<C: ColorFunctionCssContext> style_traits::ToCss for ColorFunction<C> {
                     serialize_components!(c0, c1, c2);
                     serialize_alpha!(alpha);
                 }
-            },
+            }
             Self::Color(origin, c0, c1, c2, alpha, color_space) => {
                 color_space.to_css(dest)?;
                 dest.write_str(" ")?;
@@ -1375,7 +1370,7 @@ impl<C: ColorFunctionCssContext> style_traits::ToCss for ColorFunction<C> {
                     serialize_components!(c0, c1, c2);
                     serialize_alpha!(alpha);
                 }
-            },
+            }
             Self::DeviceCmyk(..) => unreachable!("handled above"),
             Self::CustomProfile(..) => unreachable!("handled above"),
             Self::BdSpot(..) => unreachable!("handled above"),
@@ -1431,6 +1426,31 @@ mod tests {
         assert_eq!(color.c0(), Some(60.0));
         assert_eq!(color.c1(), None);
         assert_eq!(color.c2(), Some(50.0));
+    }
+
+    #[test]
+    fn absolute_hsl_preserves_extended_components_until_rgb_conversion() {
+        for (hue, saturation, lightness, expected) in [
+            (60.0, 5701.0, 100.96, [0.462304, 0.462304, 1.556896]),
+            (240.0, 7176.0, -0.85, [0.60146, 0.60146, -0.61846]),
+        ] {
+            let function = ColorFunction::<AbsoluteColor>::Hsl(
+                Optional::None,
+                ColorComponent::Value(NumberOrAngleComponent::Angle(hue)),
+                number(saturation),
+                number(lightness),
+                ColorComponent::AlphaOmitted,
+            );
+            let color = function
+                .resolve_to_absolute()
+                .expect("absolute hsl resolves");
+            assert_eq!(color.c1(), Some(ColorFloat::from(saturation)));
+            assert_eq!(color.c2(), Some(ColorFloat::from(lightness)));
+            let rgb = color.to_color_space(ColorSpace::Srgb);
+            for (actual, expected) in [rgb.c0(), rgb.c1(), rgb.c2()].into_iter().zip(expected) {
+                assert!((actual.expect("RGB channel") - expected).abs() < 0.00001);
+            }
+        }
     }
 
     #[test]
