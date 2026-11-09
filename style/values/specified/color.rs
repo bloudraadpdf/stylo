@@ -475,6 +475,22 @@ impl SystemColor {
     #[cfg(feature = "servo")]
     #[inline]
     fn compute(&self, cx: &Context) -> ComputedColor {
+        if matches!(self, Self::Accentcolor | Self::Accentcolortext)
+            && !cx.device().forced_colors().is_active()
+        {
+            cx.rule_cache_conditions.borrow_mut().set_uncacheable();
+            let accent = match &cx.builder.get_inherited_ui().accent_color {
+                crate::values::generics::color::ColorOrAuto::Auto => Self::default_accent_color(),
+                crate::values::generics::color::ColorOrAuto::Color(color) => {
+                    color.resolve_to_absolute(&cx.builder.get_inherited_text().color)
+                },
+            };
+            return if *self == Self::Accentcolor {
+                ComputedColor::Absolute(accent)
+            } else {
+                ComputedColor::from_contrast_color(ComputedColor::Absolute(accent))
+            };
+        }
         if cx.for_non_inherited_property {
             cx.rule_cache_conditions
                 .borrow_mut()
@@ -1515,7 +1531,9 @@ impl Parse for CaretColor {
         let text_color = if matches!(color, ColorOrAuto::Auto) {
             None
         } else {
-            input.try_parse(|input| ColorOrAuto::parse(context, input)).ok()
+            input
+                .try_parse(|input| ColorOrAuto::parse(context, input))
+                .ok()
         };
         Ok(GenericCaretColor(color, text_color))
     }

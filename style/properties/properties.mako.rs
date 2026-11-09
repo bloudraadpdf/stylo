@@ -734,7 +734,7 @@ impl LonghandIdSet {
     /// links. When cascading visited styles, we can save time by only
     /// processing these properties.
     pub(super) fn visited_dependent() -> &'static Self {
-        ${static_longhand_id_set("VISITED_DEPENDENT", lambda p: p.is_visited_dependent())}
+        ${static_longhand_id_set("VISITED_DEPENDENT", lambda p: p.is_visited_dependent() and not p.is_prioritary())}
         debug_assert!(Self::late_group().contains_all(&VISITED_DEPENDENT));
         &VISITED_DEPENDENT
     }

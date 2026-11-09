@@ -53,6 +53,8 @@ PRIORITARY_PROPERTIES = set(
         "font-family",
         # color-scheme affects how system colors and light-dark() resolve.
         "color-scheme",
+        "accent-color",
+        "color",
         # forced-color-adjust affects whether colors are adjusted.
         "forced-color-adjust",
         # Zoom affects all absolute lengths.

@@ -1162,6 +1162,50 @@ fn cascade_zoom_test_style(css: &str, parent: Option<&super::ComputedValues>) ->
 }
 
 #[test]
+fn accent_system_colours_use_the_authored_accent_and_break_direct_cycles() {
+    use crate::color::AbsoluteColor;
+    let parent = cascade_zoom_test_style("color:rgb(70,80,90);accent-color:rgb(20,40,60)", None);
+    for (css, expected) in [
+        (
+            "accent-color:rgb(11,22,33);background-color:AccentColor",
+            AbsoluteColor::srgb_legacy(11, 22, 33, 1.0),
+        ),
+        (
+            "accent-color:AccentColor;background-color:AccentColor",
+            AbsoluteColor::srgb_legacy(20, 40, 60, 1.0),
+        ),
+        (
+            "accent-color:currentcolor;color:rgb(9,8,7);background-color:AccentColor",
+            AbsoluteColor::srgb_legacy(9, 8, 7, 1.0),
+        ),
+        (
+            "accent-color:white;background-color:AccentColorText",
+            AbsoluteColor::BLACK,
+        ),
+        (
+            "accent-color:black;background-color:AccentColorText",
+            AbsoluteColor::WHITE,
+        ),
+    ] {
+        let style = cascade_zoom_test_style(css, Some(&parent));
+        assert_eq!(
+            style
+                .get_background()
+                .background_color
+                .resolve_to_absolute(&style.get_inherited_text().color),
+            expected,
+            "{css}"
+        );
+    }
+    let cycle =
+        cascade_zoom_test_style("accent-color:currentcolor;color:AccentColor", Some(&parent));
+    assert_eq!(
+        cycle.get_inherited_text().color,
+        AbsoluteColor::srgb_legacy(70, 80, 90, 1.0)
+    );
+}
+
+#[test]
 fn keyword_line_widths_scale_once_before_border_snapping() {
     with_zoom_test_prefs(|| {
     use style_traits::ToCss;

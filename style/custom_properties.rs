@@ -544,8 +544,12 @@ bitflags! {
         const LH_UNITS = 1 << 2;
         /// At least one custom property depends on root element's line height units.
         const ROOT_LH_UNITS = 1 << 3;
+        /// The value contains currentcolor.
+        const COLOR = 1 << 4;
+        /// The value contains an accent system colour.
+        const ACCENT_COLOR = 1 << 5;
         /// All dependencies not depending on the root element.
-        const NON_ROOT_DEPENDENCIES = Self::FONT_UNITS.0 | Self::LH_UNITS.0;
+        const NON_ROOT_DEPENDENCIES = Self::FONT_UNITS.0 | Self::LH_UNITS.0 | Self::COLOR.0 | Self::ACCENT_COLOR.0;
         /// All dependencies depending on the root element.
         const ROOT_DEPENDENCIES = Self::ROOT_FONT_UNITS.0 | Self::ROOT_LH_UNITS.0;
     }
@@ -571,6 +575,8 @@ impl NonCustomReferences {
                 Self::ROOT_FONT_UNITS => SingleNonCustomReference::RootFontUnits,
                 Self::LH_UNITS => SingleNonCustomReference::LhUnits,
                 Self::ROOT_LH_UNITS => SingleNonCustomReference::RootLhUnits,
+                Self::COLOR => SingleNonCustomReference::Color,
+                Self::ACCENT_COLOR => SingleNonCustomReference::AccentColor,
                 _ => unreachable!("Unexpected single bit value"),
             };
             f(single);
@@ -614,9 +620,11 @@ enum SingleNonCustomReference {
     RootFontUnits,
     LhUnits,
     RootLhUnits,
+    Color,
+    AccentColor,
 }
 
-struct NonCustomReferenceMap<T>([Option<T>; 4]);
+struct NonCustomReferenceMap<T>([Option<T>; 6]);
 
 impl<T> Default for NonCustomReferenceMap<T> {
     fn default() -> Self {
@@ -1633,7 +1641,16 @@ fn parse_declaration_value_block<'i, 't>(
             | Token::Dimension {
                 unit: ref value, ..
             } => {
-                let unit = NonCustomReferences::from_unit(value);
+                let mut unit = NonCustomReferences::from_unit(value);
+                if matches!(token, Token::Ident(_)) {
+                    if value.eq_ignore_ascii_case("currentcolor") {
+                        unit.insert(NonCustomReferences::COLOR);
+                    } else if value.eq_ignore_ascii_case("accentcolor")
+                        || value.eq_ignore_ascii_case("accentcolortext")
+                    {
+                        unit.insert(NonCustomReferences::ACCENT_COLOR);
+                    }
+                }
                 references.non_custom_references.insert(unit);
                 if !unit.is_empty() {
                     references.unit_references.push((token_start.byte_index() - input_start.byte_index(), unit));
@@ -1952,11 +1969,15 @@ fn non_custom_dependencies(
     may_have_color_scheme: bool,
     is_root_element: bool,
 ) -> Option<NonCustomReferences> {
+    let mut value_dependencies = NonCustomReferences::empty();
+    if dependent_types.intersects(DependentDataTypes::COLOR) {
+        value_dependencies |= references & (NonCustomReferences::COLOR | NonCustomReferences::ACCENT_COLOR);
+    }
     if may_reference_length {
-        let value_dependencies = references.for_element(is_root_element);
-        if !value_dependencies.is_empty() {
-            return Some(value_dependencies);
-        }
+        value_dependencies |= references.for_element(is_root_element);
+    }
+    if !value_dependencies.is_empty() {
+        return Some(value_dependencies);
     }
     if dependent_types.intersects(DependentDataTypes::COLOR) && may_have_color_scheme {
         // NOTE(emilio): We might want to add a NonCustomReferences::COLOR_SCHEME or something but
@@ -2193,7 +2214,13 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
         if id == LonghandId::ColorScheme {
             return true;
         }
-        if matches!(id, LonghandId::LineHeight | LonghandId::FontSize) {
+        if matches!(
+            id,
+            LonghandId::LineHeight
+                | LonghandId::FontSize
+                | LonghandId::Color
+                | LonghandId::AccentColor
+        ) {
             return matches!(decl, PropertyDeclaration::WithVariables(..));
         }
         false
@@ -2243,6 +2270,8 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
                     NonCustomReferences::LH_UNITS | NonCustomReferences::FONT_UNITS
                 }
             },
+            LonghandId::Color => NonCustomReferences::COLOR,
+            LonghandId::AccentColor => NonCustomReferences::ACCENT_COLOR,
             _ => return,
         };
 
@@ -2264,7 +2293,13 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
                     .get_custom_property_registration(name)
                     .syntax
                     .dependent_types()
-                    .intersects(DependentDataTypes::LENGTH)
+                    .intersects(
+                        if matches!(id, LonghandId::Color | LonghandId::AccentColor) {
+                            DependentDataTypes::COLOR
+                        } else {
+                            DependentDataTypes::LENGTH
+                        },
+                    )
             })
             .cloned()
             .collect();
@@ -2942,6 +2977,22 @@ fn substitute_all(
                     context
                         .invalid_non_custom_properties
                         .insert(LonghandId::LineHeight);
+                }
+                if context
+                    .non_custom_references
+                    .contains(NonCustomReferences::COLOR)
+                {
+                    context
+                        .invalid_non_custom_properties
+                        .insert(LonghandId::Color);
+                }
+                if context
+                    .non_custom_references
+                    .contains(NonCustomReferences::ACCENT_COLOR)
+                {
+                    context
+                        .invalid_non_custom_properties
+                        .insert(LonghandId::AccentColor);
                 }
             }
             // This variable is in loop. Resolve to invalid.
@@ -4150,6 +4201,57 @@ mod tests {
         parser
             .parse_entirely(|input| VariableValue::parse(input, &url_data, namespaces))
             .unwrap()
+    }
+
+    #[test]
+    fn registered_colour_dependencies_track_accent_and_current_colour_tokens() {
+        for (css, expected) in [
+            ("AccentColor", NonCustomReferences::ACCENT_COLOR),
+            (
+                "color-mix(in srgb, AccentColorText, currentcolor)",
+                NonCustomReferences::ACCENT_COLOR | NonCustomReferences::COLOR,
+            ),
+            ("red", NonCustomReferences::empty()),
+            ("\"AccentColor\"", NonCustomReferences::empty()),
+        ] {
+            let value = parse_value(css, &Namespaces::default());
+            let references = value.references.non_custom_references;
+            assert_eq!(references, expected, "{css}");
+            assert_eq!(
+                non_custom_dependencies(DependentDataTypes::COLOR, false, references, false, false),
+                (!expected.is_empty()).then_some(expected)
+            );
+        }
+        assert_eq!(
+            non_custom_dependencies(DependentDataTypes::COLOR, false, NonCustomReferences::empty(), true, false),
+            Some(NonCustomReferences::empty())
+        );
+    }
+
+    #[test]
+    fn typed_function_dependencies_merge_font_and_colour_references() {
+        use crate::shared_lock::StylesheetGuards;
+        use crate::stylesheets::DocumentStyleSheet;
+        use crate::test_support::{parse_stylesheet, test_device};
+        let value = parse_value("--mixed()", &Namespaces::default());
+        let _guard = pref_lock().lock().unwrap();
+        let sheet = Arc::new(parse_stylesheet(
+            "@function --mixed(--length <length>:1em, --color <color>:AccentColor) returns <color> \
+             {result:color-mix(in srgb,var(--color),currentColor)}",
+        ));
+        let mut stylist = Stylist::new(test_device(), crate::context::QuirksMode::NoQuirks);
+        let guard = sheet.shared_lock.read();
+        stylist.append_stylesheet(DocumentStyleSheet(sheet.clone(), None), &guard);
+        stylist.flush(&StylesheetGuards::same(&guard));
+        let scope = functions::document_function_scope(&stylist, CascadeLevel::same_tree_author_normal());
+        let dependencies = functions::FunctionDependencies::new(&value, &scope);
+        let expected = NonCustomReferences::FONT_UNITS | NonCustomReferences::COLOR | NonCustomReferences::ACCENT_COLOR;
+        assert_eq!(dependencies.non_custom_references, expected);
+        for color_scheme in [false, true] {
+            assert_eq!(function_non_custom_references(
+                &dependencies, PropertyRegistrationData::unregistered(), &value, color_scheme, false, true,
+            ), Some(expected));
+        }
     }
 
     fn parsed_attr(value: &VariableValue) -> (AttrName, AttributeType) {

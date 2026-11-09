@@ -520,7 +520,19 @@ where
             // try to avoid gathering the declarations. That'd be:
             //      unvisited_context.builder.rules.as_ref() == Some(rules)
             iter_declarations(iter, &mut declarations, None, &mut attribute_tracker);
-
+            context.builder.mutate_inherited_ui().set_accent_color(
+                unvisited_context
+                    .builder
+                    .get_inherited_ui()
+                    .clone_accent_color(),
+            );
+            cascade.apply_one_prioritary_property(
+                &mut context,
+                &declarations,
+                &mut shorthand_cache,
+                PrioritaryPropertyId::Color,
+                &mut attribute_tracker,
+            );
             LonghandIdSet::visited_dependent()
         },
         CascadeMode::Unvisited { visited_rules } => {
@@ -1380,6 +1392,8 @@ impl<'b> Cascade<'b> {
         if apply!(ColorScheme) {
             context.builder.color_scheme = context.builder.get_inherited_ui().color_scheme_bits();
         }
+        apply!(AccentColor);
+        apply!(Color);
         apply!(LineHeight);
     }
 
