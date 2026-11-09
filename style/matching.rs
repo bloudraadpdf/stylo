@@ -839,9 +839,7 @@ trait PrivateMatchMethods: TElement {
             .transitions
             .retain(|transition| transition.state != AnimationState::Finished);
 
-        animation_set
-            .animations
-            .retain(|animation| animation.state != AnimationState::Finished);
+        animation_set.remove_finished_document_animations();
 
         // If the ElementAnimationSet is empty, and don't store it in order to
         // save memory and to avoid extra processing later.

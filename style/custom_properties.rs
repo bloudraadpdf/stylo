@@ -861,6 +861,16 @@ impl VariableValue {
                 },
                 (
                     SubstitutionFunction::DynamicVar { name: target, .. },
+                    SubstitutionFunction::Var(source),
+                ) => *target = Some(source.clone()),
+                (
+                    SubstitutionFunction::Var(target),
+                    SubstitutionFunction::DynamicVar {
+                        name: Some(source), ..
+                    },
+                ) => *target = source.clone(),
+                (
+                    SubstitutionFunction::DynamicVar { name: target, .. },
                     SubstitutionFunction::DynamicVar { name: source, .. },
                 ) => *target = source.clone(),
                 (
@@ -1014,14 +1024,26 @@ impl VariableValue {
             &mut missing_closing_characters,
         )?;
         let mut css = input.slice_from(start_position).to_owned();
+        let consumed_eof_escape =
+            css.ends_with("\\") && missing_closing_characters.starts_with('�');
         if !missing_closing_characters.is_empty() {
-            // Unescaped backslash at EOF in a quoted string is ignored.
+            // EOF consumes an unescaped backslash: strings ignore it, while
+            // identifiers, dimensions and URLs replace it with U+FFFD.
             if css.ends_with("\\")
-                && matches!(missing_closing_characters.as_bytes()[0], b'"' | b'\'')
+                && (consumed_eof_escape
+                    || matches!(missing_closing_characters.as_bytes()[0], b'"' | b'\''))
             {
                 css.pop();
             }
             css.push_str(&missing_closing_characters);
+        }
+        if consumed_eof_escape {
+            // Removing the consumed source byte also changes any enclosing
+            // substitution ranges. Parse the repaired value once so all ranges
+            // refer to its actual serialization, including generated closers.
+            let mut repaired = ParserInput::new(&css);
+            return Self::parse(&mut Parser::new(&mut repaired), url_data, namespaces)
+                .map_err(|_| input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
         }
 
         css.truncate(trim_token_whitespace(&css).len());
@@ -1620,8 +1642,8 @@ fn parse_declaration_value_block<'i, 't>(
                 if value.ends_with("�") && input.slice_from(token_start).ends_with("\\") {
                     // Unescaped backslash at EOF in these contexts is interpreted as U+FFFD
                     // Check the value in case the final backslash was itself escaped.
-                    // Serialize as escaped U+FFFD, which is also interpreted as U+FFFD.
-                    // (Unescaped U+FFFD would also work, but removing the backslash is annoying.)
+                    // VariableValue::parse removes the consumed source backslash
+                    // before appending the replacement and any closing delimiters.
                     missing_closing_characters.push_str("�")
                 }
                 if is_unquoted_url && !input.slice_from(token_start).ends_with(")") {
@@ -4095,6 +4117,27 @@ mod tests {
     use cssparser::{Parser, ParserInput};
     use url::Url;
 
+    #[test]
+    fn private_function_arguments_retain_names_when_reparsed_as_dynamic_var() {
+        let _guard = pref_lock().lock().unwrap();
+        let url_data = UrlExtraData::from(Url::parse("https://example.invalid/").unwrap());
+        let private = Atom::from("\0mixin-parameter");
+        let argument = Arc::new(VariableValue::private_variable_reference(
+            private.clone(),
+            &url_data,
+        ));
+        let call = VariableValue::private_function_call(
+            Atom::from("\0mixin-local"),
+            &[argument],
+            &url_data,
+        )
+        .unwrap();
+        assert_eq!(
+            call.references.refs[1].function.variable_name(),
+            Some(&private)
+        );
+    }
+
     fn parse_value(css: &str, namespaces: &Namespaces) -> VariableValue {
         let _guard = pref_lock().lock().unwrap();
         let _attr_pref = BoolPrefGuard::set("layout.css.attr.enabled", true);
@@ -4129,6 +4172,37 @@ mod tests {
             },
             _ => panic!("expected an attr() reference"),
         }
+    }
+
+    #[test]
+    fn consumed_eof_escapes_serialize_as_literal_replacement_characters() {
+        for (authored, expected) in [
+            (r"foo\", "foo�"),
+            (r"1foo\", "1foo�"),
+            (r"url(foo\", "url(foo�)"),
+            (r#""foo\"#, "\"foo\""),
+            ("foo�", "foo�"),
+            (r"foo\fffd ", r"foo\fffd "),
+            (r"foo\\", r"foo\\"),
+        ] {
+            let value: ComputedValue = parse_value(authored, &Namespaces::default());
+            assert_eq!(value.to_css_string(), expected, "{authored}");
+        }
+        let value = parse_value(r"var(--missing, foo\", &Namespaces::default());
+        assert_eq!(value.to_css_string(), "var(--missing, foo�)");
+        let reference = &value.references.refs[0];
+        assert_eq!(reference.end, value.css.len());
+        let fallback = match &reference.function {
+            SubstitutionFunction::DynamicVar { arguments, .. } => {
+                let argument = arguments.last().unwrap();
+                &value.css[argument.start..argument.end]
+            },
+            SubstitutionFunction::Var(_) => {
+                &value.css[reference.fallback.as_ref().unwrap().start.get()..reference.end - 1]
+            },
+            _ => panic!("the fixture must retain a var() reference"),
+        };
+        assert_eq!(fallback, "foo�");
     }
 
     #[test]

@@ -764,6 +764,45 @@ mod tests {
     }
 
     #[test]
+    fn eof_recovery_preserves_exact_custom_property_cssom_serialization() {
+        crate::context::initialise_required_servo_style_prefs();
+        for (css, expected) in [
+            (r"p{--x:foo\", "foo�"),
+            (r"p{--x:1foo\", "1foo�"),
+            (r"p{--x:url(foo\", "url(foo�)"),
+            (r#"p{--x:"foo\"#, "\"foo\""),
+        ] {
+            let parsed = crate::authored_rules::ParsedStylesheet::parse(css).unwrap();
+            assert_eq!(
+                parsed.rule_nodes()[0]
+                    .payload()
+                    .declaration_block()
+                    .unwrap()
+                    .declarations()[0]
+                    .value(),
+                expected,
+                "{css}"
+            );
+            let expanded = super::expand_view_transition_rules(parsed.rule_nodes()).expect(css);
+            let reparsed = crate::authored_rules::ParsedStylesheet::parse(
+                &expanded[0].projection_serialization(),
+            )
+            .unwrap();
+            assert_eq!(
+                reparsed.rule_nodes()[0]
+                    .payload()
+                    .declaration_block()
+                    .unwrap()
+                    .declarations()[0]
+                    .value(),
+                expected,
+                "{css}"
+            );
+            lower_contextual_stylesheet(css).expect(css);
+        }
+    }
+
+    #[test]
     fn contextual_mixin_lowering_keeps_result_blocks_and_local_descriptors() {
         for (css, locals) in [
             (

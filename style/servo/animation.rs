@@ -1374,6 +1374,15 @@ pub struct ElementAnimationSet {
 }
 
 impl ElementAnimationSet {
+    /// Discards completed document animations after their final style has been applied.
+    /// A progress timeline can move backwards, so reaching its end does not end its association.
+    pub fn remove_finished_document_animations(&mut self) {
+        self.animations.retain(|animation| {
+            animation.state != AnimationState::Finished
+                || matches!(animation.timeline_phase, AnimationTimelinePhase::Progress { .. })
+        });
+    }
+
     fn update_animation_list(&mut self, new_animations: Vec<Animation>, now: f64) {
         self.dirty |= !self.animations.is_empty() || !new_animations.is_empty();
         let mut unmatched = std::mem::take(&mut self.animations);
@@ -2493,6 +2502,26 @@ mod tests {
             duration,
             ..pending_animation()
         }
+    }
+
+    #[test]
+    fn style_refresh_keeps_finished_progress_animations_until_their_css_association_ends() {
+        let mut document = named_animation("document", 0.0, 1.0);
+        document.state = AnimationState::Finished;
+        let mut progress = named_animation("progress", 0.0, 1.0);
+        progress.state = AnimationState::Finished;
+        progress.timeline_phase = super::AnimationTimelinePhase::Progress { sample: None };
+        progress.sample_progress_timeline(Some(1.0), true);
+        let mut set = super::ElementAnimationSet::default();
+        set.animations = vec![document, progress];
+        set.remove_finished_document_animations();
+        assert_eq!(set.animations.len(), 1);
+        assert_eq!(set.animations[0].name, Atom::from("progress"));
+        assert_eq!(set.animations[0].directed_progress_at(10.0).map(|value| value.0), Some(1.0));
+        set.animations[0].sample_progress_timeline(Some(0.0), true);
+        assert_eq!(set.animations[0].directed_progress_at(10.0).map(|value| value.0), Some(0.0));
+        set.update_animation_list(Vec::new(), 10.0);
+        assert!(!set.has_active_animation(), "animation:none still cancels the progress animation");
     }
 
     #[test]
