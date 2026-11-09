@@ -440,6 +440,12 @@ pub enum SystemColor {
 }
 
 impl SystemColor {
+    /// The platform accent used when no author accent is specified.
+    #[cfg(feature = "servo")]
+    pub fn default_accent_color() -> AbsoluteColor {
+        AbsoluteColor::srgb_legacy(0, 120, 212, 1.0)
+    }
+
     fn modern_equivalent(self) -> Self {
         match self {
             Self::Activeborder
@@ -485,7 +491,7 @@ impl SystemColor {
         } else {
             cx.device().default_color()
         };
-        let accent = AbsoluteColor::srgb_legacy(0, 120, 212, 1.0);
+        let accent = Self::default_accent_color();
         let accent_text = AbsoluteColor::WHITE;
         let highlight = if dark {
             AbsoluteColor::srgb_legacy(54, 90, 172, 1.0)
