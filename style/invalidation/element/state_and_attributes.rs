@@ -139,7 +139,14 @@ where
 /// Whether we should process the descendants of a given element for style
 /// invalidation.
 pub fn should_process_descendants(data: &ElementData) -> bool {
-    !data.styles.is_display_none() && !data.hint.contains(RestyleHint::RESTYLE_DESCENDANTS)
+    data.has_styles()
+        && !data.styles.is_display_none()
+        && !data.hint.contains(RestyleHint::RESTYLE_DESCENDANTS)
+}
+
+#[test]
+fn unstyled_elements_do_not_invalidate_descendants() {
+    assert!(!should_process_descendants(&ElementData::default()));
 }
 
 /// Propagates the bits after invalidating a descendant child.
