@@ -176,6 +176,28 @@ pub fn selector_targets_pseudo_element(source: &str) -> bool {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn webkit_scrollbar_is_a_matching_lazy_pseudo_element() {
+        use style::selector_parser::PseudoElement;
+
+        let parsed = super::parse_selector("#scroller::-WEBKIT-SCROLLBAR").unwrap();
+        assert_eq!(
+            super::serialize_selector_list(&parsed),
+            "#scroller::-webkit-scrollbar"
+        );
+        let pseudo = parsed.slice()[0].pseudo_element().unwrap();
+        assert_eq!(pseudo, &PseudoElement::WebkitScrollbar);
+        assert!(pseudo.is_lazy());
+        assert!(PseudoElement::WebkitScrollbar.matches_selector(pseudo, &[]));
+        let unknown = super::parse_selector("::-webkit-unrecognized").unwrap();
+        assert!(!PseudoElement::WebkitScrollbar
+            .matches_selector(unknown.slice()[0].pseudo_element().unwrap(), &[],));
+        assert!(super::parse_dom_selector("::-webkit-scrollbar")
+            .unwrap()
+            .slice()
+            .is_empty());
+    }
+
+    #[test]
     fn unknown_webkit_pseudo_elements_parse_and_serialize_in_lowercase() {
         for source in ["::-WEBKIT-unknown", "::-webkit-unknown:hover", "::-webkit-unknown:focus"] {
             let parsed = super::parse_selector(source).unwrap();

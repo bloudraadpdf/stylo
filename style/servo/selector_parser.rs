@@ -201,10 +201,12 @@ pub enum PseudoElement {
     ServoTableGrid,
     ServoTableWrapper,
     UnknownWebkit(Atom),
+    /// Legacy scrollbar box, styled independently of its originating element.
+    WebkitScrollbar,
 }
 
 /// The count of all pseudo-elements.
-pub const PSEUDO_COUNT: usize = PseudoElement::ServoTableWrapper.index() + 2;
+pub const PSEUDO_COUNT: usize = PseudoElement::WebkitScrollbar.index() + 1;
 
 impl ToCss for PseudoElement {
     fn to_css<W>(&self, dest: &mut W) -> fmt::Result
@@ -220,6 +222,7 @@ impl ToCss for PseudoElement {
             After => "::after",
             Before => "::before",
             Selection => "::selection",
+            WebkitScrollbar => "::-webkit-scrollbar",
             FirstLetter => "::first-letter",
             FirstLine => "::first-line",
             Backdrop => "::backdrop",
@@ -469,6 +472,7 @@ impl PseudoElement {
             Self::ServoTableGrid => 46,
             Self::ServoTableWrapper => 47,
             Self::UnknownWebkit(_) => 48,
+            Self::WebkitScrollbar => 49,
         }
     }
 
@@ -614,6 +618,7 @@ impl PseudoElement {
             | PseudoElement::FirstLine => PseudoElementCascadeType::Eager,
             PseudoElement::Backdrop
             | PseudoElement::UnknownWebkit(_)
+            | PseudoElement::WebkitScrollbar
             | PseudoElement::PickerIcon
             | PseudoElement::GrammarError
             | PseudoElement::SpellingError
@@ -1221,6 +1226,7 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             "after" => After,
             "backdrop" => Backdrop,
             "selection" => Selection,
+            "-webkit-scrollbar" => WebkitScrollbar,
             "first-letter" => FirstLetter,
             "first-line" => FirstLine,
             "marker" => Marker,
