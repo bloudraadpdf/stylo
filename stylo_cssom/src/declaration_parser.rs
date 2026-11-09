@@ -1084,6 +1084,7 @@ pub fn specified_declarations_from_property_declaration(
 pub fn inline_style_cssom_backing_property(property: &str) -> &str {
     match property.to_ascii_lowercase().as_str() {
         "fit-tolerance" => "masonry-slack",
+        "grid-lanes-pack" => "grid-auto-flow",
         "grid-gap" => "gap",
         "word-wrap" => "overflow-wrap",
         _ => property,
@@ -1105,6 +1106,16 @@ pub fn inline_style_cssom_property_schema(
 pub fn inline_style_cssom_backing_value<'a>(property: &str, value: &'a str) -> Option<&'a str> {
     if !crate::css_scan::named_function_is_closed(value, b"progress") {
         return None;
+    }
+    if property.eq_ignore_ascii_case("grid-lanes-pack") {
+        let keyword = value.trim();
+        return if keyword.eq_ignore_ascii_case("normal") {
+            Some("row")
+        } else if keyword.eq_ignore_ascii_case("dense") {
+            Some("dense")
+        } else {
+            None
+        };
     }
     if !property.eq_ignore_ascii_case("fit-tolerance") {
         return Some(value);
@@ -1144,6 +1155,8 @@ pub fn inline_style_cssom_authored_value(property: &str, value: Option<String>) 
         let keyword = match (property.to_ascii_lowercase().as_str(), value.as_str()) {
             ("fit-tolerance", "infinite") => Some("normal"),
             ("fit-tolerance", "auto") => Some("infinite"),
+            ("grid-lanes-pack", "row" | "column") => Some("normal"),
+            ("grid-lanes-pack", "dense" | "row dense" | "column dense") => Some("dense"),
             _ => None,
         };
         match keyword {

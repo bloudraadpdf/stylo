@@ -127,6 +127,7 @@ pub fn css_supports(query: CssSupportsQuery<'_>) -> bool {
                 }
             } else if style::properties::PropertyId::parse_enabled_for_all_content(property)
                 .is_err()
+                && crate::declaration_parser::inline_compatibility_property(property).is_none()
             {
                 return false;
             }
@@ -274,6 +275,39 @@ mod tests {
     use style::properties::PropertyDeclaration;
     use style::values::computed::font::{ScriptSpecificGenericFontFamily, SingleFontFamily};
     use style::values::specified::FontFamily;
+
+    #[test]
+    fn supports_compatibility_properties_uses_their_declaration_parser() {
+        for (property, value, expected) in [
+            ("grid-lanes-pack", "normal", true),
+            ("GRID-LANES-PACK", "dense", true),
+            ("grid-lanes-pack", "auto", false),
+            ("grid-lanes-pack", "normal dense", false),
+            (" grid-lanes-pack", "dense", false),
+            ("grid-lanes-pack ", "dense", false),
+            ("fit-tolerance", "normal", true),
+        ] {
+            assert_eq!(
+                supports(CssSupportsInput::declaration(property, value)),
+                expected,
+                "{property}: {value}"
+            );
+        }
+        use crate::declaration_parser::{
+            inline_style_cssom_authored_value, inline_style_cssom_backing_property,
+            inline_style_cssom_backing_value,
+        };
+        assert_eq!(inline_style_cssom_backing_property("GRID-LANES-PACK"), "grid-auto-flow");
+        assert_eq!(inline_style_cssom_backing_value("grid-lanes-pack", "normal"), Some("row"));
+        assert_eq!(inline_style_cssom_backing_value("grid-lanes-pack", "dense"), Some("dense"));
+        assert_eq!(inline_style_cssom_backing_value("grid-lanes-pack", "auto"), None);
+        for (carrier, expected) in [("row", "normal"), ("column", "normal"), ("dense", "dense"), ("row dense", "dense"), ("column dense", "dense")] {
+            assert_eq!(
+                inline_style_cssom_authored_value("grid-lanes-pack", Some(carrier.to_owned())),
+                Some(expected.to_owned())
+            );
+        }
+    }
 
     #[test]
     fn supports_declaration_requires_a_property_name_not_declaration_syntax() {
