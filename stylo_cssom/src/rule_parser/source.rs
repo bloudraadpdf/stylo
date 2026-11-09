@@ -125,8 +125,26 @@ fn opens_block(token: &Token<'_>) -> bool {
 }
 
 fn exhaust(input: &mut Parser<'_, '_>) {
-    while !input.is_exhausted() {
-        let _ = input.next_including_whitespace_and_comments();
+    while input.next_including_whitespace_and_comments().is_ok() {}
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn a_final_component_block_is_consumed_before_recording_the_rule_body_end() {
+        for declaration in [
+            "color:var(--color)",
+            "color:if(style(--x:a):green;else:red)",
+            "--value:[one(two)]",
+            "--value:{one(two)}",
+        ] {
+            for terminator in ["", ";", "  "] {
+                let css = format!("@result{{{declaration}{terminator}}}");
+                let span = super::span_at(&css, 0, cssparser::UrlErrorRecovery::Css2);
+                assert_eq!(span.block_end, Some(css.len() - 1), "{css}");
+                assert_eq!(span.text(&css), css, "{css}");
+            }
+        }
     }
 }
 
