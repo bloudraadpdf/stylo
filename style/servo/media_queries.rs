@@ -1349,6 +1349,25 @@ mod page_color_scheme_support_tests {
     }
 
     #[test]
+    fn explicit_color_override_controls_queries_and_used_scheme_without_changing_page_support() {
+        let mut device = crate::test_support::test_device();
+        let support = device.page_color_scheme_support;
+        device.set_user_preferences(UserPreferences { color_scheme: Some(PrefersColorScheme::Dark), ..Default::default() });
+        assert_eq!(device.color_scheme(), PrefersColorScheme::Dark);
+        assert_eq!(device.page_color_scheme_support, support);
+        Context::for_media_query_evaluation(&device, QuirksMode::NoQuirks, |context| {
+            assert!(eval_prefers_color_scheme(context, Some(PrefersColorScheme::Dark)));
+            assert!(!eval_prefers_color_scheme(context, Some(PrefersColorScheme::Light)));
+        });
+        assert!(device.is_dark_color_scheme(ColorSchemeFlags::LIGHT | ColorSchemeFlags::DARK));
+        device.set_user_preferences(UserPreferences::default());
+        assert_eq!(device.color_scheme(), PrefersColorScheme::Light);
+        Context::for_media_query_evaluation(&device, QuirksMode::NoQuirks, |context| {
+            assert!(eval_prefers_color_scheme(context, Some(PrefersColorScheme::Light)));
+        });
+    }
+
+    #[test]
     fn reduced_preferences_are_independent_and_resettable() {
         let mut device = crate::test_support::test_device();
         assert!(!device.set_user_preferences(UserPreferences::default()));

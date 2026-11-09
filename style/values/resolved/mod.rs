@@ -83,6 +83,7 @@ macro_rules! trivial_to_resolved_value {
 trivial_to_resolved_value!(());
 trivial_to_resolved_value!(bool);
 trivial_to_resolved_value!(f32);
+trivial_to_resolved_value!(f64);
 trivial_to_resolved_value!(u8);
 trivial_to_resolved_value!(i8);
 trivial_to_resolved_value!(u16);

@@ -4,15 +4,20 @@
 
 //! Computed angles.
 
-use crate::derives::*;
-use crate::values::distance::{ComputeSquaredDistance, SquaredDistance};
-use crate::values::CSSFloat;
 use crate::Zero;
+use crate::derives::*;
+use crate::values::CSSFloat;
+use crate::values::distance::{ComputeSquaredDistance, SquaredDistance};
 use std::f64::consts::PI;
 use std::fmt::{self, Write};
 use std::ops::Neg;
 use std::{f32, f64};
 use style_traits::{CssWriter, ToCss};
+
+#[cfg(feature = "gecko")]
+type AngleFloat = CSSFloat;
+#[cfg(not(feature = "gecko"))]
+type AngleFloat = f64;
 
 /// A computed angle in degrees.
 #[derive(
@@ -30,7 +35,7 @@ use style_traits::{CssWriter, ToCss};
     ToResolvedValue,
 )]
 #[repr(C)]
-pub struct Angle(CSSFloat);
+pub struct Angle(AngleFloat);
 
 impl ToCss for Angle {
     fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
@@ -47,13 +52,17 @@ const RAD_PER_DEG: f64 = PI / 180.0;
 impl Angle {
     /// Creates a computed `Angle` value from a radian amount.
     pub fn from_radians(radians: CSSFloat) -> Self {
-        Angle(radians / RAD_PER_DEG as f32)
+        #[cfg(feature = "gecko")]
+        let degrees = radians / RAD_PER_DEG as f32;
+        #[cfg(not(feature = "gecko"))]
+        let degrees = f64::from(radians) / RAD_PER_DEG;
+        Angle(degrees)
     }
 
     /// Creates a computed `Angle` value from a degrees amount.
     #[inline]
     pub fn from_degrees(degrees: CSSFloat) -> Self {
-        Angle(degrees)
+        Angle(degrees.into())
     }
 
     /// Returns the amount of radians this angle represents.
@@ -70,13 +79,20 @@ impl Angle {
     /// quarter-turn for 225 degrees, for example.
     #[inline]
     pub fn radians64(&self) -> f64 {
-        self.0 as f64 * RAD_PER_DEG
+        f64::from(self.0) * RAD_PER_DEG
     }
 
     /// Return the value in degrees.
     #[inline]
     pub fn degrees(&self) -> CSSFloat {
-        self.0
+        #[cfg(feature = "gecko")]
+        {
+            self.0
+        }
+        #[cfg(not(feature = "gecko"))]
+        {
+            self.0 as CSSFloat
+        }
     }
 }
 
@@ -97,8 +113,7 @@ impl ComputeSquaredDistance for Angle {
     fn compute_squared_distance(&self, other: &Self) -> Result<SquaredDistance, ()> {
         // Use the formula for calculating the distance between angles defined in SVG:
         // https://www.w3.org/TR/SVG/animate.html#complexDistances
-        self.radians64()
-            .compute_squared_distance(&other.radians64())
+        self.radians64().compute_squared_distance(&other.radians64())
     }
 }
 
@@ -108,5 +123,26 @@ impl Neg for Angle {
     #[inline]
     fn neg(self) -> Angle {
         Angle(-self.0)
+    }
+}
+
+#[cfg(all(test, not(feature = "gecko")))]
+mod tests {
+    use super::*;
+    use crate::values::animated::{Animate, Procedure};
+
+    #[test]
+    fn extrapolated_radians_preserve_the_same_matrix_as_an_authored_angle() {
+        let actual = Angle::from_radians(10.0)
+            .animate(&Angle::from_radians(20.0), Procedure::Interpolate { progress: 2.0 })
+            .unwrap();
+        let expected = Angle::from_radians(30.0);
+        assert!((actual.radians64() - expected.radians64()).abs() < 1e-12);
+        assert!((actual.radians64().tan() * 110.0 - expected.radians64().tan() * 110.0).abs() < 1e-10);
+        assert_eq!(actual.degrees(), expected.degrees());
+        let degrees = Angle::from_degrees(10.0)
+            .animate(&Angle::from_degrees(20.0), Procedure::Interpolate { progress: 2.0 })
+            .unwrap();
+        assert_eq!(degrees.degrees(), 30.0);
     }
 }
