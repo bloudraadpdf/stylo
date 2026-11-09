@@ -733,6 +733,15 @@ impl Device {
         true
     }
 
+    /// The negotiated page scheme, queried by prefers-color-scheme.
+    pub fn page_color_scheme(&self) -> PrefersColorScheme {
+        if self.is_dark_color_scheme(self.page_color_scheme_support) {
+            PrefersColorScheme::Dark
+        } else {
+            PrefersColorScheme::Light
+        }
+    }
+
     /// Set the [`NavigationPhase`] of this [`Device`].
     ///
     /// Note that this does not update any associated `Stylist`. For this you must call
@@ -747,6 +756,11 @@ impl Device {
     }
 
     pub(crate) fn is_dark_color_scheme(&self, color_scheme: ColorSchemeFlags) -> bool {
+        let color_scheme = if color_scheme.contains(ColorSchemeFlags::NORMAL) {
+            self.page_color_scheme_support
+        } else {
+            color_scheme
+        };
         let supports_light = color_scheme.contains(ColorSchemeFlags::LIGHT);
         let supports_dark = color_scheme.contains(ColorSchemeFlags::DARK);
         match (supports_light, supports_dark) {
@@ -858,7 +872,7 @@ fn eval_device_pixel_ratio(context: &Context) -> f32 {
 
 fn eval_prefers_color_scheme(context: &Context, query_value: Option<PrefersColorScheme>) -> bool {
     match query_value {
-        Some(v) => context.device().prefers_color_scheme == v,
+        Some(v) => context.device().page_color_scheme() == v,
         None => true,
     }
 }

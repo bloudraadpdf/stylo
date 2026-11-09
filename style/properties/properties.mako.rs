@@ -1477,6 +1477,11 @@ pub mod style_structs {
                 /// Returns the ColorSchemeFlags corresponding to the value of `color-scheme`.
                 #[inline]
                 pub fn color_scheme_bits(&self) -> ColorSchemeFlags {
+                    % if engine == "servo":
+                    if self.color_scheme == crate::values::specified::color::ColorScheme::normal() {
+                        return ColorSchemeFlags::NORMAL;
+                    }
+                    % endif
                     self.color_scheme.bits
                 }
             % elif style_struct.name == "Box":

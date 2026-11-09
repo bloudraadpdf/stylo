@@ -1547,6 +1547,9 @@ bitflags! {
         const DARK = 1 << 1;
         /// Whether the author specified `only`.
         const ONLY = 1 << 2;
+        /// Internal computation marker for `normal`, distinct from unsupported custom schemes.
+        #[cfg(feature = "servo")]
+        const NORMAL = 1 << 3;
     }
 }
 
