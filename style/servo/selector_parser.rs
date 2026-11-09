@@ -1312,7 +1312,7 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             },
             _ => {
                 let lower = name.to_ascii_lowercase();
-                if lower.starts_with("-webkit-") {
+                if lower.starts_with("-webkit-") && !self.for_supports_rule {
                     UnknownWebkit(Atom::from(lower))
                 } else {
                     return Err(location.new_custom_error(SelectorParseErrorKind::UnexpectedIdent(name.clone())))

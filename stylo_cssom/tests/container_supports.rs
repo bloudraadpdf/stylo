@@ -1,6 +1,23 @@
 use stylo_cssom::values::{CssSupportsQuery, css_supports};
 
 #[test]
+fn compatibility_pseudo_elements_parse_without_claiming_selector_support() {
+    for selector in [
+        "div::-webkit-scrollbar-thumb",
+        "::-WEBKIT-unknown-compatibility-pseudo",
+        ":is(div, ::-webkit-unknown-compatibility-pseudo)",
+    ] {
+        assert!(stylo_cssom::selector_query::parse_selector(selector).is_ok(), "{selector}");
+        assert!(!css_supports(CssSupportsQuery::Condition(&format!("selector({selector})"))), "{selector}");
+        assert!(css_supports(CssSupportsQuery::Condition(&format!("not selector({selector})"))), "{selector}");
+    }
+    for selector in ["div::before", "li::marker", "input:-webkit-autofill", ":is(div, span)", "::-webkit-scrollbar"] {
+        assert!(css_supports(CssSupportsQuery::Condition(&format!("selector({selector})"))), "{selector}");
+    }
+    assert!(stylo_cssom::selector_query::parse_selector("div, ::-webkit-scrollbar").is_ok());
+}
+
+#[test]
 fn container_supports_uses_the_existing_shorthand_parser() {
     for value in [
         "initial",
