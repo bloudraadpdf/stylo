@@ -1111,6 +1111,16 @@ fn inherited_length_wrappers_scale_relative_to_parent_zoom() {
 }
 
 #[test]
+fn inherited_background_sizes_scale_lengths_but_preserve_auto_and_percentages() {
+    use style_traits::ToCss;
+    with_zoom_test_prefs(|| {
+        let parent = cascade_zoom_test_style("zoom:2;background-size:9px 25%,auto,contain,cover", None);
+        let child = cascade_zoom_test_style("zoom:3;background-size:inherit", Some(&parent));
+        assert_eq!(child.get_background().background_size.to_css_string(), "54px 25%, auto, contain, cover");
+    });
+}
+
+#[test]
 fn zoomed_gap_rules_resolve_to_unscaled_cssom_lengths() {
     with_zoom_test_prefs(|| {
     use crate::values::resolved::{Context, ToResolvedValue};
