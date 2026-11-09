@@ -526,10 +526,15 @@ class Longhand(Property):
         if not self.predefined_type:
             return False
         # TODO: Get this from SpecifiedValueInfo or so instead; see bug 1887627.
-        return self.predefined_type in {
+        return self.predefined_type.rsplit("::", 1)[-1] in {
+            "BorderCornerRadius",
+            "BorderSideOffset",
+            "BorderSideWidth",
             "BorderSpacing",
             "Filter",
+            "FlexBasis",
             "FontSize",
+            "GapRuleWidthList",
             "Inset",
             "Length",
             "LengthPercentage",
@@ -537,6 +542,7 @@ class Longhand(Property):
             "LetterSpacing",
             "LineHeight",
             "LineWidth",
+            "Margin",
             "MaxSize",
             "NonNegativeLength",
             "NonNegativeLengthOrAuto",
@@ -560,7 +566,7 @@ class Longhand(Property):
             "Translate",
             "ViewTimelineInset",
             "WordSpacing",
-            "basic_shape::ShapeOutside",
+            "ShapeOutside",
         }
 
     def is_inherited_zoom_dependent_property(self):

@@ -62,14 +62,17 @@ impl GapRuleWidth {
 }
 
 impl ToResolvedValue for GapRuleWidth {
-    type ResolvedValue = Self;
+    type ResolvedValue = CSSPixelLength;
 
-    fn to_resolved_value(self, _: &ResolvedContext) -> Self::ResolvedValue {
-        self
+    fn to_resolved_value(self, context: &ResolvedContext) -> Self::ResolvedValue {
+        CSSPixelLength::from(self.length).to_resolved_value(context)
     }
 
     fn from_resolved_value(resolved: Self::ResolvedValue) -> Self {
-        resolved
+        Self {
+            length: Au::from_f32_px(resolved.px()),
+            device_pixel: Au::from_px(1),
+        }
     }
 }
 

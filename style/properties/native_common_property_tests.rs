@@ -1033,6 +1033,100 @@ fn scroll_padding_edges_participate_in_zoom_inheritance() {
 }
 
 #[test]
+fn length_wrapper_properties_participate_in_zoom_inheritance() {
+    with_zoom_test_prefs(|| {
+    let properties = super::LonghandIdSet::zoom_dependent();
+    for name in [
+        "border-top-width", "border-top-left-radius", "outline-width", "outline-offset",
+        "column-rule-width", "row-rule-width", "column-gap", "row-gap", "column-width",
+        "margin-top", "flex-basis",
+    ] {
+        let id = PropertyId::parse_enabled_for_all_content(name).unwrap().longhand_id().unwrap();
+        assert!(properties.contains(id), "{name}");
+    }
+    for name in ["border-top-style", "column-rule-style", "zoom"] {
+        let id = PropertyId::parse_enabled_for_all_content(name).unwrap().longhand_id().unwrap();
+        assert!(!properties.contains(id), "{name}");
+    }
+    });
+}
+
+fn with_zoom_test_prefs(test: impl FnOnce()) {
+    let _lock = crate::test_support::pref_lock().lock().unwrap();
+    let _zoom = crate::test_support::BoolPrefGuard::set("layout.unimplemented", true);
+    let _columns = crate::test_support::BoolPrefGuard::set("layout.columns.enabled", true);
+    test();
+}
+
+fn cascade_zoom_test_style(css: &str, parent: Option<&super::ComputedValues>) -> servo_arc::Arc<super::ComputedValues> {
+    use crate::context::QuirksMode;
+    use crate::properties::{LonghandId, StyleBuilder, CASCADE_PROPERTY};
+    use crate::rule_cache::RuleCacheConditions;
+    use crate::stylesheets::container_rule::ContainerSizeQuery;
+    use crate::values::computed::Context;
+
+    let device = crate::test_support::test_device();
+    let builder = StyleBuilder::for_inheritance(&device, None, parent, None);
+    let mut conditions = RuleCacheConditions::default();
+    let mut context = Context::new(builder, QuirksMode::NoQuirks, &mut conditions, ContainerSizeQuery::none());
+    for (declaration, _) in block(css).declaration_importance_iter() {
+        let id = declaration.id().as_longhand().unwrap();
+        unsafe { CASCADE_PROPERTY[id as usize](declaration, &mut context); }
+        if id == LonghandId::Zoom {
+            context.builder.recompute_effective_zooms();
+        }
+    }
+    context.builder.build()
+}
+
+#[test]
+fn keyword_line_widths_scale_once_before_border_snapping() {
+    with_zoom_test_prefs(|| {
+    use style_traits::ToCss;
+    for (keyword, css_px) in [("thin", 1.0), ("medium", 3.0), ("thick", 5.0)] {
+        let computed = cascade_zoom_test_style(&format!("zoom:2;border-top-width:{keyword};outline-width:{keyword};column-rule-width:{keyword}"), None);
+        assert_eq!(computed.get_border().border_top_width.0.to_f32_px(), css_px * 2.0);
+        assert_eq!(computed.get_outline().outline_width.0.to_f32_px(), css_px * 2.0);
+        assert_eq!(computed.get_column().column_rule_width.to_css_string(), format!("{}px", css_px * 2.0));
+    }
+    });
+}
+
+#[test]
+fn inherited_length_wrappers_scale_relative_to_parent_zoom() {
+    with_zoom_test_prefs(|| {
+    use style_traits::ToCss;
+    let parent = cascade_zoom_test_style("zoom:2;border-top-width:4px;border-top-left-radius:5px;outline-offset:3px;margin-top:6px;flex-basis:7px;column-gap:8px;row-gap:25%;column-width:auto", None);
+    let child = cascade_zoom_test_style("zoom:3;border-top-width:inherit;border-top-left-radius:inherit;outline-offset:inherit;margin-top:inherit;flex-basis:inherit;column-gap:inherit;row-gap:inherit;column-width:inherit", Some(&parent));
+    assert_eq!(child.effective_zoom.value(), 6.0);
+    assert_eq!(child.get_border().border_top_width.0.to_f32_px(), 24.0);
+    assert_eq!(child.get_border().border_top_left_radius.to_css_string(), "30px");
+    assert_eq!(child.get_outline().outline_offset.to_f32_px(), 18.0);
+    assert_eq!(child.get_margin().margin_top.to_css_string(), "36px");
+    assert_eq!(child.get_position().flex_basis.to_css_string(), "42px");
+    assert_eq!(child.get_position().column_gap.to_css_string(), "48px");
+    assert_eq!(child.get_position().row_gap.to_css_string(), "25%");
+    assert_eq!(child.get_column().column_width.to_css_string(), "auto");
+    });
+}
+
+#[test]
+fn zoomed_gap_rules_resolve_to_unscaled_cssom_lengths() {
+    with_zoom_test_prefs(|| {
+    use crate::values::resolved::{Context, ToResolvedValue};
+    use style_traits::ToCss;
+    let computed = cascade_zoom_test_style("zoom:2;column-rule-width:5px", None);
+    let id = super::LonghandId::ColumnRuleWidth;
+    let context = Context {
+        style: &computed,
+        for_property: id.into(),
+        current_longhand: Some(id),
+    };
+    assert_eq!(computed.get_column().column_rule_width.clone().to_resolved_value(&context).to_css_string(), "5px");
+    });
+}
+
+#[test]
 fn image_resolution_keeps_the_source_and_resolution_group_together() {
     for value in [
         "3dpi snap from-image",

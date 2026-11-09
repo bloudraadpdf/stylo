@@ -1305,6 +1305,19 @@ impl<'b> Cascade<'b> {
         if !context.builder.effective_zoom_for_inheritance.is_one() {
             self.recompute_zoom_dependent_inherited_lengths(context);
         }
+        if !context.builder.effective_zoom.is_one() {
+            for prop in LonghandIdSet::zoom_dependent().iter() {
+                if prop.inherited() || prop.is_logical() || self.seen.contains(prop)
+                    || !properties_to_apply.contains(prop)
+                {
+                    continue;
+                }
+                let declaration = PropertyDeclaration::css_wide_keyword(prop, CSSWideKeyword::Initial);
+                unsafe {
+                    self.do_apply_declaration(context, prop, &declaration);
+                }
+            }
+        }
     }
 
     #[cold]
@@ -1409,13 +1422,15 @@ impl<'b> Cascade<'b> {
                 let inherited = longhand_id.inherited();
                 let zoomed = !context.builder.effective_zoom_for_inheritance.is_one()
                     && longhand_id.zoom_dependent();
+                let zoomed_initial = !context.builder.effective_zoom.is_one()
+                    && longhand_id.zoom_dependent();
                 match keyword {
                     CSSWideKeyword::Revert
                     | CSSWideKeyword::RevertLayer
                     | CSSWideKeyword::RevertRule => unreachable!(),
-                    CSSWideKeyword::Unset => !zoomed || !inherited,
+                    CSSWideKeyword::Unset => if inherited { !zoomed } else { !zoomed_initial },
                     CSSWideKeyword::Inherit => inherited && !zoomed,
-                    CSSWideKeyword::Initial => !inherited,
+                    CSSWideKeyword::Initial => !inherited && !zoomed_initial,
                 }
             },
             None => false,
@@ -1517,13 +1532,15 @@ impl<'b> Cascade<'b> {
                 let inherited = companion_id.inherited();
                 let zoomed = !context.builder.effective_zoom_for_inheritance.is_one()
                     && companion_id.zoom_dependent();
+                let zoomed_initial = !context.builder.effective_zoom.is_one()
+                    && companion_id.zoom_dependent();
                 match keyword {
                     CSSWideKeyword::Revert
                     | CSSWideKeyword::RevertLayer
                     | CSSWideKeyword::RevertRule => true,
-                    CSSWideKeyword::Unset => !zoomed || !inherited,
+                    CSSWideKeyword::Unset => if inherited { !zoomed } else { !zoomed_initial },
                     CSSWideKeyword::Inherit => inherited && !zoomed,
-                    CSSWideKeyword::Initial => !inherited,
+                    CSSWideKeyword::Initial => !inherited && !zoomed_initial,
                 }
             },
             None => false,

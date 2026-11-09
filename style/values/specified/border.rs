@@ -172,9 +172,18 @@ impl ToComputedValue for LineWidth {
                 Au::from_f32_px(1.0 / dppx).min(Au::from_px(1))
             },
             // https://drafts.csswg.org/css-backgrounds-3/#line-width
-            Self::Thin => context.device().line_width_keywords().thin,
-            Self::Medium => context.device().line_width_keywords().medium,
-            Self::Thick => context.device().line_width_keywords().thick,
+            Self::Thin | Self::Medium | Self::Thick => {
+                let keywords = context.device().line_width_keywords();
+                let width = match self {
+                    Self::Thin => keywords.thin,
+                    Self::Medium => keywords.medium,
+                    Self::Thick => keywords.thick,
+                    _ => unreachable!(),
+                };
+                crate::values::computed::border::line_width_app_units(
+                    context.builder.effective_zoom.zoom(width.to_f32_px()),
+                )
+            },
             // Truncated, so that a width a hair short of a device pixel snaps down to the pixel below it: to
             // snap as a line width (CSS Values 4) rounds a width above 1 device pixel down, and rounding to the
             // nearest app unit first would carry 2.999px up to 3px.

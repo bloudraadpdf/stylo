@@ -69,7 +69,15 @@ pub mod ${property.ident} {
                     CSSWideKeyword::Unset |
                     % endif
                     CSSWideKeyword::Initial => {
-                        % if not property.style_struct.inherited:
+                        % if property.is_zoom_dependent() and not property.style_struct.inherited:
+                            let specified = ToComputedValue::from_computed_value(&get_initial_value());
+                            % if property.boxed:
+                            let specified = Box::new(specified);
+                            % endif
+                            let declaration = PropertyDeclaration::${property.camel_case}(specified);
+                            cascade_property(&declaration, context);
+                            return;
+                        % elif not property.style_struct.inherited:
                             declaration.debug_crash("Unexpected initial or unset for non-inherited property");
                         % elif property.name == "color" and engine == "servo":
                             let value = get_initial_specified_value().to_computed_value(context);
