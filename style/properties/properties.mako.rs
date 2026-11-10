@@ -846,6 +846,18 @@ impl LogicalMappingData {
 }
 
 impl LonghandId {
+    /// Whether font-relative math in this property uses inherited font metrics.
+    pub fn is_font_affecting(self) -> bool {
+        match self {
+            % for property in data.longhands:
+            % if property.style_struct.name == "Font":
+            Self::${property.camel_case} => true,
+            % endif
+            % endfor
+            _ => false,
+        }
+    }
+
     /// Every longhand in declaration order.
     pub const ALL: [Self; property_counts::LONGHANDS] = [
         % for property in data.longhands:

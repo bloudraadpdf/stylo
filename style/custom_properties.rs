@@ -824,6 +824,28 @@ impl VariableValue {
         self.references.refs.iter().filter_map(|reference| reference.function.variable_name())
     }
 
+    /// Custom property lookups reached during substitution, excluding unused fallbacks.
+    pub fn substitution_custom_property_dependencies(
+        &self,
+        custom_properties: &ComputedCustomProperties,
+        stylist: &Stylist,
+        context: &computed::Context,
+        level: CascadeLevel,
+        attribute_tracker: &mut AttributeTracker,
+    ) -> Vec<Name> {
+        let mut substitutor = Substitutor::new(
+            custom_properties,
+            stylist,
+            context,
+            EnvironmentResolutionMode::ResolveLiveEnvironment,
+            attribute_tracker,
+            Some(level),
+        );
+        substitutor.dependency_names = Some(Vec::new());
+        let _ = substitutor.substitute_value(self, None);
+        substitutor.dependency_names.take().unwrap()
+    }
+
     /// Rename lexical references without changing the retained authored token stream.
     pub fn rename_private_references(&mut self, names: &std::collections::HashMap<Name, Name>) {
         self.private_names = names
@@ -1910,6 +1932,7 @@ pub struct CustomPropertiesBuilder<'a, 'b: 'a> {
     computed_context: &'a mut computed::Context<'b>,
     references_from_non_custom_properties: NonCustomReferenceMap<Vec<Name>>,
     function_levels: FunctionLevels,
+    font_affecting_properties: PrecomputedHashSet<Name>,
     initial_properties: ComputedCustomProperties,
     declarations: Vec<(&'a CustomDeclaration, CascadePriority, usize)>,
     substituted_keywords: std::collections::HashMap<usize, CSSWideKeyword>,
@@ -1935,7 +1958,7 @@ fn find_non_custom_references(
     let dependent_types = registration.syntax.dependent_types();
     non_custom_dependencies(
         dependent_types,
-        dependent_types.intersects(DependentDataTypes::LENGTH)
+        !registration.syntax.is_universal()
             || (include_universal && registration.syntax.is_universal()),
         value.references.non_custom_references,
         may_have_color_scheme,
@@ -1956,7 +1979,8 @@ fn function_non_custom_references(
     let dependent_types = dependencies.dependent_types | registration.syntax.dependent_types();
     non_custom_dependencies(
         dependent_types,
-        dependent_types.intersects(DependentDataTypes::LENGTH)
+        !registration.syntax.is_universal()
+            || dependent_types.intersects(DependentDataTypes::LENGTH)
             || (include_universal && registration.syntax.is_universal()),
         value.references.non_custom_references | dependencies.non_custom_references,
         may_have_color_scheme,
@@ -2011,6 +2035,7 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
             computed_context,
             references_from_non_custom_properties: NonCustomReferenceMap::default(),
             function_levels: FunctionLevels::default(),
+            font_affecting_properties: Default::default(),
             declarations: Vec::new(),
             substituted_keywords: Default::default(),
             replaying: false,
@@ -2233,7 +2258,7 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
         ) {
             return matches!(decl, PropertyDeclaration::WithVariables(..));
         }
-        false
+        id.is_font_affecting() && matches!(decl, PropertyDeclaration::WithVariables(..))
     }
 
     /// Note a non-custom property with variable reference that may in turn depend on that property.
@@ -2257,6 +2282,19 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
             _ => return,
         };
         let refs = &value.references;
+        if id.is_font_affecting() {
+            self.font_affecting_properties
+                .extend(value.referenced_custom_properties().cloned());
+            if refs.any_function {
+                self.font_affecting_properties.extend(
+                    functions::FunctionDependencies::new(
+                        value,
+                        &self.computed_context.function_scope(level),
+                    )
+                    .names,
+                );
+            }
+        }
 
         if !refs.any_var && !refs.any_attr && !refs.any_function {
             return;
@@ -2299,6 +2337,9 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
             .filter_map(|reference| reference.function.variable_name())
             .chain(called.iter().flatten())
             .filter(|name| {
+                if !matches!(id, LonghandId::Color | LonghandId::AccentColor) {
+                    return true;
+                }
                 self.stylist
                     .get_custom_property_registration(name)
                     .syntax
@@ -2532,6 +2573,21 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
         attribute_tracker: &mut AttributeTracker,
     ) -> Option<DeferredCustomProperties> {
         self.resolve_substituted_reverts(attribute_tracker);
+        let font_affecting: Vec<_> = self.font_affecting_properties.iter().cloned().collect();
+        for name in font_affecting {
+            let mut substitutor = Substitutor::new(
+                &self.custom_properties,
+                self.stylist,
+                self.computed_context,
+                EnvironmentResolutionMode::ResolveLiveEnvironment,
+                attribute_tracker,
+                self.function_levels.get(&name).copied(),
+            );
+            substitutor.dependency_names = Some(Vec::new());
+            let _ = substitutor.variable(None, &name);
+            self.font_affecting_properties
+                .extend(substitutor.dependency_names.take().unwrap());
+        }
         let mut deferred_custom_properties = None;
         if self.may_have_cycles {
             if defer == DeferFontRelativeCustomPropertyResolution::Yes {
@@ -2546,6 +2602,7 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
                 &self.seen,
                 &self.references_from_non_custom_properties,
                 &self.function_levels,
+                &self.font_affecting_properties,
                 self.stylist,
                 self.computed_context,
                 attribute_tracker,
@@ -2603,6 +2660,8 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
         if deferred.is_empty() {
             return;
         }
+        let font_affecting =
+            std::mem::replace(&mut computed_context.for_font_affecting_property, false);
         let mut custom_properties = std::mem::take(&mut computed_context.builder.custom_properties);
         for (name, value) in deferred.iter() {
             if let Some(value) = value {
@@ -2629,6 +2688,7 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
             );
         }
         computed_context.builder.custom_properties = custom_properties;
+        computed_context.for_font_affecting_property = font_affecting;
     }
 }
 
@@ -2644,6 +2704,7 @@ fn substitute_all(
     seen: &PrecomputedHashSet<&Name>,
     references_from_non_custom_properties: &NonCustomReferenceMap<Vec<Name>>,
     function_levels: &FunctionLevels,
+    font_affecting_properties: &PrecomputedHashSet<Name>,
     stylist: &Stylist,
     computed_context: &computed::Context,
     attr_provider: &mut AttributeTracker,
@@ -2711,6 +2772,7 @@ fn substitute_all(
         deferred_properties: Option<&'a mut CustomPropertiesMap>,
         /// The cascade levels of values that call custom functions.
         function_levels: &'a FunctionLevels,
+        font_affecting_properties: &'a PrecomputedHashSet<Name>,
     }
 
     /// This function combines the traversal for cycle removal and value
@@ -2976,6 +3038,51 @@ fn substitute_all(
             let entry = &non_custom_references[non_custom];
             if let Some(deps) = entry.as_ref() {
                 for d in deps {
+                    if matches!(
+                        non_custom,
+                        SingleNonCustomReference::FontUnits
+                            | SingleNonCustomReference::RootFontUnits
+                            | SingleNonCustomReference::LhUnits
+                            | SingleNonCustomReference::RootLhUnits
+                    ) {
+                        let registration = context.stylist.get_custom_property_registration(d);
+                        let mut depends_on_length = registration
+                            .syntax
+                            .dependent_types()
+                            .intersects(DependentDataTypes::LENGTH);
+                        if !depends_on_length {
+                            if let Some(value) = context
+                                .map
+                                .get(registration, d)
+                                .and_then(|value| value.as_universal())
+                            {
+                                let mut substitutor = Substitutor::new(
+                                    context.map,
+                                    context.stylist,
+                                    context.computed_context,
+                                    EnvironmentResolutionMode::ResolveLiveEnvironment,
+                                    attribute_tracker,
+                                    context.function_levels.get(d).copied(),
+                                );
+                                substitutor.dependency_names = Some(Vec::new());
+                                let _ = substitutor.substitute_value(value, None);
+                                depends_on_length =
+                                    substitutor.dependency_names.take().unwrap().iter().any(
+                                        |name| {
+                                            context
+                                                .stylist
+                                                .get_custom_property_registration(name)
+                                                .syntax
+                                                .dependent_types()
+                                                .intersects(DependentDataTypes::LENGTH)
+                                        },
+                                    );
+                            }
+                        }
+                        if !depends_on_length {
+                            continue;
+                        }
+                    }
                     // Visit any reference from this non-custom property to custom properties.
                     visit_link(
                         VarType::Custom(d.clone()),
@@ -3091,7 +3198,7 @@ fn substitute_all(
             if let Some(ref mut deferred) = context.deferred_properties {
                 // We need to defer this property if it has a non-custom property dependency, or
                 // any variable that it references is already deferred.
-                defer = find_non_custom_references(
+                defer = (find_non_custom_references(
                     registration,
                     v,
                     context.has_color_scheme,
@@ -3099,6 +3206,11 @@ fn substitute_all(
                     /* include_unregistered = */ false,
                 )
                 .is_some()
+                    && (!context.font_affecting_properties.contains(&name)
+                        || registration
+                            .syntax
+                            .dependent_types()
+                            .intersects(DependentDataTypes::LENGTH)))
                     || v.references.refs.iter().any(|reference| {
                         reference
                             .function
@@ -3134,7 +3246,10 @@ fn substitute_all(
 
             // If there are no var references we should already be computed and substituted by now.
             if !defer
-                && (v.references.any_var || v.references.any_attr || v.references.any_function)
+                && (v.references.any_var
+                    || v.references.any_attr
+                    || v.references.any_function
+                    || !registration.syntax.is_universal())
             {
                 substitute_references_if_needed_and_apply(
                     &name,
@@ -3172,6 +3287,7 @@ fn substitute_all(
             deferred_properties: deferred_properties_map.as_deref_mut(),
             contains_computed_custom_property: false,
             function_levels,
+            font_affecting_properties,
         };
         traverse(
             VarType::Custom((*name).clone()),
@@ -3265,7 +3381,9 @@ fn substitute_references_if_needed_and_apply(
         let css_wide_kw = {
             let mut input = ParserInput::new(&css);
             let mut input = Parser::new(&mut input);
-            input.parse_entirely(CSSWideKeyword::parse)
+            input.parse_entirely(|input| {
+                CSSWideKeyword::parse(input).map_err(|()| input.new_custom_error::<(), ()>(()))
+            })
         };
 
         if let Ok(kw) = css_wide_kw {
