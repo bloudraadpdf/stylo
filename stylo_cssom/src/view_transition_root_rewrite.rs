@@ -296,7 +296,7 @@ fn append_projected_style_tree_rules(rule: &mut String, prelude: &str, body: &st
         group_selectors.clone(),
         project_declarations(
             body,
-            &["background", "background-color", "visibility"],
+            &["background", "background-color", "visibility", "overflow", "overflow-x", "overflow-y"],
             None,
         ),
     );
@@ -1405,6 +1405,14 @@ mod tests {
         )));
         assert!(rewritten.contains(&format!(
             "{GROUP_STYLE_ELEMENT}:where([data-moegoe-view-transition-name=\"6368696c64\"]){SPECIFICITY_WITNESS}{{background:inherit;}}",
+        )));
+    }
+
+    #[test]
+    fn projects_group_overflow_to_its_generated_style() {
+        let rewritten = rewrite_view_transition_root("::view-transition-group(parent){overflow:clip;overflow-x:hidden}");
+        assert!(rewritten.contains(&format!(
+            "{GROUP_STYLE_ELEMENT}:where([data-moegoe-view-transition-name=\"706172656e74\"]){SPECIFICITY_WITNESS}{{overflow:clip;overflow-x:hidden;}}",
         )));
     }
 
