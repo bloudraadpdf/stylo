@@ -15,7 +15,7 @@ use crate::properties::{
         self, visibility::computed_value::T as Visibility,
         content_visibility::computed_value::T as ContentVisibility,
     },
-    CSSWideKeyword, LonghandId, NonCustomPropertyIterator,
+    CSSWideKeyword, LonghandId, NonCustomPropertyIterator, ShorthandId,
     PropertyDeclaration, PropertyDeclarationId,
 };
 #[cfg(feature = "gecko")] use crate::properties::{
@@ -788,6 +788,7 @@ pub struct TransitionPropertyIterator<'a> {
     style: &'a ComputedValues,
     index_range: core::ops::Range<usize>,
     longhand_iterator: Option<NonCustomPropertyIterator<LonghandId>>,
+    custom_property_index: Option<usize>,
 }
 
 impl<'a> TransitionPropertyIterator<'a> {
@@ -797,6 +798,7 @@ impl<'a> TransitionPropertyIterator<'a> {
             style,
             index_range: 0..style.get_ui().transition_property_count(),
             longhand_iterator: None,
+            custom_property_index: None,
         }
     }
 }
@@ -827,6 +829,17 @@ impl<'a> Iterator for TransitionPropertyIterator<'a> {
                 self.longhand_iterator = None;
             }
 
+            if let Some(index) = self.custom_property_index {
+                if let Some((name, _)) = self.style.custom_properties().property_at(index) {
+                    self.custom_property_index = Some(index + 1);
+                    return Some(TransitionPropertyIteration {
+                        property: OwnedPropertyDeclarationId::Custom(name.clone()),
+                        index: self.index_range.start - 1,
+                    });
+                }
+                self.custom_property_index = None;
+            }
+
             let index = self.index_range.next()?;
             match self.style.get_ui().transition_property_at(index) {
                 TransitionProperty::NonCustom(id) => {
@@ -838,6 +851,9 @@ impl<'a> Iterator for TransitionPropertyIterator<'a> {
                             });
                         },
                         Err(shorthand_id) => {
+                            if shorthand_id == ShorthandId::All {
+                                self.custom_property_index = Some(0);
+                            }
                             // In the other cases, we set up our state so that we are ready to
                             // compute the next value of the iterator and then loop (equivalent
                             // to calling self.next()).
