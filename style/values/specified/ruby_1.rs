@@ -44,8 +44,8 @@ pub enum RubyMerge {
     #[default]
     Separate,
     /// All annotations in a segment are merged into a single run.
-    Collapse,
-    /// The UA picks `separate` or `collapse` based on heuristics.
+    Merge,
+    /// The UA picks `separate` or `merge` based on heuristics.
     Auto,
 }
 
