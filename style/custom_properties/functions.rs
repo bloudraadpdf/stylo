@@ -201,7 +201,7 @@ pub struct ElementCallSite<'a, E> {
 }
 
 impl<'a, E: TElement + 'a> ElementCallSite<'a, E> {
-    fn tree(&self, level: CascadeLevel) -> Option<<E::ConcreteNode as TNode>::ConcreteShadowRoot> {
+    pub(crate) fn tree(&self, level: CascadeLevel) -> Option<<E::ConcreteNode as TNode>::ConcreteShadowRoot> {
         let steps = level.shadow_scope_steps();
         if steps < 0 {
             let mut slots = SmallVec::<[E; 4]>::new();

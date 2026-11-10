@@ -13,7 +13,7 @@ use crate::computed_value_flags::ComputedValueFlags;
 use crate::context::{CascadeInputs, QuirksMode};
 use crate::custom_properties::{ComputedCustomProperties, CustomFunction, FunctionBodyItem};
 use crate::derives::*;
-use crate::dom::TElement;
+use crate::dom::{TElement, TShadowRoot};
 #[cfg(feature = "gecko")]
 use crate::gecko_bindings::structs::{ServoStyleSetSizes, StyleRuleInclusion};
 use crate::invalidation::element::invalidation_map::{
@@ -2135,6 +2135,42 @@ impl Stylist {
         E: TElement + 'a,
     {
         self.lookup_element_dependent_at_rule(element, |data| data.animations.get(name))
+    }
+
+    /// Resolve an animation name from the tree of its winning declaration, searching enclosing trees outwards.
+    pub fn lookup_keyframes_for_style<'a, E>(
+        &'a self,
+        name: &Atom,
+        element: E,
+        computed: &ComputedValues,
+        guards: &StylesheetGuards,
+    ) -> Option<&'a KeyframesAnimation>
+    where
+        E: TElement + 'a,
+    {
+        let level = computed.rules().self_and_ancestors().find_map(|node| {
+            let level = node.cascade_level();
+            let source = node.style_source()?;
+            source.read(level.guard(guards)).declaration_importance_iter().any(|(declaration, importance)| {
+                importance == node.importance()
+                    && declaration.id() == properties::PropertyDeclarationId::Longhand(properties::LonghandId::AnimationName)
+            }).then_some(level)
+        }).unwrap_or_else(CascadeLevel::same_tree_author_normal);
+        let site = crate::custom_properties::ElementCallSite {
+            stylist: self,
+            element,
+            originating_element: None,
+        };
+        let mut tree = site.tree(level);
+        while let Some(root) = tree {
+            if let Some(animation) = root.style_data().and_then(|data| data.animations.get(name)) {
+                return Some(animation);
+            }
+            tree = root.host().containing_shadow();
+        }
+        self.cascade_data.author.animations.get(name)
+            .or_else(|| self.cascade_data.user.animations.get(name))
+            .or_else(|| self.cascade_data.user_agent.cascade_data.animations.get(name))
     }
 
     /// Returns the registered `@position-try-rule` animation for the specified name.

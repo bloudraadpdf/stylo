@@ -2261,7 +2261,7 @@ pub fn maybe_start_animations<E>(
         // phase it holds.
         let duration = style.animation_duration_mod(i).seconds() as f64;
 
-        let keyframe_animation = match context.stylist.lookup_keyframes(name, element) {
+        let keyframe_animation = match context.stylist.lookup_keyframes_for_style(name, element, new_style, &context.guards) {
             Some(animation) => animation,
             None => continue,
         };
