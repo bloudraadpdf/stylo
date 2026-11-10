@@ -810,6 +810,28 @@ impl References {
         })
     }
 
+    fn eager_variable_names(&self) -> impl Iterator<Item = &Name> {
+        self.refs.iter().filter_map(|reference| {
+            if self.in_lazy_argument(reference) {
+                return None;
+            }
+            let in_fallback = self.refs.iter().any(|outer| match &outer.function {
+                SubstitutionFunction::DynamicVar { arguments, .. }
+                | SubstitutionFunction::Inherit(arguments) => {
+                    arguments.get(1).is_some_and(|fallback| {
+                        reference.start >= fallback.start && reference.end <= fallback.end
+                    })
+                },
+                _ => outer.fallback.as_ref().is_some_and(|fallback| {
+                    reference.start >= fallback.start.get() && reference.end < outer.end
+                }),
+            });
+            if in_fallback {
+                return None;
+            }
+            reference.function.variable_name()
+        })
+    }
 }
 
 /// Whether this name belongs to an unobservable lexical private property.
@@ -2984,7 +3006,9 @@ fn substitute_all(
                         })
                         .copied(),
                 );
-                substitutor.dependency_names = Some(Vec::new());
+                // A failed substitution still has direct references after the failure.
+                substitutor.dependency_names =
+                    Some(v.references.eager_variable_names().cloned().collect());
                 let owner = match &var {
                     VarType::Custom(name) => substitutor.calls.guard_property(name).ok(),
                     VarType::NonCustom(_) => None,
