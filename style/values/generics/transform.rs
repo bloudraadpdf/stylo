@@ -285,7 +285,7 @@ where
     Perspective(GenericPerspectiveFunction<Length>),
     /// A intermediate type for interpolation of mismatched transform lists.
     #[allow(missing_docs)]
-    #[css(serialize_with = "serialize_interpolate_matrix")]
+    #[css(function = "transform-interpolate", serialize_with = "serialize_interpolate_matrix")]
     InterpolateMatrix {
         from_list: GenericTransform<
             GenericTransformOperation<Angle, Number, Length, Integer, LengthPercentage>,
