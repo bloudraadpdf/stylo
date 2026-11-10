@@ -1184,7 +1184,7 @@ impl ParsedCssRule {
             },
             CssRule::FontPaletteValues(rule) => canonical_font_palette_values_rule(rule),
             CssRule::Property(rule) => ParsedCssRuleKind::Property(CanonicalPropertyRule {
-                name: rule.name.to_css_string(),
+                name: format!("--{}", rule.name.0),
                 syntax: rule
                     .data
                     .syntax
