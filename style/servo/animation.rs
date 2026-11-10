@@ -256,15 +256,10 @@ impl IntermediateComputedKeyframe {
             KeyframesStepValue::Declarations { ref block } => block,
         };
 
-        // Filter out !important, non-animatable properties, and the
-        // 'display' property (which is only animatable from SMIL).
+        // Filter out !important and non-animatable properties.
         let guard = block.read_with(&guard);
         for declaration in guard.normal_declaration_iter() {
             if let PropertyDeclarationId::Longhand(id) = declaration.id() {
-                if id == LonghandId::Display {
-                    continue;
-                }
-
                 if !id.is_animatable() {
                     continue;
                 }

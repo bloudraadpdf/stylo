@@ -546,10 +546,6 @@ fn get_animated_properties(
         for declaration in block.normal_declaration_iter() {
             let declaration_id = declaration.id();
 
-            if declaration_id == PropertyDeclarationId::Longhand(LonghandId::Display) {
-                continue;
-            }
-
             if !declaration_id.is_animatable() {
                 continue;
             }
