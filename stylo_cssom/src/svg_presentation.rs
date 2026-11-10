@@ -678,3 +678,136 @@ pub fn transform_attribute_operations(source: &str) -> Option<Vec<SvgTransformOp
         })
         .collect()
 }
+
+#[derive(Clone, Debug)]
+pub enum SvgLengthSpecifiedValue {
+    Number(style::values::specified::Number),
+    LengthPercentage(style::values::specified::LengthPercentage),
+}
+
+#[derive(Clone, Debug)]
+struct SvgLengthScalar {
+    value: f32,
+    unit: String,
+}
+
+/// SVG 2's reflected length, parsed by the native CSS value parser.
+#[derive(Clone, Debug)]
+pub struct SvgLengthValue {
+    pub specified: SvgLengthSpecifiedValue,
+    scalar: Option<SvgLengthScalar>,
+    serialization: String,
+}
+
+impl SvgLengthValue {
+    pub fn parse(source: &str) -> Option<Self> {
+        use cssparser::{Parser, ParserInput, Token};
+        use style_traits::ToCss;
+        let (specified, serialization) = if let Some(value) =
+            crate::values::parse_value::<style::values::specified::Number>(source)
+        {
+            let serialization = value.to_css_string();
+            (SvgLengthSpecifiedValue::Number(value), serialization)
+        } else {
+            let value =
+                crate::values::parse_value::<style::values::specified::LengthPercentage>(source)?;
+            let serialization = value.to_css_string();
+            (
+                SvgLengthSpecifiedValue::LengthPercentage(value),
+                serialization,
+            )
+        };
+        let mut input = ParserInput::new(source);
+        let mut input = Parser::new(&mut input);
+        let scalar = match input.next().ok()?.clone() {
+            Token::Number { value, .. } => Some(SvgLengthScalar {
+                value,
+                unit: String::new(),
+            }),
+            Token::Percentage { unit_value, .. } => Some(SvgLengthScalar {
+                value: unit_value * 100.0,
+                unit: "%".into(),
+            }),
+            Token::Dimension { value, unit, .. } => Some(SvgLengthScalar {
+                value,
+                unit: unit.to_ascii_lowercase(),
+            }),
+            _ => None,
+        }
+        .filter(|_| input.is_exhausted());
+        Some(Self {
+            specified,
+            scalar,
+            serialization,
+        })
+    }
+
+    pub fn unit_type(&self) -> u16 {
+        match self.scalar.as_ref().map(|scalar| scalar.unit.as_str()) {
+            Some("") => 1,
+            Some("%") => 2,
+            Some("em") => 3,
+            Some("ex") => 4,
+            Some("px") => 5,
+            Some("cm") => 6,
+            Some("mm") => 7,
+            Some("in") => 8,
+            Some("pt") => 9,
+            Some("pc") => 10,
+            _ => 0,
+        }
+    }
+
+    pub fn specified_units(&self) -> f32 {
+        self.scalar.as_ref().map_or(0.0, |scalar| scalar.value)
+    }
+
+    pub fn serialization(&self) -> &str {
+        &self.serialization
+    }
+
+    pub fn with_specified_units(&self, value: f32) -> Option<Self> {
+        if !value.is_finite() {
+            return None;
+        }
+        let unit = self
+            .scalar
+            .as_ref()
+            .map_or("", |scalar| scalar.unit.as_str());
+        Self::parse(&format!("{value}{unit}"))
+    }
+}
+
+#[test]
+fn reflected_svg_lengths_keep_unknown_scalar_units_and_native_calc() {
+    for (source, unit, factor) in [
+        ("12", 1, 12.0),
+        ("12%", 2, 12.0),
+        ("12em", 3, 12.0),
+        ("12cqw", 0, 12.0),
+        ("calc(1cqw + 2px)", 0, 0.0),
+    ] {
+        let length = SvgLengthValue::parse(source).unwrap();
+        assert_eq!(length.unit_type(), unit, "{source}");
+        assert_eq!(length.specified_units(), factor, "{source}");
+    }
+    assert_eq!(
+        SvgLengthValue::parse("12cqw")
+            .unwrap()
+            .with_specified_units(20.0)
+            .unwrap()
+            .serialization(),
+        "20cqw"
+    );
+    assert_eq!(
+        SvgLengthValue::parse("calc(1cqw + 2px)")
+            .unwrap()
+            .with_specified_units(7.0)
+            .unwrap()
+            .serialization(),
+        "7"
+    );
+    for invalid in ["1cqw extra", "calc(1px + red)", "not-a-length"] {
+        assert!(SvgLengthValue::parse(invalid).is_none());
+    }
+}
