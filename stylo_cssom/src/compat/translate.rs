@@ -2341,7 +2341,8 @@ mod prince_rewrite_tests {
                 "background-origin",
                 "-bd-bleed-box, content-box",
                 CssomDeclarationPriority::Normal,
-                &std::sync::Arc::from("about:blank")
+                &std::sync::Arc::from("about:blank"),
+                selectors::matching::QuirksMode::NoQuirks
             )
             .is_some()
         );
@@ -2358,7 +2359,8 @@ mod prince_rewrite_tests {
                 "line-height",
                 "none",
                 CssomDeclarationPriority::Normal,
-                &base
+                &base,
+                selectors::matching::QuirksMode::NoQuirks
             )
             .is_none()
         );
@@ -2367,7 +2369,8 @@ mod prince_rewrite_tests {
                 "line-height",
                 "-bd-none",
                 CssomDeclarationPriority::Normal,
-                &base
+                &base,
+                selectors::matching::QuirksMode::NoQuirks
             )
             .is_some()
         );
@@ -4088,8 +4091,12 @@ fn engine_ignores_declaration(compat: CompatMode, name: &str, value: &str) -> bo
     use style::properties::PropertyDeclaration;
     use style::properties::longhands::text_decoration_style::SpecifiedValue as DecorationStyle;
 
-    let declarations =
-        || crate::declaration_parser::parse_inline_style_block(&format!("{name}:{value}"));
+    let declarations = || {
+        crate::declaration_parser::parse_inline_style_block(
+            &format!("{name}:{value}"),
+            selectors::matching::QuirksMode::NoQuirks,
+        )
+    };
     match compat {
         CompatMode::None | CompatMode::WeasyPrint => false,
         CompatMode::Chromium => {
@@ -4634,7 +4641,10 @@ fn scan_block<'i>(parser: &mut Parser<'i, '_>, state: &mut TranslateState, full_
                             use crate::declaration_parser::{
                                 inline_style_property_is_important, parse_inline_style_block,
                             };
-                            let block = parse_inline_style_block(&format!("{name}:{raw_value}"));
+                            let block = parse_inline_style_block(
+                                &format!("{name}:{raw_value}"),
+                                selectors::matching::QuirksMode::NoQuirks,
+                            );
                             if let Some(important) =
                                 inline_style_property_is_important(&block, &name)
                             {
@@ -5946,7 +5956,11 @@ pub(crate) fn inline_vendor_declarations(
         .into_iter()
         .map(|(property, value)| {
             crate::declaration_parser::parse_inline_style_property_declarations(
-                property, &value, priority, base_url,
+                property,
+                &value,
+                priority,
+                base_url,
+                selectors::matching::QuirksMode::NoQuirks,
             )
         })
         .collect::<Option<Vec<_>>>()?;
@@ -6192,9 +6206,10 @@ fn translate_property(lower_property: &str, raw_value: &str) -> Translated {
             let admitted = matches!(
                 keyword.as_str(),
                 "note" | "invisible" | "highlight" | "underline" | "strikeout" | "squiggly"
-            ) || crate::declaration_parser::parse_inline_style_block(&format!(
-                "-bd-pdf-comment:{value}"
-            ))
+            ) || crate::declaration_parser::parse_inline_style_block(
+                &format!("-bd-pdf-comment:{value}"),
+                selectors::matching::QuirksMode::NoQuirks,
+            )
             .as_typed()
             .declarations()
             .iter()
@@ -8653,8 +8668,15 @@ mod pdfreactor_comment_tests {
         for side in ["left", "right"] {
             let source = format!("span{{-ro-comment-position:page-{side}}}");
             let translated = translate_compat(&source, CompatMode::PdfReactor);
-            assert!(translated.rewritten.contains(&format!("-bd-pdf-comment-position: page-{side}")));
-            let parsed = crate::declaration_parser::parse_inline_style_block(&format!("-bd-pdf-comment-position:page-{side}"));
+            assert!(
+                translated
+                    .rewritten
+                    .contains(&format!("-bd-pdf-comment-position: page-{side}"))
+            );
+            let parsed = crate::declaration_parser::parse_inline_style_block(
+                &format!("-bd-pdf-comment-position:page-{side}"),
+                selectors::matching::QuirksMode::NoQuirks,
+            );
             assert_eq!(parsed.as_typed().declarations().len(), 1);
         }
     }
@@ -8669,7 +8691,10 @@ mod pdfreactor_comment_tests {
             ("-bd-pdf-comment-start:'a' 'b' 'c'", 0),
             ("-bd-pdf-comment-contents:content(invalid)", 0),
         ] {
-            let parsed = crate::declaration_parser::parse_inline_style_block(source);
+            let parsed = crate::declaration_parser::parse_inline_style_block(
+                source,
+                selectors::matching::QuirksMode::NoQuirks,
+            );
             assert_eq!(parsed.as_typed().declarations().len(), count, "{source}");
         }
     }

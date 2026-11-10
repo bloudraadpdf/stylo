@@ -136,6 +136,7 @@ pub fn css_supports(query: CssSupportsQuery<'_>) -> bool {
                 value,
                 stylo_cssom_model::Importance::Normal,
                 &std::sync::Arc::from("about:blank"),
+                selectors::matching::QuirksMode::NoQuirks,
             )
             .is_some()
             {

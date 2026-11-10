@@ -130,21 +130,24 @@ impl CssomDeclarationPriority {
     }
 }
 
-pub fn parse_inline_style_block(css: &str) -> InlineStyleBlock {
+pub fn parse_inline_style_block(
+    css: &str,
+    quirks_mode: selectors::matching::QuirksMode,
+) -> InlineStyleBlock {
     crate::context::initialise_required_servo_style_prefs();
     let url_data: UrlExtraData = ABOUT_BLANK.clone().into();
     InlineStyleBlock(parse_style_attribute(
         css,
         &url_data,
         None,
-        selectors::matching::QuirksMode::NoQuirks,
+        quirks_mode,
         CssRuleType::Style,
     ))
 }
 
 #[must_use]
 pub fn parse_inline_style(input: DeclarationInput<'_>) -> InlineStyleBlock {
-    parse_inline_style_block(input.0)
+    parse_inline_style_block(input.0, selectors::matching::QuirksMode::NoQuirks)
 }
 
 #[must_use]
@@ -322,10 +325,11 @@ fn parse_specified_component_values(
 #[must_use]
 pub fn inline_style_declarations(
     projection: &stylo_cssom_model::InlineStyleProjection,
+    quirks_mode: selectors::matching::QuirksMode,
 ) -> Arc<[stylo_cssom_model::SpecifiedDeclaration]> {
     match projection.presentation() {
         Some(css) if !projection.is_hydrated() => {
-            parse_inline_style_declarations(css, projection.context().base_url.clone())
+            parse_inline_style_declarations(css, projection.context().base_url.clone(), quirks_mode)
         },
         _ => Arc::clone(projection.declarations()),
     }
@@ -334,9 +338,14 @@ pub fn inline_style_declarations(
 pub fn parse_inline_style_declarations(
     css: &str,
     base_url: Arc<str>,
+    quirks_mode: selectors::matching::QuirksMode,
 ) -> Arc<[stylo_cssom_model::SpecifiedDeclaration]> {
-    let mut declarations = inline_native_declarations(css, &base_url);
-    declarations.extend(parse_inline_compatibility_declarations(css, &base_url));
+    let mut declarations = inline_native_declarations(css, &base_url, quirks_mode);
+    declarations.extend(parse_inline_compatibility_declarations(
+        css,
+        &base_url,
+        quirks_mode,
+    ));
     declarations.sort_by_key(|(order, _)| *order);
     let mut winners: Vec<(usize, stylo_cssom_model::SpecifiedDeclaration)> = Vec::new();
     for (order, declaration) in declarations {
@@ -392,6 +401,7 @@ fn inline_declaration_after_at_rules(css: &str) -> Option<&str> {
 fn inline_native_declarations(
     css: &str,
     base_url: &Arc<str>,
+    quirks_mode: selectors::matching::QuirksMode,
 ) -> Vec<(usize, stylo_cssom_model::SpecifiedDeclaration)> {
     let mut declarations = Vec::new();
     for (order, range) in crate::css_scan::split_top_level(css.as_bytes(), b';')
@@ -406,9 +416,9 @@ fn inline_native_declarations(
                 && crate::css_scan::trim_ascii(value.as_bytes()).is_empty()
         });
         let block = if empty_custom_property {
-            parse_inline_style_block(&format!("{authored};"))
+            parse_inline_style_block(&format!("{authored};"), quirks_mode)
         } else {
-            parse_inline_style_block(authored)
+            parse_inline_style_block(authored, quirks_mode)
         };
         let shorthand = authored
             .split_once(':')
@@ -543,7 +553,11 @@ mod calculation_source_tests {
         let url_data = ABOUT_BLANK.clone().into();
         for property in ["grid", "grid-template"] {
             let css = format!("{property}: calc(50px - 10%) / calc(100px + 20%)");
-            let declarations = parse_inline_style_declarations(&css, base.clone());
+            let declarations = parse_inline_style_declarations(
+                &css,
+                base.clone(),
+                selectors::matching::QuirksMode::NoQuirks,
+            );
             assert!(!declarations.is_empty());
             for declaration in declarations.iter() {
                 let projected =
@@ -569,14 +583,22 @@ mod calculation_source_tests {
                         "abs(1cm)",
                         CssomDeclarationPriority::Normal,
                         &base,
+                        selectors::matching::QuirksMode::NoQuirks,
                     )
                     .unwrap()
                 } else {
-                    parse_inline_style_declarations(&format!("{property}: abs(1cm)"), base.clone())
-                        .to_vec()
+                    parse_inline_style_declarations(
+                        &format!("{property}: abs(1cm)"),
+                        base.clone(),
+                        selectors::matching::QuirksMode::NoQuirks,
+                    )
+                    .to_vec()
                 };
                 let canonical = inline_style_get_property_value(
-                    &parse_inline_style_block(&format!("{property}: abs(1cm)")),
+                    &parse_inline_style_block(
+                        &format!("{property}: abs(1cm)"),
+                        selectors::matching::QuirksMode::NoQuirks,
+                    ),
                     property,
                 );
                 assert_eq!(
@@ -624,6 +646,7 @@ fn specified_style_value_from_components(
 fn parse_inline_compatibility_declarations(
     css: &str,
     base_url: &Arc<str>,
+    quirks_mode: selectors::matching::QuirksMode,
 ) -> Vec<(usize, stylo_cssom_model::SpecifiedDeclaration)> {
     crate::css_scan::split_top_level(css.as_bytes(), b';')
         .into_iter()
@@ -636,13 +659,17 @@ fn parse_inline_compatibility_declarations(
             let authored_property = declaration[..colon].trim();
             let (value, importance) =
                 split_inline_declaration_importance(declaration[colon + 1..].trim());
-            parse_inline_compatibility_declaration(authored_property, value, importance, base_url)
-                .into_iter()
-                .flat_map(|declaration| {
-                    compatibility::expand_declaration(declaration, base_url, false)
-                })
-                .map(|declaration| (order, declaration))
-                .collect::<Vec<_>>()
+            parse_inline_compatibility_declaration(
+                authored_property,
+                value,
+                importance,
+                base_url,
+                quirks_mode,
+            )
+            .into_iter()
+            .flat_map(|declaration| compatibility::expand_declaration(declaration, base_url, false))
+            .map(|declaration| (order, declaration))
+            .collect::<Vec<_>>()
         })
         .collect()
 }
@@ -652,6 +679,7 @@ pub fn parse_inline_compatibility_declaration(
     value: &str,
     importance: stylo_cssom_model::Importance,
     base_url: &Arc<str>,
+    quirks_mode: selectors::matching::QuirksMode,
 ) -> Option<stylo_cssom_model::SpecifiedDeclaration> {
     let vendor = authored_property.to_ascii_lowercase();
     if crate::compat::translate::required_compat_for(&vendor).is_some() {
@@ -678,7 +706,8 @@ pub fn parse_inline_compatibility_declaration(
     let property = compatibility_declaration_property(authored_property, value)?;
     let url_data = url::Url::parse(base_url).ok()?.into();
     let namespaces = Namespaces::default();
-    let context = declaration_parser_context(CssRuleType::Style, &url_data, &namespaces);
+    let mut context = declaration_parser_context(CssRuleType::Style, &url_data, &namespaces);
+    context.quirks_mode = quirks_mode;
     parse_compatibility_declaration(property, value, importance, &context)
 }
 
@@ -727,7 +756,10 @@ fn parse_compatibility_declaration(
         stylo_cssom_model::InlineCompatibilityProperty::FitTolerance
             if !matches!(trimmed.to_ascii_lowercase().as_str(), "normal" | "infinite") =>
         {
-            let block = parse_inline_style_block(&format!("masonry-slack:{trimmed}"));
+            let block = parse_inline_style_block(
+                &format!("masonry-slack:{trimmed}"),
+                selectors::matching::QuirksMode::NoQuirks,
+            );
             canonical_value = Some(inline_style_get_property_value(&block, "masonry-slack")?);
         },
         stylo_cssom_model::InlineCompatibilityProperty::GridLanesPack
@@ -759,6 +791,7 @@ pub fn parse_inline_style_property_declarations(
     value: &str,
     priority: CssomDeclarationPriority,
     base_url: &Arc<str>,
+    quirks_mode: selectors::matching::QuirksMode,
 ) -> Option<Vec<stylo_cssom_model::SpecifiedDeclaration>> {
     if let Some(declaration) = parse_inline_compatibility_declaration(
         property,
@@ -768,6 +801,7 @@ pub fn parse_inline_style_property_declarations(
             CssomDeclarationPriority::Important => stylo_cssom_model::Importance::Important,
         },
         base_url,
+        quirks_mode,
     ) {
         return Some(compatibility::expand_declaration(
             declaration,
@@ -776,11 +810,12 @@ pub fn parse_inline_style_property_declarations(
         ));
     }
     let backing_property = inline_style_cssom_backing_property(property);
-    let mut block = parse_inline_style_block("");
+    let mut block = parse_inline_style_block("", selectors::matching::QuirksMode::NoQuirks);
     if !inline_style_set_property(
         &mut block,
         DeclarationPropertyInput::new(property, value),
         priority,
+        quirks_mode,
     ) {
         return None;
     }
@@ -1145,7 +1180,10 @@ pub fn inline_style_cssom_authored_value(property: &str, value: Option<String>) 
                 .windows(10)
                 .any(|word| word.eq_ignore_ascii_case(b"color-mix(")))
         {
-            let block = parse_inline_style_block(&format!("color: {value}"));
+            let block = parse_inline_style_block(
+                &format!("color: {value}"),
+                selectors::matching::QuirksMode::NoQuirks,
+            );
             if inline_color_needs_authored_cascade_value(&block) {
                 if let Some(serialized) = inline_style_get_property_value(&block, "color") {
                     return serialized;
@@ -1277,13 +1315,24 @@ pub fn inline_style_set_property(
     block: &mut InlineStyleBlock,
     input: DeclarationPropertyInput<'_>,
     priority: CssomDeclarationPriority,
+    quirks_mode: selectors::matching::QuirksMode,
 ) -> bool {
     let DeclarationPropertyInput { property, value } = input;
     let Some(value) = inline_style_cssom_backing_value(property, value) else {
         return false;
     };
     let property = inline_style_cssom_backing_property(property);
-    declaration_block_set_property(&mut block.0, property, value, priority, CssRuleType::Style)
+    let url_data: UrlExtraData = ABOUT_BLANK.clone().into();
+    declaration_block_set_property_with_context(
+        &mut block.0,
+        property,
+        value,
+        priority,
+        CssRuleType::Style,
+        &url_data,
+        &Namespaces::default(),
+        quirks_mode,
+    )
 }
 
 pub fn cssom_declaration_set_property(
@@ -1371,6 +1420,7 @@ pub fn mutate_rule_declaration_block(
         context.rule_type(),
         &url_data,
         &namespaces,
+        selectors::matching::QuirksMode::NoQuirks,
     ) {
         return None;
     }
@@ -1438,6 +1488,7 @@ pub fn stylo_rule_declaration_block(
                 .as_ref()
                 .unwrap_or(&ABOUT_BLANK.clone().into()),
             &namespaces,
+            selectors::matching::QuirksMode::NoQuirks,
         ) {
             return None;
         }
@@ -1558,6 +1609,7 @@ impl<'a> PendingShorthandExpansions<'a> {
             self.context.rule_type(),
             &url_data,
             self.namespaces,
+            selectors::matching::QuirksMode::NoQuirks,
         )
         .then(|| PendingShorthandExpansion {
             source: pending.clone(),
@@ -1684,6 +1736,7 @@ fn declaration_block_set_property(
         rule_type,
         &url_data,
         &Namespaces::default(),
+        selectors::matching::QuirksMode::NoQuirks,
     )
 }
 
@@ -1695,8 +1748,10 @@ fn declaration_block_set_property_with_context(
     rule_type: CssRuleType,
     url_data: &UrlExtraData,
     namespaces: &Namespaces,
+    quirks_mode: selectors::matching::QuirksMode,
 ) -> bool {
-    let context = declaration_parser_context(rule_type, url_data, namespaces);
+    let mut context = declaration_parser_context(rule_type, url_data, namespaces);
+    context.quirks_mode = quirks_mode;
     let Ok(id) = PropertyId::parse(property, &context) else {
         return false;
     };
@@ -1817,6 +1872,61 @@ pub fn inline_style_declarations_with_importance(
 #[cfg(test)]
 mod tests {
     #[test]
+    fn inline_document_quirks_apply_to_attributes_and_cssom_without_leaking_to_supports() {
+        use selectors::matching::QuirksMode;
+        let base = Arc::from("about:blank");
+        for mode in [
+            QuirksMode::NoQuirks,
+            QuirksMode::LimitedQuirks,
+            QuirksMode::Quirks,
+        ] {
+            let quirky = mode == QuirksMode::Quirks;
+            for (property, value, accepts_quirks) in [
+                ("height", "100", true),
+                ("margin", "10 20", true),
+                ("height", "calc(100)", false),
+                ("background", "100 100", false),
+                ("border", "10 solid red", false),
+            ] {
+                let expected = quirky && accepts_quirks;
+                let property_declarations = parse_inline_style_property_declarations(
+                    property,
+                    value,
+                    CssomDeclarationPriority::Normal,
+                    &base,
+                    mode,
+                );
+                assert_eq!(
+                    property_declarations.is_some(),
+                    expected,
+                    "{mode:?}/{property}:{value}"
+                );
+                let declarations = parse_inline_style_declarations(
+                    &format!("{property}:{value}"),
+                    base.clone(),
+                    mode,
+                );
+                assert_eq!(
+                    !declarations.is_empty(),
+                    expected,
+                    "attribute {mode:?}/{property}:{value}"
+                );
+            }
+            let block = parse_inline_style_block("height:100", mode);
+            assert_eq!(
+                inline_style_get_property_value(&block, "height").as_deref(),
+                quirky.then_some("100px")
+            );
+        }
+        assert!(!crate::values::css_supports(
+            crate::values::CssSupportsQuery::Declaration {
+                property: "height",
+                value: "100",
+            }
+        ));
+    }
+
+    #[test]
     fn background_clip_only_keywords_set_and_serialize_the_border_box_origin() {
         for value in [
             "border-area",
@@ -1824,7 +1934,10 @@ mod tests {
             "text",
             "border-area border-box",
         ] {
-            let block = parse_inline_style_block(&format!("background:{value}"));
+            let block = parse_inline_style_block(
+                &format!("background:{value}"),
+                selectors::matching::QuirksMode::NoQuirks,
+            );
             assert_eq!(
                 inline_style_get_property_value(&block, "background-origin").as_deref(),
                 Some("border-box")
@@ -1839,7 +1952,10 @@ mod tests {
                 Some(expected)
             );
         }
-        let block = parse_inline_style_block("background:padding-box border-area");
+        let block = parse_inline_style_block(
+            "background:padding-box border-area",
+            selectors::matching::QuirksMode::NoQuirks,
+        );
         assert_eq!(
             inline_style_get_property_value(&block, "background").as_deref(),
             Some("padding-box border-area")
@@ -1855,7 +1971,10 @@ mod tests {
         ] {
             assert!(
                 inline_style_get_property_value(
-                    &parse_inline_style_block(&format!("background-image:{value}")),
+                    &parse_inline_style_block(
+                        &format!("background-image:{value}"),
+                        selectors::matching::QuirksMode::NoQuirks
+                    ),
                     "background-image"
                 )
                 .is_none(),
@@ -1869,7 +1988,10 @@ mod tests {
         ] {
             assert!(
                 inline_style_get_property_value(
-                    &parse_inline_style_block(&format!("background-image:{value}")),
+                    &parse_inline_style_block(
+                        &format!("background-image:{value}"),
+                        selectors::matching::QuirksMode::NoQuirks
+                    ),
                     "background-image"
                 )
                 .is_some(),
@@ -1890,6 +2012,7 @@ mod tests {
                 authored,
                 CssomDeclarationPriority::Normal,
                 &Arc::from("about:blank"),
+                selectors::matching::QuirksMode::NoQuirks,
             )
             .unwrap();
             assert_eq!(
@@ -1900,6 +2023,7 @@ mod tests {
             let declarations = parse_inline_style_declarations(
                 &format!("box-shadow:{authored} !important"),
                 "about:blank".into(),
+                selectors::matching::QuirksMode::NoQuirks,
             );
             assert_eq!(
                 crate::specified::projected_specified_property_value(&declarations, "box-shadow")
@@ -1916,6 +2040,7 @@ mod tests {
             "none, red 1px 2px",
             CssomDeclarationPriority::Normal,
             &Arc::from("about:blank"),
+            selectors::matching::QuirksMode::NoQuirks,
         )
         .unwrap();
         assert_eq!(
@@ -1994,13 +2119,19 @@ mod tests {
         for value in ["", "invalid", "-1pt", "8pt; color:red"] {
             assert!(math_script_min_size_presentation_hint(value).is_none());
         }
-        let block = parse_inline_style_block("-x-math-script-min-size:0pt");
+        let block = parse_inline_style_block(
+            "-x-math-script-min-size:0pt",
+            selectors::matching::QuirksMode::NoQuirks,
+        );
         assert!(block.0.declarations().is_empty());
     }
 
     #[test]
     fn revert_rule_is_preserved_as_a_css_wide_declared_value() {
-        let block = parse_inline_style_block("color: revert-rule; --accent: revert-rule");
+        let block = parse_inline_style_block(
+            "color: revert-rule; --accent: revert-rule",
+            selectors::matching::QuirksMode::NoQuirks,
+        );
         assert_eq!(
             inline_style_get_property_value(&block, "color").as_deref(),
             Some("revert-rule")
@@ -2027,6 +2158,7 @@ mod tests {
             "initial",
             CssomDeclarationPriority::Normal,
             &Arc::from("about:blank"),
+            selectors::matching::QuirksMode::NoQuirks,
         )
         .expect("the mask shorthand must parse");
         assert_eq!(
@@ -2060,7 +2192,11 @@ mod tests {
             ("@foo{} }color:red;z-index:1", "z-index: 1;"),
             ("{}color:red;z-index:1", "z-index: 1;"),
         ] {
-            let declarations = parse_inline_style_declarations(source, "about:blank".into());
+            let declarations = parse_inline_style_declarations(
+                source,
+                "about:blank".into(),
+                selectors::matching::QuirksMode::NoQuirks,
+            );
             assert_eq!(
                 crate::specified::serialize_specified_declarations(&declarations),
                 expected,
@@ -2078,6 +2214,7 @@ mod tests {
                 authored,
                 CssomDeclarationPriority::Normal,
                 &Arc::from("about:blank"),
+                selectors::matching::QuirksMode::NoQuirks,
             )
             .expect("timing function must parse");
             let cascade_value =
@@ -2094,6 +2231,7 @@ mod tests {
             authored,
             CssomDeclarationPriority::Normal,
             &Arc::from("about:blank"),
+            selectors::matching::QuirksMode::NoQuirks,
         )
         .expect("direct RGB must parse");
         let cascade_value =
@@ -2116,6 +2254,7 @@ mod tests {
             authored,
             CssomDeclarationPriority::Normal,
             &Arc::from("about:blank"),
+            selectors::matching::QuirksMode::NoQuirks,
         )
         .expect("relative color must parse");
         assert_eq!(
@@ -2132,6 +2271,7 @@ mod tests {
             authored,
             CssomDeclarationPriority::Normal,
             &Arc::from("about:blank"),
+            selectors::matching::QuirksMode::NoQuirks,
         )
         .expect("relative color must parse");
         let cascade_value =
@@ -2151,6 +2291,7 @@ mod tests {
             authored,
             CssomDeclarationPriority::Normal,
             &Arc::from("about:blank"),
+            selectors::matching::QuirksMode::NoQuirks,
         )
         .expect("color mix must parse");
         assert_eq!(
@@ -2172,10 +2313,14 @@ mod tests {
             authored,
             CssomDeclarationPriority::Normal,
             &Arc::from("about:blank"),
+            selectors::matching::QuirksMode::NoQuirks,
         )
         .expect("color mix must parse");
         let canonical = inline_style_get_property_value(
-            &parse_inline_style_block(&format!("color: {authored}")),
+            &parse_inline_style_block(
+                &format!("color: {authored}"),
+                selectors::matching::QuirksMode::NoQuirks,
+            ),
             "color",
         );
         assert_eq!(canonical.as_deref(), Some(authored));
@@ -2206,13 +2351,19 @@ mod tests {
             "luminosity",
         ] {
             let value = format!("color-layers({mode}, red, blue)");
-            let block = parse_inline_style_block(&format!("color: {value}"));
+            let block = parse_inline_style_block(
+                &format!("color: {value}"),
+                selectors::matching::QuirksMode::NoQuirks,
+            );
             assert!(
                 inline_style_get_property_value(&block, "color").is_some(),
                 "{mode}"
             );
         }
-        let normal = parse_inline_style_block("color: color-layers(normal, red, blue)");
+        let normal = parse_inline_style_block(
+            "color: color-layers(normal, red, blue)",
+            selectors::matching::QuirksMode::NoQuirks,
+        );
         assert_eq!(
             inline_style_get_property_value(&normal, "color").as_deref(),
             Some("color-layers(red, blue)"),
@@ -2233,7 +2384,10 @@ mod tests {
         ] {
             assert_eq!(
                 inline_style_get_property_value(
-                    &parse_inline_style_block(&format!("color: {authored}")),
+                    &parse_inline_style_block(
+                        &format!("color: {authored}"),
+                        selectors::matching::QuirksMode::NoQuirks
+                    ),
                     "color"
                 )
                 .as_deref(),
@@ -2250,7 +2404,10 @@ mod tests {
         ] {
             assert!(
                 inline_style_get_property_value(
-                    &parse_inline_style_block(&format!("color: {authored}")),
+                    &parse_inline_style_block(
+                        &format!("color: {authored}"),
+                        selectors::matching::QuirksMode::NoQuirks
+                    ),
                     "color",
                 )
                 .is_some(),
@@ -2264,7 +2421,10 @@ mod tests {
         for value in ["both", "end", "normal", "start"] {
             assert_eq!(
                 inline_style_get_property_value(
-                    &parse_inline_style_block(&format!("text-box-trim:{value}")),
+                    &parse_inline_style_block(
+                        &format!("text-box-trim:{value}"),
+                        selectors::matching::QuirksMode::NoQuirks
+                    ),
                     "text-box-trim"
                 )
                 .as_deref(),
@@ -2312,8 +2472,11 @@ mod tests {
 
     #[test]
     fn inline_vendor_declarations_preserve_source_page() {
-        let declarations =
-            parse_inline_style_declarations("-ro-source-page: 2 !important", "about:blank".into());
+        let declarations = parse_inline_style_declarations(
+            "-ro-source-page: 2 !important",
+            "about:blank".into(),
+            selectors::matching::QuirksMode::NoQuirks,
+        );
         assert_eq!(declarations.len(), 1);
         assert_eq!(
             declarations[0].importance,
@@ -2328,8 +2491,11 @@ mod tests {
     #[test]
     fn inline_vendor_declarations_project_only_for_the_selected_profile() {
         use crate::compat::CompatMode;
-        let declarations =
-            parse_inline_style_declarations("-ro-source-page: 2 !important", "about:blank".into());
+        let declarations = parse_inline_style_declarations(
+            "-ro-source-page: 2 !important",
+            "about:blank".into(),
+            selectors::matching::QuirksMode::NoQuirks,
+        );
         let url_data = crate::context::ABOUT_BLANK.clone().into();
         for mode in [CompatMode::None, CompatMode::Prince, CompatMode::PdfReactor] {
             let projected = crate::specified::project_inline_style_declaration_with_compat(
@@ -2354,6 +2520,7 @@ mod tests {
             let declarations = parse_inline_style_declarations(
                 &format!("-ro-height:{value}"),
                 "about:blank".into(),
+                selectors::matching::QuirksMode::NoQuirks,
             );
             let projected = crate::specified::project_inline_style_declaration_with_compat(
                 &declarations[0],
@@ -2377,6 +2544,7 @@ mod tests {
                     value,
                     CssomDeclarationPriority::Normal,
                     &base_url,
+                    selectors::matching::QuirksMode::NoQuirks
                 )
                 .is_none(),
                 "{value}"
@@ -2385,6 +2553,7 @@ mod tests {
         let mut declarations = parse_inline_style_declarations(
             "height:1px;-ro-height:2px!important;height:3px;-ro-height:4px",
             base_url.clone(),
+            selectors::matching::QuirksMode::NoQuirks,
         )
         .to_vec();
         assert_eq!(
@@ -2396,6 +2565,7 @@ mod tests {
             "5px",
             CssomDeclarationPriority::Normal,
             &base_url,
+            selectors::matching::QuirksMode::NoQuirks,
         )
         .unwrap();
         mutation::apply_updates(&mut declarations, updates, true);
@@ -2418,6 +2588,7 @@ mod tests {
                 value,
                 stylo_cssom_model::Importance::Normal,
                 &Arc::from("about:blank"),
+                selectors::matching::QuirksMode::NoQuirks,
             )
             .unwrap();
             assert_eq!(
@@ -2442,6 +2613,7 @@ mod tests {
                 "view-transition-scope:all;view-transition-group:contain",
             ),
             "about:blank".into(),
+            selectors::matching::QuirksMode::NoQuirks,
         );
         let compatibility = declarations
             .iter()
@@ -2472,6 +2644,7 @@ mod tests {
             let declarations = parse_inline_style_declarations(
                 &format!("-webkit-box-align:{keyword};align-items:safe center"),
                 "about:blank".into(),
+                selectors::matching::QuirksMode::NoQuirks,
             );
             assert_eq!(
                 crate::specified::projected_specified_property_value(
@@ -2498,6 +2671,7 @@ mod tests {
                     value,
                     CssomDeclarationPriority::Normal,
                     &base_url,
+                    selectors::matching::QuirksMode::NoQuirks
                 )
                 .is_some(),
                 "{value}"
@@ -2514,6 +2688,7 @@ mod tests {
                     value,
                     CssomDeclarationPriority::Normal,
                     &base_url,
+                    selectors::matching::QuirksMode::NoQuirks
                 )
                 .is_none(),
                 "{value}"
@@ -2526,6 +2701,7 @@ mod tests {
                     value,
                     CssomDeclarationPriority::Normal,
                     &base_url,
+                    selectors::matching::QuirksMode::NoQuirks
                 )
                 .is_some(),
                 "{value}"
@@ -2538,6 +2714,7 @@ mod tests {
                     value,
                     CssomDeclarationPriority::Normal,
                     &base_url,
+                    selectors::matching::QuirksMode::NoQuirks
                 )
                 .is_none(),
                 "{value}"
@@ -2577,31 +2754,31 @@ mod tests {
                 stylo_cssom_model::Importance::Important,
             ),
         ] {
-            let winners = parse_inline_style_declarations(css, "about:blank".into())
-                .iter()
-                .filter_map(|declaration| {
-                    let name = match &declaration.property {
-                        Property::Standard(property)
-                            if property.schema().name == "masonry-slack" =>
-                        {
-                            Some("masonry-slack")
-                        },
-                        Property::Compatibility(Compat::FitTolerance) => Some("fit-tolerance"),
-                        Property::Standard(_)
-                        | Property::Custom(_)
-                        | Property::Compatibility(_)
-                        | Property::Vendor(_) => None,
-                    }?;
-                    Some((
-                        name,
-                        crate::specified::serialize_projected_specified_style_value(
-                            &declaration.value,
-                        )
+            let winners = parse_inline_style_declarations(
+                css,
+                "about:blank".into(),
+                selectors::matching::QuirksMode::NoQuirks,
+            )
+            .iter()
+            .filter_map(|declaration| {
+                let name = match &declaration.property {
+                    Property::Standard(property) if property.schema().name == "masonry-slack" => {
+                        Some("masonry-slack")
+                    },
+                    Property::Compatibility(Compat::FitTolerance) => Some("fit-tolerance"),
+                    Property::Standard(_)
+                    | Property::Custom(_)
+                    | Property::Compatibility(_)
+                    | Property::Vendor(_) => None,
+                }?;
+                Some((
+                    name,
+                    crate::specified::serialize_projected_specified_style_value(&declaration.value)
                         .into_css_text(),
-                        declaration.importance,
-                    ))
-                })
-                .collect::<Vec<_>>();
+                    declaration.importance,
+                ))
+            })
+            .collect::<Vec<_>>();
             assert_eq!(winners, [(name, value.to_owned(), importance)], "{css}");
         }
     }
@@ -2613,14 +2790,17 @@ mod tests {
             "margin-left: 4px; margin-bottom: 3px; margin-right: 2px; margin-top: 1px",
             "margin-right: 2px; color: red; margin-left: 4px; margin-top: 1px; margin-bottom: 3px",
         ] {
-            let block = parse_inline_style_block(css);
+            let block = parse_inline_style_block(css, selectors::matching::QuirksMode::NoQuirks);
             assert_eq!(
                 inline_style_get_property_value(&block, "margin").as_deref(),
                 Some("1px 2px 3px 4px"),
                 "{css}"
             );
         }
-        let incomplete = parse_inline_style_block("margin-top: 1px; margin-left: 4px");
+        let incomplete = parse_inline_style_block(
+            "margin-top: 1px; margin-left: 4px",
+            selectors::matching::QuirksMode::NoQuirks,
+        );
         assert_eq!(inline_style_get_property_value(&incomplete, "margin"), None);
     }
 
@@ -2633,7 +2813,10 @@ mod tests {
             ("0 1 0%", "0%"),
             ("0 1 0px", "0px"),
         ] {
-            let block = parse_inline_style_block(&format!("flex:{value}"));
+            let block = parse_inline_style_block(
+                &format!("flex:{value}"),
+                selectors::matching::QuirksMode::NoQuirks,
+            );
             assert_eq!(
                 inline_style_get_property_value(&block, "flex-basis").as_deref(),
                 Some(basis),
@@ -2654,7 +2837,7 @@ mod tests {
             "font: 12px/1.5 serif; background: url(a.png) no-repeat; flex: 1 1 0",
             "margin: var(--space); grid-area: 1 / 2 / 3 / 4",
         ] {
-            let block = parse_inline_style_block(css).0;
+            let block = parse_inline_style_block(css, selectors::matching::QuirksMode::NoQuirks).0;
             let every_schema_shorthand = stylo_cssom_model::STANDARD_PROPERTIES
                 .iter()
                 .filter(|schema| schema.kind == stylo_cssom_model::PropertyKind::Shorthand)
@@ -2683,7 +2866,10 @@ mod tests {
 
     #[test]
     fn object_view_box_retains_a_basic_shape_rectangle() {
-        let block = parse_inline_style_block("object-view-box: xywh(10px 20px 30px 40px)");
+        let block = parse_inline_style_block(
+            "object-view-box: xywh(10px 20px 30px 40px)",
+            selectors::matching::QuirksMode::NoQuirks,
+        );
         assert_eq!(
             inline_style_get_property_value(&block, "object-view-box").as_deref(),
             Some("xywh(10px 20px 30px 40px)")
@@ -2695,6 +2881,7 @@ mod tests {
         let declarations = parse_inline_style_declarations(
             "clip-path:shape(from 0 0,curve to 5% var(--s,1) with 5% 5%, vline to 100%)",
             "about:blank".into(),
+            selectors::matching::QuirksMode::NoQuirks,
         );
 
         assert!(matches!(
@@ -2706,8 +2893,11 @@ mod tests {
 
     #[test]
     fn inline_shorthand_retains_pending_substitution_classification() {
-        let declarations =
-            parse_inline_style_declarations("margin:var(--space)", "about:blank".into());
+        let declarations = parse_inline_style_declarations(
+            "margin:var(--space)",
+            "about:blank".into(),
+            selectors::matching::QuirksMode::NoQuirks,
+        );
 
         assert_eq!(declarations.len(), 4);
         assert!(declarations.iter().all(|declaration| {
@@ -2733,6 +2923,7 @@ mod tests {
                 keyword,
                 CssomDeclarationPriority::Normal,
                 &"about:blank".into(),
+                selectors::matching::QuirksMode::NoQuirks,
             )
             .expect("system font shorthand parses");
             assert_eq!(
@@ -2744,6 +2935,7 @@ mod tests {
             let from_list = parse_inline_style_declarations(
                 &format!("font:{keyword} !important"),
                 "about:blank".into(),
+                selectors::matching::QuirksMode::NoQuirks,
             );
             assert_eq!(
                 crate::specified::projected_specified_property_value(&from_list, "font").as_deref(),
@@ -2787,6 +2979,7 @@ mod tests {
                 keyword,
                 CssomDeclarationPriority::Normal,
                 &"about:blank".into(),
+                selectors::matching::QuirksMode::NoQuirks,
             )
             .expect("system font shorthand parses");
             let style = parse_inline_style_property_declarations(
@@ -2794,6 +2987,7 @@ mod tests {
                 "normal",
                 CssomDeclarationPriority::Normal,
                 &"about:blank".into(),
+                selectors::matching::QuirksMode::NoQuirks,
             )
             .expect("font-style longhand parses")
             .pop()
@@ -2820,7 +3014,7 @@ mod tests {
             "transition:var(--timing)",
             "transition:var(--timing);transition-delay:1s",
         ] {
-            let block = parse_inline_style_block(css);
+            let block = parse_inline_style_block(css, selectors::matching::QuirksMode::NoQuirks);
             let declarations =
                 specified_declarations_from_inline_style_block(&block, "about:blank".into());
             let duration = declarations
@@ -2858,7 +3052,11 @@ mod tests {
 
     #[test]
     fn inline_empty_custom_property_retains_an_empty_token_stream() {
-        let declarations = parse_inline_style_declarations("--empty: ", "about:blank".into());
+        let declarations = parse_inline_style_declarations(
+            "--empty: ",
+            "about:blank".into(),
+            selectors::matching::QuirksMode::NoQuirks,
+        );
 
         assert!(matches!(
             declarations.as_ref(),
@@ -2893,7 +3091,10 @@ mod tests {
                 ("initial", "initial", Some("initial")),
                 ("revert", "revert", Some("revert")),
             ] {
-                let block = parse_inline_style_block(&format!("{first}:{left};{second}:{right}"));
+                let block = parse_inline_style_block(
+                    &format!("{first}:{left};{second}:{right}"),
+                    selectors::matching::QuirksMode::NoQuirks,
+                );
                 assert_eq!(
                     inline_style_get_property_value(&block, shorthand).as_deref(),
                     expected,
@@ -2919,7 +3120,7 @@ mod tests {
                 "margin:1px!important;margin-top:initial!important",
             ),
         ] {
-            let block = parse_inline_style_block(css);
+            let block = parse_inline_style_block(css, selectors::matching::QuirksMode::NoQuirks);
             assert_eq!(
                 inline_style_property_is_important(&block, shorthand),
                 Some(true),
@@ -2935,7 +3136,8 @@ mod tests {
             "position-try-fallbacks:none;color:red",
             "position-try-order:normal!important;position-try-fallbacks:none;color:red",
         ] {
-            let mut block = parse_inline_style_block(css);
+            let mut block =
+                parse_inline_style_block(css, selectors::matching::QuirksMode::NoQuirks);
             assert_eq!(
                 inline_style_remove_property(&mut block, "position-try"),
                 None,
@@ -2961,12 +3163,15 @@ mod tests {
 
     #[test]
     fn container_shorthand_expands_transactionally_and_serialises_canonically() {
-        let mut block =
-            parse_inline_style_block("container-name: old; container-type: inline-size");
+        let mut block = parse_inline_style_block(
+            "container-name: old; container-type: inline-size",
+            selectors::matching::QuirksMode::NoQuirks,
+        );
         assert!(inline_style_set_property(
             &mut block,
             DeclarationPropertyInput::new("container", "FOO/size"),
             CssomDeclarationPriority::Important,
+            selectors::matching::QuirksMode::NoQuirks
         ));
         assert_eq!(
             inline_style_get_property_value(&block, "container").as_deref(),
@@ -2986,6 +3191,7 @@ mod tests {
             &mut block,
             DeclarationPropertyInput::new("container", "FOO / size inline-size"),
             CssomDeclarationPriority::Normal,
+            selectors::matching::QuirksMode::NoQuirks
         ));
         assert_eq!(
             crate::declaration_serialization::serialise_inline_style_block(&block),
@@ -3018,12 +3224,13 @@ mod tests {
             ("  FOO  /size", "FOO / size"),
             ("normal / size", "normal / size"),
         ] {
-            let mut block = parse_inline_style_block("");
+            let mut block = parse_inline_style_block("", selectors::matching::QuirksMode::NoQuirks);
             assert!(
                 inline_style_set_property(
                     &mut block,
                     DeclarationPropertyInput::new("container", specified),
                     CssomDeclarationPriority::Normal,
+                    selectors::matching::QuirksMode::NoQuirks
                 ),
                 "{specified} must parse",
             );
@@ -3043,12 +3250,13 @@ mod tests {
             "name / block-size",
             "none / size style",
         ] {
-            let mut block = parse_inline_style_block("");
+            let mut block = parse_inline_style_block("", selectors::matching::QuirksMode::NoQuirks);
             assert!(
                 !inline_style_set_property(
                     &mut block,
                     DeclarationPropertyInput::new("container", invalid),
                     CssomDeclarationPriority::Normal,
+                    selectors::matching::QuirksMode::NoQuirks
                 ),
                 "{invalid} must be rejected",
             );
@@ -3058,12 +3266,18 @@ mod tests {
 
     #[test]
     fn radial_shape_position_preserves_specified_syntax() {
-        let block = parse_inline_style_block("shape-outside: circle(1in at bottom 2in right 1in)");
+        let block = parse_inline_style_block(
+            "shape-outside: circle(1in at bottom 2in right 1in)",
+            selectors::matching::QuirksMode::NoQuirks,
+        );
         assert_eq!(
             inline_style_get_property_value(&block, "shape-outside").as_deref(),
             Some("circle(1in at right 1in bottom 2in)")
         );
-        let invalid = parse_inline_style_block("shape-outside: circle(1in at 50% left)");
+        let invalid = parse_inline_style_block(
+            "shape-outside: circle(1in at 50% left)",
+            selectors::matching::QuirksMode::NoQuirks,
+        );
         assert_eq!(
             inline_style_get_property_value(&invalid, "shape-outside"),
             None
@@ -3140,7 +3354,7 @@ mod tests {
 
     #[test]
     fn position_try_shorthand_uses_the_typed_anchor_grammar() {
-        let mut block = parse_inline_style_block("");
+        let mut block = parse_inline_style_block("", selectors::matching::QuirksMode::NoQuirks);
         assert!(inline_style_set_property(
             &mut block,
             DeclarationPropertyInput::new(
@@ -3148,6 +3362,7 @@ mod tests {
                 "most-inline-size flip-inline flip-block, --fallback",
             ),
             CssomDeclarationPriority::Normal,
+            selectors::matching::QuirksMode::NoQuirks
         ));
 
         assert_eq!(

@@ -10,7 +10,10 @@ fn sizing_shorthands_have_native_cssom_expansions() {
     for prefix in ["", "min-", "max-"] {
         let property = format!("{prefix}size");
         for value in ["100px", "inherit", "initial", "unset", "revert-layer"] {
-            let block = parse_inline_style_block(&format!("{property}:{value}"));
+            let block = parse_inline_style_block(
+                &format!("{property}:{value}"),
+                selectors::matching::QuirksMode::NoQuirks,
+            );
             for axis in ["width", "height"] {
                 assert_eq!(
                     inline_style_get_property_value(&block, &format!("{prefix}{axis}")).as_deref(),
@@ -35,7 +38,10 @@ fn frame_sizing_keywords_have_native_cssom_values() {
         "content-width content-height",
         "content-width, content-height",
     ] {
-        let block = parse_inline_style_block(&format!("frame-sizing:{value}"));
+        let block = parse_inline_style_block(
+            &format!("frame-sizing:{value}"),
+            selectors::matching::QuirksMode::NoQuirks,
+        );
         assert_eq!(
             inline_style_get_property_value(&block, "frame-sizing"),
             None,
@@ -49,7 +55,10 @@ fn frame_sizing_keywords_have_native_cssom_values() {
         "content-inline-size",
         "content-block-size",
     ] {
-        let block = parse_inline_style_block(&format!("frame-sizing:{value}"));
+        let block = parse_inline_style_block(
+            &format!("frame-sizing:{value}"),
+            selectors::matching::QuirksMode::NoQuirks,
+        );
         assert_eq!(
             inline_style_get_property_value(&block, "frame-sizing").as_deref(),
             Some(value),

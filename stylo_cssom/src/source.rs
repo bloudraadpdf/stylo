@@ -275,7 +275,10 @@ pub fn local_url_fragment(source: &str) -> Option<String> {
 }
 
 pub fn inline_clip_path_reference(source: &str) -> InlineClipPathReference {
-    let block = crate::declaration_parser::parse_inline_style_block(source);
+    let block = crate::declaration_parser::parse_inline_style_block(
+        source,
+        selectors::matching::QuirksMode::NoQuirks,
+    );
     let Some(value) =
         crate::declaration_parser::inline_style_get_property_value(&block, "clip-path")
     else {

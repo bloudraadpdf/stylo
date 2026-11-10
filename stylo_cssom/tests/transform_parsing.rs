@@ -17,6 +17,7 @@ fn scale_calculations_retain_percentage_units() {
         let declarations = declaration_parser::parse_inline_style_declarations(
             &format!("scale:{source}"),
             "about:blank".into(),
+            selectors::matching::QuirksMode::NoQuirks,
         );
         assert_eq!(
             specified::projected_specified_property_value(&declarations, "scale").as_deref(),
@@ -38,6 +39,7 @@ fn scale_and_skew_axis_function_names_are_lowercase() {
         let declarations = declaration_parser::parse_inline_style_declarations(
             &format!("transform:{source}"),
             "about:blank".into(),
+            selectors::matching::QuirksMode::NoQuirks,
         );
         assert_eq!(
             specified::projected_specified_property_value(&declarations, "transform").as_deref(),

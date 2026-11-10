@@ -10,17 +10,19 @@ pub fn project_inline_style_with_compat(
     projection: &stylo_cssom_model::InlineStyleProjection,
     compat: crate::compat::CompatMode,
     url_data: &UrlExtraData,
+    quirks_mode: selectors::matching::QuirksMode,
 ) -> Vec<stylo_cssom_model::RuleDeclaration> {
     projection
         .presentation()
         .map(|css| crate::compat::translate::translate_compat_declarations(css, compat))
         .filter(|translation| !translation.is_borrowed())
         .map_or_else(
-            || crate::declaration_parser::inline_style_declarations(projection),
+            || crate::declaration_parser::inline_style_declarations(projection, quirks_mode),
             |translation| {
                 crate::declaration_parser::parse_inline_style_declarations(
                     &translation.rewritten,
                     projection.context().base_url.clone(),
+                    quirks_mode,
                 )
             },
         )
@@ -286,6 +288,7 @@ mod inline_compatibility_projection_tests {
         let declarations = crate::declaration_parser::parse_inline_style_declarations(
             "scroll-initial-target: nearest",
             "about:blank".into(),
+            selectors::matching::QuirksMode::NoQuirks,
         );
         assert_eq!(
             super::projected_specified_property_value(&declarations, "scroll-initial-target")
@@ -322,6 +325,7 @@ mod inline_compatibility_projection_tests {
             let declarations = crate::declaration_parser::parse_inline_style_declarations(
                 &format!("font-family: {authored} !important"),
                 "about:blank".into(),
+                selectors::matching::QuirksMode::NoQuirks,
             );
             let declaration = &declarations[0];
             for compat in [CompatMode::None, CompatMode::Prince, CompatMode::PdfReactor] {
@@ -385,6 +389,7 @@ mod inline_compatibility_projection_tests {
             let declarations = crate::declaration_parser::parse_inline_style_declarations(
                 source,
                 "about:blank".into(),
+                selectors::matching::QuirksMode::NoQuirks,
             );
             assert_eq!(
                 serialize_specified_declarations(&declarations),
@@ -395,6 +400,7 @@ mod inline_compatibility_projection_tests {
         let declarations = crate::declaration_parser::parse_inline_style_declarations(
             "font:menu",
             "about:blank".into(),
+            selectors::matching::QuirksMode::NoQuirks,
         );
         assert_eq!(
             projected_specified_property_value(&declarations, "font-variant"),
@@ -411,6 +417,7 @@ mod inline_compatibility_projection_tests {
                     let declarations = crate::declaration_parser::parse_inline_style_declarations(
                         &source,
                         "about:blank".into(),
+                        selectors::matching::QuirksMode::NoQuirks,
                     );
                     assert_eq!(
                         serialize_specified_declarations(&declarations),
@@ -429,6 +436,7 @@ mod inline_compatibility_projection_tests {
             "initial",
             crate::declaration_parser::CssomDeclarationPriority::Normal,
             &"about:blank".into(),
+            selectors::matching::QuirksMode::NoQuirks,
         )
         .expect("the all shorthand must parse");
         let started = std::time::Instant::now();
@@ -477,6 +485,7 @@ mod inline_compatibility_projection_tests {
             let declarations = crate::declaration_parser::parse_inline_style_declarations(
                 css,
                 "about:blank".into(),
+                selectors::matching::QuirksMode::NoQuirks,
             );
             assert_eq!(
                 projected_specified_property_value(&declarations, property).as_deref(),
@@ -502,6 +511,7 @@ mod inline_compatibility_projection_tests {
         let declarations = crate::declaration_parser::parse_inline_style_declarations(
             "margin-left:4px;margin-bottom:3px;margin-right:2px;margin-top:1px;--margin-top:9px",
             "about:blank".into(),
+            selectors::matching::QuirksMode::NoQuirks,
         );
         let schema = stylo_cssom_model::property_schema("margin").unwrap();
         let members = super::SpecifiedDeclarationIndex::new(&declarations)
@@ -546,11 +556,15 @@ mod inline_compatibility_projection_tests {
             ("background-image:url(./)", "url(\"./\")"),
             ("background-image:url(#local)", "url(\"#local\")"),
         ] {
-            let retained =
-                crate::declaration_parser::parse_inline_style_declarations(source, old_base.into());
+            let retained = crate::declaration_parser::parse_inline_style_declarations(
+                source,
+                old_base.into(),
+                selectors::matching::QuirksMode::NoQuirks,
+            );
             let assigned = crate::declaration_parser::parse_inline_style_declarations(
                 source,
                 current_base.into(),
+                selectors::matching::QuirksMode::NoQuirks,
             );
             for (declarations, expected_base) in [(&retained, old_base), (&assigned, current_base)]
             {
@@ -572,6 +586,7 @@ mod inline_compatibility_projection_tests {
             "1px",
             crate::declaration_parser::CssomDeclarationPriority::Normal,
             &"about:blank".into(),
+            selectors::matching::QuirksMode::NoQuirks,
         )
         .expect("the supported alias must parse");
         assert_eq!(
@@ -582,6 +597,7 @@ mod inline_compatibility_projection_tests {
         let declarations = crate::declaration_parser::parse_inline_style_declarations(
             "grid: 30px 40px / 50px 60px; grid-auto-flow: column",
             "about:blank".into(),
+            selectors::matching::QuirksMode::NoQuirks,
         );
         assert_eq!(
             projected_specified_property_value(&declarations, "grid-template").as_deref(),
@@ -591,6 +607,7 @@ mod inline_compatibility_projection_tests {
         let declarations = crate::declaration_parser::parse_inline_style_declarations(
             "grid: auto-flow / 10px; grid-template-rows: 20px",
             "about:blank".into(),
+            selectors::matching::QuirksMode::NoQuirks,
         );
         assert_eq!(
             projected_specified_property_value(&declarations, "grid-template").as_deref(),
@@ -607,6 +624,7 @@ mod inline_compatibility_projection_tests {
                 "grid-template:20px / 10px",
             ),
             "about:blank".into(),
+            selectors::matching::QuirksMode::NoQuirks,
         );
         assert_eq!(
             serialize_specified_declarations(&declarations),
@@ -616,6 +634,7 @@ mod inline_compatibility_projection_tests {
         let declarations = crate::declaration_parser::parse_inline_style_declarations(
             "grid: 1px / 2px; grid-auto-flow: row",
             "about:blank".into(),
+            selectors::matching::QuirksMode::NoQuirks,
         );
         assert_eq!(
             projected_specified_property_value(&declarations, "grid").as_deref(),
@@ -630,6 +649,7 @@ mod inline_compatibility_projection_tests {
             let declarations = crate::declaration_parser::parse_inline_style_declarations(
                 &format!("background: {background}"),
                 "about:blank".into(),
+                selectors::matching::QuirksMode::NoQuirks,
             );
             assert_eq!(
                 projected_specified_property_value(&declarations, "background-color").as_deref(),
@@ -650,6 +670,7 @@ mod inline_compatibility_projection_tests {
         let declarations = crate::declaration_parser::parse_inline_style_declarations(
             "font: normal normal xx-large/1.2 cursive",
             "about:blank".into(),
+            selectors::matching::QuirksMode::NoQuirks,
         );
 
         assert_eq!(
@@ -663,6 +684,7 @@ mod inline_compatibility_projection_tests {
         let declarations = crate::declaration_parser::parse_inline_style_declarations(
             "color: rgb(from rgb(20% 40% 60%) r g b)",
             "about:blank".into(),
+            selectors::matching::QuirksMode::NoQuirks,
         );
 
         assert_eq!(
@@ -673,6 +695,7 @@ mod inline_compatibility_projection_tests {
         let declarations = crate::declaration_parser::parse_inline_style_declarations(
             "color: rgb(from var(--color) calc(r * .3 + g * .59 + b * .11) r g)",
             "about:blank".into(),
+            selectors::matching::QuirksMode::NoQuirks,
         );
         assert_eq!(
             serialize_specified_declarations(&declarations),
@@ -685,6 +708,7 @@ mod inline_compatibility_projection_tests {
         let declarations = crate::declaration_parser::parse_inline_style_declarations(
             "background: var(--colour, lightgreen); --colour: initial",
             "about:blank".into(),
+            selectors::matching::QuirksMode::NoQuirks,
         );
 
         assert_eq!(
@@ -702,6 +726,7 @@ mod inline_compatibility_projection_tests {
         let declarations = crate::declaration_parser::parse_inline_style_declarations(
             "--size: 8px; margin: var(--size); margin-top: 10px",
             "about:blank".into(),
+            selectors::matching::QuirksMode::NoQuirks,
         );
         assert_eq!(
             serialize_specified_declarations(&declarations),
@@ -727,6 +752,7 @@ mod inline_compatibility_projection_tests {
         let declarations = crate::declaration_parser::parse_inline_style_declarations(
             "margin:var(--size); margin-top:10px",
             "about:blank".into(),
+            selectors::matching::QuirksMode::NoQuirks,
         );
         let css = serialize_specified_declarations(&declarations);
         assert!(!css.contains("margin:"), "{css}");
@@ -742,6 +768,7 @@ mod inline_compatibility_projection_tests {
         let declarations = crate::declaration_parser::parse_inline_style_declarations(
             "--comment: a/* comment */b; --url: foo url(bar)",
             "https://example.test/styles/".into(),
+            selectors::matching::QuirksMode::NoQuirks,
         );
 
         assert_eq!(
@@ -762,6 +789,7 @@ mod inline_compatibility_projection_tests {
             let declarations = crate::declaration_parser::parse_inline_style_declarations(
                 source,
                 "about:blank".into(),
+                selectors::matching::QuirksMode::NoQuirks,
             );
             assert_eq!(declarations.len(), 1, "{source}");
             assert_eq!(
@@ -773,6 +801,7 @@ mod inline_compatibility_projection_tests {
             let reparsed = crate::declaration_parser::parse_inline_style_declarations(
                 &serialized,
                 "about:blank".into(),
+                selectors::matching::QuirksMode::NoQuirks,
             );
             assert_eq!(reparsed.len(), 1, "{name}");
             assert_eq!(reparsed[0].property, declarations[0].property);
@@ -788,6 +817,7 @@ mod inline_compatibility_projection_tests {
         let declarations = crate::declaration_parser::parse_inline_style_declarations(
             "page-break-before:always;page-break-after:right;page-break-inside:avoid",
             "about:blank".into(),
+            selectors::matching::QuirksMode::NoQuirks,
         );
 
         assert_eq!(
@@ -807,7 +837,10 @@ mod inline_compatibility_projection_tests {
         ] {
             for priority in ["", " !important"] {
                 let css = format!("{shorthand}: var(--break){priority};");
-                let block = crate::declaration_parser::parse_inline_style_block(&css);
+                let block = crate::declaration_parser::parse_inline_style_block(
+                    &css,
+                    selectors::matching::QuirksMode::NoQuirks,
+                );
                 let canonical =
                     crate::declaration_serialization::serialise_inline_style_block(&block)
                         .into_css_text();
@@ -815,6 +848,7 @@ mod inline_compatibility_projection_tests {
                 let declarations = crate::declaration_parser::parse_inline_style_declarations(
                     &css,
                     "about:blank".into(),
+                    selectors::matching::QuirksMode::NoQuirks,
                 );
                 assert_eq!(
                     projected_specified_property_value(&declarations, shorthand).as_deref(),
@@ -837,6 +871,7 @@ mod inline_compatibility_projection_tests {
                 "row-rule-style:solid;row-rule-width:10px;row-rule-color:green",
             ),
             "about:blank".into(),
+            selectors::matching::QuirksMode::NoQuirks,
         );
 
         assert_eq!(
@@ -854,6 +889,7 @@ mod inline_compatibility_projection_tests {
                 "text-align:-webkit-right;display:-webkit-box",
             ),
             "about:blank".into(),
+            selectors::matching::QuirksMode::NoQuirks,
         );
         let projected = declarations
             .iter()
@@ -1544,6 +1580,7 @@ mod namespace_component_serialization_tests {
             let declarations = crate::declaration_parser::parse_inline_style_declarations(
                 &format!("content:{source}"),
                 "about:blank".into(),
+                selectors::matching::QuirksMode::NoQuirks,
             );
             let serialized = super::projected_specified_property_value(&declarations, "content")
                 .expect("valid content declaration");
@@ -1551,6 +1588,7 @@ mod namespace_component_serialization_tests {
             let reparsed = crate::declaration_parser::parse_inline_style_declarations(
                 &format!("content:{serialized}"),
                 "about:blank".into(),
+                selectors::matching::QuirksMode::NoQuirks,
             );
             assert_eq!(
                 super::projected_specified_property_value(&reparsed, "content").as_deref(),
@@ -1560,6 +1598,7 @@ mod namespace_component_serialization_tests {
         let custom = crate::declaration_parser::parse_inline_style_declarations(
             "--tokens:left | right",
             "about:blank".into(),
+            selectors::matching::QuirksMode::NoQuirks,
         );
         assert_eq!(
             super::projected_specified_property_value(&custom, "--tokens").as_deref(),
