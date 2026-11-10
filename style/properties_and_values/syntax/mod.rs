@@ -459,7 +459,7 @@ impl<'a> Parser<'a> {
             return Ok(ComponentName::DataType(self.parse_data_type_name()?));
         }
 
-        if b != b'\\' && !is_name_start(b) {
+        if b != b'\\' && b != b'-' && !is_name_start(b) {
             return Err(ParseError::InvalidNameStart);
         }
 

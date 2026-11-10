@@ -10,7 +10,7 @@ use std::fmt::{self, Write};
 use super::{
     registry::PropertyRegistrationData,
     syntax::{
-        Component as SyntaxComponent, ComponentName, Descriptor, Multiplier, data_type::DataType,
+        data_type::DataType, Component as SyntaxComponent, ComponentName, Descriptor, Multiplier,
     },
 };
 use crate::derives::*;
@@ -20,11 +20,10 @@ use crate::rule_tree::CascadeLevel;
 use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
 use crate::stylist::Stylist;
 use crate::values::{
-    CustomIdent,
     animated::{self, Animate, Procedure},
     computed::{self, ToComputedValue},
     generics::transform::Transform,
-    specified,
+    specified, CustomIdent,
 };
 use crate::{custom_properties::ComputedValue as ComputedPropertyValue, dom::AttributeTracker};
 use cssparser::{BasicParseErrorKind, ParseErrorKind, Parser as CSSParser, TokenSerializationType};
@@ -32,8 +31,8 @@ use selectors::matching::QuirksMode;
 use servo_arc::Arc;
 use smallvec::SmallVec;
 use style_traits::{
-    CssWriter, ParseError as StyleParseError, ParsingMode, StyleParseErrorKind, ToCss,
-    owned_str::OwnedStr,
+    owned_str::OwnedStr, CssWriter, ParseError as StyleParseError, ParsingMode,
+    StyleParseErrorKind, ToCss,
 };
 
 /// A single component of the computed value.
@@ -269,6 +268,11 @@ impl<Component: Animate + Clone> Animate for Value<Component> {
 }
 
 impl<Component> Value<Component> {
+    /// The typed value retained by this registration.
+    pub fn inner(&self) -> &ValueInner<Component> {
+        &self.v
+    }
+
     /// Creates a new registered custom property value.
     pub fn new(v: ValueInner<Component>, url_data: UrlExtraData) -> Self {
         let attr_tainted = matches!(&v, ValueInner::Universal(value) if value.is_attr_tainted());
@@ -302,6 +306,17 @@ impl<L, N, P, LP, C, Image, U, Integer, A, T, R, TF, TL>
 where
     Self: ToCss,
 {
+    pub(crate) fn contains_url(&self) -> bool {
+        match &self.v {
+            ValueInner::Component(component) => matches!(component, GenericValueComponent::Url(_)),
+            ValueInner::List(list) => list
+                .components
+                .iter()
+                .any(|component| matches!(component, GenericValueComponent::Url(_))),
+            ValueInner::Universal(_) => false,
+        }
+    }
+
     fn serialization_types(&self) -> (TokenSerializationType, TokenSerializationType) {
         match &self.v {
             ValueInner::Component(component) => component.serialization_types(),
@@ -350,6 +365,24 @@ pub type SpecifiedValue = Value<SpecifiedValueComponent>;
 /// Computed custom property value.
 pub type ComputedValue = Value<ComputedValueComponent>;
 
+impl ComputedValue {
+    fn resolve_colors(mut self, context: &computed::Context) -> Self {
+        let resolve = |component: &mut ComputedValueComponent| {
+            if let ComputedValueComponent::Color(color) = component {
+                *color = computed::Color::Absolute(
+                    color.resolve_to_absolute(&context.builder.get_inherited_text().color),
+                );
+            }
+        };
+        match &mut self.v {
+            ValueInner::Component(component) => resolve(component),
+            ValueInner::List(list) => list.components.iter_mut().for_each(resolve),
+            ValueInner::Universal(_) => {},
+        }
+        self
+    }
+}
+
 impl SpecifiedValue {
     /// Compute a typed custom property with its original name available to random-key simplification.
     pub fn compute_with_property<'i, 't>(
@@ -361,7 +394,7 @@ impl SpecifiedValue {
         property: &str,
     ) -> Result<ComputedValue, ()> {
         Self::parse_with_property(input, &registration.syntax, url_data, allow, property)
-            .map(|value| value.to_computed_value(context))
+            .map(|value| value.to_computed_value(context).resolve_colors(context))
             .map_err(|_| ())
     }
 
@@ -384,7 +417,7 @@ impl SpecifiedValue {
             return Err(());
         };
 
-        Ok(value.to_computed_value(context))
+        Ok(value.to_computed_value(context).resolve_colors(context))
     }
 
     /// Parse and validate a registered custom property value according to its syntax descriptor,
@@ -395,20 +428,32 @@ impl SpecifiedValue {
         url_data: &UrlExtraData,
         allow_computationally_dependent: AllowComputationallyDependent,
     ) -> Result<Self, StyleParseError<'i>> {
-        Self::parse_internal(input, syntax, url_data, allow_computationally_dependent, None)
+        Self::parse_internal(
+            input,
+            syntax,
+            url_data,
+            allow_computationally_dependent,
+            None,
+        )
     }
 
     /// Parse a typed custom property or function descriptor in its original declaration scope.
     pub fn parse_with_property<'i, 't>(
-        input: &mut CSSParser<'i, 't>, syntax: &Descriptor, url_data: &UrlExtraData,
-        allow: AllowComputationallyDependent, property: &str,
+        input: &mut CSSParser<'i, 't>,
+        syntax: &Descriptor,
+        url_data: &UrlExtraData,
+        allow: AllowComputationallyDependent,
+        property: &str,
     ) -> Result<Self, StyleParseError<'i>> {
         Self::parse_internal(input, syntax, url_data, allow, Some(property))
     }
 
     fn parse_internal<'i, 't>(
-        mut input: &mut CSSParser<'i, 't>, syntax: &Descriptor, url_data: &UrlExtraData,
-        allow_computationally_dependent: AllowComputationallyDependent, property: Option<&str>,
+        mut input: &mut CSSParser<'i, 't>,
+        syntax: &Descriptor,
+        url_data: &UrlExtraData,
+        allow_computationally_dependent: AllowComputationallyDependent,
+        property: Option<&str>,
     ) -> Result<Self, StyleParseError<'i>> {
         if syntax.is_universal() {
             let namespaces = crate::stylesheets::Namespaces::default();
@@ -424,7 +469,12 @@ impl SpecifiedValue {
         let mut multiplier = None;
         {
             let mut parser = Parser::new(syntax, &mut values, &mut multiplier);
-            parser.parse(&mut input, url_data, allow_computationally_dependent, property)?;
+            parser.parse(
+                &mut input,
+                url_data,
+                allow_computationally_dependent,
+                property,
+            )?;
         }
         let v = if let Some(multiplier) = multiplier {
             ValueInner::List(ComponentList {
@@ -682,7 +732,11 @@ impl<'a> Parser<'a> {
                 SpecifiedValueComponent::CustomIdent(name)
             },
             DataType::TransformList => {
-                SpecifiedValueComponent::TransformList(specified::Transform::parse(context, input)?)
+                let transform = specified::Transform::parse(context, input)?;
+                if transform.0.is_empty() {
+                    return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+                }
+                SpecifiedValueComponent::TransformList(transform)
             },
             DataType::String => {
                 let string = input.expect_string()?;
@@ -753,7 +807,11 @@ impl CustomAnimatedValue {
                 .value
                 .as_ref()
                 .zip(other.value.as_ref())
-                .is_some_and(|(from, to)| from.v.animate(&to.v, Procedure::Interpolate { progress: 0.5 }).is_ok())
+                .is_some_and(|(from, to)| {
+                    from.v
+                        .animate(&to.v, Procedure::Interpolate { progress: 0.5 })
+                        .is_ok()
+                })
     }
 
     pub(crate) fn from_computed(
@@ -871,7 +929,6 @@ impl CustomAnimatedValue {
 #[cfg(all(test, feature = "servo"))]
 mod tests {
     use super::*;
-    use crate::Atom;
     use crate::dom::DummyAttributeProvider;
     use crate::properties::{CustomDeclaration, CustomDeclarationValue, StyleBuilder};
     use crate::properties_and_values::registry::PropertyRegistration;
@@ -879,6 +936,7 @@ mod tests {
     use crate::rule_cache::RuleCacheConditions;
     use crate::stylesheets::container_rule::ContainerSizeQuery;
     use crate::test_support::{test_device, with_computed_context};
+    use crate::Atom;
 
     fn computed(syntax: &str, css: &str) -> Result<ComputedValue, ()> {
         let syntax = Descriptor::from_str(syntax, false).expect("the syntax must parse");
@@ -953,13 +1011,11 @@ mod tests {
         let tainted = computed("<number>", "1").unwrap().with_attr_taint(true);
         let plain = computed("<number>", "2").unwrap();
         for procedure in [Procedure::Add, Procedure::Accumulate { count: 2 }] {
-            assert!(
-                tainted
-                    .animate(&plain, procedure)
-                    .unwrap()
-                    .to_variable_value()
-                    .is_attr_tainted()
-            );
+            assert!(tainted
+                .animate(&plain, procedure)
+                .unwrap()
+                .to_variable_value()
+                .is_attr_tainted());
         }
     }
 

@@ -369,6 +369,11 @@ impl ::selectors::parser::PseudoElement for PseudoElement {
                 | Self::Placeholder
                 | Self::FileSelectorButton
                 | Self::DetailsContent
+                | Self::PickerSelect
+                | Self::PickerIcon
+                | Self::ScrollMarkerGroup
+                | Self::ScrollMarker
+                | Self::ScrollButton(_)
         )
     }
 

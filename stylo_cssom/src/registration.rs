@@ -275,7 +275,7 @@ pub fn validate_register_property(
     inherits: bool,
     initial_value: Option<&str>,
 ) -> Result<ValidatedRegistration, RegisterPropertyError> {
-    if !crate::is_valid_custom_property_name(name) {
+    if style::custom_properties::parse_name(name).is_err() {
         return Err(RegisterPropertyError::Syntax(format!(
             "name `{name}` is not a valid <custom-property-name>"
         )));

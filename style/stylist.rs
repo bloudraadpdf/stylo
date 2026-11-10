@@ -2841,6 +2841,7 @@ struct StylistSelectorVisitor<'a> {
 
     /// Whether any selector depends on a shadow-including ancestor through
     /// `:host-context()`.
+    has_host_dependency: &'a mut bool,
     has_host_context_dependency: &'a mut bool,
     has_slotted_dependency: &'a mut bool,
 }
@@ -2957,6 +2958,9 @@ impl<'a> SelectorVisitor for StylistSelectorVisitor<'a> {
             || component_needs_revalidation(s, self.passed_rightmost_selector);
 
         match *s {
+            Component::Host(_) => {
+                *self.has_host_dependency = true;
+            },
             Component::HostContext(_) => {
                 *self.has_host_context_dependency = true;
             },
@@ -3577,6 +3581,7 @@ pub struct CascadeData {
 
     /// Whether a selector depends on a shadow-including ancestor through
     /// `:host-context()`.
+    has_host_dependency: bool,
     has_host_context_dependency: bool,
     has_slotted_dependency: bool,
 
@@ -3712,6 +3717,7 @@ impl CascadeData {
             attribute_dependencies: PrecomputedHashSet::default(),
             state_dependencies: ElementState::empty(),
             document_state_dependencies: DocumentState::empty(),
+            has_host_dependency: false,
             has_host_context_dependency: false,
             has_slotted_dependency: false,
             mapped_ids: PrecomputedHashSet::default(),
@@ -3843,6 +3849,11 @@ impl CascadeData {
         &self,
     ) -> &AdditionalRelativeSelectorInvalidationMap {
         &self.additional_relative_selector_invalidation_map
+    }
+
+    /// Whether selectors depend on their shadow host.
+    pub fn has_host_dependency(&self) -> bool {
+        self.has_host_dependency
     }
 
     /// Returns whether a selector depends on a shadow-including ancestor
@@ -4278,6 +4289,7 @@ impl CascadeData {
                     state_dependencies: &mut self.state_dependencies,
                     nth_of_state_dependencies: &mut self.nth_of_state_dependencies,
                     document_state_dependencies: &mut self.document_state_dependencies,
+                    has_host_dependency: &mut self.has_host_dependency,
                     has_host_context_dependency: &mut self.has_host_context_dependency,
                     has_slotted_dependency: &mut self.has_slotted_dependency,
                 };
@@ -4947,6 +4959,7 @@ impl CascadeData {
                         state_dependencies: &mut self.state_dependencies,
                         nth_of_state_dependencies: &mut self.nth_of_state_dependencies,
                         document_state_dependencies: &mut self.document_state_dependencies,
+                        has_host_dependency: &mut self.has_host_dependency,
                         has_host_context_dependency: &mut self.has_host_context_dependency,
                         has_slotted_dependency: &mut self.has_slotted_dependency,
                     };
@@ -5276,6 +5289,7 @@ impl CascadeData {
         self.state_dependencies = ElementState::empty();
         self.nth_of_state_dependencies = ElementState::empty();
         self.document_state_dependencies = DocumentState::empty();
+        self.has_host_dependency = false;
         self.has_host_context_dependency = false;
         self.has_slotted_dependency = false;
         self.mapped_ids.clear();
@@ -5526,6 +5540,7 @@ pub fn needs_revalidation_for_testing(s: &Selector<SelectorImpl>) -> bool {
     let mut state_dependencies = ElementState::empty();
     let mut nth_of_state_dependencies = ElementState::empty();
     let mut document_state_dependencies = DocumentState::empty();
+    let mut has_host_dependency = false;
     let mut has_host_context_dependency = false;
     let mut has_slotted_dependency = false;
     let mut visitor = StylistSelectorVisitor {
@@ -5541,6 +5556,7 @@ pub fn needs_revalidation_for_testing(s: &Selector<SelectorImpl>) -> bool {
         state_dependencies: &mut state_dependencies,
         nth_of_state_dependencies: &mut nth_of_state_dependencies,
         document_state_dependencies: &mut document_state_dependencies,
+        has_host_dependency: &mut has_host_dependency,
         has_host_context_dependency: &mut has_host_context_dependency,
         has_slotted_dependency: &mut has_slotted_dependency,
     };
