@@ -362,7 +362,8 @@ impl ::selectors::parser::PseudoElement for PseudoElement {
     fn valid_after_slotted(&self) -> bool {
         matches!(
             self,
-            Self::Before
+            Self::Backdrop
+                | Self::Before
                 | Self::After
                 | Self::Marker
                 | Self::Placeholder
