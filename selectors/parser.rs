@@ -195,9 +195,6 @@ bitflags! {
         /// Whether we are after any of the pseudo-like things.
         const AFTER_PSEUDO = Self::AFTER_PART_LIKE.bits() | Self::AFTER_SLOTTED.bits() | Self::AFTER_NON_ELEMENT_BACKED_PSEUDO.bits() | Self::AFTER_BEFORE_OR_AFTER_PSEUDO.bits();
 
-        /// Whether we explicitly disallow combinators.
-        const DISALLOW_COMBINATORS = 1 << 6;
-
         /// Whether we explicitly disallow pseudo-element-like things.
         const DISALLOW_PSEUDOS = 1 << 7;
 
@@ -244,11 +241,6 @@ impl SelectorParsingState {
     #[inline]
     fn allows_tree_structural_pseudo_classes(self) -> bool {
         !self.intersects(Self::AFTER_PSEUDO) || self.intersects(Self::IN_PSEUDO_ELEMENT_TREE)
-    }
-
-    #[inline]
-    fn allows_combinators(self) -> bool {
-        !self.intersects(Self::DISALLOW_COMBINATORS)
     }
 
     #[inline]
@@ -693,12 +685,16 @@ where
     P: Parser<'i, Impl = Impl>,
     Impl: SelectorImpl,
 {
-    parse_selector(
+    let selector = parse_selector(
         parser,
         input,
-        state | SelectorParsingState::DISALLOW_PSEUDOS | SelectorParsingState::DISALLOW_COMBINATORS,
+        state | SelectorParsingState::DISALLOW_PSEUDOS,
         ParseRelative::No,
-    )
+    )?;
+    if selector.iter_raw_match_order().any(|component| matches!(component, Component::Combinator(_))) {
+        return Err(input.new_custom_error(SelectorParseErrorKind::InvalidState));
+    }
+    Ok(selector)
 }
 
 /// Ancestor hashes for the bloom filter. We precompute these and store them
@@ -2980,10 +2976,6 @@ where
             break;
         };
 
-        if !state.allows_combinators() {
-            return Err(input.new_custom_error(SelectorParseErrorKind::InvalidState));
-        }
-
         if state.intersects(SelectorParsingState::SKIP_DEFAULT_NAMESPACE)
             && !compound.has_type_selector
         {
@@ -3642,18 +3634,7 @@ where
             if !state.allows_tree_structural_pseudo_classes() {
                 return Err(input.new_custom_error(SelectorParseErrorKind::InvalidState));
             }
-            // Restrict only this argument's outer selector. Nested :has()
-            // arguments keep their own relative-selector grammar.
-            let selector = parse_selector(
-                parser,
-                input,
-                (state - SelectorParsingState::DISALLOW_COMBINATORS) | SelectorParsingState::DISALLOW_PSEUDOS,
-                ParseRelative::No,
-            )?;
-            if selector.iter_raw_match_order().any(|component| matches!(component, Component::Combinator(_))) {
-                return Err(input.new_custom_error(SelectorParseErrorKind::InvalidState));
-            }
-            return Ok(Component::HasSlotted(selector));
+            return Ok(Component::HasSlotted(parse_inner_compound_selector(parser, input, state)?));
         },
         "host" => {
             if !state.allows_tree_structural_pseudo_classes() {
