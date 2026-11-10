@@ -324,7 +324,7 @@ impl ::selectors::parser::PseudoElement for PseudoElement {
     }
 
     fn is_element_backed(&self) -> bool {
-        matches!(self, Self::DetailsContent)
+        matches!(self, Self::DetailsContent | Self::DetailsSummary)
     }
 
     fn is_in_pseudo_element_tree(&self) -> bool {
