@@ -144,9 +144,12 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
     #[cfg(feature = "servo")]
     fn adjust_background_blending(&mut self) {
         if !self.style.device.background_blending_enabled {
-            self.style.mutate_background().set_background_blend_mode(
-                crate::properties::longhands::background_blend_mode::get_initial_value(),
-            );
+            let initial = crate::properties::longhands::background_blend_mode::get_initial_value();
+            if self.style.get_background().background_blend_mode != initial {
+                self.style
+                    .mutate_background()
+                    .set_background_blend_mode(initial);
+            }
         }
     }
 
@@ -1246,6 +1249,16 @@ mod outline_tests {
 mod background_tests {
     use super::*;
     use crate::properties::longhands::background_blend_mode;
+
+    #[test]
+    fn initial_background_keeps_shared_storage_when_blending_disabled() {
+        let mut device = crate::test_support::test_device();
+        device.background_blending_enabled = false;
+        let mut style = StyleBuilder::for_inheritance(&device, None, None, None);
+        let initial = std::ptr::from_ref(style.get_background());
+        StyleAdjuster::new(&mut style).adjust_background_blending();
+        assert_eq!(std::ptr::from_ref(style.get_background()), initial);
+    }
 
     #[test]
     fn background_blending_can_be_disabled_without_changing_mix_blending() {
