@@ -2775,6 +2775,10 @@ mod tests {
                 .hang { dominant-baseline: hanging; }
                 .ideo { dominant-baseline: ideographic; }
                 .math { dominant-baseline: mathematical; }
+                .top { dominant-baseline: text-top; }
+                .bottom { dominant-baseline: text-bottom; }
+                .old-top { dominant-baseline: text-before-edge; }
+                .old-bottom { dominant-baseline: text-after-edge; }
             "#,
         );
         let guard = stylesheet.shared_lock.read();
@@ -2803,6 +2807,10 @@ mod tests {
                 "hanging".to_string(),
                 "ideographic".to_string(),
                 "mathematical".to_string(),
+                "text-top".to_string(),
+                "text-bottom".to_string(),
+                "text-top".to_string(),
+                "text-bottom".to_string(),
             ],
             "typed Servo rules should preserve dominant-baseline declarations",
         );
