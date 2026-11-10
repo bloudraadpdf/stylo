@@ -48,7 +48,6 @@ pub mod css_identifier;
 pub mod css_scan;
 pub mod declaration_parser;
 pub mod declaration_serialization;
-pub mod overlay_transition_rewrite;
 pub mod property_schema;
 pub mod typed_om;
 

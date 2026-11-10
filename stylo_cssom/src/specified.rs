@@ -251,18 +251,6 @@ fn project_inline_compatibility_declaration(
             }
         },
         Property::Standard(property)
-            if matches!(property.schema().name, "transition" | "transition-property") =>
-        {
-            one(
-                property.schema().name,
-                replace_projected_ident(
-                    &declaration.value,
-                    "overlay",
-                    crate::overlay_transition_rewrite::INTERNAL_OVERLAY_TRANSITION_PROPERTY,
-                ),
-            )
-        },
-        Property::Standard(property)
             if matches!(property.schema().name, "text-align" | "text-align-all") =>
         {
             vec![
