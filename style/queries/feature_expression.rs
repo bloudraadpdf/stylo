@@ -808,7 +808,7 @@ impl QueryExpressionValue {
             Ok(value) => return Ok(value),
             Err(error) => error,
         };
-        if feature_type != FeatureType::Container {
+        if !matches!(feature_type, FeatureType::Container | FeatureType::ScrollState) {
             return Err(error);
         }
         input.reset(&start);
@@ -864,5 +864,48 @@ impl QueryExpressionValue {
                 QueryExpressionValue::Fallback(FallbackQuery::parse(context, input)?)
             },
         })
+    }
+}
+
+#[cfg(all(test, feature = "servo"))]
+mod substitution_tests {
+    use super::*;
+    use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
+    use style_traits::ParsingMode;
+
+    #[test]
+    fn scroll_state_values_accept_references_but_media_values_do_not() {
+        let url_data = UrlExtraData::from(url::Url::parse("https://example.invalid/").unwrap());
+        let context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            ParsingMode::DEFAULT,
+            crate::context::QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        let (_, scrollable) = FeatureType::ScrollState
+            .find_feature(&Atom::from("scrollable"))
+            .unwrap();
+        for value in ["var(--direction)", "var(--missing, right)"] {
+            let mut input = ParserInput::new(value);
+            let parsed = Parser::new(&mut input)
+                .parse_entirely(|input| {
+                    QueryExpressionValue::parse_for_type(FeatureType::ScrollState, scrollable, &context, input)
+                })
+                .unwrap();
+            assert!(matches!(parsed, QueryExpressionValue::Unparsed(_)));
+        }
+        let (_, width) = FeatureType::Media.find_feature(&Atom::from("width")).unwrap();
+        let mut input = ParserInput::new("var(--width)");
+        assert!(
+            Parser::new(&mut input)
+                .parse_entirely(|input| {
+                    QueryExpressionValue::parse_for_type(FeatureType::Media, width, &context, input)
+                })
+                .is_err()
+        );
     }
 }

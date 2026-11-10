@@ -107,3 +107,16 @@ fn adapter_support_conditions_keep_native_boolean_and_token_rules() {
         );
     }
 }
+
+#[test]
+fn slider_thumb_alias_reports_the_existing_implemented_pseudo() {
+    for selector in ["input::slider-thumb", "input::-webkit-slider-thumb"] {
+        assert!(stylo_cssom::selector_query::parse_selector(selector).is_ok());
+        assert!(css_supports(CssSupportsQuery::Condition(&format!(
+            "selector({selector})"
+        ))));
+    }
+    assert!(!css_supports(CssSupportsQuery::Condition(
+        "selector(input::-webkit-asdf)"
+    )));
+}

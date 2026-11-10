@@ -1278,7 +1278,7 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             "spelling-error" => SpellingError,
             "target-text" => TargetText,
             "search-text" => SearchText,
-            "slider-thumb" => SliderThumb,
+            "slider-thumb" | "-webkit-slider-thumb" => SliderThumb,
             "slider-track" => SliderTrack,
             "slider-fill" => SliderFill,
             "view-transition" => ViewTransition,
