@@ -365,24 +365,6 @@ pub type SpecifiedValue = Value<SpecifiedValueComponent>;
 /// Computed custom property value.
 pub type ComputedValue = Value<ComputedValueComponent>;
 
-impl ComputedValue {
-    fn resolve_colors(mut self, context: &computed::Context) -> Self {
-        let resolve = |component: &mut ComputedValueComponent| {
-            if let ComputedValueComponent::Color(color) = component {
-                *color = computed::Color::Absolute(
-                    color.resolve_to_absolute(&context.builder.get_inherited_text().color),
-                );
-            }
-        };
-        match &mut self.v {
-            ValueInner::Component(component) => resolve(component),
-            ValueInner::List(list) => list.components.iter_mut().for_each(resolve),
-            ValueInner::Universal(_) => {},
-        }
-        self
-    }
-}
-
 impl SpecifiedValue {
     /// Compute a typed custom property with its original name available to random-key simplification.
     pub fn compute_with_property<'i, 't>(
@@ -394,7 +376,7 @@ impl SpecifiedValue {
         property: &str,
     ) -> Result<ComputedValue, ()> {
         Self::parse_with_property(input, &registration.syntax, url_data, allow, property)
-            .map(|value| value.to_computed_value(context).resolve_colors(context))
+            .map(|value| value.to_computed_value(context))
             .map_err(|_| ())
     }
 
@@ -417,7 +399,7 @@ impl SpecifiedValue {
             return Err(());
         };
 
-        Ok(value.to_computed_value(context).resolve_colors(context))
+        Ok(value.to_computed_value(context))
     }
 
     /// Parse and validate a registered custom property value according to its syntax descriptor,

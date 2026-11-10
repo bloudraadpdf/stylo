@@ -2419,6 +2419,18 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
                     return existing_value != value;
                 }
                 if !registration.syntax.is_universal() {
+                    if value.has_references()
+                        || find_non_custom_references(
+                            registration,
+                            value,
+                            /* may_have_color_scheme = */ true,
+                            self.computed_context.is_root_element(),
+                            /* include_universal = */ false,
+                        )
+                        .is_some()
+                    {
+                        return true;
+                    }
                     compute_value(
                         &value.css,
                         &value.url_data,
