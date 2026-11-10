@@ -143,10 +143,7 @@ impl RayFunction {
 }
 
 impl Parse for OffsetPathFunction {
-    fn parse<'i, 't>(
-        context: &ParserContext,
-        input: &mut Parser<'i, 't>,
-    ) -> Result<Self, ParseError<'i>> {
+    fn parse<'i, 't>(context: &ParserContext, input: &mut Parser<'i, 't>) -> Result<Self, ParseError<'i>> {
         use crate::values::specified::basic_shape::{AllowedBasicShapes, ShapeType};
 
         // <offset-path> = <ray()> | <url> | <basic-shape>
@@ -161,7 +158,18 @@ impl Parse for OffsetPathFunction {
             }
         }
 
-        BasicShape::parse(context, input, AllowedBasicShapes::ALL, ShapeType::Outline)
+        // Preserve polygon()/shape() fill rules for CSSOM while using their
+        // equivalent paths. Keep the existing admission for other shapes.
+        input
+            .try_parse(|input| {
+                BasicShape::parse(
+                    context,
+                    input,
+                    AllowedBasicShapes::POLYGON | AllowedBasicShapes::SHAPE,
+                    ShapeType::Filled,
+                )
+            })
+            .or_else(|_| BasicShape::parse(context, input, AllowedBasicShapes::ALL, ShapeType::Outline))
             .map(OffsetPathFunction::Shape)
     }
 }

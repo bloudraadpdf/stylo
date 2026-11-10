@@ -3381,9 +3381,7 @@ fn substitute_references_if_needed_and_apply(
         let css_wide_kw = {
             let mut input = ParserInput::new(&css);
             let mut input = Parser::new(&mut input);
-            input.parse_entirely(|input| {
-                CSSWideKeyword::parse(input).map_err(|()| input.new_custom_error::<(), ()>(()))
-            })
+            CSSWideKeyword::parse(&mut input)
         };
 
         if let Ok(kw) = css_wide_kw {

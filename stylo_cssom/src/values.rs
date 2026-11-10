@@ -238,6 +238,62 @@ pub fn keyword_is(source: &str, expected: &str) -> bool {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn offset_paths_accept_and_serialize_basic_shape_fill_rules() {
+        use style::values::specified::motion::OffsetPath;
+        use style_traits::ToCss;
+
+        crate::preferences::initialise_required_servo_style_prefs();
+        for (source, expected) in [
+            (
+                "polygon(nonzero round 1px, 1px 2px, 3em 4em)",
+                "polygon(round 1px, 1px 2px, 3em 4em)",
+            ),
+            (
+                "polygon(evenodd round 1px, 1px 2px, 3em 4em, 5pt 6%)",
+                "polygon(evenodd round 1px, 1px 2px, 3em 4em, 5pt 6%)",
+            ),
+            (
+                "polygon(evenodd round 6pt, 1px 2px, 3em 4em, 6pt 6%)",
+                "polygon(evenodd round 6pt, 1px 2px, 3em 4em, 6pt 6%)",
+            ),
+            (
+                "shape(evenodd from 0px 0px, line to 10px 10px)",
+                "shape(evenodd from 0px 0px, line to 10px 10px)",
+            ),
+            (
+                "shape(nonzero from 0px 0px, line to 10px 10px)",
+                "shape(from 0px 0px, line to 10px 10px)",
+            ),
+            (
+                "shape(evenodd from 0px 0px, close)",
+                "shape(evenodd from 0px 0px, close)",
+            ),
+            ("polygon(round 1px, 1% 2%)", "polygon(round 1px, 1% 2%)"),
+            (
+                "shape(from 0px 0px, line to 10px 10px)",
+                "shape(from 0px 0px, line to 10px 10px)",
+            ),
+            ("path('M0 0L10 10')", "path(\"M 0 0 L 10 10\")"),
+        ] {
+            let value =
+                super::parse_value::<OffsetPath>(source).unwrap_or_else(|| panic!("offset-path must accept {source}"));
+            assert_eq!(value.to_css_string(), expected, "{source}");
+        }
+        for source in [
+            "path(nonzero, 'M0 0L10 10')",
+            "path(evenodd, 'M0 0L10 10')",
+            "polygon(evenodd nonzero, 1px 2px)",
+            "polygon(evenodd round -1px, 1px 2px)",
+            "polygon(evenodd round 1px 1px 2px)",
+            "shape(evenodd nonzero from 0px 0px, close)",
+            "shape(evenodd, from 0px 0px, close)",
+            "shape(evenodd from 0px 0px)",
+        ] {
+            assert!(super::parse_value::<OffsetPath>(source).is_none(), "{source}");
+        }
+    }
+
+    #[test]
     fn color_wells_sanitise_before_their_value_enters_the_cascade() {
         use super::{color_well_value, ColorWellColorSpace};
         use style::color::{AbsoluteColor, ColorSpace};
