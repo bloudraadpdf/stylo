@@ -1053,33 +1053,6 @@ impl Animation {
             None => return,
         };
 
-        // If we only need to take into account one keyframe, then exit early
-        // in order to avoid doing more work.
-        let mut add_declarations_to_map = |keyframe: &ComputedKeyframe| {
-            #[cfg(feature = "servo")]
-            let shadow = self.composited_shadow(keyframe, map);
-            #[cfg(feature = "servo")]
-            if let Some(ref shadow) = shadow {
-                for value in shadow.components() {
-                    map.insert(value.id().to_owned(), value);
-                }
-            }
-            for value in keyframe.values.iter() {
-                #[cfg(feature = "servo")]
-                if shadow.is_some()
-                    && matches!(value.id(), PropertyDeclarationId::Longhand(id) if SHADOW_COMPONENTS.contains(&id))
-                {
-                    continue;
-                }
-                let value = self.composited_keyframe_value(keyframe, value, map);
-                map.insert(value.id().to_owned(), value.clone());
-            }
-        };
-        if directed_progress >= 1.0 {
-            add_declarations_to_map(&next_keyframe);
-            return;
-        }
-
         let percentage_between_keyframes =
             (next_keyframe.start_percentage - prev_keyframe.start_percentage).abs() as f64;
         let duration_between_keyframes = percentage_between_keyframes * self.duration;
