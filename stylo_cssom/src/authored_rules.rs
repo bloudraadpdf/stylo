@@ -768,6 +768,9 @@ impl ValidatedCssRule {
             },
             Err(_) => None,
         };
+        if let Some(node) = authored.as_deref().and_then(parse_view_transition_compatibility_rule) {
+            return Some(Self { node });
+        }
         let validated = ValidatedStylesheetRuleList::parse(css).into_stylesheet();
         if validated.rule_nodes().len() != 1 {
             return None;
@@ -2375,6 +2378,23 @@ mod tests {
             stylo_cssom_model::RuleGrammar::Container
         );
         assert_eq!(parsed.rule_nodes()[0].projection_serialization(), css);
+    }
+
+    #[test]
+    fn validated_part_rules_preserve_view_transition_pseudo_selectors() {
+        for selector in [
+            "::part(button):active-view-transition",
+            "::part(button):active-view-transition-type(dialog)",
+        ] {
+            let source = format!("{selector} {{ color: green; }}");
+            let rule = ValidatedCssRule::parse(crate::rule_parser::RuleInput::new(&source))
+                .expect("a part can use a view-transition state pseudo-class")
+                .into_rule_node();
+            assert!(matches!(rule.cssom_data(), Some(stylo_cssom_model::RuleCssomData::Style { selector: actual }) if actual.as_ref() == selector));
+        }
+        assert!(ValidatedCssRule::parse(crate::rule_parser::RuleInput::new(
+            "::part(button):active-view-transition-type() { color: green; }",
+        )).is_none());
     }
 
     #[test]
