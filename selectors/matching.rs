@@ -1126,8 +1126,10 @@ where
         return KleeneValue::True;
     };
     context.nest(|context| {
-        context.with_featureless(false, |context| {
-            matches_complex_selector(selector.iter(), element, context, rightmost)
+        context.with_shadow_host(element.containing_shadow_host(), |context| {
+            context.with_featureless(false, |context| {
+                matches_complex_selector(selector.iter(), element, context, rightmost)
+            })
         })
     })
 }
@@ -1235,15 +1237,11 @@ pub(crate) fn compound_matches_featureless_host<Impl: SelectorImpl>(
                 }
             },
             Component::Negation(ref l) => {
-                // For now preserving behavior, see
-                // https://github.com/w3c/csswg-drafts/issues/10179 for existing resolutions that
-                // tweak this behavior.
-                for selector in l.slice() {
-                    if selector.matches_featureless_host(scope_matches_featureless_host)
-                        != MatchesFeaturelessHost::Only
-                    {
-                        return MatchesFeaturelessHost::Never;
-                    }
+                if !l.slice().iter().any(|selector| {
+                    selector.matches_featureless_host(scope_matches_featureless_host)
+                        != MatchesFeaturelessHost::Never
+                }) {
+                    return MatchesFeaturelessHost::Never;
                 }
             },
             // Other components don't match the host scope.
@@ -1393,9 +1391,17 @@ where
             return context.shared.nest(|context| {
                 let mut candidate = Some(element.clone());
                 while let Some(current) = candidate {
-                    let matched = context.with_featureless(false, |context| {
-                        matches_complex_selector(selector.iter(), &current, context, rightmost)
-                    });
+                    let matched =
+                        context.with_shadow_host(current.containing_shadow_host(), |context| {
+                            context.with_featureless(false, |context| {
+                                matches_complex_selector(
+                                    selector.iter(),
+                                    &current,
+                                    context,
+                                    rightmost,
+                                )
+                            })
+                        });
                     if matched.to_bool(true) {
                         return matched;
                     }
