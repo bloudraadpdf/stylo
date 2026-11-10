@@ -780,6 +780,7 @@ impl SvgLengthValue {
 
 #[test]
 fn reflected_svg_lengths_keep_unknown_scalar_units_and_native_calc() {
+    crate::context::initialise_required_servo_style_prefs();
     for (source, unit, factor) in [
         ("12", 1, 12.0),
         ("12%", 2, 12.0),
