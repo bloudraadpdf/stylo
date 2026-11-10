@@ -819,6 +819,11 @@ pub fn is_private_name(name: &Name) -> bool {
 }
 
 impl VariableValue {
+    /// Statically named custom properties referenced by this value, including fallbacks.
+    pub fn referenced_custom_properties(&self) -> impl Iterator<Item = &Name> {
+        self.references.refs.iter().filter_map(|reference| reference.function.variable_name())
+    }
+
     /// Rename lexical references without changing the retained authored token stream.
     pub fn rename_private_references(&mut self, names: &std::collections::HashMap<Name, Name>) {
         self.private_names = names
@@ -1469,13 +1474,6 @@ fn parse_declaration_value_block<'i, 't>(
                     let name = parse_property_name_css(
                         &input.slice_from(input_start)[argument.start..argument.end],
                     );
-                    if name.is_none()
-                        && !references.refs[our_ref_index + 1..]
-                            .iter()
-                            .any(|reference| reference.end <= argument.end)
-                    {
-                        return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
-                    }
                     name
                 } else {
                     None
@@ -1912,6 +1910,10 @@ pub struct CustomPropertiesBuilder<'a, 'b: 'a> {
     computed_context: &'a mut computed::Context<'b>,
     references_from_non_custom_properties: NonCustomReferenceMap<Vec<Name>>,
     function_levels: FunctionLevels,
+    initial_properties: ComputedCustomProperties,
+    declarations: Vec<(&'a CustomDeclaration, CascadePriority, usize)>,
+    substituted_keywords: std::collections::HashMap<usize, CSSWideKeyword>,
+    replaying: bool,
 }
 
 /// The cascade levels of custom property values that call custom functions.
@@ -2003,11 +2005,15 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
             reverted_rules: Default::default(),
             may_have_cycles: false,
             has_color_scheme: false,
+            initial_properties: custom_properties.clone(),
             custom_properties,
             stylist,
             computed_context,
             references_from_non_custom_properties: NonCustomReferenceMap::default(),
             function_levels: FunctionLevels::default(),
+            declarations: Vec::new(),
+            substituted_keywords: Default::default(),
+            replaying: false,
         }
     }
 
@@ -2043,6 +2049,9 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
         rule_identity: usize,
         attribute_tracker: &mut AttributeTracker,
     ) {
+        if !self.replaying {
+            self.declarations.push((declaration, priority, rule_identity));
+        }
         let CustomDeclaration {
             ref name,
             ref value,
@@ -2062,7 +2071,8 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
             }
         }
 
-        let resolved_keyword = match value {
+        let resolved_keyword = self.substituted_keywords.get(&(declaration as *const _ as usize))
+            .copied().map(CustomDeclarationValue::CSSWideKeyword).or_else(|| match value {
             CustomDeclarationValue::Unparsed(value)
                 if value.references.any_function
                     && !value.references.any_var
@@ -2096,7 +2106,7 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
                 }
             },
             _ => None,
-        };
+        });
         let value = resolved_keyword.as_ref().unwrap_or(value);
 
         if matches!(
@@ -2430,6 +2440,77 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
         true
     }
 
+    fn resolve_substituted_reverts(&mut self, attribute_tracker: &mut AttributeTracker) {
+        if !self.may_have_cycles {
+            return;
+        }
+        let mut history = vec![self.substituted_keywords.clone()];
+        loop {
+            let mut keywords = std::collections::HashMap::new();
+            for &(declaration, priority, _) in &self.declarations {
+                let CustomDeclarationValue::Unparsed(value) = &declaration.value else {
+                    continue;
+                };
+                if !value.has_references() {
+                    continue;
+                }
+                let mut substitutor = Substitutor::new(
+                    &self.custom_properties,
+                    self.stylist,
+                    self.computed_context,
+                    EnvironmentResolutionMode::ResolveLiveEnvironment,
+                    attribute_tracker,
+                    Some(priority.cascade_level()),
+                );
+                let owner = substitutor.calls.guard_property(&declaration.name).unwrap();
+                let keyword = substitutor
+                    .substitute_value(value, None)
+                    .ok()
+                    .and_then(|value| functions::keyword(&value.css));
+                if !substitutor.calls.release(owner) {
+                    if let Some(
+                        keyword @ (CSSWideKeyword::Revert
+                        | CSSWideKeyword::RevertLayer
+                        | CSSWideKeyword::RevertRule),
+                    ) = keyword
+                    {
+                        keywords.insert(declaration as *const _ as usize, keyword);
+                    }
+                }
+            }
+            if keywords == self.substituted_keywords {
+                return;
+            }
+            let cycle = history.iter().position(|previous| *previous == keywords);
+            if let Some(start) = cycle {
+                for previous in &history[start..] {
+                    for key in previous.keys().chain(self.substituted_keywords.keys()) {
+                        if previous.get(key) != self.substituted_keywords.get(key) {
+                            keywords.insert(*key, CSSWideKeyword::Unset);
+                        }
+                    }
+                }
+            }
+            self.substituted_keywords = keywords;
+            self.custom_properties = self.initial_properties.clone();
+            self.seen.clear();
+            self.reverted.clear();
+            self.reverted_rules.clear();
+            self.function_levels.clear();
+            self.may_have_cycles = false;
+            self.replaying = true;
+            for index in 0..self.declarations.len() {
+                let (declaration, priority, rule) = self.declarations[index];
+                self.cascade(declaration, priority, rule, attribute_tracker);
+            }
+            self.replaying = false;
+            if cycle.is_some() {
+                return;
+            }
+            history.push(self.substituted_keywords.clone());
+        }
+    }
+
     /// Computes the map of applicable custom properties, as well as
     /// longhand properties that are now considered invalid-at-compute time.
     /// The result is saved into the computed context.
@@ -2450,6 +2531,7 @@ impl<'a, 'b: 'a> CustomPropertiesBuilder<'a, 'b> {
         defer: DeferFontRelativeCustomPropertyResolution,
         attribute_tracker: &mut AttributeTracker,
     ) -> Option<DeferredCustomProperties> {
+        self.resolve_substituted_reverts(attribute_tracker);
         let mut deferred_custom_properties = None;
         if self.may_have_cycles {
             if defer == DeferFontRelativeCustomPropertyResolution::Yes {
@@ -2813,77 +2895,40 @@ fn substitute_all(
                 "Non-custom property has references?"
             );
 
-            // Visit other custom properties...
-            // FIXME: Maybe avoid visiting the same var twice if not needed?
-            for next in v
-                .references
-                .refs
-                .iter()
-                .filter(|next| !v.references.in_lazy_argument(next))
-            {
-                let Some(name) = next.function.variable_name() else {
-                    continue;
+            let reached = {
+                let mut substitutor = Substitutor::new(
+                    context.map,
+                    context.stylist,
+                    context.computed_context,
+                    EnvironmentResolutionMode::ResolveLiveEnvironment,
+                    attribute_tracker,
+                    context
+                        .function_levels
+                        .get(match &var {
+                            VarType::Custom(name) => name,
+                            VarType::NonCustom(_) => unreachable!(),
+                        })
+                        .copied(),
+                );
+                substitutor.dependency_names = Some(Vec::new());
+                let owner = match &var {
+                    VarType::Custom(name) => substitutor.calls.guard_property(name).ok(),
+                    VarType::NonCustom(_) => None,
                 };
+                let _ = substitutor.substitute_value(v, None);
+                if let Some(owner) = owner {
+                    substitutor.calls.release(owner);
+                }
+                substitutor.dependency_names.take().unwrap()
+            };
+            for name in reached {
                 visit_link(
-                    VarType::Custom(name.clone()),
+                    VarType::Custom(name),
                     context,
                     &mut lowlink,
                     &mut self_ref,
                     attribute_tracker,
                 );
-            }
-
-            for (offset, reference) in v.references.refs.iter().enumerate() {
-                if v.references.in_lazy_argument(reference) {
-                    continue;
-                }
-                let SubstitutionFunction::DynamicVar {
-                    name: None,
-                    arguments,
-                } = &reference.function
-                else {
-                    continue;
-                };
-                let argument = &arguments[0];
-                let name = {
-                    let mut substitutor = Substitutor::new(
-                        context.map,
-                        context.stylist,
-                        context.computed_context,
-                        EnvironmentResolutionMode::ResolveLiveEnvironment,
-                        attribute_tracker,
-                        None,
-                    );
-                    substitutor.private_names = v.private_names.clone();
-                    let mut references = v.references.refs[offset + 1..].iter().peekable();
-                    substitutor
-                        .chunk(
-                            &v.css,
-                            argument.start,
-                            argument.end,
-                            argument.first_token_type,
-                            argument.last_token_type,
-                            &v.url_data,
-                            None,
-                            &mut references,
-                        )
-                        .ok()
-                        .and_then(|name| parse_property_name_css(&name.css))
-                };
-                if let Some(name) = name {
-                    let name = v
-                        .private_names
-                        .iter()
-                        .find(|(original, _)| original == &name)
-                        .map_or(name.clone(), |(_, private)| private.clone());
-                    visit_link(
-                        VarType::Custom(name),
-                        context,
-                        &mut lowlink,
-                        &mut self_ref,
-                        attribute_tracker,
-                    );
-                }
             }
 
             // ... and the custom properties that called functions read...
@@ -3220,7 +3265,7 @@ fn substitute_references_if_needed_and_apply(
         let css_wide_kw = {
             let mut input = ParserInput::new(&css);
             let mut input = Parser::new(&mut input);
-            input.try_parse(CSSWideKeyword::parse)
+            input.parse_entirely(CSSWideKeyword::parse)
         };
 
         if let Ok(kw) = css_wide_kw {
@@ -3322,7 +3367,11 @@ impl<'a> Substitution<'a> {
             )));
         }
         compute_value(&self.css, url_data, registration, computed_context, &format!("--{name}"))
-            .map(|value| value.with_attr_taint(!self.attr_tainted.is_empty()))
+            .and_then(|value| {
+                let tainted = !self.attr_tainted.is_empty();
+                if tainted && value.contains_url() { return Err(()); }
+                Ok(value.with_attr_taint(tainted))
+            })
     }
 
     fn new(
@@ -3398,6 +3447,7 @@ struct Substitutor<'a, 'b, 't> {
     attribute_tracker: &'a mut AttributeTracker<'t>,
     calls: functions::FunctionCalls<'a>,
     private_names: ThinVec<(Name, Name)>,
+    dependency_names: Option<Vec<Name>>,
     random_property: Option<Atom>,
     random_source_offset: usize,
     early_random: std::collections::HashMap<(Atom, Vec<Atom>), EarlyRandomState>,
@@ -3423,6 +3473,7 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
             attribute_tracker,
             calls: functions::FunctionCalls::new(level),
             private_names: ThinVec::new(),
+            dependency_names: None,
             random_property: None,
             random_source_offset: 0,
             early_random: Default::default(),
@@ -3475,6 +3526,9 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
             .iter()
             .find(|(original, _)| original == name)
             .map_or_else(|| name.clone(), |(_, private)| private.clone());
+        if let Some(dependencies) = &mut self.dependency_names {
+            if !dependencies.contains(&name) { dependencies.push(name.clone()); }
+        }
         let entry = self.calls.guard_property(&name).ok()?;
         let result = (|| {
             let registration = self.stylist.get_custom_property_registration(&name);
@@ -3721,11 +3775,12 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
                     url_data,
                     frame,
                     references,
-                )?;
-                let tainted = !substituted.attr_tainted.is_empty();
+                ).ok();
+                while references.next_if(|reference| reference.end <= argument.end).is_some() {}
+                let tainted = substituted.as_ref().is_some_and(|value| !value.attr_tainted.is_empty());
                 let value = name
                     .clone()
-                    .or_else(|| parse_property_name_css(&substituted.css))
+                    .or_else(|| substituted.as_ref().and_then(|value| parse_property_name_css(&value.css)))
                     .and_then(|name| self.variable(frame, &name));
                 let value = match (value, fallback.first()) {
                     (Some(value), _) => Some(value),
