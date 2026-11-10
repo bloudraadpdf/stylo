@@ -285,7 +285,7 @@ where
     Perspective(GenericPerspectiveFunction<Length>),
     /// A intermediate type for interpolation of mismatched transform lists.
     #[allow(missing_docs)]
-    #[css(comma, function = "interpolatematrix")]
+    #[css(serialize_with = "serialize_interpolate_matrix")]
     InterpolateMatrix {
         from_list: GenericTransform<
             GenericTransformOperation<Angle, Number, Length, Integer, LengthPercentage>,
@@ -310,6 +310,21 @@ where
 }
 
 pub use self::GenericTransformOperation as TransformOperation;
+
+fn serialize_interpolate_matrix<T: ToCss, W: Write>(
+    from_list: &T,
+    to_list: &T,
+    progress: &computed::Percentage,
+    dest: &mut CssWriter<W>,
+) -> fmt::Result {
+    dest.write_str("transform-interpolate(")?;
+    progress.0.to_css(dest)?;
+    dest.write_str(", 0: ")?;
+    from_list.to_css(dest)?;
+    dest.write_str(", 1: ")?;
+    to_list.to_css(dest)?;
+    dest.write_char(')')
+}
 
 #[derive(
     Clone,

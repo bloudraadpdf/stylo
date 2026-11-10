@@ -96,6 +96,7 @@ impl TransformOrigin {
 ///
 /// See: https://github.com/whatwg/compat/issues/100
 #[allow(missing_docs)]
+#[derive(Clone, Copy)]
 pub enum AllowUnitlessPerspective {
     No,
     Yes,
@@ -147,6 +148,9 @@ impl TransformOperation {
     ) -> Result<Self, ParseError<'i>> {
         let function = input.expect_function()?.clone();
         input.parse_nested_block(|input| {
+            if function.eq_ignore_ascii_case("transform-interpolate") {
+                return Self::parse_interpolation(context, input, allow_unitless_perspective);
+            }
             let location = input.current_source_location();
             let result = match_ignore_ascii_case! { &function,
                 "matrix" => {
@@ -329,6 +333,45 @@ impl TransformOperation {
                     function.clone(),
                 ))
             })
+        })
+    }
+
+    fn parse_interpolation<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+        allow_unitless_perspective: &AllowUnitlessPerspective,
+    ) -> Result<Self, ParseError<'i>> {
+        let proportion = |input: &mut Parser<'i, '_>| {
+            NumberOrPercentage::parse(context, input)?
+                .to_number()
+                .resolve()
+                .filter(|value| value.is_finite())
+                .ok_or_else(|| input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
+        };
+        let progress = proportion(input)?;
+        input.expect_comma()?;
+        let start = proportion(input)?;
+        input.expect_colon()?;
+        let from_list = input.parse_until_before(cssparser::Delimiter::Comma, |input| {
+            Transform::parse_internal(context, input, *allow_unitless_perspective)
+        })?;
+        input.expect_comma()?;
+        let end = proportion(input)?.max(start);
+        input.expect_colon()?;
+        let to_list = Transform::parse_internal(context, input, *allow_unitless_perspective)?;
+        let progress = if start == end {
+            if progress < start {
+                0.0
+            } else {
+                1.0
+            }
+        } else {
+            ((progress - start) / (end - start)).clamp(0.0, 1.0)
+        };
+        Ok(Self::InterpolateMatrix {
+            from_list,
+            to_list,
+            progress: ComputedPercentage(progress),
         })
     }
 }

@@ -9,6 +9,7 @@ use crate::stylesheets::{CssRuleType, UrlExtraData};
 
 #[test]
 fn deferred_transform_matrices_resolve_reference_boxes_recursively() {
+    use style_traits::ToCss;
     use crate::values::computed::transform::{
         Matrix, PerspectiveFunction, Transform, TransformOperation,
     };
@@ -37,6 +38,12 @@ fn deferred_transform_matrices_resolve_reference_boxes_recursively() {
         }])
     };
     let halfway = interpolate(from.clone(), to.clone(), 0.5);
+    let serialization = halfway.to_css_string();
+    assert_eq!(
+        serialization,
+        "transform-interpolate(0.5, 0: matrix(1, 0, 0, 1, 10, 0), 1: translateX(50%))"
+    );
+    assert_serialization("transform", &serialization, Some(&serialization));
     assert!(halfway.to_resolved_transform_3d_matrix(None).is_err());
     for (width, expected) in [(100.0, 30.0), (200.0, 55.0)] {
         let (matrix, _) = halfway
@@ -85,6 +92,44 @@ fn deferred_transform_matrices_resolve_reference_boxes_recursively() {
     assert!(is_3d);
     for (actual, expected) in actual.to_array().into_iter().zip(expected.to_array()) {
         assert!((actual - expected).abs() < 0.001);
+    }
+}
+
+#[test]
+fn proportional_transform_interpolation_roundtrips_without_changing_other_functions() {
+    for (input, expected) in [
+        (
+            "transform-interpolate(50%, 0%: translateX(50%), 100%: scale(4))",
+            "transform-interpolate(0.5, 0: translateX(50%), 1: scale(4))",
+        ),
+        (
+            "transform-interpolate(0.5, 0.25: translate(50%, 10px), 75%: rotate(90deg) scale(2))",
+            "transform-interpolate(0.5, 0: translate(50%, 10px), 1: rotate(90deg) scale(2))",
+        ),
+        (
+            "transform-interpolate(-1, 0: translateX(50%), 1: scale(4))",
+            "transform-interpolate(0, 0: translateX(50%), 1: scale(4))",
+        ),
+        (
+            "transform-interpolate(2, 0: translateX(50%), 1: scale(4))",
+            "transform-interpolate(1, 0: translateX(50%), 1: scale(4))",
+        ),
+        ("translate(10px, 0px)", "translate(10px)"),
+        ("scale(2, 2)", "scale(2)"),
+        ("rotate(90deg)", "rotate(90deg)"),
+        ("skew(10deg, 0deg)", "skew(10deg)"),
+        ("matrix(1, 0, 0, 1, 10, 20)", "matrix(1, 0, 0, 1, 10, 20)"),
+    ] {
+        assert_serialization("transform", input, Some(expected));
+        assert_serialization("transform", expected, Some(expected));
+    }
+    for invalid in [
+        "transform-interpolate(0.5, 0: translateX(50%))",
+        "transform-interpolate(0.5, 0: translateX(50%), 1 scale(4))",
+        "transform-interpolate(0.5, 0: translateX(50%), 1: scale(4),)",
+        "interpolatematrix(translateX(50%), scale(4), 50%)",
+    ] {
+        assert_serialization("transform", invalid, None);
     }
 }
 

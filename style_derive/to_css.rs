@@ -154,6 +154,10 @@ fn derive_variant_arm(variant: &VariantInfo, generics: &mut Option<WhereClause>)
     let variant_attrs = cg::parse_variant_attrs_from_ast::<CssVariantAttrs>(&ast);
     let separator = if variant_attrs.comma { ", " } else { " " };
 
+    if let Some(serializer) = variant_attrs.serialize_with {
+        return quote!(#serializer(#(#bindings,)* dest));
+    }
+
     if variant_attrs.skip {
         return quote!(Ok(()));
     }
@@ -374,6 +378,7 @@ pub struct CssInputAttrs {
 #[darling(attributes(css), default)]
 pub struct CssVariantAttrs {
     pub function: Option<Override<String>>,
+    pub serialize_with: Option<Path>,
     // Here because structs variants are also their whole type definition.
     pub derive_debug: bool,
     pub comma: bool,
