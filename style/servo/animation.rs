@@ -695,14 +695,14 @@ impl Animation {
     /// one (`iterations_left`, infinite for an infinite count).
     ///
     /// This is the closed form of stepping one iteration at a time while the
-    /// remaining progress exceeds a single iteration. Stepping cannot be used:
+    /// remaining progress includes a complete iteration. Stepping cannot be used:
     /// the delay is author-controlled and unbounded, so `animation: 1s -1e16s
     /// infinite` asks for 1e16 steps, and beyond 2^53 a `-= 1.` is lost to
     /// floating point outright, so the loop never terminates at all.
     fn iterations_skipped_by_delay(starting_progress: f64, iterations_left: f64) -> f64 {
         // `max` and `min` both discard a NaN operand, so a non-finite progress
         // folds to "nothing to skip" rather than propagating into the state.
-        let iterations = (starting_progress - 1.).ceil().max(0.).min(iterations_left);
+        let iterations = starting_progress.floor().max(0.).min(iterations_left);
         if iterations.is_finite() {
             iterations
         } else {
@@ -2990,7 +2990,7 @@ mod tests {
         let mut current = 0f64;
         // `Animation::on_last_iteration()`: `current >= max - 1` for a finite
         // count, always false for an infinite one.
-        while progress > 1. && !max.is_some_and(|max| current >= max - 1.) {
+        while progress >= 1. && !max.is_some_and(|max| current >= max - 1.) {
             current += 1.;
             progress -= 1.;
         }
@@ -3003,6 +3003,14 @@ mod tests {
             None => f64::INFINITY,
         };
         Animation::iterations_skipped_by_delay(starting_progress, iterations_left)
+    }
+
+    #[test]
+    fn exact_negative_delay_boundaries_start_the_next_active_iteration() {
+        assert_eq!(skipped(2., None), 2.);
+        assert_eq!(skipped(2., Some(2.1)), 2.);
+        assert_eq!(skipped(2., Some(3.)), 2.);
+        assert_eq!(skipped(2., Some(2.)), 1.);
     }
 
     #[test]
