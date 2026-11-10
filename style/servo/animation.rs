@@ -1409,11 +1409,15 @@ pub struct ElementAnimationSet {
 }
 
 impl ElementAnimationSet {
-    /// Discards completed document animations after their final style has been applied.
+    /// Discards completed document animations that no longer contribute a filled value.
     /// A progress timeline can move backwards, so reaching its end does not end its association.
-    pub fn remove_finished_document_animations(&mut self) {
+    pub fn remove_finished_unfilled_document_animations(&mut self) {
         self.animations.retain(|animation| {
             animation.state != AnimationState::Finished
+                || matches!(
+                    animation.fill_mode,
+                    AnimationFillMode::Forwards | AnimationFillMode::Both
+                )
                 || matches!(animation.timeline_phase, AnimationTimelinePhase::Progress { .. })
         });
     }
@@ -2674,7 +2678,7 @@ mod tests {
         progress.sample_progress_timeline(Some(1.0), true);
         let mut set = super::ElementAnimationSet::default();
         set.animations = vec![document, progress];
-        set.remove_finished_document_animations();
+        set.remove_finished_unfilled_document_animations();
         assert_eq!(set.animations.len(), 1);
         assert_eq!(set.animations[0].name, Atom::from("progress"));
         assert_eq!(set.animations[0].directed_progress_at(10.0).map(|value| value.0), Some(1.0));
@@ -2682,6 +2686,37 @@ mod tests {
         assert_eq!(set.animations[0].directed_progress_at(10.0).map(|value| value.0), Some(0.0));
         set.update_animation_list(Vec::new(), 10.0);
         assert!(!set.has_active_animation(), "animation:none still cancels the progress animation");
+    }
+
+    #[test]
+    fn style_refresh_keeps_finished_document_animations_with_forwards_fill() {
+        for fill in [
+            AnimationFillMode::None,
+            AnimationFillMode::Backwards,
+            AnimationFillMode::Forwards,
+            AnimationFillMode::Both,
+        ] {
+            let mut animation = named_animation("document", -1.0, 1.0);
+            animation.state = AnimationState::Finished;
+            animation.fill_mode = fill;
+            let mut set = super::ElementAnimationSet::default();
+            set.animations.push(animation);
+            set.remove_finished_unfilled_document_animations();
+            let filled = matches!(fill, AnimationFillMode::Forwards | AnimationFillMode::Both);
+            assert_eq!(set.animations.len(), usize::from(filled));
+            if let Some(animation) = set.animations.first() {
+                assert_eq!(animation.started_at, -1.0);
+                assert_eq!(
+                    animation.directed_progress_at(0.0).map(|value| value.0),
+                    Some(1.0)
+                );
+            }
+            set.update_animation_list(Vec::new(), 0.0);
+            assert!(
+                !set.has_active_animation(),
+                "animation:none cancels every fill mode"
+            );
+        }
     }
 
     #[test]
