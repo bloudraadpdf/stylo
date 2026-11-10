@@ -4,7 +4,7 @@ use style::{
     parser::Parse,
     properties::PropertyDeclaration,
     stylesheets::supports_rule::{
-        parse_condition_or_declaration, Declaration as SupportsDeclaration,
+        parse_condition_or_declaration, Declaration as SupportsDeclaration, SupportsCondition,
     },
 };
 
@@ -152,10 +152,31 @@ pub fn css_supports(query: CssSupportsQuery<'_>) -> bool {
             let projected = crate::compat::translate::rewrite_grid_lanes_properties(condition);
             let condition = projected.as_deref().unwrap_or(condition);
             parse_fragment_with(condition, |context, input| {
-                parse_condition_or_declaration(input).map(|condition| condition.eval(context))
+                let mut condition = parse_condition_or_declaration(input)?;
+                project_active_view_transition_selectors(&mut condition);
+                Ok(condition.eval(context))
             })
             .unwrap_or(false)
         },
+    }
+}
+
+fn project_active_view_transition_selectors(condition: &mut SupportsCondition) {
+    match condition {
+        SupportsCondition::Selector(selector) => {
+            if let std::borrow::Cow::Owned(projected) =
+                crate::active_view_transition_selector::rewrite_selector(&selector.0)
+            {
+                selector.0 = projected;
+            }
+        },
+        SupportsCondition::Not(inner) | SupportsCondition::Parenthesized(inner) => {
+            project_active_view_transition_selectors(inner);
+        },
+        SupportsCondition::And(conditions) | SupportsCondition::Or(conditions) => {
+            conditions.iter_mut().for_each(project_active_view_transition_selectors);
+        },
+        _ => {},
     }
 }
 
@@ -237,6 +258,38 @@ pub fn keyword_is(source: &str, expected: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn supports_conditions_project_active_view_transition_selectors() {
+        use super::{css_supports, CssSupportsQuery};
+
+        for (condition, expected) in [
+            ("selector(::part(example):active-view-transition)", true),
+            (
+                "selector(::part(example):active-view-transition-type(example))",
+                true,
+            ),
+            (
+                "selector(::part(example):active-view-transition-type(none))",
+                false,
+            ),
+            (
+                "not (selector(::part(example):active-view-transition) and (display: block))",
+                false,
+            ),
+            (
+                "(display: unknown) or selector(::part(example):active-view-transition)",
+                true,
+            ),
+            ("selector(::part(example):active-view-transition, div)", false),
+        ] {
+            assert_eq!(
+                css_supports(CssSupportsQuery::Condition(condition)),
+                expected,
+                "{condition}"
+            );
+        }
+    }
+
     #[test]
     fn offset_paths_accept_and_serialize_basic_shape_fill_rules() {
         use style::values::specified::motion::OffsetPath;
