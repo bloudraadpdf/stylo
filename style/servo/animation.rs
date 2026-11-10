@@ -347,9 +347,31 @@ struct ComputedKeyframe {
     /// The animation values to transition to and from when processing this
     /// keyframe animation step.
     values: Box<[AnimationValue]>,
+
+    declared_properties: PropertyDeclarationIdSet,
 }
 
 impl ComputedKeyframe {
+    fn pair_for_property<'a>(
+        frames: &'a [Self],
+        property: PropertyDeclarationId<'_>,
+        progress: f64,
+    ) -> Option<(&'a Self, &'a Self)> {
+        let mut frames = frames.iter().filter(|frame| {
+            frame.start_percentage == 0.0
+                || frame.start_percentage == 1.0
+                || frame.declared_properties.contains(property)
+        });
+        let mut from = frames.next()?;
+        let mut to = frames.next().unwrap_or(from);
+        while f64::from(to.start_percentage) <= progress {
+            let Some(next) = frames.next() else { break };
+            from = to;
+            to = next;
+        }
+        Some((from, to))
+    }
+
     fn composite(
         composition: AnimationComposition,
         underlying: &AnimationValue,
@@ -408,12 +430,7 @@ impl ComputedKeyframe {
                 step_timing_function.unwrap_or_else(|| default_timing_function.clone());
 
             let values = {
-                // If a value is not set in a property declaration we use the value from
-                // the style for the first and last keyframe. For intermediate ones, we
-                // use the value from the previous keyframe.
-                //
-                // TODO(mrobinson): According to the spec, we should use an interpolated
-                // value for properties missing from keyframe declarations.
+                // Missing intermediate values are placeholders: sampling brackets only declared frames.
                 let default_values = if start_percentage == 0. || start_percentage == 1.0 {
                     animation_values_from_style.as_slice()
                 } else {
@@ -443,6 +460,7 @@ impl ComputedKeyframe {
                 composition,
                 start_percentage,
                 values,
+                declared_properties: properties_changed_in_step,
             });
         }
         computed_steps.into_boxed_slice()
@@ -1091,13 +1109,44 @@ impl Animation {
             false
         };
 
-        for (from, to) in prev_keyframe.values.iter().zip(next_keyframe.values.iter()) {
+        for from in prev_keyframe.values.iter() {
             #[cfg(feature = "servo")]
             if shadow_sampled
                 && matches!(from.id(), PropertyDeclarationId::Longhand(id) if SHADOW_COMPONENTS.contains(&id))
             {
                 continue;
             }
+            let property = from.id();
+            let Some((prev_keyframe, next_keyframe)) = ComputedKeyframe::pair_for_property(
+                &self.computed_steps,
+                property,
+                directed_progress,
+            ) else {
+                continue;
+            };
+            let Some(from) = prev_keyframe
+                .values
+                .iter()
+                .find(|value| value.id() == property)
+            else {
+                continue;
+            };
+            let Some(to) = next_keyframe
+                .values
+                .iter()
+                .find(|value| value.id() == property)
+            else {
+                continue;
+            };
+            let percentage_between_keyframes =
+                f64::from(next_keyframe.start_percentage - prev_keyframe.start_percentage);
+            if percentage_between_keyframes <= 0.0 {
+                continue;
+            }
+            let duration_between_keyframes = percentage_between_keyframes * self.duration;
+            let progress_between_keyframes = (directed_progress
+                - f64::from(prev_keyframe.start_percentage))
+                / percentage_between_keyframes;
             let from = self.composited_keyframe_value(prev_keyframe, from, map);
             let to = self.composited_keyframe_value(next_keyframe, to, map);
             let animation = PropertyAnimation {
@@ -2356,6 +2405,81 @@ mod tests {
             assert_eq!(active(&set, 6.), Some(AnimationValue::Opacity(0.5)));
             set.transitions[0].state = AnimationState::Canceled;
             assert_eq!(active(&set, 6.), None);
+        }
+    }
+
+    #[test]
+    fn omitted_property_frames_do_not_split_the_propertys_interpolation_interval() {
+        use crate::properties::{LonghandId, PropertyDeclarationId, PropertyDeclarationIdSet};
+        let property = PropertyDeclarationId::Longhand(LonghandId::Opacity);
+        for (source, progress, expected_offsets) in [
+            (
+                vec![(0.0, 1.0, true), (0.25, 1.0, false), (1.0, 0.0, true)],
+                0.5,
+                (0.0, 1.0),
+            ),
+            (
+                vec![
+                    (0.0, 1.0, false),
+                    (0.25, 1.0, false),
+                    (0.5, 0.0, true),
+                    (1.0, 0.0, true),
+                ],
+                0.25,
+                (0.0, 0.5),
+            ),
+            (
+                vec![
+                    (0.0, 0.0, true),
+                    (0.5, 0.0, true),
+                    (0.75, 0.0, false),
+                    (1.0, 1.0, false),
+                ],
+                0.75,
+                (0.5, 1.0),
+            ),
+        ] {
+            let frames = source
+                .into_iter()
+                .map(|(start_percentage, opacity, declared)| {
+                    let mut declared_properties = PropertyDeclarationIdSet::default();
+                    if declared {
+                        declared_properties.insert(property);
+                    }
+                    ComputedKeyframe {
+                        timing_function: super::TimingFunction::Keyword(
+                            crate::values::generics::easing::TimingKeyword::Linear,
+                        ),
+                        composition: AnimationComposition::Replace,
+                        start_percentage,
+                        values: vec![AnimationValue::Opacity(opacity)].into_boxed_slice(),
+                        declared_properties,
+                    }
+                })
+                .collect::<Vec<_>>();
+            let (from, to) =
+                ComputedKeyframe::pair_for_property(&frames, property, progress).unwrap();
+            assert_eq!(
+                (from.start_percentage, to.start_percentage),
+                expected_offsets
+            );
+            let interval = f64::from(to.start_percentage - from.start_percentage);
+            let animation = super::PropertyAnimation {
+                from: from.values[0].clone(),
+                to: to.values[0].clone(),
+                timing_function: from.timing_function.clone(),
+                duration: interval,
+                interpolate_size: InterpolateSize::NumericOnly,
+                #[cfg(feature = "servo")]
+                shadow: None,
+            };
+            assert_eq!(
+                animation.calculate_value(
+                    (progress - f64::from(from.start_percentage)) / interval,
+                    super::BeforeFlag::Unset
+                ),
+                AnimationValue::Opacity(0.5)
+            );
         }
     }
 
