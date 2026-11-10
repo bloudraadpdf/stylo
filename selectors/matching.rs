@@ -784,6 +784,12 @@ where
 {
     let scope = context.current_host;
     let mut curr = element.containing_shadow_host()?;
+    if context.part_originates_at_shadow_host {
+        while Some(curr.opaque()) != scope {
+            curr = curr.containing_shadow_host()?;
+        }
+        return Some(curr);
+    }
     if scope == Some(curr.opaque()) {
         return Some(curr);
     }
@@ -1068,29 +1074,17 @@ fn matches_part<E>(
 where
     E: Element,
 {
-    let mut hosts = SmallVec::<[E; 4]>::new();
-
-    let mut host = match element.containing_shadow_host() {
-        Some(h) => h,
-        None => return false,
+    let Some(origin) = host_for_part(element, context) else {
+        return false;
     };
-
-    let current_host = context.current_host;
-    if current_host != Some(host.opaque()) {
-        loop {
-            let outer_host = host.containing_shadow_host();
-            if outer_host.as_ref().map(|h| h.opaque()) == current_host {
-                break;
-            }
-            let outer_host = match outer_host {
-                Some(h) => h,
-                None => return false,
-            };
-            // TODO(emilio): if worth it, we could early return if
-            // host doesn't have the exportparts attribute.
-            hosts.push(host);
-            host = outer_host;
-        }
+    let mut hosts = SmallVec::<[E; 4]>::new();
+    let mut host = element.containing_shadow_host().unwrap();
+    while host.opaque() != origin.opaque() {
+        hosts.push(host.clone());
+        let Some(parent) = host.containing_shadow_host() else {
+            return false;
+        };
+        host = parent;
     }
 
     // Translate the part into the right scope.

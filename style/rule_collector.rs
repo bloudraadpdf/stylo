@@ -396,6 +396,12 @@ where
             }
 
             let inner_shadow_host = inner_shadow.host();
+            let mut new_parts = SmallVec::<[_; 3]>::new();
+            for part in &parts {
+                inner_shadow_host.each_exported_part(part, |exported_part| {
+                    new_parts.push(exported_part.clone());
+                });
+            }
             let outer_shadow = inner_shadow_host.containing_shadow();
             let cascade_data = match outer_shadow {
                 Some(shadow) => shadow.style_data(),
@@ -422,6 +428,20 @@ where
                                 );
                             }
                         }
+                        if containing_host.is_some() && !new_parts.is_empty() {
+                            let previous = collector.context.part_originates_at_shadow_host;
+                            collector.context.part_originates_at_shadow_host = true;
+                            for part in &new_parts {
+                                if let Some(rules) = part_rules.get(&part.0) {
+                                    collector.collect_rules_in_list(
+                                        rules,
+                                        cascade_level,
+                                        cascade_data,
+                                    );
+                                }
+                            }
+                            collector.context.part_originates_at_shadow_host = previous;
+                        }
                     });
                 }
             }
@@ -434,12 +454,6 @@ where
                 None => break, // Nowhere to export to.
             };
 
-            let mut new_parts = SmallVec::new();
-            for part in &parts {
-                inner_shadow_host.each_exported_part(part, |exported_part| {
-                    new_parts.push(exported_part.clone());
-                });
-            }
             parts = new_parts;
         }
     }

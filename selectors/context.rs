@@ -170,6 +170,9 @@ where
     /// The current shadow host we're collecting :host rules for.
     pub current_host: Option<OpaqueElement>,
 
+    /// The part selector originates at this shadow tree's own host.
+    pub part_originates_at_shadow_host: bool,
+
     /// Controls how matching for links is handled.
     visited_handling: VisitedHandlingMode,
 
@@ -268,6 +271,7 @@ where
             scope_element: None,
             scope_is_document: false,
             current_host: None,
+            part_originates_at_shadow_host: false,
             featureless: false,
             nesting_level: 0,
             in_negation: false,
