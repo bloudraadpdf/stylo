@@ -1555,13 +1555,6 @@ pub struct UnparsedValue {
     from_shorthand: Option<ShorthandId>,
 }
 
-impl UnparsedValue {
-    /// The retained variable syntax and its typed substitution references.
-    pub fn variable_value(&self) -> &custom_properties::VariableValue {
-        &self.variable_value
-    }
-}
-
 impl ToCss for UnparsedValue {
     fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
     where
