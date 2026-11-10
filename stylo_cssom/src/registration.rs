@@ -366,6 +366,22 @@ mod tests {
     use super::*;
 
     #[test]
+    fn registered_image_syntax_excludes_none_unless_listed_as_a_keyword() {
+        assert!(matches!(
+            validate_register_property("--image", "<image>", false, Some("none")),
+            Err(RegisterPropertyError::Syntax(_))
+        ));
+        assert!(validate_register_property("--image", "<image> | none", false, Some("none")).is_ok());
+        assert!(validate_register_property(
+            "--image",
+            "<image>",
+            false,
+            Some("url(\"https://example.test/image.png\")")
+        )
+        .is_ok());
+    }
+
+    #[test]
     fn substitution_functions_are_valid_at_parse_time() {
         let length = Descriptor::from_str("<length>", false).expect("the syntax must parse");
         assert!(registered_value_is_valid_at_parse_time("--length", &length, "1px"));

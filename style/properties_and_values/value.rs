@@ -689,7 +689,11 @@ impl<'a> Parser<'a> {
                 SpecifiedValueComponent::Color(specified::Color::parse(context, input)?)
             },
             DataType::Image => {
-                SpecifiedValueComponent::Image(specified::Image::parse(context, input)?)
+                let image = specified::Image::parse(context, input)?;
+                if matches!(image, specified::Image::None) {
+                    return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+                }
+                SpecifiedValueComponent::Image(image)
             },
             DataType::Url => {
                 SpecifiedValueComponent::Url(specified::url::SpecifiedUrl::parse(context, input)?)
