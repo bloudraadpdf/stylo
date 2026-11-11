@@ -392,7 +392,7 @@ mod inline_compatibility_projection_tests {
         );
         assert_eq!(
             projected_specified_property_value(&declarations, "font-variant"),
-            Some("normal".to_owned())
+            None
         );
     }
 
@@ -411,7 +411,7 @@ mod inline_compatibility_projection_tests {
             ),
             (
                 "font:menu!important;font-variant-numeric:tabular-nums",
-                Some("normal"),
+                None,
                 Some("menu"),
             ),
             (
@@ -1158,11 +1158,11 @@ impl<'a> ShorthandMembers<'a> {
         if let Some(value) = self.source_value() {
             return Some(projected_specified_style_value_text(value));
         }
-        // A system font is only expressible by the complete `font` shorthand.
-        // Once one of its longhands is replaced, the remaining system-derived
-        // values cannot be reconstructed as a regular font shorthand.
-        if self.schema.name == "font"
-            && self.declarations().any(|declaration| {
+        // Untouched system values stay opaque. Explicit subproperty overrides
+        // can serialise the known reset values of a subshorthand.
+        let system_members = self
+            .declarations()
+            .filter(|declaration| {
                 declaration
                     .shorthand_source
                     .is_some_and(|source| source.property().schema().name == "font")
@@ -1172,6 +1172,9 @@ impl<'a> ShorthandMembers<'a> {
                         )
                     })
             })
+            .count();
+        if system_members > 0
+            && (self.schema.name == "font" || system_members == self.indices.len())
         {
             return None;
         }

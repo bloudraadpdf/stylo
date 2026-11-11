@@ -2961,7 +2961,7 @@ mod tests {
             for parsed in [&declarations[..], &from_list[..]] {
                 assert_eq!(
                     crate::specified::projected_specified_property_value(parsed, "font-variant"),
-                    Some("normal".to_owned()),
+                    None,
                     "{keyword}: font-variant",
                 );
             }
