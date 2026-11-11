@@ -671,18 +671,81 @@ pub fn parse_css_numeric_binary<'i>(
     match precedence {
         CssNumericBinaryPrecedence::Sum => specified_sum(values).ok_or_else(|| input.new_custom_error(())),
         CssNumericBinaryPrecedence::Product => {
+            if values
+                .iter()
+                .all(|value| matches!(value, SpecifiedCssNumericValue::Unit(_)))
+            {
+                let mut unit = TypedOmUnit::Number;
+                let mut product = 1.0;
+                let mut dimensions = 0;
+                for value in &values {
+                    if let SpecifiedCssNumericValue::Unit(value) = value {
+                        product *= value.value;
+                        if value.unit != TypedOmUnit::Number {
+                            dimensions += 1;
+                            unit = value.unit;
+                        }
+                    }
+                }
+                if dimensions <= 1 {
+                    return Ok(specified_unit(product, unit));
+                }
+            }
             let values = values.into_iter().map(Box::new).collect();
             Ok(SpecifiedCssNumericValue::Product(
                 NonEmptyCssList::from_vec(values).ok_or_else(|| input.new_custom_error(()))?,
             ))
-        },
+        }
     }
 }
 
 pub fn specified_sum(values: Vec<SpecifiedCssNumericValue>) -> Option<SpecifiedCssNumericValue> {
-    Some(SpecifiedCssNumericValue::Sum(NonEmptyCssList::from_vec(
-        values.into_iter().map(Box::new).collect(),
-    )?))
+    let mut result: Vec<Box<SpecifiedCssNumericValue>> = Vec::new();
+    for value in values {
+        if let SpecifiedCssNumericValue::Sum(values) = value {
+            result.extend(values.into_vec());
+            continue;
+        }
+        result.push(Box::new(value));
+    }
+    let values = result;
+    let mut result: Vec<Box<SpecifiedCssNumericValue>> = Vec::new();
+    for value in values {
+        let value = *value;
+        let SpecifiedCssNumericValue::Unit(unit) = value else {
+            result.push(Box::new(value));
+            continue;
+        };
+        if let Some(existing) = result.iter_mut().find_map(|value| match value.as_mut() {
+            SpecifiedCssNumericValue::Unit(existing) if existing.unit == unit.unit => Some(existing),
+            _ => None,
+        }) {
+            existing.value += unit.value;
+            continue;
+        }
+        let CssUnitKind::Canonical(conversion) = unit.unit.kind() else {
+            result.push(Box::new(SpecifiedCssNumericValue::Unit(unit)));
+            continue;
+        };
+        if let Some(existing) = result.iter_mut().find_map(|value| match value.as_mut() {
+            SpecifiedCssNumericValue::Unit(existing)
+                if existing
+                    .unit
+                    .canonical_conversion()
+                    .is_some_and(|candidate| candidate.dimension == conversion.dimension) =>
+            {
+                Some(existing)
+            }
+            _ => None,
+        }) {
+            let existing_conversion = existing.unit.canonical_conversion()?;
+            existing.value = existing.value * existing_conversion.scale + unit.value * conversion.scale;
+            existing.unit = conversion.dimension.canonical_unit();
+        } else {
+            result.push(Box::new(SpecifiedCssNumericValue::Unit(unit)));
+        }
+    }
+    Some(SpecifiedCssNumericValue::Sum(NonEmptyCssList::from_vec(result)?))
 }
 
 pub const fn specified_unit(value: f64, unit: TypedOmUnit) -> SpecifiedCssNumericValue {
@@ -694,57 +757,34 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parsed_calculations_retain_terms_and_nested_operations() {
+    fn parsed_calculations_combine_nested_terms_and_scalar_products() {
         for (source, expected) in [
+            ("calc(1 + 4)", vec![specified_unit(5.0, TypedOmUnit::Number)]),
+            ("calc(1px + 1in)", vec![specified_unit(97.0, TypedOmUnit::Px)]),
             (
-                "calc(1 + 4)",
+                "calc(1px + calc(1px) + calc(1px * 2) + 1%)",
                 vec![
-                    specified_unit(1.0, TypedOmUnit::Number),
-                    specified_unit(4.0, TypedOmUnit::Number),
-                ],
-            ),
-            (
-                "calc(1px + 1in)",
-                vec![
-                    specified_unit(1.0, TypedOmUnit::Px),
-                    specified_unit(1.0, TypedOmUnit::In),
+                    specified_unit(4.0, TypedOmUnit::Px),
+                    specified_unit(1.0, TypedOmUnit::Percent),
                 ],
             ),
         ] {
-            let Some(SpecifiedCssNumericValue::Sum(values)) =
-                parse_specified_css_numeric_value(source)
-            else {
+            let Some(SpecifiedCssNumericValue::Sum(values)) = parse_specified_css_numeric_value(source) else {
                 panic!("{source} must retain its calculation sum");
             };
             assert_eq!(values.len(), expected.len());
             for (actual, expected) in values.iter().zip(expected) {
-                let (
-                    SpecifiedCssNumericValue::Unit(actual),
-                    SpecifiedCssNumericValue::Unit(expected),
-                ) = (actual.as_ref(), expected)
+                let (SpecifiedCssNumericValue::Unit(actual), SpecifiedCssNumericValue::Unit(expected)) =
+                    (actual.as_ref(), expected)
                 else {
-                    panic!("{source} must preserve its input unit values");
+                    panic!("{source} must simplify to unit values");
                 };
                 assert_eq!((actual.value, actual.unit), (expected.value, expected.unit));
             }
         }
-        let Some(SpecifiedCssNumericValue::Sum(outer)) =
-            parse_specified_css_numeric_value("calc(1px + calc(2px + 3px))")
-        else {
-            panic!("nested calculation must retain its outer sum");
-        };
-        assert_eq!(outer.len(), 2);
-        let SpecifiedCssNumericValue::Sum(inner) = outer.iter().nth(1).unwrap().as_ref() else {
-            panic!("nested calculation must retain its inner sum");
-        };
-        assert_eq!(inner.len(), 2);
-        for source in ["calc(1px * 2s)", "calc(1px * 2)", "calc(2 * 3)"] {
-            let Some(SpecifiedCssNumericValue::Product(values)) =
-                parse_specified_css_numeric_value(source)
-            else {
-                panic!("{source} must retain its product");
-            };
-            assert_eq!(values.len(), 2);
-        }
+        assert!(matches!(
+            parse_specified_css_numeric_value("calc(1px * 2s)"),
+            Some(SpecifiedCssNumericValue::Product(_))
+        ));
     }
 }
