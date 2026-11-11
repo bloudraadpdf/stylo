@@ -1691,6 +1691,9 @@ pub struct RareComputedValues {
 
     /// What style & layout interleaving replaced in this style.
     anchor_layout_base: Option<crate::values::computed::position::AnchorLayoutBase>,
+
+    /// The nearest enclosing ruby container, before annotation writing-mode adjustment.
+    ruby_container_writing_mode: Option<WritingMode>,
 }
 
 /// The struct that Servo uses to represent computed values.
@@ -1926,6 +1929,7 @@ impl ComputedValues {
         flags: ComputedValueFlags,
         authored_control_style: super::authored_control_style::AuthoredControlStyle,
         anchor_layout_base: Option<crate::values::computed::position::AnchorLayoutBase>,
+        ruby_container_writing_mode: Option<WritingMode>,
         rules: Option<StrongRuleNode>,
         visited_style: Option<Arc<ComputedValues>>,
         % for style_struct in data.active_style_structs():
@@ -1941,10 +1945,11 @@ impl ComputedValues {
                 effective_zoom,
                 flags,
                 authored_control_style,
-                rare: (visited_style.is_some() || anchor_layout_base.is_some()).then(|| {
+                rare: (visited_style.is_some() || anchor_layout_base.is_some() || ruby_container_writing_mode.is_some()).then(|| {
                     Arc::new(RareComputedValues {
                         visited_style,
                         anchor_layout_base,
+                        ruby_container_writing_mode,
                     })
                 }),
             % for style_struct in data.active_style_structs():
@@ -2068,6 +2073,11 @@ impl ComputedValuesInner {
     /// Returns the visited style, if any.
     pub fn visited_style(&self) -> Option<&ComputedValues> {
         self.rare.as_ref()?.visited_style.as_deref()
+    }
+
+    /// The nearest enclosing ruby container writing mode.
+    pub fn ruby_container_writing_mode(&self) -> Option<WritingMode> {
+        self.rare.as_ref()?.ruby_container_writing_mode
     }
 
     /// What style & layout interleaving replaced in this style: the base that layout positions from.
@@ -2557,6 +2567,10 @@ pub struct StyleBuilder<'a> {
     #[cfg(feature = "servo")]
     pub authored_control_style: super::authored_control_style::AuthoredControlStyle,
 
+    /// The nearest enclosing ruby container writing mode.
+    #[cfg(feature = "servo")]
+    pub ruby_container_writing_mode: Option<WritingMode>,
+
     /// The computed values that style & layout interleaving replaced.
     pub anchor_layout_base: crate::values::computed::position::AnchorLayoutBase,
 
@@ -2603,6 +2617,8 @@ impl<'a> StyleBuilder<'a> {
             flags: Cell::new(flags),
             #[cfg(feature = "servo")]
             authored_control_style: Default::default(),
+            #[cfg(feature = "servo")]
+            ruby_container_writing_mode: inherited_style.ruby_container_writing_mode(),
             anchor_layout_base: Default::default(),
             visited_style: None,
             % for style_struct in data.active_style_structs():
@@ -2649,6 +2665,8 @@ impl<'a> StyleBuilder<'a> {
             flags: Cell::new(style_to_derive_from.flags),
             #[cfg(feature = "servo")]
             authored_control_style: style_to_derive_from.authored_control_style,
+            #[cfg(feature = "servo")]
+            ruby_container_writing_mode: style_to_derive_from.ruby_container_writing_mode(),
             anchor_layout_base: Default::default(),
             visited_style: None,
             % for style_struct in data.active_style_structs():
@@ -2905,6 +2923,8 @@ impl<'a> StyleBuilder<'a> {
             self.authored_control_style,
             #[cfg(feature = "servo")]
             self.anchor_layout_base.into_present(),
+            #[cfg(feature = "servo")]
+            self.ruby_container_writing_mode,
             self.rules,
             self.visited_style,
             % for style_struct in data.active_style_structs():

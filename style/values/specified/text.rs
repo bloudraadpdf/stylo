@@ -276,6 +276,34 @@ mod tests {
     }
 
     #[test]
+    fn ruby_position_inter_character_round_trips_as_a_single_position() {
+        for input in ["inter-character", "INTER-CHARACTER"] {
+            let value = parse_value::<super::RubyPosition>(input)
+                .expect("inter-character is a ruby position");
+            assert_eq!(value.to_css_string(), "inter-character");
+        }
+        for input in ["alternate", "over", "under", "alternate under"] {
+            assert!(parse_value::<super::RubyPosition>(input).is_ok());
+        }
+    }
+
+    #[test]
+    fn ruby_position_inter_character_rejects_combined_positions() {
+        for input in [
+            "alternate inter-character",
+            "inter-character alternate",
+            "inter-character over",
+            "under inter-character",
+            "inter-character inter-character",
+        ] {
+            assert!(
+                parse_value::<super::RubyPosition>(input).is_err(),
+                "{input}"
+            );
+        }
+    }
+
+    #[test]
     fn text_overflow_accepts_fade_keyword() {
         let value = parse_value::<super::TextOverflow>("fade").unwrap();
         assert!(matches!(value.second, super::TextOverflowSide::Fade));
@@ -320,7 +348,10 @@ mod tests {
             "match-parent"
         );
         let computed = computed::text::TextAlignLast::new(TextAlignLastKeyword::Start, true);
-        assert_eq!(TextAlignLast::from_computed_value(&computed), TextAlignLast::MatchParent);
+        assert_eq!(
+            TextAlignLast::from_computed_value(&computed),
+            TextAlignLast::MatchParent
+        );
     }
 
     #[test]
@@ -1940,6 +1971,7 @@ pub enum RubyPosition {
     AlternateUnder,
     Over,
     Under,
+    InterCharacter,
 }
 
 impl Parse for RubyPosition {
@@ -1947,6 +1979,12 @@ impl Parse for RubyPosition {
         _context: &ParserContext,
         input: &mut Parser<'i, 't>,
     ) -> Result<RubyPosition, ParseError<'i>> {
+        if input
+            .try_parse(|input| input.expect_ident_matching("inter-character"))
+            .is_ok()
+        {
+            return Ok(RubyPosition::InterCharacter);
+        }
         // Parse alternate before
         let alternate = input
             .try_parse(|i| i.expect_ident_matching("alternate"))
@@ -1984,13 +2022,14 @@ impl ToCss for RubyPosition {
             RubyPosition::AlternateUnder => "alternate under",
             RubyPosition::Over => "over",
             RubyPosition::Under => "under",
+            RubyPosition::InterCharacter => "inter-character",
         })
     }
 }
 
 impl SpecifiedValueInfo for RubyPosition {
     fn collect_completion_keywords(f: KeywordsCollectFn) {
-        f(&["alternate", "over", "under"])
+        f(&["alternate", "over", "under", "inter-character"])
     }
 }
 

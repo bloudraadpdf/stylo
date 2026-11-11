@@ -424,6 +424,13 @@ fn text_stroke_preserves_fractional_widths_and_expands_the_shorthand() {
 }
 
 #[test]
+fn ruby_position_applies_to_first_line_but_not_first_letter() {
+    let flags = super::LonghandId::RubyPosition.flags();
+    assert!(flags.contains(super::PropertyFlags::APPLIES_TO_FIRST_LINE));
+    assert!(!flags.contains(super::PropertyFlags::APPLIES_TO_FIRST_LETTER));
+}
+
+#[test]
 fn text_justify_applies_to_first_line_and_first_letter() {
     for restriction in [
         super::PropertyFlags::APPLIES_TO_FIRST_LINE,

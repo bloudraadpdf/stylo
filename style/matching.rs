@@ -886,6 +886,11 @@ trait PrivateMatchMethods: TElement {
             return ChildRestyleRequirement::MustCascadeChildren;
         }
 
+        #[cfg(feature = "servo")]
+        if old_values.ruby_container_writing_mode() != new_values.ruby_container_writing_mode() {
+            return ChildRestyleRequirement::MustCascadeChildren;
+        }
+
         if old_values.effective_zoom != new_values.effective_zoom {
             // Zoom changes need to get propagated to children.
             debug!(

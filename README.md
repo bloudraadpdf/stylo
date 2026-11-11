@@ -42,6 +42,11 @@ style. Author and effect levels apply the generated property restrictions of
 `::marker` (with inherited text properties), `::placeholder` and the highlight
 pseudo-elements. User-agent rules remain unrestricted.
 Eager pseudo and ordinary element keyframe paths remain unchanged.
+Ruby position accepts `inter-character` and inherits through first-line styles.
+Horizontal inter-character annotations use their annotation container position
+and enclosing ruby writing mode before logical properties resolve. Style sharing
+and descendant recascade retain that enclosing mode through annotation containers.
+
 Moegoe consumes the published registered revision, without a local override.
 No upstream issue or pull request has been submitted for this patch.
 

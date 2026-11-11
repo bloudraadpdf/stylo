@@ -29,6 +29,12 @@ PRIORITARY_PROPERTIES = set(
         "writing-mode",
         "direction",
         "text-orientation",
+        # Inter-character annotations determine the writing mode used by logical properties.
+        "display",
+        "position",
+        "float",
+        "ruby-position",
+        "-servo-top-layer",
         # The fonts and colors group has the second priority, as all other lengths
         # and colors depend on them.
         #
@@ -1281,6 +1287,7 @@ class PropertyRestrictions:
                 "alignment-baseline",
                 "baseline-shift",
                 "baseline-source",
+                "ruby-position",
                 "line-height",
                 # Kinda like css-backgrounds?
                 "background-blend-mode",

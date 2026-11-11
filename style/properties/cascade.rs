@@ -497,6 +497,7 @@ where
     context.style().add_flags(cascade_input_flags);
 
     let using_cached_reset_properties;
+    let mut early_ruby_adjustment = false;
     let rule_cache = rule_cache.filter(|_| !element.map_or(false, |e| e.has_anchor_layout_inputs()));
     let ignore_colors = context.builder.device.forced_colors().is_active();
     let mut cascade = Cascade::new(first_line_reparenting, try_tactic, ignore_colors);
@@ -556,11 +557,13 @@ where
 
             // Resolve prioritary properties - Guaranteed to not fall into a cycle with existing custom
             // properties.
-            cascade.apply_prioritary_properties(
+            early_ruby_adjustment = cascade.apply_prioritary_properties(
                 &mut context,
                 &declarations,
                 &mut shorthand_cache,
                 &mut attribute_tracker,
+                layout_parent_style.unwrap_or(inherited_style),
+                element,
             );
 
             // Resolve the deferred custom properties.
@@ -584,11 +587,12 @@ where
                 );
             }
 
-            using_cached_reset_properties = cascade.try_to_use_cached_reset_properties(
-                &mut context.builder,
-                rule_cache,
-                guards,
-            );
+            using_cached_reset_properties = !early_ruby_adjustment
+                && cascade.try_to_use_cached_reset_properties(
+                    &mut context.builder,
+                    rule_cache,
+                    guards,
+                );
 
             if using_cached_reset_properties {
                 LonghandIdSet::late_group_only_inherited()
@@ -635,7 +639,7 @@ where
     }
     resolve_anchors_after_adjustment(&mut context);
 
-    if context.builder.modified_reset() || using_cached_reset_properties {
+    if early_ruby_adjustment || context.builder.modified_reset() || using_cached_reset_properties {
         // If we adjusted any reset structs, we can't cache this ComputedValues.
         //
         // Also, if we re-used existing reset structs, don't bother caching it back again. (Aside
@@ -1296,13 +1300,15 @@ impl<'b> Cascade<'b> {
         false
     }
 
-    fn apply_prioritary_properties(
+    fn apply_prioritary_properties<E: TElement>(
         &mut self,
         context: &mut computed::Context,
         decls: &Declarations,
         cache: &mut ShorthandsWithPropertyReferencesCache,
         attribute_tracker: &mut AttributeTracker,
-    ) {
+        layout_parent_style: &ComputedValues,
+        element: Option<E>,
+    ) -> bool {
         // Keeps apply_one_prioritary_property calls readable, considering the repititious
         // arguments.
         macro_rules! apply {
@@ -1318,7 +1324,7 @@ impl<'b> Cascade<'b> {
         }
 
         if !decls.has_prioritary_properties {
-            return;
+            return false;
         }
 
         let has_writing_mode = apply!(WritingMode) | apply!(Direction) | apply!(TextOrientation);
@@ -1326,6 +1332,24 @@ impl<'b> Cascade<'b> {
         if has_writing_mode {
             context.builder.writing_mode = WritingMode::new(context.builder.get_inherited_box())
         }
+
+        apply!(Display);
+        apply!(Position);
+        apply!(Float);
+        apply!(RubyPosition);
+        #[cfg(feature = "servo")]
+        apply!(ServoTopLayer);
+        #[cfg(feature = "servo")]
+        let ruby_adjustment = {
+            let skip_item_display_fixup = context.builder.pseudo.map_or_else(
+                || element.is_some_and(|element| element.skip_item_display_fixup()),
+                |pseudo| pseudo.skip_item_display_fixup(),
+            );
+            StyleAdjuster::new(&mut context.builder)
+                .adjust_ruby_writing_mode(layout_parent_style, skip_item_display_fixup)
+        };
+        #[cfg(not(feature = "servo"))]
+        let ruby_adjustment = false;
 
         if apply!(Zoom) {
             context.builder.recompute_effective_zooms();
@@ -1395,6 +1419,7 @@ impl<'b> Cascade<'b> {
         apply!(AccentColor);
         apply!(Color);
         apply!(LineHeight);
+        ruby_adjustment
     }
 
     fn apply_non_prioritary_properties(

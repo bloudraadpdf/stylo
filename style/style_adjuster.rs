@@ -777,15 +777,78 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
         }
     }
 
+    #[cfg(feature = "servo")]
+    pub(crate) fn adjust_ruby_writing_mode(
+        &mut self,
+        layout_parent_style: &ComputedValues,
+        skip_item_display_fixup: bool,
+    ) -> bool {
+        if !self.style.get_box().clone_display().is_ruby_type() {
+            return false;
+        }
+        let previous_writing_mode = self.style.writing_mode;
+        self.style.clear_modified_reset();
+        self.adjust_for_top_layer();
+        self.blockify_if_necessary(layout_parent_style, skip_item_display_fixup);
+        self.adjust_for_position();
+        self.adjust_for_inter_character_ruby(layout_parent_style);
+        self.style.modified_reset() || self.style.writing_mode != previous_writing_mode
+    }
+
+    #[cfg(feature = "servo")]
+    fn adjust_for_inter_character_ruby(&mut self, layout_parent_style: &ComputedValues) {
+        use crate::computed_values::writing_mode::T as WritingMode;
+        use crate::values::computed::RubyPosition;
+        use crate::values::specified::box_::DisplayInside;
+
+        let display = self.style.get_box().clone_display();
+        let parent_display = layout_parent_style.get_box().clone_display();
+        let parent_is_ruby = parent_display.inside() == DisplayInside::Ruby;
+        let proper_parent = display.is_ruby_type()
+            && (parent_is_ruby
+                || display == Display::RubyText && parent_display == Display::RubyTextContainer
+                || display == Display::RubyBase && parent_display == Display::RubyBaseContainer);
+        self.style.ruby_container_writing_mode = if display.inside() == DisplayInside::Ruby {
+            Some(self.style.writing_mode)
+        } else if proper_parent || display.is_contents() {
+            layout_parent_style.ruby_container_writing_mode()
+        } else if display.is_ruby_type() {
+            // An improper internal box receives an anonymous ruby container.
+            Some(layout_parent_style.writing_mode)
+        } else {
+            None
+        };
+        if display != Display::RubyText
+            || layout_parent_style
+                .get_inherited_text()
+                .clone_ruby_position()
+                != RubyPosition::InterCharacter
+            || !self
+                .style
+                .ruby_container_writing_mode
+                .is_some_and(|mode| !mode.is_vertical())
+        {
+            return;
+        }
+        self.style
+            .mutate_inherited_box()
+            .set_writing_mode(WritingMode::VerticalRl);
+        self.style.writing_mode =
+            crate::logical_geometry::WritingMode::new(self.style.get_inherited_box());
+    }
+
     /// Do ruby-related style adjustments, which include:
     /// * propagate the line break suppression flag,
     /// * inlinify block descendants,
     /// * correct unicode-bidi.
-    fn adjust_for_ruby<E>(&mut self, element: Option<E>)
+    fn adjust_for_ruby<E>(&mut self, element: Option<E>, layout_parent_style: &ComputedValues)
     where
         E: TElement,
     {
         use crate::properties::longhands::unicode_bidi::computed_value::T as UnicodeBidi;
+
+        #[cfg(feature = "servo")]
+        self.adjust_for_inter_character_ruby(layout_parent_style);
 
         let self_display = self.style.get_box().clone_display();
         // Check whether line break should be suppressed for this element.
@@ -1142,7 +1205,9 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
         if outline.outline_style != OutlineStyle::Auto
             && matches!(outline.outline_color, ColorOrAuto::Auto)
         {
-            self.style.mutate_outline().set_outline_color(ColorOrAuto::Color(Color::currentcolor()));
+            self.style
+                .mutate_outline()
+                .set_outline_color(ColorOrAuto::Color(Color::currentcolor()));
         }
     }
 
@@ -1205,7 +1270,7 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
         }
         self.adjust_for_table_text_align();
         self.adjust_for_writing_mode(layout_parent_style);
-        self.adjust_for_ruby(element);
+        self.adjust_for_ruby(element, layout_parent_style);
         #[cfg(feature = "gecko")]
         {
             self.adjust_for_appearance(element);
@@ -1240,7 +1305,10 @@ mod outline_tests {
             let mut builder = StyleBuilder::for_inheritance(&device, None, None, None);
             builder.mutate_outline().set_outline_style(style);
             StyleAdjuster::new(&mut builder).adjust_for_outline_color();
-            assert_eq!(matches!(builder.get_outline().outline_color, ColorOrAuto::Auto), style == OutlineStyle::Auto);
+            assert_eq!(
+                matches!(builder.get_outline().outline_color, ColorOrAuto::Auto),
+                style == OutlineStyle::Auto
+            );
         }
     }
 }
@@ -1287,3 +1355,7 @@ mod background_tests {
         }
     }
 }
+
+#[cfg(all(test, feature = "servo"))]
+#[path = "style_adjuster/ruby_tests.rs"]
+mod ruby_tests;
