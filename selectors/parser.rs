@@ -195,6 +195,9 @@ bitflags! {
         /// Whether we are after any of the pseudo-like things.
         const AFTER_PSEUDO = Self::AFTER_PART_LIKE.bits() | Self::AFTER_SLOTTED.bits() | Self::AFTER_NON_ELEMENT_BACKED_PSEUDO.bits() | Self::AFTER_BEFORE_OR_AFTER_PSEUDO.bits();
 
+        /// Whether only compound selectors are permitted.
+        const DISALLOW_COMBINATORS = 1 << 6;
+
         /// Whether we explicitly disallow pseudo-element-like things.
         const DISALLOW_PSEUDOS = 1 << 7;
 
@@ -685,16 +688,12 @@ where
     P: Parser<'i, Impl = Impl>,
     Impl: SelectorImpl,
 {
-    let selector = parse_selector(
+    parse_selector(
         parser,
         input,
-        state | SelectorParsingState::DISALLOW_PSEUDOS,
+        state | SelectorParsingState::DISALLOW_PSEUDOS | SelectorParsingState::DISALLOW_COMBINATORS,
         ParseRelative::No,
-    )?;
-    if selector.iter_raw_match_order().any(|component| matches!(component, Component::Combinator(_))) {
-        return Err(input.new_custom_error(SelectorParseErrorKind::InvalidState));
-    }
-    Ok(selector)
+    )
 }
 
 /// Ancestor hashes for the bloom filter. We precompute these and store them
@@ -2976,6 +2975,10 @@ where
             break;
         };
 
+        if state.contains(SelectorParsingState::DISALLOW_COMBINATORS) {
+            return Err(input.new_custom_error(SelectorParseErrorKind::InvalidState));
+        }
+
         if state.intersects(SelectorParsingState::SKIP_DEFAULT_NAMESPACE)
             && !compound.has_type_selector
         {
@@ -3602,7 +3605,7 @@ where
     let inner = SelectorList::parse_with_state(
         parser,
         input,
-        state
+        (state - SelectorParsingState::DISALLOW_COMBINATORS)
             | SelectorParsingState::SKIP_DEFAULT_NAMESPACE
             | SelectorParsingState::DISALLOW_PSEUDOS
             | SelectorParsingState::DISALLOW_RELATIVE_SELECTOR,
@@ -4304,6 +4307,15 @@ pub mod tests {
         expected: Option<&'a str>,
     ) -> Result<SelectorList<DummySelectorImpl>, SelectorParseError<'i>> {
         parse_ns_expected(input, &DummyParser::default(), expected)
+    }
+
+    #[test]
+    fn host_logical_arguments_inherit_compound_selector_grammar() {
+        for selector in [":host(:is(.a, .b+.c, .d))", ":host(:where(.a, .b+.c, .d))"] {
+            assert_eq!(parse(selector).unwrap().to_css_string(), selector);
+        }
+        assert!(parse(":host(:not(.a .b))").is_err());
+        assert!(parse(":host(:has(> section h1))").is_ok());
     }
 
     #[test]
