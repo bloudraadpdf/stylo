@@ -118,3 +118,32 @@ fn a_page_rule_parses_size_only_as_the_page_size_descriptor() {
         ]
     );
 }
+
+#[test]
+fn field_sizing_has_native_cssom_schema_and_mutations() {
+    let schema = stylo_cssom_model::property_schema("field-sizing").expect("field-sizing schema");
+    assert_eq!(schema.initial.serialized, "fixed");
+    assert_eq!(
+        schema.inheritedness,
+        stylo_cssom_model::Inheritedness::Reset
+    );
+    let mut block =
+        parse_cssom_declaration_block("field-sizing:fixed", CssomDeclarationContext::Style);
+    for value in ["content", "fixed"] {
+        assert!(cssom_declaration_set_property(
+            &mut block,
+            "field-sizing",
+            value,
+            CssomDeclarationPriority::Normal,
+            CssomDeclarationContext::Style,
+        ));
+        assert_eq!(
+            serialise_cssom_declaration_block(&block).into_css_text(),
+            format!("field-sizing: {value};"),
+        );
+    }
+    assert_eq!(
+        cssom_declaration_remove_property(&mut block, "field-sizing").as_deref(),
+        Some("fixed"),
+    );
+}
