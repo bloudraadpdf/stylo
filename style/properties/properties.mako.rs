@@ -2234,6 +2234,156 @@ impl ComputedValuesInner {
     }
 }
 
+#[cfg(feature = "servo")]
+#[derive(Default)]
+struct StyleStructSharingCache {
+    scopes: usize,
+    % for style_struct in data.active_style_structs():
+    ${style_struct.ident}: Vec<Arc<style_structs::${style_struct.name}>>,
+    % endfor
+}
+
+#[cfg(feature = "servo")]
+thread_local! {
+    static STYLE_STRUCT_SHARING: std::cell::RefCell<Option<Box<StyleStructSharingCache>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Shares equal native property records during nested synchronous style operations.
+#[cfg(feature = "servo")]
+#[must_use]
+pub struct StyleStructSharingScope {
+    _thread: std::marker::PhantomData<std::rc::Rc<()>>,
+}
+
+#[cfg(feature = "servo")]
+impl StyleStructSharingScope {
+    /// Starts sharing until the last scope on this thread closes.
+    pub fn new() -> Self {
+        STYLE_STRUCT_SHARING.with(|sharing| {
+            let mut sharing = sharing.borrow_mut();
+            sharing.get_or_insert_with(Default::default).scopes += 1;
+        });
+        Self { _thread: std::marker::PhantomData }
+    }
+}
+
+#[cfg(feature = "servo")]
+impl fmt::Debug for StyleStructSharingScope {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.debug_struct("StyleStructSharingScope").finish_non_exhaustive()
+    }
+}
+
+#[cfg(feature = "servo")]
+impl Drop for StyleStructSharingScope {
+    fn drop(&mut self) {
+        let expired = STYLE_STRUCT_SHARING.with(|sharing| {
+            let mut sharing = sharing.borrow_mut();
+            let cache = sharing.as_mut().expect("a style sharing scope is active");
+            cache.scopes -= 1;
+            if cache.scopes == 0 {
+                sharing.take()
+            } else {
+                None
+            }
+        });
+        drop(expired);
+    }
+}
+
+#[cfg(feature = "servo")]
+fn share_style_struct_value<T: PartialEq>(candidates: &mut Vec<Arc<T>>, value: Arc<T>) -> Arc<T> {
+    if let Some(shared) = candidates.iter().find(|candidate| {
+        Arc::ptr_eq(candidate, &value) || candidate.as_ref() == value.as_ref()
+    }) {
+        return shared.clone();
+    }
+    if candidates.len() < 64 {
+        candidates.push(value.clone());
+    }
+    value
+}
+
+% for style_struct in data.active_style_structs():
+#[cfg(feature = "servo")]
+fn share_style_struct_${style_struct.ident}(value: Arc<style_structs::${style_struct.name}>) -> Arc<style_structs::${style_struct.name}> {
+    STYLE_STRUCT_SHARING.with(|sharing| {
+        let mut sharing = sharing.borrow_mut();
+        match sharing.as_mut() {
+            Some(cache) => share_style_struct_value(&mut cache.${style_struct.ident}, value),
+            None => value,
+        }
+    })
+}
+% endfor
+
+#[cfg(all(test, feature = "servo"))]
+mod style_struct_sharing_tests {
+    use super::*;
+
+    fn initial_text() -> style_structs::Text {
+        ComputedValues::initial_values_with_font_override(style_structs::Font::initial_values()).get_text().clone()
+    }
+
+    #[test]
+    fn equal_records_share_without_changing_values_or_mutation_isolation() {
+        let initial = initial_text();
+        let first = Arc::new(initial.clone());
+        let second = Arc::new(initial);
+        assert!(!Arc::ptr_eq(&first, &second));
+        let scope = StyleStructSharingScope::new();
+        let first = share_style_struct_text(first);
+        let mut second = share_style_struct_text(second);
+        assert!(Arc::ptr_eq(&first, &second));
+        Arc::make_mut(&mut second).unicode_bidi = longhands::unicode_bidi::SpecifiedValue::Plaintext;
+        assert_ne!(first.unicode_bidi, second.unicode_bidi);
+        assert!(!Arc::ptr_eq(&first, &share_style_struct_text(second)));
+        drop(scope);
+        assert!(first.is_unique());
+    }
+
+    #[test]
+    fn nested_scopes_release_candidates_after_the_last_close() {
+        let outer = StyleStructSharingScope::new();
+        let first = share_style_struct_text(Arc::new(initial_text()));
+        let inner = StyleStructSharingScope::new();
+        drop(outer);
+        let second = share_style_struct_text(Arc::new(initial_text()));
+        assert!(Arc::ptr_eq(&first, &second));
+        drop(second);
+        assert!(!first.is_unique());
+        drop(inner);
+        assert!(first.is_unique());
+        let second = share_style_struct_text(Arc::new(initial_text()));
+        assert!(!Arc::ptr_eq(&first, &second));
+    }
+
+    #[test]
+    fn sharing_keeps_a_bounded_number_of_complete_values() {
+        let mut candidates = Vec::new();
+        for value in 0..100u32 {
+            assert_eq!(*share_style_struct_value(&mut candidates, Arc::new(value)), value);
+        }
+        assert_eq!(candidates.len(), 64);
+        let first = candidates[0].clone();
+        assert!(Arc::ptr_eq(&first, &share_style_struct_value(&mut candidates, Arc::new(0))));
+        let uncached = share_style_struct_value(&mut candidates, Arc::new(99));
+        assert!(!Arc::ptr_eq(&uncached, &share_style_struct_value(&mut candidates, Arc::new(99))));
+        assert_eq!(candidates.len(), 64);
+    }
+
+    #[test]
+    fn unwinding_closes_the_scope() {
+        let result = std::panic::catch_unwind(|| {
+            let _scope = StyleStructSharingScope::new();
+            panic!("scope unwind fixture");
+        });
+        assert!(result.is_err());
+        assert!(STYLE_STRUCT_SHARING.with(|sharing| sharing.borrow().is_none()));
+    }
+}
+
 /// A reference to a style struct of the parent, or our own style struct.
 pub enum StyleStructRef<'a, T: 'static> {
     /// A borrowed struct from the parent, for example, for inheriting style.
@@ -2758,6 +2908,9 @@ impl<'a> StyleBuilder<'a> {
             self.rules,
             self.visited_style,
             % for style_struct in data.active_style_structs():
+            #[cfg(feature = "servo")]
+            share_style_struct_${style_struct.ident}(self.${style_struct.ident}.build()),
+            #[cfg(not(feature = "servo"))]
             self.${style_struct.ident}.build(),
             % endfor
         )
