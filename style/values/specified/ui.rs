@@ -10,11 +10,89 @@ use crate::values::generics::ui as generics;
 use crate::values::specified::color::Color;
 use crate::values::specified::image::Image;
 use crate::values::specified::Number;
-use cssparser::Parser;
+use crate::values::{serialize_atom_identifier, AtomString};
+use crate::Atom;
+use cssparser::{Parser, Token};
 use std::fmt::{self, Write};
 use style_traits::{
     CssWriter, KeywordsCollectFn, ParseError, SpecifiedValueInfo, StyleParseErrorKind, ToCss,
 };
+
+/// The frame targeted by directional focus navigation.
+#[derive(
+    Clone,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+)]
+#[repr(C, u8)]
+pub enum NavigationTarget {
+    /// The originating element's frame.
+    Current,
+    /// The full window.
+    Root,
+    /// A named frame.
+    Frame(AtomString),
+}
+
+/// A directional focus navigation override (`nav-up`, `nav-right`, `nav-down`, `nav-left`).
+#[derive(Clone, Debug, Eq, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToComputedValue, ToResolvedValue, ToShmem)]
+#[repr(C, u8)]
+pub enum Navigation {
+    /// The user agent chooses the next focus target.
+    Auto,
+    /// An ID selector, optionally scoped to a target frame.
+    Target {
+        /// The ID selector's identifier, without its hash.
+        id: Atom,
+        /// The explicitly specified frame, if any.
+        frame: Option<NavigationTarget>,
+    },
+}
+
+impl style_traits::ToTyped for Navigation {}
+
+impl Parse for Navigation {
+    fn parse<'i, 't>(context: &ParserContext, input: &mut Parser<'i, 't>) -> Result<Self, ParseError<'i>> {
+        if input.try_parse(|input| input.expect_ident_matching("auto")).is_ok() {
+            return Ok(Self::Auto);
+        }
+        let location = input.current_source_location();
+        let id = match input.next()? {
+            Token::IDHash(id) => Atom::from(id.as_ref()),
+            token => return Err(location.new_unexpected_token_error(token.clone())),
+        };
+        let frame = input.try_parse(|input| NavigationTarget::parse(context, input)).ok();
+        Ok(Self::Target { id, frame })
+    }
+}
+
+impl ToCss for Navigation {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        match self {
+            Self::Auto => dest.write_str("auto"),
+            Self::Target { id, frame } => {
+                dest.write_char('#')?;
+                serialize_atom_identifier(id, dest)?;
+                if let Some(frame) = frame {
+                    dest.write_char(' ')?;
+                    frame.to_css(dest)?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
 
 /// Shape of the insertion caret.
 #[allow(missing_docs)]

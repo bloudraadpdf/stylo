@@ -265,6 +265,65 @@ fn assert_serialization(name: &str, input: &str, expected: Option<&str>) {
 }
 
 #[test]
+fn directional_navigation_properties_parse_identifiers_and_frame_targets() {
+    for property in ["nav-up", "nav-right", "nav-down", "nav-left"] {
+        let id = PropertyId::parse_unchecked_for_testing(property).unwrap().longhand_id().unwrap();
+        assert!(!id.inherited());
+        for (input, expected) in [
+            ("AUTO", "auto"),
+            ("#target", "#target"),
+            ("#MixedCase CURRENT", "#MixedCase current"),
+            ("#target ROOT", "#target root"),
+            ("#target 'Frame Name'", "#target \"Frame Name\""),
+            ("#target '_parent'", "#target \"_parent\""),
+            ("#target '_root'", "#target \"_root\""),
+            ("#target '_named'", "#target \"_named\""),
+            (r"#\31 23", r"#\31 23"),
+            (r"#a\ b", r"#a\ b"),
+        ] {
+            assert_serialization(property, input, Some(expected));
+        }
+        for invalid in [
+            "none",
+            "target",
+            "#123",
+            "#-",
+            "#",
+            "auto current",
+            "#target unknown",
+            "current #target",
+            "#target current root",
+            "#one #two",
+            "#target, current",
+        ] {
+            assert_serialization(property, invalid, None);
+        }
+    }
+}
+
+#[test]
+fn directional_navigation_computed_values_are_initially_auto_and_do_not_inherit() {
+    use style_traits::ToCss;
+    let parent = cascade_zoom_test_style(
+        "nav-up:#up;nav-right:#right current;nav-down:#down root;nav-left:#left 'Frame Name'",
+        None,
+    );
+    assert_eq!(parent.get_ui().nav_up.to_css_string(), "#up");
+    assert_eq!(parent.get_ui().nav_right.to_css_string(), "#right current");
+    assert_eq!(parent.get_ui().nav_down.to_css_string(), "#down root");
+    assert_eq!(parent.get_ui().nav_left.to_css_string(), "#left \"Frame Name\"");
+    for style in [
+        cascade_zoom_test_style("", None),
+        cascade_zoom_test_style("", Some(&parent)),
+    ] {
+        let ui = style.get_ui();
+        for value in [&ui.nav_up, &ui.nav_right, &ui.nav_down, &ui.nav_left] {
+            assert_eq!(value.to_css_string(), "auto");
+        }
+    }
+}
+
+#[test]
 fn insertion_caret_properties_accept_the_ui4_grammar() {
     for value in ["auto", "bar", "block", "underscore"] {
         assert_serialization("caret-shape", value, Some(value));

@@ -731,6 +731,46 @@ spec = "https://drafts.csswg.org/css-ui-4/#caret-animation"
 servo_restyle_damage = "repaint"
 affects = "paint"
 
+[nav-up]
+type = "ui::Navigation"
+boxed = true
+initial = "computed::ui::Navigation::Auto"
+struct = "ui"
+engine = "servo"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-ui-4/#propdef-nav-up"
+affects = ""
+
+[nav-right]
+type = "ui::Navigation"
+boxed = true
+initial = "computed::ui::Navigation::Auto"
+struct = "ui"
+engine = "servo"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-ui-4/#propdef-nav-right"
+affects = ""
+
+[nav-down]
+type = "ui::Navigation"
+boxed = true
+initial = "computed::ui::Navigation::Auto"
+struct = "ui"
+engine = "servo"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-ui-4/#propdef-nav-down"
+affects = ""
+
+[nav-left]
+type = "ui::Navigation"
+boxed = true
+initial = "computed::ui::Navigation::Auto"
+struct = "ui"
+engine = "servo"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-ui-4/#propdef-nav-left"
+affects = ""
+
 [caret-shape]
 type = "ui::CaretShape"
 initial = "computed::ui::CaretShape::Auto"

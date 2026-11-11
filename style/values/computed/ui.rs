@@ -10,7 +10,8 @@ use crate::values::computed::Number;
 use crate::values::generics::ui as generics;
 
 pub use crate::values::specified::ui::{
-    BoolInteger, CaretAnimation, CaretShape, CursorKind, Inert, MozTheme, PointerEvents, UserFocus, UserSelect,
+    BoolInteger, CaretAnimation, CaretShape, CursorKind, Inert, MozTheme, Navigation, NavigationTarget,
+    PointerEvents, UserFocus, UserSelect,
 };
 
 /// A computed value for the `cursor` property.
