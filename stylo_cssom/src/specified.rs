@@ -392,8 +392,50 @@ mod inline_compatibility_projection_tests {
         );
         assert_eq!(
             projected_specified_property_value(&declarations, "font-variant"),
-            None
+            Some("normal".to_owned())
         );
+    }
+
+    #[test]
+    fn system_font_variant_overrides_serialize_known_reset_values() {
+        for (source, expected, expected_font) in [
+            (
+                "font:menu;font-variant-numeric:tabular-nums",
+                Some("tabular-nums"),
+                None,
+            ),
+            (
+                "font:menu;font-variant-numeric:tabular-nums;font-variant-caps:small-caps",
+                Some("small-caps tabular-nums"),
+                None,
+            ),
+            (
+                "font:menu!important;font-variant-numeric:tabular-nums",
+                Some("normal"),
+                Some("menu"),
+            ),
+            (
+                "font:menu!important;font-variant-numeric:tabular-nums!important",
+                Some("tabular-nums"),
+                None,
+            ),
+        ] {
+            let declarations = crate::declaration_parser::parse_inline_style_declarations(
+                source,
+                "about:blank".into(),
+                selectors::matching::QuirksMode::NoQuirks,
+            );
+            assert_eq!(
+                projected_specified_property_value(&declarations, "font-variant").as_deref(),
+                expected,
+                "{source}"
+            );
+            assert_eq!(
+                projected_specified_property_value(&declarations, "font").as_deref(),
+                expected_font,
+                "{source}"
+            );
+        }
     }
 
     #[test]
@@ -1119,16 +1161,18 @@ impl<'a> ShorthandMembers<'a> {
         // A system font is only expressible by the complete `font` shorthand.
         // Once one of its longhands is replaced, the remaining system-derived
         // values cannot be reconstructed as a regular font shorthand.
-        if self.declarations().any(|declaration| {
-            declaration
-                .shorthand_source
-                .is_some_and(|source| source.property().schema().name == "font")
-                && declaration.shorthand_value.as_ref().is_some_and(|value| {
-                    crate::declaration_parser::is_system_font_keyword(
-                        &projected_specified_style_value_text(value),
-                    )
-                })
-        }) {
+        if self.schema.name == "font"
+            && self.declarations().any(|declaration| {
+                declaration
+                    .shorthand_source
+                    .is_some_and(|source| source.property().schema().name == "font")
+                    && declaration.shorthand_value.as_ref().is_some_and(|value| {
+                        crate::declaration_parser::is_system_font_keyword(
+                            &projected_specified_style_value_text(value),
+                        )
+                    })
+            })
+        {
             return None;
         }
         let wide = self
