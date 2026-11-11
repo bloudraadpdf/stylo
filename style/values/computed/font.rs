@@ -1599,8 +1599,9 @@ impl ToResolvedValue for LineHeight {
             let length = match self {
                 Self::Normal | Self::None => return self,
                 Self::Number(num) => {
-                    let size = context.style.get_font().clone_font_size().computed_size();
-                    NonNegativeLength::new(size.px() * num.0)
+                    // Resolve the font size before multiplication to avoid rounding twice.
+                    let size = context.style.get_font().clone_font_size().computed_size().to_resolved_value(context);
+                    return Self::Length(NonNegativeLength::new(size.px() * num.0));
                 },
                 Self::Length(length) => length,
             };
