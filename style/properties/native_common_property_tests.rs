@@ -1493,3 +1493,21 @@ fn margin_trim_accepts_only_the_block_container_grammar() {
         assert_serialization("margin-trim", input, expected);
     }
 }
+
+#[test]
+fn field_sizing_uses_native_discrete_keywords() {
+    for value in ["fixed", "content"] {
+        assert_serialization("field-sizing", value, Some(value));
+    }
+    for value in ["auto", "normal", "fixed content"] {
+        assert_serialization("field-sizing", value, None);
+    }
+    assert_eq!(
+        super::ComputedValues::initial_values_with_font_override(
+            super::style_structs::Font::initial_values(),
+        )
+        .get_ui()
+        .clone_field_sizing(),
+        super::longhands::field_sizing::computed_value::T::Fixed,
+    );
+}

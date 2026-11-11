@@ -8708,7 +8708,6 @@ keyword = { values = ["auto", "none"] }
 
 [field-sizing]
 struct = "ui"
-engine = "gecko"
 spec = "https://drafts.csswg.org/css-ui/#field-sizing"
 animation_type = "discrete"
 affects = "layout"
