@@ -259,6 +259,23 @@ pub fn keyword_is(source: &str, expected: &str) -> bool {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn ruby_merge_uses_the_current_keywords() {
+        use style::values::specified::RubyMerge;
+        use style_traits::ToCss;
+
+        for (source, expected) in [
+            ("separate", RubyMerge::Separate),
+            ("merge", RubyMerge::Merge),
+            ("auto", RubyMerge::Auto),
+        ] {
+            let value = super::parse_value::<RubyMerge>(source).expect("ruby-merge keyword must parse");
+            assert_eq!(value, expected);
+            assert_eq!(value.to_css_string(), source);
+        }
+        assert!(super::parse_value::<RubyMerge>("collapse").is_none());
+    }
+
+    #[test]
     fn supports_conditions_project_active_view_transition_selectors() {
         use super::{css_supports, CssSupportsQuery};
 
