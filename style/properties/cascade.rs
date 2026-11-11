@@ -1131,6 +1131,41 @@ mod first_line_reset_tests {
     }
 
     #[test]
+    fn first_line_reset_reuse_respects_the_logical_mapping_mode() {
+        use crate::computed_values::writing_mode::T as Mode;
+
+        let device = crate::test_support::test_device();
+        let lock = crate::shared_lock::SharedRwLock::new();
+        let guard = lock.read();
+        let guards = StylesheetGuards::same(&guard);
+        let tactic = PositionTryFallbacksTryTactic::default();
+        for normal_mode in [Mode::HorizontalTb, Mode::VerticalRl, Mode::VerticalLr] {
+            let mut normal = StyleBuilder::for_inheritance(&device, None, None, None);
+            normal.mutate_inherited_box().set_writing_mode(normal_mode);
+            normal.writing_mode = WritingMode::new(normal.get_inherited_box());
+            let normal = normal.build();
+            for first_line_mode in [Mode::HorizontalTb, Mode::VerticalRl, Mode::VerticalLr] {
+                let mut fragment = StyleBuilder::for_inheritance(&device, None, Some(&normal), None);
+                fragment.mutate_inherited_box().set_writing_mode(first_line_mode);
+                fragment.writing_mode = WritingMode::new(fragment.get_inherited_box());
+                let cascade = Cascade::new(
+                    FirstLineReparenting::Yes {
+                        style_to_reparent: &normal,
+                        normal_parent_style: &normal,
+                    },
+                    &tactic,
+                    false,
+                );
+                assert_eq!(
+                    cascade.try_to_use_cached_reset_properties(&mut fragment, None, &guards),
+                    normal_mode == first_line_mode,
+                    "{normal_mode:?} -> {first_line_mode:?}",
+                );
+            }
+        }
+    }
+
+    #[test]
     fn first_line_reset_reuse_respects_self_font_size_dependencies() {
         let device = crate::test_support::test_device();
         let lock = crate::shared_lock::SharedRwLock::new();
@@ -1892,6 +1927,9 @@ impl<'b> Cascade<'b> {
             FirstLineReparenting::Yes {
                 style_to_reparent, ..
             } => {
+                if style_to_reparent.writing_mode != builder.writing_mode {
+                    return false;
+                }
                 if style_to_reparent.flags.intersects(
                     ComputedValueFlags::DEPENDS_ON_SELF_FONT_METRICS
                         | ComputedValueFlags::RESET_STYLE_DEPENDS_ON_SELF_FONT_SIZE,
