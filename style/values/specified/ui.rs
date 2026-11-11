@@ -148,7 +148,7 @@ impl Parse for CursorImage {
     ) -> Result<Self, ParseError<'i>> {
         use crate::Zero;
 
-        let image = Image::parse_only_url(context, input)?;
+        let image = Image::parse_forbid_none(context, input)?;
         let mut has_hotspot = false;
         let mut hotspot_x = Number::zero();
         let mut hotspot_y = Number::zero();
@@ -168,11 +168,9 @@ impl Parse for CursorImage {
     }
 }
 
-// This trait is manually implemented because we don't support the whole <image>
-// syntax for cursors
 impl SpecifiedValueInfo for CursorImage {
     fn collect_completion_keywords(f: KeywordsCollectFn) {
-        f(&["url", "image-set"]);
+        Image::collect_completion_keywords(f);
     }
 }
 /// Specified value of `-moz-force-broken-image-icon`

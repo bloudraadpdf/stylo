@@ -342,6 +342,73 @@ fn insertion_caret_properties_accept_the_ui4_grammar() {
 }
 
 #[test]
+fn cursor_images_accept_typed_image_functions_and_require_complete_hotspots() {
+    let _lock = crate::test_support::pref_lock().lock().unwrap();
+    let _images = crate::test_support::BoolPrefGuard::set("layout.css.light-dark.images.enabled", true);
+    for value in [
+        "auto",
+        "none",
+        "linear-gradient(red, blue), auto",
+        "radial-gradient(red, blue) 5 6, pointer",
+        "conic-gradient(red, blue), crosshair",
+        "light-dark(url(\"https://example.test/light\"), url(\"https://example.test/dark\")), pointer",
+        "light-dark(url(\"https://example.test/light\"), url(\"https://example.test/dark\")) 5 6, grab",
+        "url(\"https://example.test/\"), light-dark(url(\"https://example.test/light\"), url(\"https://example.test/dark\")) 3 4, move",
+        "light-dark(image-set(url(\"https://example.test/\") 1dppx), url(\"https://example.test/\")) 5 6, grab",
+    ] {
+        assert_serialization("cursor", value, Some(value));
+    }
+    for invalid in [
+        "none, auto",
+        "auto, pointer",
+        "linear-gradient(red, blue)",
+        "linear-gradient(red, blue) 1, auto",
+        "linear-gradient(red, blue) 1 2 3, auto",
+        "light-dark(url(light), url(dark)) 1, pointer",
+    ] {
+        assert_serialization("cursor", invalid, None);
+    }
+}
+
+#[test]
+fn cursor_images_compute_gradients_and_select_the_used_color_scheme() {
+    use style_traits::ToCss;
+    let _lock = crate::test_support::pref_lock().lock().unwrap();
+    let _images = crate::test_support::BoolPrefGuard::set("layout.css.light-dark.images.enabled", true);
+    let _color_scheme = crate::test_support::BoolPrefGuard::set("layout.unimplemented", true);
+    for (image, expected) in [
+        (
+            "linear-gradient(200grad, red 10%, blue calc(75% - 2px))",
+            "linear-gradient(rgb(255, 0, 0) 10%, rgb(0, 0, 255) calc(75% - 2px))",
+        ),
+        (
+            "radial-gradient(farthest-side at calc(5px + 10%), red, blue)",
+            "radial-gradient(farthest-side at calc(10% + 5px) 50%, rgb(255, 0, 0), rgb(0, 0, 255))",
+        ),
+        (
+            "conic-gradient(from 0.5turn at 20% 20%, red, blue)",
+            "conic-gradient(from 180deg at 20% 20%, rgb(255, 0, 0), rgb(0, 0, 255))",
+        ),
+    ] {
+        let style = cascade_zoom_test_style(&format!("cursor:{image} 5 -6, crosshair"), None);
+        assert_eq!(
+            style.get_inherited_ui().cursor.to_css_string(),
+            format!("{expected} 5 -6, crosshair")
+        );
+    }
+    for (scheme, file) in [("light", "light.svg"), ("dark", "dark.svg")] {
+        let style = cascade_zoom_test_style(
+            &format!("color-scheme:{scheme};cursor:light-dark(url(light.svg), url(dark.svg)) 5 6, grab"),
+            None,
+        );
+        assert_eq!(
+            style.get_inherited_ui().cursor.to_css_string(),
+            format!("url(\"https://example.test/{file}\") 5 6, grab")
+        );
+    }
+}
+
+#[test]
 fn text_stroke_preserves_fractional_widths_and_expands_the_shorthand() {
     assert_serialization("-webkit-text-stroke-width", "0.1px", Some("0.1px"));
     assert_serialization("-webkit-text-stroke-width", "-1px", None);
@@ -1260,6 +1327,9 @@ fn cascade_zoom_test_style(css: &str, parent: Option<&super::ComputedValues>) ->
         unsafe { CASCADE_PROPERTY[id as usize](declaration, &mut context); }
         if id == LonghandId::Zoom {
             context.builder.recompute_effective_zooms();
+        }
+        if id == LonghandId::ColorScheme {
+            context.builder.color_scheme = context.builder.get_inherited_ui().color_scheme_bits();
         }
     }
     context.builder.build()
