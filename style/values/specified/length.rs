@@ -1688,8 +1688,20 @@ impl ToCss for NoCalcLength {
     where
         W: Write,
     {
+        let v = self.unitless_value();
+        if v.is_finite() {
+            let shortest = v.to_string();
+            if shortest.split_once('.').is_some_and(|(_, fraction)| fraction.len() > 6) {
+                let rounded = format!("{v:.6}");
+                let rounded = rounded.trim_end_matches('0').trim_end_matches('.');
+                dest.write_str(if rounded == "-0" { "0" } else { rounded })?;
+            } else {
+                dest.write_str(if v == 0.0 { "0" } else { &shortest })?;
+            }
+            return dest.write_str(self.unit());
+        }
         crate::values::serialize_specified_dimension(
-            self.unitless_value(),
+            v,
             self.unit(),
             false,
             dest,
@@ -3026,5 +3038,26 @@ mod absolute_length_tests {
         assert_eq!(AbsoluteLength::Pt(100.).to_px(), 133.333_33);
         assert_eq!(AbsoluteLength::Pt(50.).to_px(), 66.666_664);
         assert_eq!(AbsoluteLength::Cm(3.).to_px(), 113.385_826);
+    }
+}
+
+#[cfg(test)]
+mod dimension_precision_tests {
+    use super::*;
+
+    #[test]
+    fn lengths_limit_decimals_instead_of_significant_digits() {
+        for (value, expected) in [
+            (146.307_3, "146.3073px"),
+            (99.9, "99.9px"),
+            (0.123_456_79, "0.123457px"),
+            (0.000_000_1, "0px"),
+            (-0.0, "0px"),
+            (-0.000_000_1, "0px"),
+            (1e20, "100000000000000000000px"),
+        ] {
+            let length = NoCalcLength::Absolute(AbsoluteLength::Px(value));
+            assert_eq!(length.to_css_string(), expected);
+        }
     }
 }
