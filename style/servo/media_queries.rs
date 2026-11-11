@@ -18,9 +18,9 @@ use crate::queries::values::{Orientation, PrefersColorScheme};
 use crate::stylesheets::NavigationPhase;
 use crate::values::computed::bd_gaps::{GapRuleList, GapRuleWidth};
 use crate::values::computed::border::{BorderSideWidth, LineWidthKeywords};
-use crate::values::computed::font::{FontFamilyList, GenericFontFamily};
+use crate::values::computed::font::{FontFamilyList, FontSizeAdjust, GenericFontFamily};
 use crate::values::computed::{
-    CSSPixelLength, Context, Length, LineHeight, NonNegativeLength, Ratio, Resolution,
+    CSSPixelLength, Context, Length, LineHeight, NonNegativeLength, NonNegativeNumber, Ratio, Resolution,
 };
 use crate::values::specified::color::{ColorSchemeFlags, ForcedColors};
 use crate::values::specified::font::{
@@ -51,6 +51,12 @@ pub trait FontMetricsProvider: Debug + Sync {
         base_size: CSSPixelLength,
         flags: QueryFontMetricsFlags,
     ) -> FontMetrics;
+    /// The unadjusted metric ratio of the first available font, if available.
+    fn font_size_adjust_factor(
+        &self,
+        font: &Font,
+        adjustment: FontSizeAdjust,
+    ) -> Option<NonNegativeNumber>;
     /// Gets the base size given a generic font family.
     fn base_size_for_generic(&self, generic: GenericFontFamily) -> Length;
     /// A client keyword size, or `None` to use the browser size table.
@@ -669,6 +675,16 @@ impl Device {
     pub fn scrollbar_inline_size(&self) -> CSSPixelLength {
         // TODO: implement this.
         CSSPixelLength::new(0.0)
+    }
+
+    /// Resolves `from-font` through the embedding's first available face.
+    pub fn font_size_adjust_factor(
+        &self,
+        font: &Font,
+        adjustment: FontSizeAdjust,
+    ) -> Option<NonNegativeNumber> {
+        self.used_font_metrics.store(true, Ordering::Relaxed);
+        self.font_metrics_provider.font_size_adjust_factor(font, adjustment)
     }
 
     /// Queries font metrics using the [`FontMetricsProvider`] interface.

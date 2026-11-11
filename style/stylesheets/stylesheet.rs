@@ -1291,6 +1291,14 @@ mod tests {
     struct TestFontMetricsProvider;
 
     impl FontMetricsProvider for TestFontMetricsProvider {
+        fn font_size_adjust_factor(
+            &self,
+            _font: &Font,
+            _adjustment: crate::values::computed::font::FontSizeAdjust,
+        ) -> Option<crate::values::computed::NonNegativeNumber> {
+            None
+        }
+
         fn query_font_metrics(
             &self,
             _vertical: bool,

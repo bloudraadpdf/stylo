@@ -925,10 +925,8 @@ impl FontFamilyList {
 
 /// Computed factor for `font-size-adjust`.
 ///
-/// `from-font` deliberately remains semantic at computed-value time. A
-/// document renderer may have a different font catalogue from Stylo's style
-/// context, and must resolve the reference metric against the face that
-/// actually wins the authored font stack.
+/// The embedding resolves `from-font` from its first available face before
+/// the computed adjustment is inherited.
 #[derive(
     Clone,
     ComputeSquaredDistance,
@@ -1044,10 +1042,6 @@ impl ToComputedValue for specified::FontSizeAdjust {
     type ComputedValue = FontSizeAdjust;
 
     fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
-        // Keep `from-font` unresolved until the renderer knows which face wins
-        // the authored font stack. Resolving it through Stylo's style-context
-        // metric provider bakes in the provider's default face and is wrong
-        // whenever layout uses a different embedded/catalogued font.
         macro_rules! resolve {
             ($basis:ident, $value:expr) => {{
                 match $value {
@@ -1055,7 +1049,15 @@ impl ToComputedValue for specified::FontSizeAdjust {
                         FontSizeAdjustFactor::Number(f.to_computed_value(context)),
                     ),
                     specified::FontSizeAdjustFactor::FromFont => {
-                        FontSizeAdjust::$basis(FontSizeAdjustFactor::FromFont)
+                        let adjustment = FontSizeAdjust::$basis(FontSizeAdjustFactor::FromFont);
+                        #[cfg(feature = "servo")]
+                        {
+                            context.builder.add_flags(crate::computed_value_flags::ComputedValueFlags::DEPENDS_ON_SELF_FONT_METRICS);
+                            context.device().font_size_adjust_factor(context.builder.get_font(), adjustment)
+                                .map_or(FontSizeAdjust::None, |ratio| FontSizeAdjust::$basis(FontSizeAdjustFactor::Number(ratio)))
+                        }
+                        #[cfg(feature = "gecko")]
+                        { adjustment }
                     },
                 }
             }};
@@ -1618,6 +1620,19 @@ mod tests {
     use crate::values::animated::{Animate, Procedure};
     use crate::values::generics::NonNegative;
     use style_traits::ToCss;
+
+    #[cfg(feature = "servo")]
+    #[test]
+    fn font_size_adjust_from_font_without_available_metrics_computes_to_none() {
+        use crate::values::computed::ToComputedValue;
+        use crate::values::specified::font::{FontSizeAdjust as Specified, FontSizeAdjustFactor::FromFont};
+        crate::test_support::with_computed_context(|context| {
+            for adjustment in [Specified::ExHeight(FromFont), Specified::CapHeight(FromFont), Specified::ChWidth(FromFont), Specified::IcWidth(FromFont), Specified::IcHeight(FromFont)] {
+                assert_eq!(adjustment.to_computed_value(context), FontSizeAdjust::None);
+            }
+            assert!(context.device().used_font_metrics());
+        });
+    }
 
     #[cfg(feature = "servo")]
     #[test]
