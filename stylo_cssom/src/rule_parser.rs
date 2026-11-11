@@ -2968,6 +2968,10 @@ mod tests {
                 PropertyDeclaration::InterpolateSize(*value)
             },
             PropertyDeclaration::Interactivity(value) => PropertyDeclaration::Interactivity(*value),
+            PropertyDeclaration::NavDown(value) => PropertyDeclaration::NavDown(value.clone()),
+            PropertyDeclaration::NavLeft(value) => PropertyDeclaration::NavLeft(value.clone()),
+            PropertyDeclaration::NavRight(value) => PropertyDeclaration::NavRight(value.clone()),
+            PropertyDeclaration::NavUp(value) => PropertyDeclaration::NavUp(value.clone()),
             PropertyDeclaration::BackfaceVisibility(value) => {
                 PropertyDeclaration::BackfaceVisibility(*value)
             },

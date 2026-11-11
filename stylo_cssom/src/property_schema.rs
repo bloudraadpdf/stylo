@@ -19,6 +19,7 @@ pub fn property_schema(name: &str) -> Option<&'static PropertySchemaRow> {
 fn positions_do_not_admit_scalar_typed_om_numeric_values() {
     use stylo_cssom_model::{TypedOmNumericPropertyGrammar, TypedOmSpecifiedNumericReification};
 
+    crate::context::initialise_required_servo_style_prefs();
     // Typed OM Level 1 has no CSSPositionValue; these retain property-associated values.
     for name in ["perspective-origin", "object-position", "offset-position", "offset-anchor", "transform-origin", "background-position"] {
         let row = property_schema(name).expect("position property has a native schema");
@@ -158,10 +159,17 @@ fn named_scroll_timeline_schema_preserves_vector_longhands_and_shorthand() {
 }
 
 #[test]
-fn initial_length_metadata_matches_the_native_serializer() {
+fn initial_metadata_matches_the_native_serializer() {
     use style::properties::{ComputedValues, LonghandId, PropertyDeclarationId, style_structs::Font};
     let initial = ComputedValues::initial_values_with_font_override(Font::initial_values());
-    for longhand in [LonghandId::XMathScriptMinSize, LonghandId::BdPageRegistrationMarkSize] {
+    for longhand in [
+        LonghandId::XMathScriptMinSize,
+        LonghandId::BdPageRegistrationMarkSize,
+        LonghandId::NavDown,
+        LonghandId::NavLeft,
+        LonghandId::NavRight,
+        LonghandId::NavUp,
+    ] {
         let row = property_schema_for_id(&PropertyId::NonCustom(longhand.into())).unwrap();
         assert_eq!(
             row.initial.serialized,
