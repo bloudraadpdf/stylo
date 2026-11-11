@@ -21,6 +21,9 @@ pub(super) fn canonical_rule(
         .collect::<Vec<_>>()
         .join(", ");
     let mut values = RuleFontFeatureValues::new(family);
+    if let Some(display) = rule.display {
+        values.set_font_display(display.to_css_string());
+    }
     for (kind, entries) in [
         (FontFeatureKind::Annotation, &rule.annotation),
         (FontFeatureKind::Ornaments, &rule.ornaments),
@@ -123,17 +126,28 @@ impl<'i> RuleBodyItemParser<'i, (), ()> for HistoricalBlocks<'_> {
 }
 
 pub fn font_feature_values_node(values: RuleFontFeatureValues) -> RuleNode {
-    let mut text = format!("@font-feature-values {} {{\n", values.font_family());
-    for kind in FontFeatureKind::ALL {
+    let mut text = format!("@font-feature-values {} {{", values.font_family());
+    if let Some(display) = values.font_display() {
+        text.push_str(&format!(" font-display: {display};"));
+    }
+    for kind in [
+        FontFeatureKind::Swash,
+        FontFeatureKind::Stylistic,
+        FontFeatureKind::Ornaments,
+        FontFeatureKind::Annotation,
+        FontFeatureKind::CharacterVariant,
+        FontFeatureKind::Styleset,
+        FontFeatureKind::HistoricalForms,
+    ] {
         let map = values.map(kind);
         if map.is_empty() {
             continue;
         }
-        text.push_str(&format!("  @{} {{\n", kind.at_keyword()));
+        text.push_str(&format!(" @{} {{", kind.at_keyword()));
         let mut cursor = 0;
         while let Some((next, name, indices)) = map.next_entry(cursor) {
             cursor = next;
-            text.push_str("    ");
+            text.push(' ');
             cssparser::serialize_identifier(name, &mut text).expect("writing a string cannot fail");
             text.push_str(": ");
             text.push_str(
@@ -143,11 +157,11 @@ pub fn font_feature_values_node(values: RuleFontFeatureValues) -> RuleNode {
                     .collect::<Vec<_>>()
                     .join(" "),
             );
-            text.push_str(";\n");
+            text.push(';');
         }
-        text.push_str("  }\n");
+        text.push_str(" }");
     }
-    text.push('}');
+    text.push_str(" }");
     RuleNode::authored(RuleGrammar::FontFeatureValues, text, [])
         .with_cssom_data(RuleCssomData::FontFeatureValues { values })
         .expect("feature values match their rule grammar")

@@ -140,6 +140,7 @@ impl FontFeatureMap {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RuleFontFeatureValues {
     font_family: Arc<str>,
+    font_display: Option<Arc<str>>,
     maps: [FontFeatureMap; 7],
 }
 
@@ -147,6 +148,7 @@ impl RuleFontFeatureValues {
     pub fn new(font_family: impl Into<Arc<str>>) -> Self {
         Self {
             font_family: font_family.into(),
+            font_display: None,
             maps: FontFeatureKind::ALL.map(FontFeatureMap::new),
         }
     }
@@ -155,6 +157,12 @@ impl RuleFontFeatureValues {
     }
     pub fn set_font_family(&mut self, font_family: impl Into<Arc<str>>) {
         self.font_family = font_family.into();
+    }
+    pub fn font_display(&self) -> Option<&str> {
+        self.font_display.as_deref()
+    }
+    pub fn set_font_display(&mut self, font_display: impl Into<Arc<str>>) {
+        self.font_display = Some(font_display.into());
     }
     pub fn map(&self, kind: FontFeatureKind) -> &FontFeatureMap {
         &self.maps[kind as usize]

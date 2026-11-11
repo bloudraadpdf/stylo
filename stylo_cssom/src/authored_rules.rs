@@ -1792,6 +1792,34 @@ mod tests {
     }
 
     #[test]
+    fn validated_font_feature_values_serialize_descriptors_and_ordered_maps() {
+        for (body, expected) in [
+            ("@swash {}", ""),
+            (
+                "@annotation{a:4}@ornaments{a:3}@stylistic{a:2}@swash{a:1}",
+                " @swash { a: 1; } @stylistic { a: 2; } @ornaments { a: 3; } @annotation { a: 4; }",
+            ),
+            (
+                "font-display:block;@swash{a:1}font-display:swap;font-display:invalid;",
+                " font-display: swap; @swash { a: 1; }",
+            ),
+            (
+                "font-display:swap junk;@styleset{a:1;b:2;a:3}",
+                " @styleset { a: 3; b: 2; }",
+            ),
+        ] {
+            let source = format!("@font-feature-values Example {{ {body} }}");
+            let rule = ValidatedCssRule::parse(crate::rule_parser::RuleInput::new(&source))
+                .expect("feature values rule parses")
+                .into_rule_node();
+            assert_eq!(
+                rule.serialization(),
+                format!("@font-feature-values Example {{{expected} }}")
+            );
+        }
+    }
+
+    #[test]
     fn validated_css_rules_recover_font_feature_values_at_eof() {
         for rule in [
             "@font-feature-values bongo { @styleset { abc: 1 2 3; }",
@@ -1801,10 +1829,7 @@ mod tests {
                 ValidatedCssRule::parse(crate::rule_parser::RuleInput::new(rule))
                     .map(ValidatedCssRule::into_rule_node)
                     .map(|rule| rule.serialization()),
-                Some(
-                    "@font-feature-values bongo {\n  @styleset {\n    abc: 1 2 3;\n  }\n}"
-                        .to_owned()
-                )
+                Some("@font-feature-values bongo { @styleset { abc: 1 2 3; } }".to_owned())
             );
         }
     }

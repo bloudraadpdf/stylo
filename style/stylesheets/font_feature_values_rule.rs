@@ -8,6 +8,7 @@
 
 use crate::derives::*;
 use crate::error_reporting::ContextualParseError;
+use crate::font_face::FontDisplay;
 #[cfg(feature = "gecko")]
 use crate::gecko_bindings::bindings::Gecko_AppendFeatureValueHashEntry;
 #[cfg(feature = "gecko")]
@@ -247,6 +248,8 @@ macro_rules! font_feature_values_blocks {
             /// Family names cannot contain generic families. FamilyName
             /// also accepts only non-generic names.
             pub family_names: Vec<FamilyName>,
+            /// The optional display descriptor for the font family.
+            pub display: Option<FontDisplay>,
             $(
                 #[$doc]
                 pub $ident: Vec<FFVDeclaration<$ty>>,
@@ -260,6 +263,7 @@ macro_rules! font_feature_values_blocks {
             fn new(family_names: Vec<FamilyName>, location: SourceLocation) -> Self {
                 FontFeatureValuesRule {
                     family_names: family_names,
+                    display: None,
                     $(
                         $ident: vec![],
                     )*
@@ -295,6 +299,11 @@ macro_rules! font_feature_values_blocks {
             where
                 W: Write,
             {
+                if let Some(display) = self.display {
+                    dest.write_str("font-display: ")?;
+                    display.to_css(dest)?;
+                    dest.write_str(";\n")?;
+                }
                 $(
                     if self.$ident.len() > 0 {
                         dest.write_str(concat!("@", $name, " {\n"))?;
@@ -433,10 +442,24 @@ macro_rules! font_feature_values_blocks {
         impl<'a, 'i> DeclarationParser<'i> for FontFeatureValuesRuleParser<'a> {
             type Declaration = ();
             type Error = StyleParseErrorKind<'i>;
+
+            fn parse_value<'t>(
+                &mut self,
+                name: CowRcStr<'i>,
+                input: &mut Parser<'i, 't>,
+                _: &ParserState,
+            ) -> Result<(), ParseError<'i>> {
+                if !name.eq_ignore_ascii_case("font-display") {
+                    return Err(input.new_error(BasicParseErrorKind::UnexpectedToken(Token::Ident(name))));
+                }
+                let display = input.parse_entirely(FontDisplay::parse)?;
+                self.rule.display = Some(display);
+                Ok(())
+            }
         }
 
         impl<'a, 'i> RuleBodyItemParser<'i, (), StyleParseErrorKind<'i>> for FontFeatureValuesRuleParser<'a> {
-            fn parse_declarations(&self) -> bool { false }
+            fn parse_declarations(&self) -> bool { true }
             fn parse_qualified(&self) -> bool { true }
         }
     }
