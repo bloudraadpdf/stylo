@@ -2431,12 +2431,17 @@ impl ToComputedValue for LineHeight {
                             LineHeightBase::InheritedStyle,
                         )
                     },
-                    LengthPercentage::Percentage(ref p) => FontRelativeLength::Em(p.0)
-                        .to_computed_value(
+                    LengthPercentage::Percentage(ref p) => {
+                        let base = FontRelativeLength::Em(1.0).to_computed_value(
                             context,
                             FontBaseSize::CurrentStyle,
                             LineHeightBase::InheritedStyle,
-                        ),
+                        );
+                        crate::values::computed::LengthPercentage::new_percent(
+                            p.to_computed_value(context),
+                        )
+                        .resolve_before_zoom(base, context.style().effective_zoom)
+                    },
                     LengthPercentage::Calc(ref calc) => {
                         let computed_calc = calc.to_computed_value_zoomed(
                             context,
@@ -2444,7 +2449,7 @@ impl ToComputedValue for LineHeight {
                             LineHeightBase::InheritedStyle,
                         );
                         let base = context.style().get_font().clone_font_size().computed_size();
-                        computed_calc.resolve(base)
+                        computed_calc.resolve_before_zoom(base, context.style().effective_zoom)
                     },
                 };
                 GenericLineHeight::Length(result.into())
@@ -2494,6 +2499,63 @@ mod tests {
     use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
     use cssparser::ParserInput;
     use url::Url;
+
+    #[test]
+    fn percentage_line_height_resolves_before_zoom_multiplication() {
+        use crate::properties::{style_structs::Font, ComputedValues, StyleBuilder};
+        use crate::rule_cache::RuleCacheConditions;
+        use crate::stylesheets::container_rule::ContainerSizeQuery;
+        use crate::values::animated::ToAnimatedValue;
+        use crate::values::computed::{Length, Zoom};
+        use crate::values::resolved::{Context as ResolvedContext, ToResolvedValue};
+        use style_traits::ToCss;
+
+        let device = crate::test_support::test_device();
+        let url_data = UrlExtraData::from(Url::parse("https://example.invalid/").unwrap());
+        let parser_context = ParserContext::new(
+            Origin::Author,
+            &url_data,
+            Some(CssRuleType::Style),
+            style_traits::ParsingMode::DEFAULT,
+            QuirksMode::NoQuirks,
+            Default::default(),
+            None,
+            None,
+        );
+        for factor in [1.0, 1.25, 2.0] {
+            let zoom = Zoom::from_animated_value(factor);
+            let mut font = Font::initial_values();
+            font.font_size = computed::FontSize::from_animated_value(Length::new(20.0 * factor));
+            let mut style = (*ComputedValues::initial_values_with_font_override(font)).clone();
+            style.effective_zoom = zoom;
+            let mut conditions = RuleCacheConditions::default();
+            let context = Context::new(
+                StyleBuilder::for_derived_style(&device, None, &style, None),
+                QuirksMode::NoQuirks,
+                &mut conditions,
+                ContainerSizeQuery::none(),
+            );
+            for (css, expected) in [
+                ("120%", "24px"),
+                ("calc(120%)", "24px"),
+                ("calc(100% + 20%)", "24px"),
+                ("calc(100% + 4px)", "24px"),
+                ("calc(1em + 4px)", "24px"),
+                ("150%", "30px"),
+            ] {
+                let mut input = ParserInput::new(css);
+                let specified =
+                    LineHeight::parse(&parser_context, &mut Parser::new(&mut input)).unwrap();
+                let computed = specified.to_computed_value(&context);
+                let resolved = computed.to_resolved_value(&ResolvedContext {
+                    style: &style,
+                    for_property: crate::properties::LonghandId::LineHeight.into(),
+                    current_longhand: Some(crate::properties::LonghandId::LineHeight),
+                });
+                assert_eq!(resolved.to_css_string(), expected, "{css} at zoom {factor}");
+            }
+        }
+    }
 
     #[test]
     fn math_font_size_uses_the_computed_depth() {

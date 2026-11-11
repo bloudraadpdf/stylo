@@ -487,6 +487,17 @@ impl LengthPercentage {
         }
     }
 
+    /// Resolve in CSS pixels before reapplying the zoom of the basis and length leaves.
+    /// This avoids an extra rounding step from percentage multiplication in zoomed pixels.
+    pub(crate) fn resolve_before_zoom(&self, basis: Length, zoom: super::Zoom) -> Length {
+        if zoom.is_one() {
+            return self.resolve(basis);
+        }
+        let css = self.map_lengths(|length| Length::new(zoom.unzoom(length.px())));
+        let resolved = css.resolve(Length::new(zoom.unzoom(basis.px())));
+        Length::new(zoom.zoom(resolved.px())).finite()
+    }
+
     /// Fold the exact semantic structure of a page-float offset without
     /// exposing this type's private calculation representation.
     pub(crate) fn fold_float_offset_calculation<

@@ -17,6 +17,10 @@ styles do not scan siblings.
 Text justification applies to first-line and first-letter pseudo-elements.
 Their text-justify declarations retain the specified keyword after cascade.
 
+Percentage line heights resolve their percentage basis and calculation lengths
+in CSS pixels before reapplying zoom, avoiding an extra floating-point rounding
+step in zoomed pixel units.
+
 Font metrics providers can supply typed font-size keyword values. The default
 uses the browser size table; clients can supply their print-engine sizes.
 
