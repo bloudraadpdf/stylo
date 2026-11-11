@@ -113,6 +113,11 @@ fn native_properties_resolve_their_matching_schema() {
         assert_eq!(resolved.name, native_name, "native property ID must resolve its own schema");
         assert_eq!(resolved.name, row.name);
         assert_eq!(resolved.id, row.id);
+        if row.kind != stylo_cssom_model::PropertyKind::PageDescriptor
+            && let Ok(reparsed) = PropertyId::parse_enabled_for_all_content(row.name)
+        {
+            assert_eq!(property_schema_for_id(&reparsed).map(|schema| schema.id), Some(row.id));
+        }
     }
 }
 

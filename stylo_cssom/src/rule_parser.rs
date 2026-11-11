@@ -3193,6 +3193,7 @@ mod tests {
             PropertyDeclaration::MinIntrinsicSizing(value) => {
                 PropertyDeclaration::MinIntrinsicSizing(*value)
             },
+            PropertyDeclaration::FieldSizing(value) => PropertyDeclaration::FieldSizing(*value),
             PropertyDeclaration::FrameSizing(value) => PropertyDeclaration::FrameSizing(*value),
             PropertyDeclaration::MixBlendMode(value) => PropertyDeclaration::MixBlendMode(*value),
             PropertyDeclaration::ObjectFit(value) => PropertyDeclaration::ObjectFit(*value),

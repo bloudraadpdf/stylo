@@ -147,3 +147,23 @@ fn field_sizing_has_native_cssom_schema_and_mutations() {
         Some("fixed"),
     );
 }
+
+#[test]
+fn inline_getters_return_native_longhand_values() {
+    let declarations = stylo_cssom::declaration_parser::parse_inline_style_declarations(
+        "width:98px;height:77px;field-sizing:content",
+        "about:blank".into(),
+        selectors::matching::QuirksMode::NoQuirks,
+    );
+    for (property, value) in [
+        ("width", "98px"),
+        ("height", "77px"),
+        ("field-sizing", "content"),
+    ] {
+        assert_eq!(
+            stylo_cssom::specified::projected_specified_property_value(&declarations, property)
+                .as_deref(),
+            Some(value)
+        );
+    }
+}
