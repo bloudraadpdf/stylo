@@ -1318,6 +1318,9 @@ pub fn inline_style_set_property(
     quirks_mode: selectors::matching::QuirksMode,
 ) -> bool {
     let DeclarationPropertyInput { property, value } = input;
+    if !valid_cssom_property_name(property) {
+        return false;
+    }
     let Some(value) = inline_style_cssom_backing_value(property, value) else {
         return false;
     };
@@ -1335,6 +1338,16 @@ pub fn inline_style_set_property(
     )
 }
 
+fn valid_cssom_property_name(property: &str) -> bool {
+    if !property.trim_start().starts_with("--") {
+        return true;
+    }
+    let mut input = ParserInput::new(property);
+    Parser::new(&mut input)
+        .expect_ident()
+        .is_ok_and(|ident| ident.as_ref() == property)
+}
+
 pub fn cssom_declaration_set_property(
     block: &mut CssomDeclarationBlock,
     property: &str,
@@ -1342,7 +1355,8 @@ pub fn cssom_declaration_set_property(
     priority: CssomDeclarationPriority,
     context: CssomDeclarationContext,
 ) -> bool {
-    declaration_block_set_property(&mut block.0, property, value, priority, context.rule_type())
+    valid_cssom_property_name(property)
+        && declaration_block_set_property(&mut block.0, property, value, priority, context.rule_type())
 }
 
 pub fn declaration_block_shorthand_values(
@@ -1403,6 +1417,9 @@ pub fn mutate_rule_declaration_block(
     priority: CssomDeclarationPriority,
     context: CssomDeclarationContext,
 ) -> Option<stylo_cssom_model::RuleDeclarationBlock> {
+    if !valid_cssom_property_name(property) {
+        return None;
+    }
     let property = property.trim();
     if property.is_empty() {
         return None;
@@ -3048,6 +3065,25 @@ mod tests {
                 .unwrap();
             assert!(serialization.is_empty(), "{css}");
         }
+    }
+
+    #[test]
+    fn inline_cssom_rejects_custom_property_names_with_whitespace() {
+        let quirks = selectors::matching::QuirksMode::NoQuirks;
+        let mut block = super::parse_inline_style_block("--mixedCase: blue", quirks);
+        for name in ["--mixedCase ", "--mixed Case", " --mixedCase"] {
+            assert!(!super::inline_style_set_property(
+                &mut block,
+                super::DeclarationPropertyInput::new(name, "green"),
+                super::CssomDeclarationPriority::Normal,
+                quirks,
+            ));
+            assert_eq!(super::inline_style_get_property_value(&block, name), None);
+        }
+        assert_eq!(
+            super::inline_style_get_property_value(&block, "--mixedCase").as_deref(),
+            Some("blue")
+        );
     }
 
     #[test]
