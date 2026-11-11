@@ -156,3 +156,17 @@ fn named_scroll_timeline_schema_preserves_vector_longhands_and_shorthand() {
         assert_eq!(row.multiplicity, Some(stylo_cssom_model::TypedOmPropertyMultiplicity::CommaSeparated));
     }
 }
+
+#[test]
+fn initial_length_metadata_matches_the_native_serializer() {
+    use style::properties::{ComputedValues, LonghandId, PropertyDeclarationId, style_structs::Font};
+    let initial = ComputedValues::initial_values_with_font_override(Font::initial_values());
+    for longhand in [LonghandId::XMathScriptMinSize, LonghandId::BdPageRegistrationMarkSize] {
+        let row = property_schema_for_id(&PropertyId::NonCustom(longhand.into())).unwrap();
+        assert_eq!(
+            row.initial.serialized,
+            initial.computed_value_to_string(PropertyDeclarationId::Longhand(longhand)),
+            "{}", row.name,
+        );
+    }
+}
