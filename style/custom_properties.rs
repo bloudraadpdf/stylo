@@ -657,7 +657,6 @@ pub enum DeferFontRelativeCustomPropertyResolution {
 #[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, ToShmem, Parse)]
 enum SubstitutionFunctionKind {
     Var,
-    Env,
 }
 
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem, Parse)]
@@ -684,7 +683,7 @@ enum SubstitutionFunction {
     },
     Inherit(Box<[FunctionArgument]>),
     If(Box<[ConditionalBranch]>),
-    Env(Name),
+    Env(Box<[FunctionArgument]>),
     Attr {
         arguments: Box<[FunctionArgument]>,
         namespaces: Box<[(crate::Prefix, crate::Namespace)]>,
@@ -1365,6 +1364,7 @@ fn parse_declaration_value_block<'i, 't>(
                     || name.eq_ignore_ascii_case("inherit")
                     || name.eq_ignore_ascii_case("if")
                     || name.eq_ignore_ascii_case("var")
+                    || name.eq_ignore_ascii_case("env")
                     || name.eq_ignore_ascii_case("ident")
                     || name.eq_ignore_ascii_case("random-item")
                     || (name.eq_ignore_ascii_case("attr")
@@ -1375,6 +1375,7 @@ fn parse_declaration_value_block<'i, 't>(
                 let is_inherit = name.eq_ignore_ascii_case("inherit");
                 let is_attr = name.eq_ignore_ascii_case("attr");
                 let is_var = name.eq_ignore_ascii_case("var");
+                let is_env = name.eq_ignore_ascii_case("env");
                 let is_ident = name.eq_ignore_ascii_case("ident");
                 let is_random_item = name.eq_ignore_ascii_case("random-item");
                 let function_token_end = input.position().byte_index() - input_start.byte_index();
@@ -1403,6 +1404,8 @@ fn parse_declaration_value_block<'i, 't>(
                             name: None,
                             arguments: Box::default(),
                         }
+                    } else if is_env {
+                        SubstitutionFunction::Env(Box::default())
                     } else if is_ident {
                         SubstitutionFunction::Ident(Box::default())
                     } else if is_random_item {
@@ -1437,15 +1440,35 @@ fn parse_declaration_value_block<'i, 't>(
                         return Ok(Box::default());
                     }
                     if is_random_item {
-                        let mut arguments = vec![input.parse_until_before(Delimiter::Comma, |input| {
-                            parse_component_argument(input, input_start, namespaces, references, missing_closing_characters, false)
-                        })?];
+                        let mut arguments =
+                            vec![input.parse_until_before(Delimiter::Comma, |input| {
+                                parse_component_argument(
+                                    input,
+                                    input_start,
+                                    namespaces,
+                                    references,
+                                    missing_closing_characters,
+                                    false,
+                                )
+                            })?];
                         input.expect_comma()?;
                         loop {
-                            arguments.push(input.parse_until_before(Delimiter::Comma, |input| {
-                                parse_component_argument(input, input_start, namespaces, references, missing_closing_characters, true)
-                            })?);
-                            if input.is_exhausted() { break; }
+                            arguments.push(input.parse_until_before(
+                                Delimiter::Comma,
+                                |input| {
+                                    parse_component_argument(
+                                        input,
+                                        input_start,
+                                        namespaces,
+                                        references,
+                                        missing_closing_characters,
+                                        true,
+                                    )
+                                },
+                            )?);
+                            if input.is_exhausted() {
+                                break;
+                            }
                             input.expect_comma()?;
                         }
                         input_end_position = Some(input.position());
@@ -1473,6 +1496,32 @@ fn parse_declaration_value_block<'i, 't>(
                         input.expect_exhausted()?;
                         input_end_position = Some(input.position());
                         return Ok(vec![argument].into_boxed_slice());
+                    }
+                    if is_env {
+                        let mut arguments =
+                            vec![input.parse_until_before(Delimiter::Comma, |input| {
+                                parse_environment_argument(
+                                    input,
+                                    input_start,
+                                    namespaces,
+                                    references,
+                                    missing_closing_characters,
+                                    false,
+                                )
+                            })?];
+                        if !input.is_exhausted() {
+                            input.expect_comma()?;
+                            arguments.push(parse_environment_argument(
+                                input,
+                                input_start,
+                                namespaces,
+                                references,
+                                missing_closing_characters,
+                                true,
+                            )?);
+                        }
+                        input_end_position = Some(input.position());
+                        return Ok(arguments.into_boxed_slice());
                     }
                     if is_inherit || is_attr || is_var {
                         let mut arguments =
@@ -1557,6 +1606,10 @@ fn parse_declaration_value_block<'i, 't>(
                         references.any_attr = true;
                     },
                     SubstitutionFunction::If(_) => references.any_var = true,
+                    SubstitutionFunction::Env(ref mut arguments) => {
+                        *arguments = parsed_arguments;
+                        references.any_env = true;
+                    },
                     _ => unreachable!(),
                 }
             },
@@ -1566,8 +1619,6 @@ fn parse_declaration_value_block<'i, 't>(
                     let our_ref_index = references.refs.len();
                     let mut input_end_position = None;
                     let fallback = input.parse_nested_block(|input| {
-                        // TODO(emilio): For env() this should be <custom-ident> per spec, but no other browser does
-                        // that, see https://github.com/w3c/csswg-drafts/issues/3262.
                         let function = match substitution_kind {
                             SubstitutionFunctionKind::Var => {
                                 let name = input.expect_ident()?;
@@ -1582,9 +1633,6 @@ fn parse_declaration_value_block<'i, 't>(
                                 };
                                 SubstitutionFunction::Var(Atom::from(name))
                             },
-                            SubstitutionFunctionKind::Env => SubstitutionFunction::Env(Atom::from(
-                                input.expect_ident()?.as_ref(),
-                            )),
                         };
 
                         // We want the order of the references to match source order. So we need to reserve our slot
@@ -1652,7 +1700,6 @@ fn parse_declaration_value_block<'i, 't>(
                     reference.fallback = fallback;
                     match substitution_kind {
                         SubstitutionFunctionKind::Var => references.any_var = true,
-                        SubstitutionFunctionKind::Env => references.any_env = true,
                     };
                 } else {
                     nested!(")");
@@ -1823,6 +1870,66 @@ fn parse_component_argument<'i, 't>(
         return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
     }
     Ok(argument)
+}
+
+fn parse_environment_argument<'i, 't>(
+    input: &mut Parser<'i, 't>,
+    input_start: SourcePosition,
+    namespaces: &Namespaces,
+    references: &mut References,
+    missing_closing_characters: &mut String,
+    fallback: bool,
+) -> Result<FunctionArgument, ParseError<'i>> {
+    input.skip_whitespace();
+    let state = input.state();
+    let braced = input
+        .try_parse(|input| input.expect_curly_bracket_block())
+        .is_ok();
+    input.reset(&state);
+    let missing_before = missing_closing_characters.len();
+    let mut argument = if fallback && !braced {
+        parse_substitution_argument(
+            input,
+            input_start,
+            namespaces,
+            references,
+            missing_closing_characters,
+        )?
+    } else {
+        parse_component_argument(
+            input,
+            input_start,
+            namespaces,
+            references,
+            missing_closing_characters,
+            fallback,
+        )?
+    };
+    let missing = missing_closing_characters.len() - missing_before;
+    let recovered_wrapper =
+        braced && argument.end == input.position().byte_index() - input_start.byte_index();
+    argument.end += missing - usize::from(recovered_wrapper);
+    Ok(argument)
+}
+
+fn parse_environment_reference(css: &str) -> Result<(Name, Vec<u32>), ()> {
+    let mut source = ParserInput::new(css);
+    let mut input = Parser::new(&mut source);
+    input
+        .parse_entirely(|input| {
+            let name = crate::values::CustomIdent::parse(input, &[])?;
+            let mut indices = Vec::new();
+            while !input.is_exhausted() {
+                let index = input.expect_integer()?;
+                indices.push(
+                    u32::try_from(index).map_err(|_| {
+                        input.new_custom_error(StyleParseErrorKind::UnspecifiedError)
+                    })?,
+                );
+            }
+            Ok((name.0, indices))
+        })
+        .map_err(|_: ParseError<'_>| ())
 }
 
 fn parse_substitution_argument<'i, 't>(
@@ -4069,33 +4176,70 @@ impl<'a, 'b, 't> Substitutor<'a, 'b, 't> {
                     (None, None) => None,
                 }
             },
-            SubstitutionFunction::Env(name) => {
-                match self.environment_resolution {
-                    EnvironmentResolutionMode::ResolveLiveEnvironment => {
-                        let device = self.stylist.device();
-                        device
-                            .environment()
-                            .get(name, device, url_data)
-                            .map(Substitution::from_value)
-                    },
-                    EnvironmentResolutionMode::TreatAsMissing => None,
-                    EnvironmentResolutionMode::ResolvePagedMediaEnvOnly => {
-                        // CSS env-1 §3 paged-media path: only the six
-                        // paged-media variable names resolve; every other
-                        // env() (notably safe-area-inset-*) falls through
-                        // to its authored fallback, matching the previous
-                        // `TreatAsMissing` behaviour for those names.
-                        if is_paged_media_env_name(name) {
+            SubstitutionFunction::Env(arguments) => {
+                let [argument, fallback @ ..] = &**arguments else {
+                    return Err(());
+                };
+                let substituted = self.chunk(
+                    css,
+                    argument.start,
+                    argument.end,
+                    argument.first_token_type,
+                    argument.last_token_type,
+                    url_data,
+                    frame,
+                    references,
+                )?;
+                while references
+                    .next_if(|reference| reference.end <= argument.end)
+                    .is_some()
+                {}
+                let tainted = !substituted.attr_tainted.is_empty();
+                let (name, indices) = parse_environment_reference(&substituted.css)?;
+                let value = if indices.is_empty() {
+                    match self.environment_resolution {
+                        EnvironmentResolutionMode::ResolveLiveEnvironment => {
                             let device = self.stylist.device();
                             device
                                 .environment()
-                                .get(name, device, url_data)
+                                .get(&name, device, url_data)
                                 .map(Substitution::from_value)
-                        } else {
-                            None
-                        }
-                    },
-                }
+                        },
+                        EnvironmentResolutionMode::TreatAsMissing => None,
+                        EnvironmentResolutionMode::ResolvePagedMediaEnvOnly => {
+                            if is_paged_media_env_name(&name) {
+                                let device = self.stylist.device();
+                                device
+                                    .environment()
+                                    .get(&name, device, url_data)
+                                    .map(Substitution::from_value)
+                            } else {
+                                None
+                            }
+                        },
+                    }
+                } else {
+                    None
+                };
+                let value = match value {
+                    Some(value) => Some(value),
+                    None => fallback
+                        .first()
+                        .map(|fallback| {
+                            self.chunk(
+                                css,
+                                fallback.start,
+                                fallback.end,
+                                fallback.first_token_type,
+                                fallback.last_token_type,
+                                url_data,
+                                frame,
+                                references,
+                            )
+                        })
+                        .transpose()?,
+                };
+                value.map(|value| if tainted { value.attr_tainted() } else { value })
             },
             SubstitutionFunction::Function { name, arguments, call_identity } => {
                 let arguments = arguments
@@ -4568,9 +4712,11 @@ mod tests {
         }
         let value = parse_value("env(unknown-test-variable, keep )   ", &Namespaces::default());
         assert_eq!(value.css, "env(unknown-test-variable, keep )");
-        let reference = &value.references.refs[0];
-        let fallback = reference.fallback.as_ref().unwrap();
-        assert_eq!(&value.css[fallback.start.get()..reference.end - 1], "keep ");
+        let SubstitutionFunction::Env(arguments) = &value.references.refs[0].function else {
+            panic!("the fixture has an environment reference");
+        };
+        let fallback = &arguments[1];
+        assert_eq!(&value.css[fallback.start..fallback.end], "keep ");
         assert_eq!(parse_value("keep   ", &Namespaces::default()).css, "keep");
     }
 
@@ -4681,3 +4827,6 @@ mod tests {
     }
 
 }
+
+#[cfg(all(test, feature = "servo"))]
+mod env_tests;

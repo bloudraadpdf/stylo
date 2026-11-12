@@ -61,6 +61,10 @@ and descendant recascade retain that enclosing mode through annotation container
 Moegoe consumes the published registered revision, without a local override.
 No upstream issue or pull request has been submitted for this patch.
 
+Environment references validate their names and indices after substitution.
+Braced fallbacks use only the block contents; unbraced fallbacks retain commas.
+An index cannot select a scalar environment variable.
+
 Coordination of Stylo development happens:
 
 - Here in Github Issues
