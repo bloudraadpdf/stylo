@@ -1286,6 +1286,25 @@ impl StyleState {
         (DeclarationLease { cell: record }, install)
     }
 
+    /// Releases this state's ownership of declarations. Existing leases remain valid.
+    pub fn release_inline_attributes(&mut self, handles: impl IntoIterator<Item = DeclarationHandle>) -> usize {
+        let mut released = 0;
+        for handle in handles {
+            let Some(cell) = self.declarations.remove(&handle) else {
+                continue;
+            };
+            let slot = cell.lock().expect("declaration cell mutex poisoned").slot;
+            self.slots.remove(&slot);
+            self.unhydrated.remove(&handle);
+            released += 1;
+        }
+        if released != 0 {
+            self.declaration_order
+                .retain(|handle| self.declarations.contains_key(handle));
+        }
+        released
+    }
+
     pub fn prepare_dom_update(
         &self,
         lease: &DeclarationLease,
@@ -3444,6 +3463,69 @@ mod tests {
             Err(StyleTransactionError::StaleRevision)
         );
         assert_eq!(snapshot(), after_success);
+    }
+
+    #[test]
+    fn released_inline_attributes_leave_escaping_leases_and_other_owners_intact() {
+        let document = StyleDocumentHandle::allocate();
+        let mut state = StyleState::new(document);
+        let (first, _) = state
+            .create_inline_attribute(raw(document, Some("color: red")))
+            .unwrap();
+        let (removed, install) = state
+            .create_inline_attribute(InlineDeclarationCandidate::unparsed(
+                context(document, "https://example.test/"),
+                Some("width: 1px"),
+            ))
+            .unwrap();
+        let (last, _) = state
+            .create_inline_attribute(raw(document, Some("color: blue")))
+            .unwrap();
+        let other_document = StyleDocumentHandle::allocate();
+        let mut other = StyleState::new(other_document);
+        let (foreign, _) = other
+            .create_inline_attribute(raw(other_document, Some("height: 2px")))
+            .unwrap();
+        let escaped = removed.clone();
+        let weak = Arc::downgrade(&removed.cell);
+        let handle = removed.handle();
+        let slot = removed.slot();
+        let before = removed.projection();
+        let pending = state
+            .prepare_dom_update(&removed, slot, raw(document, Some("width: 3px")))
+            .unwrap();
+        assert_eq!(state.release_inline_attributes([foreign.handle(), handle, handle]), 1);
+        assert_eq!(
+            state.declaration_handles().collect::<Vec<_>>(),
+            [first.handle(), last.handle()]
+        );
+        assert!(state.declaration(handle).is_none());
+        assert!(state.declaration_for_slot(slot).is_none());
+        assert!(!state.unhydrated_declarations().contains(&handle));
+        assert_eq!(escaped.fingerprint(), before.fingerprint());
+        assert_eq!(escaped.semantic_fingerprint(), before.semantic_fingerprint());
+        assert_eq!(escaped.is_hydrated(), before.hydrated);
+        assert_eq!(escaped.view(), *install.view());
+        assert_eq!(
+            state.commit_dom_update(pending),
+            Err(StyleTransactionError::WrongDeclaration)
+        );
+        assert!(other.declaration(foreign.handle()).is_some());
+        assert_eq!(foreign.view().text(), Some("height: 2px"));
+        let update = state
+            .prepare_dom_update(&last, last.slot(), raw(document, Some("color: green")))
+            .unwrap();
+        state.commit_dom_update(update).unwrap();
+        assert_eq!(last.view().text(), Some("color: green"));
+        let (_, copies, _) = state.fork(StyleDocumentHandle::allocate()).unwrap();
+        assert_eq!(
+            copies.iter().map(|(handle, _, _)| *handle).collect::<Vec<_>>(),
+            [first.handle(), last.handle()]
+        );
+        drop(removed);
+        assert!(weak.upgrade().is_some());
+        drop(escaped);
+        assert!(weak.upgrade().is_none());
     }
 
     #[test]
