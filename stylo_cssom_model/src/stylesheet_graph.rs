@@ -1408,10 +1408,8 @@ impl RuleNode {
         nested: impl Into<Arc<[Self]>>,
         serialization: impl Into<Arc<str>>,
     ) -> Self {
-        let payload = self.payload_mut();
-        payload.nested = nested.into();
-        payload.projection_serialization = Some(serialization.into());
-        self
+        self.payload_mut().nested = nested.into();
+        self.with_projection_serialization(serialization)
     }
 
     #[must_use]
@@ -1589,7 +1587,14 @@ impl RuleNode {
 
     #[must_use]
     pub fn with_projection_serialization(mut self, serialization: impl Into<Arc<str>>) -> Self {
-        self.payload_mut().projection_serialization = Some(serialization.into());
+        let serialization = serialization.into();
+        let payload = self.payload_mut();
+        let shared = payload
+            .projection_serialization
+            .take()
+            .filter(|existing| existing.as_ref() == serialization.as_ref())
+            .unwrap_or(serialization);
+        payload.projection_serialization = Some(shared);
         self
     }
 
@@ -4583,4 +4588,85 @@ fn attachment_import_environment_changed(
         || previous.environment_revision != candidate.environment_revision
         || previous.base_url != candidate.base_url
         || previous.encoding != candidate.encoding
+}
+
+#[cfg(test)]
+mod projection_storage_tests {
+    use super::*;
+
+    #[test]
+    fn equal_projection_setters_share_text_and_preserve_option_and_clone_state() {
+        let plain = RuleNode::style("p", "color: red;");
+        assert!(plain.payload().projection_serialization.is_none());
+        let original = plain
+            .clone()
+            .with_projection_serialization(plain.serialization());
+        assert!(original.payload().projection_serialization.is_some());
+        let repeated = original
+            .clone()
+            .with_projection_serialization(original.projection_serialization());
+        assert_eq!(repeated, original);
+        assert!(Arc::ptr_eq(
+            original
+                .payload()
+                .projection_serialization
+                .as_ref()
+                .unwrap(),
+            repeated
+                .payload()
+                .projection_serialization
+                .as_ref()
+                .unwrap()
+        ));
+        let changed = repeated.with_projection_serialization("p { color: blue; }");
+        assert_ne!(
+            changed.projection_serialization(),
+            original.projection_serialization()
+        );
+        assert_eq!(original.projection_serialization(), plain.serialization());
+    }
+
+    #[test]
+    fn equal_projection_text_keeps_new_nested_resource_metadata() {
+        let declaration = RuleDeclaration::new("background-image", "url(image.png)")
+            .with_source_base_url("https://before.test/")
+            .with_source_referrer("https://before.test/a.css");
+        let block = RuleDeclarationBlock::new(
+            RuleDeclarationDomain::Style,
+            "background-image: url(image.png);",
+            [declaration.clone()],
+        );
+        let child =
+            RuleNode::style("p", "background-image: url(image.png);").with_declaration_block(block);
+        let updated = child
+            .clone()
+            .with_declaration_block(RuleDeclarationBlock::new(
+                RuleDeclarationDomain::Style,
+                "background-image: url(image.png);",
+                [declaration
+                    .with_source_base_url("https://after.test/")
+                    .with_source_referrer("https://after.test/b.css")],
+            ));
+        assert_ne!(child, updated);
+        let original = RuleNode::media("print", [child.clone()]).with_projection_serialization(
+            "@media print { p { background-image: url(image.png); } }",
+        );
+        let projected = original
+            .clone()
+            .with_projected_nested([updated.clone()], original.projection_serialization());
+        assert_eq!(projected.payload().nested(), [updated]);
+        assert_eq!(original.payload().nested(), [child]);
+        assert!(Arc::ptr_eq(
+            original
+                .payload()
+                .projection_serialization
+                .as_ref()
+                .unwrap(),
+            projected
+                .payload()
+                .projection_serialization
+                .as_ref()
+                .unwrap()
+        ));
+    }
 }
