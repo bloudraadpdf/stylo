@@ -1084,11 +1084,6 @@ impl PropertyDeclaration {
                     |declarations, input| shorthand_id.parse_into(declarations, context, input),
                     |declarations, wk| {
                         if shorthand_id == ShorthandId::All {
-                            #[cfg(feature = "servo")]
-                            declarations.push(PropertyDeclaration::css_wide_keyword(
-                                LonghandId::BdLegacyVerticalAlign,
-                                wk,
-                            ));
                             declarations.all_shorthand = AllShorthand::CSSWideKeyword(wk)
                         } else {
                             #[cfg(feature = "servo")]
@@ -1110,13 +1105,6 @@ impl PropertyDeclaration {
                             from_shorthand: Some(shorthand_id),
                         });
                         if shorthand_id == ShorthandId::All {
-                            #[cfg(feature = "servo")]
-                            declarations.push(PropertyDeclaration::WithVariables(
-                                VariableDeclaration {
-                                    id: LonghandId::BdLegacyVerticalAlign,
-                                    value: unparsed.clone(),
-                                },
-                            ));
                             declarations.all_shorthand = AllShorthand::WithVariables(unparsed)
                         } else {
                             #[cfg(feature = "servo")]
@@ -1848,9 +1836,13 @@ impl AllShorthand {
     /// Iterates property declarations from the given all shorthand value.
     #[inline]
     pub fn declarations(&self) -> AllShorthandDeclarationIterator<'_> {
+        #[cfg(feature = "servo")]
+        let private = Some(LonghandId::BdLegacyVerticalAlign);
+        #[cfg(not(feature = "servo"))]
+        let private = None;
         AllShorthandDeclarationIterator {
             all_shorthand: self,
-            longhands: ShorthandId::All.longhands(),
+            longhands: ShorthandId::All.longhands().chain(private),
         }
     }
 }
@@ -1858,7 +1850,8 @@ impl AllShorthand {
 /// An iterator over the all shorthand's shorthand declarations.
 pub struct AllShorthandDeclarationIterator<'a> {
     all_shorthand: &'a AllShorthand,
-    longhands: NonCustomPropertyIterator<LonghandId>,
+    longhands:
+        std::iter::Chain<NonCustomPropertyIterator<LonghandId>, std::option::IntoIter<LonghandId>>,
 }
 
 impl<'a> Iterator for AllShorthandDeclarationIterator<'a> {

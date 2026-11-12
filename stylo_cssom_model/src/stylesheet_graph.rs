@@ -939,6 +939,22 @@ impl RuleNamespaceContext {
     }
 }
 
+pub trait NativeDeclarationBacking: std::fmt::Debug + Send + Sync {
+    fn as_any(&self) -> &dyn std::any::Any;
+    fn equivalent(&self, other: &dyn NativeDeclarationBacking) -> bool;
+}
+
+#[derive(Clone, Debug)]
+pub struct RetainedNativeDeclarations(pub Arc<dyn NativeDeclarationBacking>);
+
+impl PartialEq for RetainedNativeDeclarations {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.equivalent(other.0.as_ref())
+    }
+}
+
+impl Eq for RetainedNativeDeclarations {}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RuleDeclarationBlock {
     domain: RuleDeclarationDomain,
@@ -946,6 +962,7 @@ pub struct RuleDeclarationBlock {
     serialization: Arc<str>,
     declarations: Arc<[RuleDeclaration]>,
     shorthand_values: Arc<[RuleDeclaration]>,
+    native_backing: Option<RetainedNativeDeclarations>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1081,6 +1098,7 @@ impl RuleDeclarationBlock {
             serialization: serialization.into(),
             declarations: declarations.into(),
             shorthand_values: Arc::from([]),
+            native_backing: None,
         }
     }
 
@@ -1097,6 +1115,7 @@ impl RuleDeclarationBlock {
             serialization: serialization.into(),
             declarations,
             shorthand_values: Arc::from([]),
+            native_backing: None,
         }
     }
 
@@ -1107,6 +1126,17 @@ impl RuleDeclarationBlock {
     ) -> Self {
         self.shorthand_values = shorthand_values.into();
         self
+    }
+
+    #[must_use]
+    pub fn with_native_backing(mut self, backing: Option<RetainedNativeDeclarations>) -> Self {
+        self.native_backing = backing;
+        self
+    }
+
+    #[must_use]
+    pub fn native_backing(&self) -> Option<&RetainedNativeDeclarations> {
+        self.native_backing.as_ref()
     }
 
     #[must_use]

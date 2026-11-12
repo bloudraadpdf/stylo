@@ -156,3 +156,19 @@ fn css_wide_resets_include_the_private_compatibility_component() {
         }
     }
 }
+
+#[test]
+fn native_baseline_interpolates_as_zero_shift() {
+    use crate::values::animated::{Animate, Procedure};
+    use crate::values::generics::box_::GenericVerticalAlign;
+
+    for progress in [-0.5, 0.0, 0.3, 0.6, 1.0, 1.5] {
+        assert_eq!(
+            GenericVerticalAlign::Baseline.animate(
+                &GenericVerticalAlign::Length(100.0f32),
+                Procedure::Interpolate { progress },
+            ),
+            Ok(GenericVerticalAlign::Length((100.0 * progress) as f32))
+        );
+    }
+}

@@ -5,7 +5,8 @@
 //! Generic types for box properties.
 
 use crate::derives::*;
-use crate::values::animated::ToAnimatedZero;
+use crate::values::animated::{Animate, Procedure, ToAnimatedZero};
+use crate::values::distance::{ComputeSquaredDistance, SquaredDistance};
 use crate::values::CustomIdent;
 use crate::Zero;
 use std::fmt::{self, Write};
@@ -78,9 +79,7 @@ pub use self::GenericBaselineShift as BaselineShift;
 
 /// CSS2 vertical alignment, independent of the Inline Layout 3 baseline properties.
 #[derive(
-    Animate,
     Clone,
-    ComputeSquaredDistance,
     Copy,
     Debug,
     MallocSizeOf,
@@ -115,9 +114,44 @@ pub enum GenericVerticalAlign<LengthPercentage> {
     Length(LengthPercentage),
 }
 
-impl<L> ToAnimatedZero for GenericVerticalAlign<L> {
+impl<L: Clone + Zero> GenericVerticalAlign<L> {
+    fn animation_length(&self) -> Option<L> {
+        match self {
+            Self::Baseline => Some(L::zero()),
+            Self::Length(length) => Some(length.clone()),
+            _ => None,
+        }
+    }
+}
+
+impl<L: Animate + Clone + PartialEq + Zero> Animate for GenericVerticalAlign<L> {
+    fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
+        match (self.animation_length(), other.animation_length()) {
+            (Some(from), Some(to)) => Ok(Self::Length(from.animate(&to, procedure)?)),
+            _ if self == other => Ok(self.clone()),
+            _ => Err(()),
+        }
+    }
+}
+
+impl<L: Clone + ComputeSquaredDistance + PartialEq + Zero> ComputeSquaredDistance
+    for GenericVerticalAlign<L>
+{
+    fn compute_squared_distance(&self, other: &Self) -> Result<SquaredDistance, ()> {
+        match (self.animation_length(), other.animation_length()) {
+            (Some(from), Some(to)) => from.compute_squared_distance(&to),
+            _ if self == other => Ok(SquaredDistance::from_sqrt(0.0)),
+            _ => Err(()),
+        }
+    }
+}
+
+impl<L: Zero> ToAnimatedZero for GenericVerticalAlign<L> {
     fn to_animated_zero(&self) -> Result<Self, ()> {
-        Err(())
+        match self {
+            Self::Baseline | Self::Length(_) => Ok(Self::Length(L::zero())),
+            _ => Err(()),
+        }
     }
 }
 

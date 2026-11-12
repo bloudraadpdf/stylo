@@ -352,6 +352,7 @@ pub const fn cssom_rule_interface_name_for_grammar(
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct CanonicalCssDeclarationBlock {
+    native_backing: Option<stylo_cssom_model::RetainedNativeDeclarations>,
     serialization: String,
     declarations: Box<[stylo_cssom_model::RuleDeclaration]>,
     shorthand_values: Box<[stylo_cssom_model::RuleDeclaration]>,
@@ -381,6 +382,7 @@ impl CanonicalCssDeclarationBlock {
             serialization,
             declarations,
             shorthand_values: Box::new([]),
+            native_backing: None,
         }
     }
 
@@ -396,6 +398,7 @@ impl CanonicalCssDeclarationBlock {
         )
         .with_namespaces(namespaces.clone())
         .with_shorthand_values(self.shorthand_values.to_vec())
+        .with_native_backing(self.native_backing.clone())
     }
 }
 
@@ -1223,6 +1226,7 @@ impl ParsedCssRule {
                             })
                             .collect(),
                         shorthand_values: Box::new([]),
+            native_backing: None,
                     }),
                 header: rule.prelude.to_css_string(),
                 kind: match rule.prelude.kind {
@@ -1975,6 +1979,7 @@ fn canonical_function_declarations(
             })
             .collect(),
         shorthand_values: Box::new([]),
+            native_backing: None,
     }
 }
 
@@ -1983,6 +1988,7 @@ fn canonical_declaration_block(block: &PropertyDeclarationBlock) -> CanonicalCss
     let _ = block.to_css(&mut serialization);
     let declarations = block
         .declaration_importance_iter()
+        .filter(|(declaration, _)| !crate::declaration_parser::is_internal_declaration(declaration))
         .map(|(declaration, importance)| {
             crate::declaration_parser::rule_declaration_from_stylo(declaration, importance)
         })
@@ -1994,6 +2000,7 @@ fn canonical_declaration_block(block: &PropertyDeclarationBlock) -> CanonicalCss
         serialization,
         declarations,
         shorthand_values,
+        native_backing: crate::declaration_parser::retained_native_declarations(block),
     }
 }
 

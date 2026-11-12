@@ -6,20 +6,14 @@ pub use calibrated_color::{CalGrayParams, CalRgbParams, CalibratedColour, LabPar
 
 mod error;
 mod parser_api;
-pub use parser_api::{
-    SyntaxBlockKind, SyntaxBodyKind, SyntaxOptions, SyntaxParseError, SyntaxRule, SyntaxValue,
-};
+pub use parser_api::{SyntaxBlockKind, SyntaxBodyKind, SyntaxOptions, SyntaxParseError, SyntaxRule, SyntaxValue};
 mod resource_url;
 pub use error::CssomStylesheetError;
-pub use resource_url::{
-    CssResourceUrl, CssUrlCorsMode, CssUrlReferrerPolicy, CssUrlRequestModifiers,
-};
+pub use resource_url::{CssResourceUrl, CssUrlCorsMode, CssUrlReferrerPolicy, CssUrlRequestModifiers};
 
 mod font_feature_values;
 mod stylesheet_input;
-pub use font_feature_values::{
-    FontFeatureKind, FontFeatureMap, InvalidFontFeatureValueCount, RuleFontFeatureValues,
-};
+pub use font_feature_values::{FontFeatureKind, FontFeatureMap, InvalidFontFeatureValueCount, RuleFontFeatureValues};
 pub use stylesheet_input::{CssEncoding, StylesheetEnvironmentEncoding, StylesheetLinkEncoding};
 
 use std::{
@@ -43,9 +37,7 @@ impl StyleDocumentHandle {
     pub fn allocate() -> Self {
         static NEXT: AtomicU64 = AtomicU64::new(1);
         let value = NEXT
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
-                value.checked_add(1)
-            })
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| value.checked_add(1))
             .expect("style document handle space exhausted");
         Self(value)
     }
@@ -60,9 +52,7 @@ macro_rules! non_reused_handle {
             fn allocate() -> Self {
                 static $counter: AtomicU64 = AtomicU64::new(1);
                 let value = $counter
-                    .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
-                        value.checked_add(1)
-                    })
+                    .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| value.checked_add(1))
                     .expect($message);
                 Self(value)
             }
@@ -83,20 +73,17 @@ non_reused_handle!(
 
 mod stylesheet_graph;
 pub use stylesheet_graph::{
-    DetachedRuleLease, DetachedRuleListLease, DetachedStyleSheetLease, ImportBindingContext,
-    ImportBindingHandle, ImportBindingLease, ImportBindingLoadState, InternalStylesheetRoot,
-    PendingSubstitutionValue, PositionTryDescriptorName, PreparedRuleGraphUpdate,
-    RuleBindingContext, RuleBlock, RuleConditionKind, RuleContainerCondition, RuleCssomData,
-    RuleCustomMediaQuery, RuleDeclaration, RuleDeclarationBlock, RuleDeclarationDomain,
-    RuleFunctionParameter, RuleGrammar, RuleGraphError, RuleGroupHeader, RuleHandle,
-    RuleImportCorsMode, RuleImportLayer, RuleImportPrelude, RuleImportReferrerPolicy,
-    RuleImportRequest, RuleImportScope, RuleKeyframeSelector, RuleLease, RuleListHandle,
-    RuleListLease, RuleMixinKind, RuleMutationRevision, RuleNamespaceContext, RuleNode,
-    RuleSourceStamp, StyleOrigin, StyleShadowScopeHandle, StyleSheetAttachmentCandidate,
-    StyleSheetAttachmentHandle, StyleSheetAttachmentLease, StyleSheetAttachmentOwner,
-    StyleSheetCandidate, StyleSheetGraphCandidate, StyleSheetHandle, StyleSheetImportCandidate,
-    StyleSheetLease, StyleSheetSourceContext, StyleSheetSourceKind, StyleTreeScopeHandle,
-    TypedRulePayload,
+    DetachedRuleLease, DetachedRuleListLease, DetachedStyleSheetLease, ImportBindingContext, ImportBindingHandle,
+    ImportBindingLease, ImportBindingLoadState, InternalStylesheetRoot, NativeDeclarationBacking,
+    PendingSubstitutionValue, PositionTryDescriptorName, PreparedRuleGraphUpdate, RetainedNativeDeclarations,
+    RuleBindingContext, RuleBlock, RuleConditionKind, RuleContainerCondition, RuleCssomData, RuleCustomMediaQuery,
+    RuleDeclaration, RuleDeclarationBlock, RuleDeclarationDomain, RuleFunctionParameter, RuleGrammar, RuleGraphError,
+    RuleGroupHeader, RuleHandle, RuleImportCorsMode, RuleImportLayer, RuleImportPrelude, RuleImportReferrerPolicy,
+    RuleImportRequest, RuleImportScope, RuleKeyframeSelector, RuleLease, RuleListHandle, RuleListLease, RuleMixinKind,
+    RuleMutationRevision, RuleNamespaceContext, RuleNode, RuleSourceStamp, StyleOrigin, StyleShadowScopeHandle,
+    StyleSheetAttachmentCandidate, StyleSheetAttachmentHandle, StyleSheetAttachmentLease, StyleSheetAttachmentOwner,
+    StyleSheetCandidate, StyleSheetGraphCandidate, StyleSheetHandle, StyleSheetImportCandidate, StyleSheetLease,
+    StyleSheetSourceContext, StyleSheetSourceKind, StyleTreeScopeHandle, TypedRulePayload,
 };
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -220,7 +207,7 @@ impl ResolvedCssomValue {
                     *value
                 };
                 format!("{value}px")
-            },
+            }
         }
     }
 }
@@ -290,27 +277,13 @@ impl ComputedRetainedKeywordClass {
     #[must_use]
     pub fn retained_keyword(self, keyword: &str) -> Option<&'static str> {
         match self {
-            Self::DominantBaselineAlias if keyword.eq_ignore_ascii_case("text-top") => {
-                Some("text-top")
-            },
-            Self::DominantBaselineAlias if keyword.eq_ignore_ascii_case("text-bottom") => {
-                Some("text-bottom")
-            },
-            Self::LogicalBorderNone | Self::TextBoxTrimAlias
-                if keyword.eq_ignore_ascii_case("none") =>
-            {
-                Some("none")
-            },
-            Self::OverflowClipMarginPaddingBox if keyword.eq_ignore_ascii_case("padding-box") => {
-                Some("padding-box")
-            },
-            Self::TextBoxTrimAlias if keyword.eq_ignore_ascii_case("trim-start") => {
-                Some("trim-start")
-            },
+            Self::DominantBaselineAlias if keyword.eq_ignore_ascii_case("text-top") => Some("text-top"),
+            Self::DominantBaselineAlias if keyword.eq_ignore_ascii_case("text-bottom") => Some("text-bottom"),
+            Self::LogicalBorderNone | Self::TextBoxTrimAlias if keyword.eq_ignore_ascii_case("none") => Some("none"),
+            Self::OverflowClipMarginPaddingBox if keyword.eq_ignore_ascii_case("padding-box") => Some("padding-box"),
+            Self::TextBoxTrimAlias if keyword.eq_ignore_ascii_case("trim-start") => Some("trim-start"),
             Self::TextBoxTrimAlias if keyword.eq_ignore_ascii_case("trim-end") => Some("trim-end"),
-            Self::TextBoxTrimAlias if keyword.eq_ignore_ascii_case("trim-both") => {
-                Some("trim-both")
-            },
+            Self::TextBoxTrimAlias if keyword.eq_ignore_ascii_case("trim-both") => Some("trim-both"),
             _ => None,
         }
     }
@@ -363,14 +336,13 @@ impl StandardPropertyId {
 
 #[must_use]
 pub fn property_schema(name: &str) -> Option<&'static PropertySchemaRow> {
-    static BY_NAME: LazyLock<HashMap<&'static str, &'static PropertySchemaRow>> =
-        LazyLock::new(|| {
-            STANDARD_PROPERTIES
-                .iter()
-                .filter(|row| row.kind != PropertyKind::PageDescriptor && row.name != "-bd-legacy-vertical-align")
-                .map(|row| (row.name, row))
-                .collect()
-        });
+    static BY_NAME: LazyLock<HashMap<&'static str, &'static PropertySchemaRow>> = LazyLock::new(|| {
+        STANDARD_PROPERTIES
+            .iter()
+            .filter(|row| row.kind != PropertyKind::PageDescriptor && row.name != "-bd-legacy-vertical-align")
+            .map(|row| (row.name, row))
+            .collect()
+    });
     BY_NAME.get(name).copied()
 }
 
@@ -487,12 +459,12 @@ impl SpecifiedComponentValue {
                 for argument in arguments {
                     argument.recontextualize_urls(base_url);
                 }
-            },
+            }
             Self::Block { values, .. } => {
                 for value in values {
                     value.recontextualize_urls(base_url);
                 }
-            },
+            }
             Self::Ident(_)
             | Self::AtKeyword(_)
             | Self::Hash { .. }
@@ -501,7 +473,7 @@ impl SpecifiedComponentValue {
             | Self::Dimension { .. }
             | Self::String(_)
             | Self::Delimiter(_)
-            | Self::Operator(_) => {},
+            | Self::Operator(_) => {}
         }
     }
 }
@@ -510,24 +482,22 @@ impl SpecifiedStyleValue {
     fn recontextualize_urls(&mut self, base_url: &Arc<str>) {
         match self {
             Self::ParsedCalculation {
-                serialization,
-                source,
-                ..
+                serialization, source, ..
             } => {
                 serialization.recontextualize_urls(base_url);
                 source.recontextualize_urls(base_url);
-            },
+            }
             Self::Components(values) => {
                 for value in values {
                     value.recontextualize_urls(base_url);
                 }
-            },
+            }
             Self::List { values, .. } => {
                 for value in values {
                     value.recontextualize_urls(base_url);
                 }
-            },
-            Self::CssWide(_) | Self::Opacity(_) | Self::TokenStream(_) => {},
+            }
+            Self::CssWide(_) | Self::Opacity(_) | Self::TokenStream(_) => {}
         }
     }
 }
@@ -640,6 +610,7 @@ pub struct InlineStyleContext {
 #[derive(Clone, Debug, PartialEq)]
 pub struct InlineDeclarationCandidate {
     declarations: Arc<[SpecifiedDeclaration]>,
+    native_backing: Option<RetainedNativeDeclarations>,
     presentation: Option<Arc<str>>,
     provenance: StylePresentationProvenance,
     context: InlineStyleContext,
@@ -647,6 +618,12 @@ pub struct InlineDeclarationCandidate {
 }
 
 impl InlineDeclarationCandidate {
+    #[must_use]
+    pub fn with_native_backing(mut self, backing: Option<RetainedNativeDeclarations>) -> Self {
+        self.native_backing = backing;
+        self
+    }
+
     fn recontextualize_urls(&mut self) {
         for declaration in Arc::make_mut(&mut self.declarations) {
             declaration.recontextualize_urls(&self.context.base_url);
@@ -661,6 +638,7 @@ impl InlineDeclarationCandidate {
     ) -> Self {
         Self {
             declarations: declarations.into(),
+            native_backing: None,
             presentation: presentation.map(Into::into),
             provenance: StylePresentationProvenance::RawIngress,
             context,
@@ -669,12 +647,10 @@ impl InlineDeclarationCandidate {
     }
 
     #[must_use]
-    pub fn unparsed(
-        context: InlineStyleContext,
-        presentation: Option<impl Into<Arc<str>>>,
-    ) -> Self {
+    pub fn unparsed(context: InlineStyleContext, presentation: Option<impl Into<Arc<str>>>) -> Self {
         Self {
             declarations: Arc::from([]),
+            native_backing: None,
             presentation: presentation.map(Into::into),
             provenance: StylePresentationProvenance::RawIngress,
             context,
@@ -690,6 +666,7 @@ impl InlineDeclarationCandidate {
     ) -> Self {
         Self {
             declarations: declarations.into(),
+            native_backing: None,
             presentation: Some(presentation.into()),
             provenance: StylePresentationProvenance::CanonicalMutation,
             context,
@@ -698,9 +675,7 @@ impl InlineDeclarationCandidate {
     }
 
     fn validate(&self) -> Result<(), StyleTransactionError> {
-        if self.provenance == StylePresentationProvenance::CanonicalMutation
-            && self.presentation.is_none()
-        {
+        if self.provenance == StylePresentationProvenance::CanonicalMutation && self.presentation.is_none() {
             return Err(StyleTransactionError::InvalidCandidate);
         }
         Ok(())
@@ -799,12 +774,7 @@ pub struct ImperativePropertyRegistrationInput {
 
 impl ImperativePropertyRegistrationInput {
     #[must_use]
-    pub fn new(
-        name: String,
-        syntax: String,
-        inherits: bool,
-        initial_value: Option<String>,
-    ) -> Option<Self> {
+    pub fn new(name: String, syntax: String, inherits: bool, initial_value: Option<String>) -> Option<Self> {
         (!name.is_empty() && !syntax.is_empty()).then(|| Self {
             name: name.into(),
             syntax: syntax.into(),
@@ -915,6 +885,7 @@ struct DeclarationRecord {
     handle: DeclarationHandle,
     revision: u64,
     declarations: Arc<[SpecifiedDeclaration]>,
+    native_backing: Option<RetainedNativeDeclarations>,
     presentation: Option<Arc<str>>,
     provenance: StylePresentationProvenance,
     context: InlineStyleContext,
@@ -929,6 +900,7 @@ impl DeclarationRecord {
             handle: DeclarationHandle::allocate(),
             revision: 0,
             declarations: self.declarations.clone(),
+            native_backing: self.native_backing.clone(),
             presentation: self.presentation.clone(),
             provenance: self.provenance,
             context: InlineStyleContext {
@@ -971,6 +943,7 @@ pub struct InlineStyleProjection {
     context: InlineStyleContext,
     presentation: Option<Arc<str>>,
     declarations: Arc<[SpecifiedDeclaration]>,
+    native_backing: Option<RetainedNativeDeclarations>,
     hydrated: bool,
 }
 
@@ -985,9 +958,21 @@ pub struct InlineStyleFingerprint {
 pub struct InlineStyleSemanticFingerprint {
     presentation: Option<Arc<str>>,
     declarations: Arc<[SpecifiedDeclaration]>,
+    native_backing: Option<RetainedNativeDeclarations>,
 }
 
 impl InlineStyleProjection {
+    #[must_use]
+    pub fn with_native_backing(mut self, backing: Option<RetainedNativeDeclarations>) -> Self {
+        self.native_backing = backing;
+        self
+    }
+
+    #[must_use]
+    pub fn native_backing(&self) -> Option<&RetainedNativeDeclarations> {
+        self.native_backing.as_ref()
+    }
+
     #[must_use]
     pub const fn handle(&self) -> DeclarationHandle {
         self.handle
@@ -1049,6 +1034,7 @@ impl InlineStyleProjection {
         InlineStyleSemanticFingerprint {
             presentation: self.presentation.clone(),
             declarations: self.declarations.clone(),
+            native_backing: self.native_backing.clone(),
         }
     }
 }
@@ -1056,26 +1042,17 @@ impl InlineStyleProjection {
 impl DeclarationLease {
     #[must_use]
     pub fn handle(&self) -> DeclarationHandle {
-        self.cell
-            .lock()
-            .expect("declaration cell mutex poisoned")
-            .handle
+        self.cell.lock().expect("declaration cell mutex poisoned").handle
     }
 
     #[must_use]
     pub fn slot(&self) -> StyleSlotHandle {
-        self.cell
-            .lock()
-            .expect("declaration cell mutex poisoned")
-            .slot
+        self.cell.lock().expect("declaration cell mutex poisoned").slot
     }
 
     #[must_use]
     pub fn revision(&self) -> u64 {
-        self.cell
-            .lock()
-            .expect("declaration cell mutex poisoned")
-            .revision
+        self.cell.lock().expect("declaration cell mutex poisoned").revision
     }
 
     #[must_use]
@@ -1096,6 +1073,7 @@ impl DeclarationLease {
             context: record.context.clone(),
             presentation: record.presentation.clone(),
             declarations: record.declarations.clone(),
+            native_backing: record.native_backing.clone(),
             hydrated: record.hydrated,
         }
     }
@@ -1121,10 +1099,7 @@ impl DeclarationLease {
 
     #[must_use]
     pub fn is_hydrated(&self) -> bool {
-        self.cell
-            .lock()
-            .expect("declaration cell mutex poisoned")
-            .hydrated
+        self.cell.lock().expect("declaration cell mutex poisoned").hydrated
     }
 
     #[must_use]
@@ -1190,9 +1165,9 @@ impl StyleState {
 
     #[must_use]
     pub fn declaration(&self, handle: DeclarationHandle) -> Option<DeclarationLease> {
-        self.declarations.get(&handle).map(|cell| DeclarationLease {
-            cell: Arc::clone(cell),
-        })
+        self.declarations
+            .get(&handle)
+            .map(|cell| DeclarationLease { cell: Arc::clone(cell) })
     }
 
     #[must_use]
@@ -1218,19 +1193,16 @@ impl StyleState {
             .imperative_registration_revision
             .checked_add(1)
             .expect("imperative property registration revision space exhausted");
-        self.imperative_registrations
-            .push(ImperativePropertyRegistration {
-                input,
-                insertion_order: self.imperative_registrations.len(),
-                revision: self.imperative_registration_revision,
-            });
+        self.imperative_registrations.push(ImperativePropertyRegistration {
+            input,
+            insertion_order: self.imperative_registrations.len(),
+            revision: self.imperative_registration_revision,
+        });
         Ok(self.imperative_property_registration_snapshot())
     }
 
     #[must_use]
-    pub fn imperative_property_registration_snapshot(
-        &self,
-    ) -> ImperativePropertyRegistrationSnapshot {
+    pub fn imperative_property_registration_snapshot(&self) -> ImperativePropertyRegistrationSnapshot {
         ImperativePropertyRegistrationSnapshot {
             document: self.document,
             revision: self.imperative_registration_revision,
@@ -1255,6 +1227,7 @@ impl StyleState {
             handle,
             revision: 0,
             declarations: candidate.declarations,
+            native_backing: candidate.native_backing,
             presentation: candidate.presentation,
             provenance: candidate.provenance,
             context: candidate.context,
@@ -1269,10 +1242,7 @@ impl StyleState {
         &self.unhydrated
     }
 
-    fn insert_declaration(
-        &mut self,
-        record: DeclarationRecord,
-    ) -> (DeclarationLease, StyleDomInstall) {
+    fn insert_declaration(&mut self, record: DeclarationRecord) -> (DeclarationLease, StyleDomInstall) {
         let slot = record.slot;
         let handle = record.handle;
         let install = record.install();
@@ -1379,6 +1349,7 @@ impl StyleState {
             candidate.recontextualize_urls();
         }
         record.declarations = candidate.declarations;
+        record.native_backing = candidate.native_backing;
         record.presentation = candidate.presentation;
         record.provenance = candidate.provenance;
         record.context = candidate.context;
@@ -1410,6 +1381,7 @@ impl StyleState {
         }
         let candidate = InlineDeclarationCandidate {
             declarations: record.declarations.clone(),
+            native_backing: record.native_backing.clone(),
             presentation: record.presentation.clone(),
             provenance: record.provenance,
             context,
@@ -1437,6 +1409,7 @@ impl StyleState {
             }
             InlineDeclarationCandidate {
                 declarations: record.declarations.clone(),
+                native_backing: record.native_backing.clone(),
                 presentation: record.presentation.clone(),
                 provenance: record.provenance,
                 context,
@@ -1463,9 +1436,7 @@ impl StyleState {
         if record.document != self.document || !Arc::ptr_eq(stored, &lease.cell) {
             return Err(StyleTransactionError::WrongDeclaration);
         }
-        if destination.declarations.contains_key(&record.handle)
-            || destination.slots.contains_key(&record.slot)
-        {
+        if destination.declarations.contains_key(&record.handle) || destination.slots.contains_key(&record.slot) {
             return Err(StyleTransactionError::DestinationCollision);
         }
         let handle = record.handle;
@@ -1474,8 +1445,7 @@ impl StyleState {
         if self.unhydrated.remove(&handle) {
             destination.unhydrated.insert(handle);
         }
-        self.declaration_order
-            .retain(|candidate| *candidate != handle);
+        self.declaration_order.retain(|candidate| *candidate != handle);
         self.slots.remove(&slot);
         record.document = destination.document;
         record.context = context;
@@ -1489,9 +1459,7 @@ impl StyleState {
             .expect("declaration revision space exhausted");
         let install = record.install();
         drop(record);
-        destination
-            .declarations
-            .insert(handle, Arc::clone(&lease.cell));
+        destination.declarations.insert(handle, Arc::clone(&lease.cell));
         destination.declaration_order.push(handle);
         destination.slots.insert(slot, Arc::downgrade(&lease.cell));
         Ok(install)
@@ -1526,18 +1494,13 @@ impl StyleState {
         installs
     }
 
-    pub fn fork(
-        &self,
-        document: StyleDocumentHandle,
-    ) -> Result<StyleStateFork, StyleTransactionError> {
+    pub fn fork(&self, document: StyleDocumentHandle) -> Result<StyleStateFork, StyleTransactionError> {
         let mut destination = Self::new(document);
         destination.imperative_registrations = self.imperative_registrations.clone();
         destination.imperative_registration_revision = self.imperative_registration_revision;
         let mut copies = Vec::with_capacity(self.declaration_order.len());
         destination.declarations.reserve(self.declarations.len());
-        destination
-            .declaration_order
-            .reserve(self.declaration_order.len());
+        destination.declaration_order.reserve(self.declaration_order.len());
         destination.slots.reserve(self.slots.len());
         destination.unhydrated.reserve(self.unhydrated.len());
         for handle in &self.declaration_order {
@@ -1545,10 +1508,7 @@ impl StyleState {
                 .declarations
                 .get(handle)
                 .ok_or(StyleTransactionError::MissingDeclaration)?;
-            let record = cell
-                .lock()
-                .expect("declaration cell mutex poisoned")
-                .fork(document);
+            let record = cell.lock().expect("declaration cell mutex poisoned").fork(document);
             let (lease, install) = destination.insert_declaration(record);
             copies.push((*handle, lease, install));
         }
@@ -1565,15 +1525,13 @@ mod tests {
 
     use super::{
         CssEncoding, CssWrapperIdentity, DeclarationHandle, ImperativePropertyRegistrationError,
-        ImperativePropertyRegistrationInput, ImportBindingContext, ImportBindingLoadState,
-        InlineDeclarationCandidate, InlineStyleContext, InternalStylesheetRoot, Opacity,
-        PreparedStyleDomUpdate, ResolvedCssomValue, RuleBindingContext, RuleCssomData,
-        RuleDeclaration, RuleDeclarationBlock, RuleDeclarationDomain, RuleGrammar, RuleGroupHeader,
-        RuleImportLayer, RuleImportRequest, RuleNode, STANDARD_PROPERTIES, SpecifiedDeclaration,
-        StyleDocumentHandle, StyleOrigin, StylePresentationProvenance,
-        StyleSheetAttachmentCandidate, StyleSheetAttachmentOwner, StyleSheetCandidate,
-        StyleSheetGraphCandidate, StyleSheetImportCandidate, StyleSheetSourceContext,
-        StyleSheetSourceKind, StyleState, StyleTransactionError, StyleTreeScopeHandle,
+        ImperativePropertyRegistrationInput, ImportBindingContext, ImportBindingLoadState, InlineDeclarationCandidate,
+        InlineStyleContext, InternalStylesheetRoot, Opacity, PreparedStyleDomUpdate, ResolvedCssomValue,
+        RuleBindingContext, RuleCssomData, RuleDeclaration, RuleDeclarationBlock, RuleDeclarationDomain, RuleGrammar,
+        RuleGroupHeader, RuleImportLayer, RuleImportRequest, RuleNode, STANDARD_PROPERTIES, SpecifiedDeclaration,
+        StyleDocumentHandle, StyleOrigin, StylePresentationProvenance, StyleSheetAttachmentCandidate,
+        StyleSheetAttachmentOwner, StyleSheetCandidate, StyleSheetGraphCandidate, StyleSheetImportCandidate,
+        StyleSheetSourceContext, StyleSheetSourceKind, StyleState, StyleTransactionError, StyleTreeScopeHandle,
         property_schema,
     };
 
@@ -1602,22 +1560,11 @@ mod tests {
         assert_eq!(pending.tokens(), "var(--timing)");
         assert_eq!(pending.base_url(), "https://example.test/styles/");
         assert!(
-            RuleDeclaration::from_pending_substitution(
-                "color",
-                transition,
-                "var(--timing)",
-                "about:blank"
-            )
-            .is_none()
+            RuleDeclaration::from_pending_substitution("color", transition, "var(--timing)", "about:blank").is_none()
         );
         assert!(
-            RuleDeclaration::from_pending_substitution(
-                "transition-duration",
-                duration,
-                "var(--timing)",
-                "about:blank"
-            )
-            .is_none()
+            RuleDeclaration::from_pending_substitution("transition-duration", duration, "var(--timing)", "about:blank")
+                .is_none()
         );
     }
 
@@ -1640,28 +1587,18 @@ mod tests {
     fn stylesheet_cells_own_stable_topology_revision_and_lifetime() {
         let document = StyleDocumentHandle::allocate();
         let mut state = StyleState::new(document);
-        let source = StyleSheetSourceContext::inline(
-            document,
-            StyleOrigin::Author,
-            Arc::from("https://example.test/base/"),
-        );
+        let source =
+            StyleSheetSourceContext::inline(document, StyleOrigin::Author, Arc::from("https://example.test/base/"));
         let sheet = state
             .create_stylesheet(StyleSheetCandidate::new(
                 source,
-                [RuleNode::media(
-                    "screen",
-                    [RuleNode::style("a", "color: red")],
-                )],
+                [RuleNode::media("screen", [RuleNode::style("a", "color: red")])],
             ))
             .expect("the typed stylesheet must bind");
         let top = sheet.top_list();
         let media = top.rule(0).expect("the top list must own the media rule");
-        let nested = media
-            .nested_list()
-            .expect("the media rule must own its nested list");
-        let style = nested
-            .rule(0)
-            .expect("the nested list must own the style rule");
+        let nested = media.nested_list().expect("the media rule must own its nested list");
+        let style = nested.rule(0).expect("the nested list must own the style rule");
 
         let second_sheet = state
             .create_stylesheet(StyleSheetCandidate::new(
@@ -1727,10 +1664,7 @@ mod tests {
                 keyframes,
                 RuleNode::layer(
                     None::<Arc<str>>,
-                    [RuleNode::internal_style(
-                        "body",
-                        [RuleDeclaration::new("margin", "0")],
-                    )],
+                    [RuleNode::internal_style("body", [RuleDeclaration::new("margin", "0")])],
                 ),
             ],
         );
@@ -1820,11 +1754,7 @@ mod tests {
         let other = StyleState::new(other_document);
         let sheet = state
             .create_stylesheet(StyleSheetCandidate::new(
-                StyleSheetSourceContext::inline(
-                    document,
-                    StyleOrigin::Author,
-                    Arc::from("https://example.test/"),
-                ),
+                StyleSheetSourceContext::inline(document, StyleOrigin::Author, Arc::from("https://example.test/")),
                 [RuleNode::style("a", "color: red")],
             ))
             .expect("the stylesheet must bind");
@@ -1834,52 +1764,28 @@ mod tests {
         let stale = state
             .prepare_replace_stylesheet(&sheet, [RuleNode::style("c", "color: green")])
             .expect("the concurrent replacement must prepare");
-        let original = sheet
-            .top_list()
-            .rule(0)
-            .expect("the original rule")
-            .handle();
+        let original = sheet.top_list().rule(0).expect("the original rule").handle();
 
         assert!(matches!(
             other.prepare_replace_stylesheet(&sheet, [RuleNode::style("x", "color: black")]),
             Err(super::RuleGraphError::WrongStylesheet)
         ));
         assert_eq!(sheet.revision(), 0);
-        assert_eq!(
-            sheet
-                .top_list()
-                .rule(0)
-                .expect("the unchanged rule")
-                .handle(),
-            original
-        );
+        assert_eq!(sheet.top_list().rule(0).expect("the unchanged rule").handle(), original);
 
         state
             .commit_rule_graph_update(first)
             .expect("the first update must commit");
-        let committed = sheet
-            .top_list()
-            .rule(0)
-            .expect("the committed rule")
-            .handle();
+        let committed = sheet.top_list().rule(0).expect("the committed rule").handle();
         assert_ne!(committed, original);
         assert_eq!(
             state.commit_rule_graph_update(stale),
             Err(super::RuleGraphError::StaleRevision)
         );
         assert_eq!(sheet.revision(), 1);
-        assert_eq!(
-            sheet
-                .top_list()
-                .rule(0)
-                .expect("the retained rule")
-                .handle(),
-            committed
-        );
+        assert_eq!(sheet.top_list().rule(0).expect("the retained rule").handle(), committed);
 
-        state
-            .detach_stylesheet(sheet.handle())
-            .expect("the sheet must detach");
+        state.detach_stylesheet(sheet.handle()).expect("the sheet must detach");
         let replacement = state
             .create_stylesheet(StyleSheetCandidate::new(
                 StyleSheetSourceContext::constructed(StyleOrigin::Author),
@@ -1892,11 +1798,7 @@ mod tests {
     #[test]
     fn rule_source_stamps_track_identity_and_only_actual_rule_mutations() {
         let mut state = StyleState::new(StyleDocumentHandle::allocate());
-        let original = RuleNode::authored(
-            RuleGrammar::PositionTry,
-            "@position-try --side { left: 1px; }",
-            [],
-        );
+        let original = RuleNode::authored(RuleGrammar::PositionTry, "@position-try --side { left: 1px; }", []);
         let sheet = state
             .create_stylesheet(StyleSheetCandidate::new(
                 StyleSheetSourceContext::constructed(StyleOrigin::Author),
@@ -1918,9 +1820,7 @@ mod tests {
             .unwrap();
         state.commit_rule_graph_update(update).unwrap();
         assert_eq!(source.snapshot().payload().source_stamp(), Some(initial));
-        let update = state
-            .prepare_mutate_rule(&sheet, &rules, 1, original.clone())
-            .unwrap();
+        let update = state.prepare_mutate_rule(&sheet, &rules, 1, original.clone()).unwrap();
         state.commit_rule_graph_update(update).unwrap();
         assert_eq!(source.snapshot().payload().source_stamp(), Some(initial));
 
@@ -1929,11 +1829,7 @@ mod tests {
                 &sheet,
                 &rules,
                 1,
-                RuleNode::authored(
-                    RuleGrammar::PositionTry,
-                    "@position-try --side { left: 2px; }",
-                    [],
-                ),
+                RuleNode::authored(RuleGrammar::PositionTry, "@position-try --side { left: 2px; }", []),
             )
             .unwrap();
         state.commit_rule_graph_update(update).unwrap();
@@ -1948,22 +1844,11 @@ mod tests {
             .unwrap();
         let forked_rule = forked_sheet.top_list().rule(1).unwrap();
         assert_ne!(forked_rule.handle(), source.handle());
-        assert_eq!(
-            forked_rule.snapshot().payload().source_stamp(),
-            Some(changed)
-        );
+        assert_eq!(forked_rule.snapshot().payload().source_stamp(), Some(changed));
 
-        let update = state
-            .prepare_replace_rule(&sheet, &rules, 1, original)
-            .unwrap();
+        let update = state.prepare_replace_rule(&sheet, &rules, 1, original).unwrap();
         state.commit_rule_graph_update(update).unwrap();
-        let replacement = rules
-            .rule(1)
-            .unwrap()
-            .snapshot()
-            .payload()
-            .source_stamp()
-            .unwrap();
+        let replacement = rules.rule(1).unwrap().snapshot().payload().source_stamp().unwrap();
         assert_ne!(replacement.rule(), initial.rule());
         assert_eq!(source.snapshot().payload().source_stamp(), Some(changed));
     }
@@ -1974,11 +1859,7 @@ mod tests {
         let mut state = StyleState::new(document);
         let sheet = state
             .create_stylesheet(StyleSheetCandidate::new(
-                StyleSheetSourceContext::inline(
-                    document,
-                    StyleOrigin::Author,
-                    Arc::from("https://old.test/"),
-                ),
+                StyleSheetSourceContext::inline(document, StyleOrigin::Author, Arc::from("https://old.test/")),
                 [RuleNode::style("a", "color: red")],
             ))
             .expect("the stylesheet must bind");
@@ -2001,10 +1882,7 @@ mod tests {
             .expect("the complete replacement must prepare");
 
         assert_eq!(sheet.serialise(), "a { color: red; }");
-        assert_eq!(
-            sheet.source().base_url.as_deref(),
-            Some("https://old.test/")
-        );
+        assert_eq!(sheet.source().base_url.as_deref(), Some("https://old.test/"));
         assert_eq!(sheet.media(), None);
         assert!(!sheet.disabled());
 
@@ -2012,10 +1890,7 @@ mod tests {
             .commit_rule_graph_update(update)
             .expect("the complete replacement must commit");
         assert_eq!(sheet.serialise(), "b { color: blue; }");
-        assert_eq!(
-            sheet.source().source_url.as_deref(),
-            Some("https://new.test/sheet.css")
-        );
+        assert_eq!(sheet.source().source_url.as_deref(), Some("https://new.test/sheet.css"));
         assert_eq!(sheet.media().as_deref(), Some("print"));
         assert!(sheet.disabled());
         assert_eq!(sheet.revision(), 1);
@@ -2028,28 +1903,17 @@ mod tests {
         let encoding = CssEncoding::new("utf-8").expect("UTF-8 is a supported encoding");
         let inline = state
             .create_stylesheet(StyleSheetCandidate::new(
-                StyleSheetSourceContext::inline(
-                    document,
-                    StyleOrigin::Author,
-                    Arc::from("https://old.test/"),
-                ),
+                StyleSheetSourceContext::inline(document, StyleOrigin::Author, Arc::from("https://old.test/")),
                 [RuleNode::style("a", "color: red")],
             ))
             .expect("the inline sheet must bind");
 
         assert!(
             state
-                .recontextualize_inline_stylesheet(
-                    &inline,
-                    Arc::from("https://new.test/"),
-                    encoding
-                )
+                .recontextualize_inline_stylesheet(&inline, Arc::from("https://new.test/"), encoding)
                 .expect("the inline environment must rebind")
         );
-        assert_eq!(
-            inline.source().base_url.as_deref(),
-            Some("https://new.test/")
-        );
+        assert_eq!(inline.source().base_url.as_deref(), Some("https://new.test/"));
         assert_eq!(inline.source().encoding, Some(encoding));
         assert_eq!(inline.revision(), 1);
 
@@ -2069,11 +1933,7 @@ mod tests {
             .expect("the linked sheet must bind");
         assert!(
             !state
-                .recontextualize_inline_stylesheet(
-                    &linked,
-                    Arc::from("https://ignored.test/"),
-                    encoding
-                )
+                .recontextualize_inline_stylesheet(&linked, Arc::from("https://ignored.test/"), encoding)
                 .expect("linked source context must remain fixed")
         );
         assert_eq!(
@@ -2087,12 +1947,11 @@ mod tests {
     fn rule_blocks_retain_graph_identity_grammar_and_binding_context() {
         let document = StyleDocumentHandle::allocate();
         let mut state = StyleState::new(document);
-        let rule =
-            RuleNode::style("a", "color: red").with_declaration_block(RuleDeclarationBlock::new(
-                RuleDeclarationDomain::Style,
-                "color: red;",
-                [RuleDeclaration::new("color", "red")],
-            ));
+        let rule = RuleNode::style("a", "color: red").with_declaration_block(RuleDeclarationBlock::new(
+            RuleDeclarationDomain::Style,
+            "color: red;",
+            [RuleDeclaration::new("color", "red")],
+        ));
         let sheet = state
             .create_stylesheet(StyleSheetCandidate::new(
                 StyleSheetSourceContext::constructed(StyleOrigin::Author),
@@ -2105,10 +1964,7 @@ mod tests {
         assert_eq!(block.sheet(), sheet.handle());
         assert_eq!(block.rule(), rule.handle());
         assert_eq!(block.grammar(), RuleDeclarationDomain::Style);
-        assert_eq!(
-            block.binding_context(),
-            RuleBindingContext::AttachmentDependent
-        );
+        assert_eq!(block.binding_context(), RuleBindingContext::AttachmentDependent);
         assert_eq!(block.declarations()[0].name(), "color");
         assert_eq!(block.declarations()[0].value(), "red");
     }
@@ -2152,9 +2008,7 @@ mod tests {
         assert_eq!(original.serialization(), "a { color: red; }");
         assert_eq!(sheet.rule_path(original.handle()), None);
         assert_eq!(sheet.rule_path(inserted.handle()), Some(vec![0]));
-        let detached = original
-            .detached()
-            .expect("a removed rule permits detached mutation");
+        let detached = original.detached().expect("a removed rule permits detached mutation");
         assert!(matches!(
             detached.mutate(RuleNode::media("all", [])),
             Err(super::RuleGraphError::WrongRule)
@@ -2202,12 +2056,8 @@ mod tests {
             .expect("the stylesheet must bind");
         let list = sheet.top_list();
         let rule = list.rule(0).expect("the style rule must exist");
-        let block = rule
-            .block()
-            .expect("the style rule must own its declaration cell");
-        let nested = rule
-            .nested_list()
-            .expect("the style rule must own its nested list");
+        let block = rule.block().expect("the style rule must own its declaration cell");
+        let nested = rule.nested_list().expect("the style rule must own its nested list");
         let nested_rule = nested.rule(0).expect("the nested style rule must exist");
         let updated = RuleNode::authored(RuleGrammar::Style, "a { color: green; }", [])
             .with_declaration_block(RuleDeclarationBlock::new(
@@ -2230,10 +2080,7 @@ mod tests {
         let current = list.rule(0).expect("the style rule must remain");
         assert_eq!(current.handle(), rule.handle());
         assert_eq!(
-            current
-                .nested_list()
-                .expect("the nested list must remain")
-                .handle(),
+            current.nested_list().expect("the nested list must remain").handle(),
             nested.handle()
         );
         assert_eq!(
@@ -2277,10 +2124,7 @@ mod tests {
                 [RuleNode::media("screen", [])],
             ))
             .expect("the sheet must bind");
-        let grouping = sheet
-            .top_list()
-            .rule(0)
-            .expect("the grouping rule must exist");
+        let grouping = sheet.top_list().rule(0).expect("the grouping rule must exist");
         let nested = grouping
             .nested_list()
             .expect("an empty grouping rule must own its nested list");
@@ -2307,18 +2151,11 @@ mod tests {
             .expect("import CSSOM data must match import grammar");
         let parent = state
             .create_stylesheet(StyleSheetCandidate::new(
-                StyleSheetSourceContext::inline(
-                    document,
-                    StyleOrigin::Author,
-                    Arc::from("https://example.test/"),
-                ),
+                StyleSheetSourceContext::inline(document, StyleOrigin::Author, Arc::from("https://example.test/")),
                 [import],
             ))
             .expect("the parent stylesheet must bind");
-        let import_rule = parent
-            .top_list()
-            .rule(0)
-            .expect("the import rule must exist");
+        let import_rule = parent.top_list().rule(0).expect("the import rule must exist");
         let child = state
             .create_stylesheet(StyleSheetCandidate::new(
                 StyleSheetSourceContext {
@@ -2344,10 +2181,7 @@ mod tests {
         assert_eq!(binding.parent_sheet(), parent.handle());
         assert_eq!(binding.parent_rule(), import_rule.handle());
         assert_eq!(binding.context(), ImportBindingContext::Source);
-        assert_eq!(
-            binding.resolved_url().as_ref(),
-            "https://example.test/child.css"
-        );
+        assert_eq!(binding.resolved_url().as_ref(), "https://example.test/child.css");
         assert_eq!(binding.state(), ImportBindingLoadState::Pending);
         assert_eq!(binding.revision(), 0);
         assert!(matches!(
@@ -2362,16 +2196,9 @@ mod tests {
         state
             .complete_import(&binding, &child)
             .expect("the binding must own its loaded child");
-        assert_eq!(
-            binding.state(),
-            ImportBindingLoadState::Loaded(child.handle())
-        );
+        assert_eq!(binding.state(), ImportBindingLoadState::Loaded(child.handle()));
         assert_eq!(binding.revision(), 1);
-        assert!(
-            binding
-                .loaded_child()
-                .is_some_and(|loaded| loaded.same_cell(&child))
-        );
+        assert!(binding.loaded_child().is_some_and(|loaded| loaded.same_cell(&child)));
 
         for media in ["print", ""] {
             let updated = import_rule
@@ -2384,41 +2211,22 @@ mod tests {
             state
                 .commit_rule_graph_update(mutation)
                 .expect("the media mutation must commit");
-            assert_eq!(
-                binding.state(),
-                ImportBindingLoadState::Loaded(child.handle())
-            );
+            assert_eq!(binding.state(), ImportBindingLoadState::Loaded(child.handle()));
             assert_eq!(binding.revision(), 1);
-            assert!(
-                binding
-                    .loaded_child()
-                    .is_some_and(|loaded| loaded.same_cell(&child))
-            );
+            assert!(binding.loaded_child().is_some_and(|loaded| loaded.same_cell(&child)));
             assert_eq!(import_rule.import_bindings()[0].handle(), binding.handle());
         }
 
         let replacement = state
-            .prepare_replace_rule(
-                &parent,
-                &parent.top_list(),
-                0,
-                RuleNode::style("b", "color: blue"),
-            )
+            .prepare_replace_rule(&parent, &parent.top_list(), 0, RuleNode::style("b", "color: blue"))
             .expect("the import replacement must prepare");
         state
             .commit_rule_graph_update(replacement)
             .expect("the import replacement must commit");
         assert!(state.import_binding(binding.handle()).is_none());
         assert!(state.stylesheet(child.handle()).is_none());
-        assert_eq!(
-            binding.state(),
-            ImportBindingLoadState::Loaded(child.handle())
-        );
-        assert!(
-            binding
-                .loaded_child()
-                .is_some_and(|loaded| loaded.same_cell(&child))
-        );
+        assert_eq!(binding.state(), ImportBindingLoadState::Loaded(child.handle()));
+        assert!(binding.loaded_child().is_some_and(|loaded| loaded.same_cell(&child)));
         assert!(
             import_rule
                 .import_bindings()
@@ -2430,22 +2238,18 @@ mod tests {
             Err(super::RuleGraphError::WrongImportBinding)
         ));
 
-        let replacement_import =
-            RuleNode::authored(RuleGrammar::Import, "@import url(child.css);", [])
-                .with_cssom_data(RuleCssomData::Import {
-                    request: import_request("child.css"),
-                })
-                .expect("import CSSOM data must match import grammar");
+        let replacement_import = RuleNode::authored(RuleGrammar::Import, "@import url(child.css);", [])
+            .with_cssom_data(RuleCssomData::Import {
+                request: import_request("child.css"),
+            })
+            .expect("import CSSOM data must match import grammar");
         let replacement = state
             .prepare_replace_rule(&parent, &parent.top_list(), 0, replacement_import)
             .expect("the replacement import must prepare");
         state
             .commit_rule_graph_update(replacement)
             .expect("the replacement import must commit");
-        let replacement_rule = parent
-            .top_list()
-            .rule(0)
-            .expect("the replacement import must exist");
+        let replacement_rule = parent.top_list().rule(0).expect("the replacement import must exist");
         let replacement_binding = state
             .bind_import(
                 &replacement_rule,
@@ -2498,17 +2302,10 @@ mod tests {
         let foreign = state
             .attach_stylesheet(&other, attachment(2))
             .expect("the foreign projection must attach");
-        let rule = parent
-            .top_list()
-            .rule(0)
-            .expect("the import rule must exist");
+        let rule = parent.top_list().rule(0).expect("the import rule must exist");
 
         assert!(matches!(
-            state.bind_import(
-                &rule,
-                ImportBindingContext::Source,
-                "https://example.test/child.css",
-            ),
+            state.bind_import(&rule, ImportBindingContext::Source, "https://example.test/child.css",),
             Err(super::RuleGraphError::WrongImportBinding)
         ));
 
@@ -2553,10 +2350,8 @@ mod tests {
         state
             .complete_import(&second_binding, &second_child)
             .expect("the second attachment child must complete");
-        let first_projection =
-            parent.serialise_projection(ImportBindingContext::Attachment(first.handle()));
-        let second_projection =
-            parent.serialise_projection(ImportBindingContext::Attachment(second.handle()));
+        let first_projection = parent.serialise_projection(ImportBindingContext::Attachment(first.handle()));
+        let second_projection = parent.serialise_projection(ImportBindingContext::Attachment(second.handle()));
         assert!(first_projection.contains(".first"));
         assert!(!first_projection.contains(".second"));
         assert!(second_projection.contains(".second"));
@@ -2615,21 +2410,13 @@ mod tests {
             .expect("import data matches its grammar");
         let parent = state
             .create_stylesheet(StyleSheetCandidate::new(
-                StyleSheetSourceContext::inline(
-                    document,
-                    StyleOrigin::Author,
-                    Arc::from("https://example.test/"),
-                ),
+                StyleSheetSourceContext::inline(document, StyleOrigin::Author, Arc::from("https://example.test/")),
                 [import],
             ))
             .expect("parent sheet binds");
         let rule = parent.top_list().rule(0).expect("import rule exists");
         let binding = state
-            .bind_import(
-                &rule,
-                ImportBindingContext::Source,
-                "https://example.test/child.css",
-            )
+            .bind_import(&rule, ImportBindingContext::Source, "https://example.test/child.css")
             .expect("source import binds");
         let source = StyleSheetSourceContext {
             origin_clean: true,
@@ -2645,11 +2432,7 @@ mod tests {
             .expect("pending import owns an empty child");
         assert_eq!(binding.state(), ImportBindingLoadState::Pending);
         assert!(binding.loaded_child().is_none());
-        assert!(
-            binding
-                .associated_child()
-                .is_some_and(|sheet| sheet.same_cell(&child))
-        );
+        assert!(binding.associated_child().is_some_and(|sheet| sheet.same_cell(&child)));
         assert_eq!(child.top_list().len(), 0);
         let mut redirected = source;
         redirected.base_url = Some(Arc::from("https://example.test/redirected/"));
@@ -2660,15 +2443,8 @@ mod tests {
         state
             .complete_import_graph(&binding, candidate)
             .expect("loaded graph fills the same child");
-        assert!(
-            binding
-                .loaded_child()
-                .is_some_and(|sheet| sheet.same_cell(&child))
-        );
-        assert_eq!(
-            binding.state(),
-            ImportBindingLoadState::Loaded(child.handle())
-        );
+        assert!(binding.loaded_child().is_some_and(|sheet| sheet.same_cell(&child)));
+        assert_eq!(binding.state(), ImportBindingLoadState::Loaded(child.handle()));
         assert_eq!(child.top_list().len(), 1);
         assert_eq!(
             child.source().base_url.as_deref(),
@@ -2692,11 +2468,7 @@ mod tests {
             .expect("import CSSOM data must match import grammar");
         let parent = state
             .create_stylesheet(StyleSheetCandidate::new(
-                StyleSheetSourceContext::inline(
-                    document,
-                    StyleOrigin::Author,
-                    Arc::from("https://example.test/"),
-                ),
+                StyleSheetSourceContext::inline(document, StyleOrigin::Author, Arc::from("https://example.test/")),
                 [import],
             ))
             .expect("the parent stylesheet must bind");
@@ -2720,16 +2492,9 @@ mod tests {
         let second = state
             .create_stylesheet(child_candidate())
             .expect("the replacement child must bind");
-        let rule = parent
-            .top_list()
-            .rule(0)
-            .expect("the import rule must exist");
+        let rule = parent.top_list().rule(0).expect("the import rule must exist");
         let binding = state
-            .bind_import(
-                &rule,
-                ImportBindingContext::Source,
-                "https://example.test/child.css",
-            )
+            .bind_import(&rule, ImportBindingContext::Source, "https://example.test/child.css")
             .expect("the source import must bind");
 
         state
@@ -2740,15 +2505,10 @@ mod tests {
             .expect("the validated replacement child must complete");
         assert!(state.stylesheet(first.handle()).is_none());
         assert!(state.stylesheet(second.handle()).is_some());
-        assert_eq!(
-            binding.state(),
-            ImportBindingLoadState::Loaded(second.handle())
-        );
+        assert_eq!(binding.state(), ImportBindingLoadState::Loaded(second.handle()));
         assert_eq!(binding.revision(), 2);
 
-        state
-            .fail_import(&binding)
-            .expect("the current import must fail");
+        state.fail_import(&binding).expect("the current import must fail");
         assert!(state.stylesheet(second.handle()).is_none());
         assert_eq!(binding.state(), ImportBindingLoadState::Failed);
         assert!(binding.loaded_child().is_none());
@@ -2784,11 +2544,7 @@ mod tests {
         );
         let root = StyleSheetGraphCandidate::new(
             StyleSheetCandidate::new(
-                StyleSheetSourceContext::inline(
-                    document,
-                    StyleOrigin::Author,
-                    Arc::from("https://example.test/"),
-                ),
+                StyleSheetSourceContext::inline(document, StyleOrigin::Author, Arc::from("https://example.test/")),
                 [import_rule("loaded.css"), import_rule("missing.css")],
             ),
             [
@@ -2800,63 +2556,38 @@ mod tests {
         let root = state
             .create_stylesheet_graph(root)
             .expect("the validated stylesheet graph must publish atomically");
-        let loaded = root
-            .top_list()
-            .rule(0)
-            .expect("the loaded import must exist");
-        let missing = root
-            .top_list()
-            .rule(1)
-            .expect("the failed import must exist");
+        let loaded = root.top_list().rule(0).expect("the loaded import must exist");
+        let missing = root.top_list().rule(1).expect("the failed import must exist");
 
-        assert_eq!(
-            loaded.import_bindings()[0].context(),
-            ImportBindingContext::Source
-        );
+        assert_eq!(loaded.import_bindings()[0].context(), ImportBindingContext::Source);
         assert!(matches!(
             loaded.import_bindings()[0].state(),
             ImportBindingLoadState::Loaded(_)
         ));
-        assert_eq!(
-            missing.import_bindings()[0].state(),
-            ImportBindingLoadState::Failed
-        );
+        assert_eq!(missing.import_bindings()[0].state(), ImportBindingLoadState::Failed);
         assert_eq!(root.revision(), 4);
         assert_eq!(
             root.serialise_projection(ImportBindingContext::Source),
             "p { color: green; }"
         );
         let mut source_bases = Vec::new();
-        let projected =
-            root.projection_nodes_with_source(ImportBindingContext::Source, &mut |source, rule| {
-                source_bases.push(source.base_url.clone());
-                rule
-            });
-        assert_eq!(
-            source_bases,
-            [Some(Arc::from("https://example.test/loaded.css"))]
-        );
+        let projected = root.projection_nodes_with_source(ImportBindingContext::Source, &mut |source, rule| {
+            source_bases.push(source.base_url.clone());
+            rule
+        });
+        assert_eq!(source_bases, [Some(Arc::from("https://example.test/loaded.css"))]);
         assert_ne!(source_bases[0], root.source().base_url);
         assert_eq!(projected.len(), 1);
         assert_eq!(projected[0].grammar(), RuleGrammar::Style);
-        assert_eq!(
-            projected[0].projection_serialization(),
-            "p { color: green; }"
-        );
+        assert_eq!(projected[0].projection_serialization(), "p { color: green; }");
         let child = loaded.import_bindings()[0]
             .loaded_child()
             .expect("the loaded import retains its child");
         state
             .set_stylesheet_disabled(&child, true)
             .expect("the child can be disabled");
-        assert!(
-            root.serialise_projection(ImportBindingContext::Source)
-                .is_empty()
-        );
-        assert!(
-            root.projection_nodes(ImportBindingContext::Source)
-                .is_empty()
-        );
+        assert!(root.serialise_projection(ImportBindingContext::Source).is_empty());
+        assert!(root.projection_nodes(ImportBindingContext::Source).is_empty());
         state
             .set_stylesheet_disabled(&child, false)
             .expect("the child can be enabled");
@@ -2876,13 +2607,9 @@ mod tests {
             super::RuleImportPrelude::new("url(\"child.css\") scope((.card))"),
         )
         .with_scope(Some(super::RuleImportScope::Explicit(Arc::from("(.card)"))));
-        let import = RuleNode::authored(
-            RuleGrammar::Import,
-            "@import url(\"child.css\") scope((.card));",
-            [],
-        )
-        .with_cssom_data(RuleCssomData::Import { request })
-        .expect("import CSSOM data must match import grammar");
+        let import = RuleNode::authored(RuleGrammar::Import, "@import url(\"child.css\") scope((.card));", [])
+            .with_cssom_data(RuleCssomData::Import { request })
+            .expect("import CSSOM data must match import grammar");
         let child = StyleSheetGraphCandidate::new(
             StyleSheetCandidate::new(
                 StyleSheetSourceContext {
@@ -2901,11 +2628,7 @@ mod tests {
         let root = state
             .create_stylesheet_graph(StyleSheetGraphCandidate::new(
                 StyleSheetCandidate::new(
-                    StyleSheetSourceContext::inline(
-                        document,
-                        StyleOrigin::Author,
-                        Arc::from("https://example.test/"),
-                    ),
+                    StyleSheetSourceContext::inline(document, StyleOrigin::Author, Arc::from("https://example.test/")),
                     [import],
                 ),
                 [StyleSheetImportCandidate::loaded(
@@ -2935,36 +2658,22 @@ mod tests {
             super::RuleImportPrelude::new("url(\"missing.css\") layer(theme)"),
         )
         .with_conditions(Some("(display: block)"), Some("(min-width: 500px)"));
-        let import = RuleNode::authored(
-            RuleGrammar::Import,
-            "@import url(\"missing.css\") layer(theme);",
-            [],
-        )
-        .with_cssom_data(RuleCssomData::Import { request })
-        .expect("import CSSOM data must match import grammar");
+        let import = RuleNode::authored(RuleGrammar::Import, "@import url(\"missing.css\") layer(theme);", [])
+            .with_cssom_data(RuleCssomData::Import { request })
+            .expect("import CSSOM data must match import grammar");
         let root = state
             .create_stylesheet_graph(StyleSheetGraphCandidate::new(
                 StyleSheetCandidate::new(
-                    StyleSheetSourceContext::inline(
-                        document,
-                        StyleOrigin::Author,
-                        Arc::from("https://example.test/"),
-                    ),
+                    StyleSheetSourceContext::inline(document, StyleOrigin::Author, Arc::from("https://example.test/")),
                     [import],
                 ),
-                [StyleSheetImportCandidate::failed(
-                    0,
-                    "https://example.test/missing.css",
-                )],
+                [StyleSheetImportCandidate::failed(0, "https://example.test/missing.css")],
             ))
             .expect("failed import must still bind");
         let projected = root.projection_nodes(ImportBindingContext::Source);
         assert_eq!(projected.len(), 1);
         assert_eq!(projected[0].grammar(), RuleGrammar::Media);
-        assert_eq!(
-            projected[0].payload().nested()[0].grammar(),
-            RuleGrammar::Supports
-        );
+        assert_eq!(projected[0].payload().nested()[0].grammar(), RuleGrammar::Supports);
         assert_eq!(
             projected[0].payload().nested()[0].payload().nested()[0].grammar(),
             RuleGrammar::LayerBlock
@@ -2987,21 +2696,13 @@ mod tests {
         );
         let sheet = state
             .create_stylesheet(StyleSheetCandidate::new(
-                StyleSheetSourceContext::inline(
-                    document,
-                    StyleOrigin::Author,
-                    "https://example.test/".into(),
-                ),
+                StyleSheetSourceContext::inline(document, StyleOrigin::Author, "https://example.test/".into()),
                 [rule],
             ))
             .expect("the stylesheet must bind");
 
         assert!(!sheet.serialise().contains("::highlight(note)"));
-        assert!(
-            sheet
-                .serialise_projection_source()
-                .contains("::highlight(note)")
-        );
+        assert!(sheet.serialise_projection_source().contains("::highlight(note)"));
         assert_eq!(
             sheet.serialise_projection(ImportBindingContext::Source),
             "@container (width >= 400px) { ::selection { color: green; } ::highlight(note) { color: green; } }"
@@ -3021,17 +2722,11 @@ mod tests {
         .with_projection_serialization("@layer values {#target {}}");
         let sheet = state
             .create_stylesheet(StyleSheetCandidate::new(
-                StyleSheetSourceContext::inline(
-                    document,
-                    StyleOrigin::Author,
-                    "https://example.test/".into(),
-                ),
+                StyleSheetSourceContext::inline(document, StyleOrigin::Author, "https://example.test/".into()),
                 [layer],
             ))
             .expect("the source stylesheet must bind");
-        let list = sheet
-            .rule_list_at_path(&[0])
-            .expect("the layer has a rule list");
+        let list = sheet.rule_list_at_path(&[0]).expect("the layer has a rule list");
         let update = state
             .prepare_mutate_rule(
                 &sheet,
@@ -3050,10 +2745,7 @@ mod tests {
             .fork(StyleDocumentHandle::allocate())
             .expect("the stylesheet must fork");
         let copied = &copies[0].1;
-        assert_eq!(
-            copied.serialise_projection(ImportBindingContext::Source),
-            expected
-        );
+        assert_eq!(copied.serialise_projection(ImportBindingContext::Source), expected);
     }
 
     #[test]
@@ -3073,20 +2765,12 @@ mod tests {
         }
         let sheet = state
             .create_stylesheet(StyleSheetCandidate::new(
-                StyleSheetSourceContext::inline(
-                    document,
-                    StyleOrigin::Author,
-                    "https://example.test/".into(),
-                ),
+                StyleSheetSourceContext::inline(document, StyleOrigin::Author, "https://example.test/".into()),
                 [rule],
             ))
             .expect("the stylesheet must bind");
         super::stylesheet_graph::take_snapshot_visits();
-        let snapshot = sheet
-            .top_list()
-            .rule(0)
-            .expect("scope must exist")
-            .snapshot();
+        let snapshot = sheet.top_list().rule(0).expect("scope must exist").snapshot();
         assert_eq!(snapshot.grammar(), RuleGrammar::Scope);
         assert_eq!(
             super::stylesheet_graph::take_snapshot_visits(),
@@ -3106,11 +2790,7 @@ mod tests {
             .expect("import CSSOM data must match import grammar");
         let parent = state
             .create_stylesheet(StyleSheetCandidate::new(
-                StyleSheetSourceContext::inline(
-                    document,
-                    StyleOrigin::Author,
-                    Arc::from("https://example.test/"),
-                ),
+                StyleSheetSourceContext::inline(document, StyleOrigin::Author, Arc::from("https://example.test/")),
                 [import],
             ))
             .expect("the parent stylesheet must bind");
@@ -3128,10 +2808,7 @@ mod tests {
                 [RuleNode::style("a", "color: red")],
             ))
             .expect("the imported stylesheet must bind");
-        let source_rule = parent
-            .top_list()
-            .rule(0)
-            .expect("the import rule must exist");
+        let source_rule = parent.top_list().rule(0).expect("the import rule must exist");
         let source_binding = state
             .bind_import(
                 &source_rule,
@@ -3206,20 +2883,12 @@ mod tests {
         .expect("page CSSOM data must match page grammar");
         let sheet = state
             .create_stylesheet(StyleSheetCandidate::new(
-                StyleSheetSourceContext::inline(
-                    document,
-                    StyleOrigin::Author,
-                    Arc::from("https://example.test/"),
-                ),
+                StyleSheetSourceContext::inline(document, StyleOrigin::Author, Arc::from("https://example.test/")),
                 [page],
             ))
             .expect("the stylesheet must bind");
 
-        let snapshot = sheet
-            .top_list()
-            .rule(0)
-            .expect("the page rule must exist")
-            .snapshot();
+        let snapshot = sheet.top_list().rule(0).expect("the page rule must exist").snapshot();
         assert!(matches!(
             snapshot.cssom_data(),
             Some(RuleCssomData::Page { selector }) if selector.as_ref() == "named:left"
@@ -3266,13 +2935,8 @@ mod tests {
             Some("1px".to_owned()),
         )
         .expect("the validated registration input must be non-empty");
-        let universal = ImperativePropertyRegistrationInput::new(
-            "--tokens".to_owned(),
-            "*".to_owned(),
-            true,
-            None,
-        )
-        .expect("the validated registration input must be non-empty");
+        let universal = ImperativePropertyRegistrationInput::new("--tokens".to_owned(), "*".to_owned(), true, None)
+            .expect("the validated registration input must be non-empty");
 
         let first = state
             .register_imperative_property(length.clone())
@@ -3307,7 +2971,7 @@ mod tests {
     fn schema_names_are_unique_per_domain_and_opacity_is_typed() {
         for (index, row) in STANDARD_PROPERTIES.iter().enumerate() {
             assert_eq!(row.id.index(), index);
-            if row.kind != super::PropertyKind::PageDescriptor {
+            if row.kind != super::PropertyKind::PageDescriptor && row.name != "-bd-legacy-vertical-align" {
                 assert_eq!(property_schema(row.name), Some(row));
             }
             assert_eq!(
@@ -3323,10 +2987,7 @@ mod tests {
             );
         }
         assert_eq!(
-            property_schema("opacity")
-                .expect("opacity row")
-                .initial
-                .typed,
+            property_schema("opacity").expect("opacity row").initial.typed,
             Some(super::TypedInitialValue::Opacity(Opacity::ONE))
         );
         assert_eq!(Opacity::new(f32::NAN), None);
@@ -3338,10 +2999,7 @@ mod tests {
     #[test]
     fn text_decoration_skip_schema_retains_the_current_initial_keyword() {
         assert_eq!(
-            property_schema("text-decoration-skip")
-                .unwrap()
-                .initial
-                .serialized,
+            property_schema("text-decoration-skip").unwrap().initial.serialized,
             "auto"
         );
     }
@@ -3349,10 +3007,7 @@ mod tests {
     #[test]
     fn resolved_cssom_values_serialise_at_the_observable_boundary() {
         assert_eq!(ResolvedCssomValue::css_pixel(12.0).to_css_string(), "12px");
-        assert_eq!(
-            ResolvedCssomValue::css_pixel(20.7_f32).to_css_string(),
-            "20.7px"
-        );
+        assert_eq!(ResolvedCssomValue::css_pixel(20.7_f32).to_css_string(), "20.7px");
         assert_eq!(ResolvedCssomValue::keyword("auto").to_css_string(), "auto");
         assert!(matches!(
             ResolvedCssomValue::associated("calc(10px + 5%)"),
@@ -3375,37 +3030,23 @@ mod tests {
             state.declaration_handles().collect::<Vec<_>>(),
             vec![lease.handle(), other_lease.handle()]
         );
-        let snapshot = || {
-            (
-                lease.revision(),
-                lease.declarations(),
-                lease.context(),
-                lease.view(),
-            )
-        };
+        let snapshot = || (lease.revision(), lease.declarations(), lease.context(), lease.view());
         let before = snapshot();
 
         assert_eq!(
-            state.prepare_dom_update(
-                &lease,
-                lease.slot(),
-                raw(other_document, Some("color: blue"))
-            ),
+            state.prepare_dom_update(&lease, lease.slot(), raw(other_document, Some("color: blue"))),
             Err(StyleTransactionError::WrongDocument)
         );
         assert_eq!(snapshot(), before);
         assert_eq!(
-            state.prepare_dom_update(
-                &lease,
-                other_lease.slot(),
-                raw(document, Some("color: blue"))
-            ),
+            state.prepare_dom_update(&lease, other_lease.slot(), raw(document, Some("color: blue"))),
             Err(StyleTransactionError::WrongSlot)
         );
         assert_eq!(snapshot(), before);
 
         let invalid = InlineDeclarationCandidate {
             declarations: Arc::<[SpecifiedDeclaration]>::from([]),
+            native_backing: None,
             presentation: None,
             provenance: StylePresentationProvenance::CanonicalMutation,
             context: context(document, "https://example.test/"),
@@ -3449,9 +3090,7 @@ mod tests {
         let replay = state
             .prepare_dom_update(&lease, lease.slot(), raw(document, Some("color: green")))
             .expect("the replay candidate must prepare at the same base revision");
-        let installed = state
-            .commit_dom_update(first)
-            .expect("the matching update must commit");
+        let installed = state.commit_dom_update(first).expect("the matching update must commit");
         assert_eq!(
             installed.target().declaration_revision(),
             initial.target().declaration_revision() + 1
@@ -3560,17 +3199,13 @@ mod tests {
     fn forks_share_immutable_declarations_and_isolate_later_updates() {
         fn declaration(base_url: &str) -> SpecifiedDeclaration {
             SpecifiedDeclaration {
-                property: super::SpecifiedPropertyName::Standard(
-                    property_schema("background-image").unwrap().id,
-                ),
-                value: super::SpecifiedStyleValue::Components(Box::new([
-                    super::SpecifiedComponentValue::Url {
-                        value: Arc::from("image.png"),
-                        source: super::UrlSourceContext {
-                            base_url: Arc::from(base_url),
-                        },
+                property: super::SpecifiedPropertyName::Standard(property_schema("background-image").unwrap().id),
+                value: super::SpecifiedStyleValue::Components(Box::new([super::SpecifiedComponentValue::Url {
+                    value: Arc::from("image.png"),
+                    source: super::UrlSourceContext {
+                        base_url: Arc::from(base_url),
                     },
-                ])),
+                }])),
                 importance: super::Importance::Normal,
                 shorthand_source: None,
                 shorthand_value: None,
@@ -3588,10 +3223,7 @@ mod tests {
             ))
             .unwrap();
         let values = original.declarations();
-        assert_eq!(
-            values.as_ref(),
-            &[declaration("https://example.test/source/")]
-        );
+        assert_eq!(values.as_ref(), &[declaration("https://example.test/source/")]);
 
         let (mut fork, copies, _) = source.fork(StyleDocumentHandle::allocate()).unwrap();
         let copied = &copies[0].1;
@@ -3611,11 +3243,7 @@ mod tests {
             .prepare_dom_update(
                 copied,
                 copied.slot(),
-                InlineDeclarationCandidate::canonical(
-                    copied.context(),
-                    "background-image: url(image.png);",
-                    retained,
-                ),
+                InlineDeclarationCandidate::canonical(copied.context(), "background-image: url(image.png);", retained),
             )
             .unwrap();
         fork.commit_dom_update(update).unwrap();
@@ -3635,12 +3263,8 @@ mod tests {
     fn the_unhydrated_set_follows_each_declaration() {
         let document = StyleDocumentHandle::allocate();
         let mut state = StyleState::new(document);
-        let unparsed = |text| {
-            InlineDeclarationCandidate::unparsed(
-                context(document, "https://example.test/"),
-                Some(text),
-            )
-        };
+        let unparsed =
+            |text| InlineDeclarationCandidate::unparsed(context(document, "https://example.test/"), Some(text));
         let (pending, _) = state
             .create_inline_attribute(unparsed("color: red"))
             .expect("an unparsed declaration must bind");
@@ -3654,19 +3278,14 @@ mod tests {
             .fork(StyleDocumentHandle::allocate())
             .expect("the store must fork");
         assert_eq!(
-            fork.unhydrated_declarations()
-                .iter()
-                .copied()
-                .collect::<Vec<_>>(),
+            fork.unhydrated_declarations().iter().copied().collect::<Vec<_>>(),
             [copies[0].1.handle()]
         );
 
         let update = state
             .prepare_dom_update(&pending, pending.slot(), raw(document, Some("color: red")))
             .expect("the hydration must prepare");
-        state
-            .commit_dom_update(update)
-            .expect("the hydration must commit");
+        state.commit_dom_update(update).expect("the hydration must commit");
         assert!(state.unhydrated_declarations().is_empty());
 
         let update = state
@@ -3685,11 +3304,7 @@ mod tests {
             )
             .expect("the declaration must transfer");
         assert!(state.unhydrated_declarations().is_empty());
-        assert!(
-            destination
-                .unhydrated_declarations()
-                .contains(&hydrated.handle())
-        );
+        assert!(destination.unhydrated_declarations().contains(&hydrated.handle()));
     }
 
     #[test]
@@ -3705,9 +3320,7 @@ mod tests {
             .create_inline_attribute(raw(source_document, None))
             .expect("the second source declaration must bind");
 
-        let (fork, copies, _) = source
-            .fork(destination_document)
-            .expect("the store must fork");
+        let (fork, copies, _) = source.fork(destination_document).expect("the store must fork");
         assert_eq!(copies.len(), 2);
         assert_eq!(fork.declaration_handles().count(), 2);
         assert_ne!(copies[0].1.handle(), first.handle());
@@ -3717,10 +3330,7 @@ mod tests {
         assert_eq!(first.context().document, source_document);
 
         let local_copy = source
-            .copy_inline_attribute(
-                &first,
-                context(source_document, "https://source.test/local-copy/"),
-            )
+            .copy_inline_attribute(&first, context(source_document, "https://source.test/local-copy/"))
             .expect("a same-store clone must copy");
         assert_ne!(local_copy.0.handle(), first.handle());
         assert_ne!(local_copy.0.slot(), first.slot());
@@ -3755,11 +3365,7 @@ mod tests {
         assert_eq!(adopted.target().slot(), second.slot());
         assert_eq!(second.context().document, third_document);
         assert_eq!(second.revision(), source_revision + 1);
-        assert!(
-            !source
-                .declaration_handles()
-                .any(|handle| handle == second.handle())
-        );
+        assert!(!source.declaration_handles().any(|handle| handle == second.handle()));
         assert!(
             destination
                 .declaration_handles()
@@ -3767,8 +3373,7 @@ mod tests {
         );
 
         let copied_revision = copied.0.revision();
-        let installs = destination
-            .recontextualize_inline_attributes(Arc::from("https://destination.test/new-base/"));
+        let installs = destination.recontextualize_inline_attributes(Arc::from("https://destination.test/new-base/"));
         assert_eq!(installs.len(), 2);
         assert_eq!(copied.0.revision(), copied_revision + 1);
         assert_eq!(
@@ -3776,8 +3381,7 @@ mod tests {
             "https://destination.test/new-base/"
         );
         assert_eq!(
-            destination
-                .recontextualize_inline_attributes(Arc::from("https://destination.test/new-base/")),
+            destination.recontextualize_inline_attributes(Arc::from("https://destination.test/new-base/")),
             Vec::new()
         );
     }
@@ -3795,10 +3399,7 @@ mod tests {
             .and_then(|update| state.commit_dom_update(update))
             .expect("removal must commit");
         assert_eq!(removed.view().text(), None);
-        assert_eq!(
-            removed.view().provenance(),
-            StylePresentationProvenance::RawIngress
-        );
+        assert_eq!(removed.view().provenance(), StylePresentationProvenance::RawIngress);
         let removed_projection = lease.projection();
         assert_eq!(removed_projection.handle(), lease.handle());
         assert_eq!(removed_projection.revision(), lease.revision());

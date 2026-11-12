@@ -19,6 +19,52 @@ use crate::{
 
 pub mod compatibility;
 pub mod mutation;
+pub mod inline_native;
+
+pub(crate) fn is_internal_declaration(declaration: &PropertyDeclaration) -> bool {
+    declaration.id().name() == "-bd-legacy-vertical-align"
+}
+
+#[derive(Debug, PartialEq)]
+struct NativeCompatibilityDeclarations(Vec<(PropertyDeclaration, Importance)>);
+
+impl stylo_cssom_model::NativeDeclarationBacking for NativeCompatibilityDeclarations {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn equivalent(&self, other: &dyn stylo_cssom_model::NativeDeclarationBacking) -> bool {
+        other.as_any().downcast_ref::<Self>() == Some(self)
+    }
+}
+
+pub(crate) fn retained_native_declarations(
+    block: &style::properties::declaration_block::PropertyDeclarationBlock,
+) -> Option<stylo_cssom_model::RetainedNativeDeclarations> {
+    let declarations = block
+        .declaration_importance_iter()
+        .filter(|(declaration, _)| is_internal_declaration(declaration))
+        .map(|(declaration, importance)| (declaration.clone(), importance))
+        .collect::<Vec<_>>();
+    (!declarations.is_empty()).then(|| {
+        stylo_cssom_model::RetainedNativeDeclarations(Arc::new(NativeCompatibilityDeclarations(
+            declarations,
+        )))
+    })
+}
+
+pub(crate) fn restore_native_declarations(
+    block: &mut style::properties::declaration_block::PropertyDeclarationBlock,
+    backing: Option<&stylo_cssom_model::RetainedNativeDeclarations>,
+) {
+    if let Some(backing) = backing
+        .and_then(|backing| backing.0.as_any().downcast_ref::<NativeCompatibilityDeclarations>())
+    {
+        for (declaration, importance) in &backing.0 {
+            block.push(declaration.clone(), *importance);
+        }
+    }
+}
 
 pub fn math_script_min_size_presentation_hint(value: &str) -> Option<PropertyDeclaration> {
     parse_fragment_with(value, style::values::specified::MathScriptMinSize::parse)
@@ -1015,6 +1061,9 @@ pub fn specified_declarations_from_native_block(
     block
         .declaration_importance_iter()
         .filter_map(|(declaration, importance)| {
+            if is_internal_declaration(declaration) {
+                return None;
+            }
             let has_pending_substitution =
                 matches!(declaration, PropertyDeclaration::WithVariables(_));
             let name = declaration.id().name().into_owned();
@@ -1130,6 +1179,9 @@ pub fn inline_style_cssom_backing_property(property: &str) -> &str {
 pub fn inline_style_cssom_property_schema(
     property: &str,
 ) -> Option<&'static stylo_cssom_model::PropertySchemaRow> {
+    if property.eq_ignore_ascii_case("-bd-legacy-vertical-align") {
+        return None;
+    }
     let property = inline_style_cssom_backing_property(property);
     PropertyId::parse_enabled_for_all_content(property)
         .ok()
@@ -1339,6 +1391,9 @@ pub fn inline_style_set_property(
 }
 
 fn valid_cssom_property_name(property: &str) -> bool {
+    if property.eq_ignore_ascii_case("-bd-legacy-vertical-align") {
+        return false;
+    }
     if !property.trim_start().starts_with("--") {
         return true;
     }
@@ -1510,6 +1565,7 @@ pub fn stylo_rule_declaration_block(
             return None;
         }
     }
+    restore_native_declarations(&mut parsed.0, block.native_backing());
     Some(parsed.0)
 }
 
@@ -1648,12 +1704,14 @@ pub fn rule_declaration_block_from_cssom(
     let declarations = block
         .0
         .declaration_importance_iter()
+        .filter(|(declaration, _)| !is_internal_declaration(declaration))
         .map(|(declaration, importance)| rule_declaration_from_stylo(declaration, importance))
         .collect::<Vec<_>>();
     let mut serialization = String::new();
     let _ = block.0.to_css(&mut serialization);
     stylo_cssom_model::RuleDeclarationBlock::new(domain, serialization, declarations)
         .with_shorthand_values(declaration_block_shorthand_values(&block.0))
+        .with_native_backing(retained_native_declarations(&block.0))
 }
 
 pub fn rule_declaration_from_stylo(
@@ -1845,12 +1903,19 @@ fn declaration_block_remove_property(
     block: &mut style::properties::declaration_block::PropertyDeclarationBlock,
     property: &str,
 ) -> Option<String> {
+    if !valid_cssom_property_name(property) {
+        return None;
+    }
     if let Some(schema) = inline_style_cssom_property_schema(property)
         .filter(|schema| schema.kind == stylo_cssom_model::PropertyKind::Shorthand)
     {
         let old = declaration_block_get_property_value(block, property);
         for longhand in schema.shorthand_expansion {
             declaration_block_remove_property(block, longhand);
+        }
+        if schema.name == "vertical-align" {
+            let id = PropertyId::NonCustom(style::properties::LonghandId::BdLegacyVerticalAlign.into());
+            declaration_block_remove_typed_property(block, &id);
         }
         return old;
     }
@@ -1876,6 +1941,7 @@ pub fn inline_style_declarations_with_importance(
     block
         .0
         .declaration_importance_iter()
+        .filter(|(declaration, _)| !is_internal_declaration(declaration))
         .map(|(decl, importance)| {
             let name = decl.id().name().into_owned();
             let mut value = String::new();
@@ -2111,6 +2177,40 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn vertical_align_rule_projection_preserves_private_native_state() {
+        let parsed = parse_cssom_declaration_block("vertical-align: middle", CssomDeclarationContext::Style);
+        let model = rule_declaration_block_from_cssom(&parsed, stylo_cssom_model::RuleDeclarationDomain::Style);
+        assert_eq!(model.declarations().len(), 3);
+        assert!(!model.serialization().contains("-bd-legacy-vertical-align"));
+        assert!(model.native_backing().is_some());
+        let original = retained_native_declarations(parsed.as_typed());
+        let mut updated = model;
+        for (property, value) in [("color", "red"), ("alignment-baseline", "alphabetic")] {
+            updated = mutate_rule_declaration_block(&updated, property, value, CssomDeclarationPriority::Normal, CssomDeclarationContext::Style).unwrap();
+            let restored = stylo_rule_declaration_block(&updated, CssomDeclarationContext::Style).unwrap();
+            assert_eq!(retained_native_declarations(&restored), original);
+        }
+        let removed = mutate_rule_declaration_block(&updated, "vertical-align", "", CssomDeclarationPriority::Normal, CssomDeclarationContext::Style).unwrap();
+        assert!(removed.native_backing().is_none());
+        assert!(inline_style_cssom_property_schema("-bd-legacy-vertical-align").is_none());
+    }
+
+    #[test]
+    fn all_rule_projection_retains_private_native_alignment() {
+        for value in ["initial", "inherit", "var(--alignment)"] {
+            let parsed = parse_cssom_declaration_block(&format!("all: {value}"), CssomDeclarationContext::Style);
+            let original = retained_native_declarations(parsed.as_typed());
+            assert!(original.is_some(), "{value}");
+            let model = rule_declaration_block_from_cssom(&parsed, stylo_cssom_model::RuleDeclarationDomain::Style);
+            assert!(model.declarations().iter().all(|declaration| declaration.name() != "-bd-legacy-vertical-align"));
+            assert!(!model.serialization().contains("-bd-legacy-vertical-align"));
+            let changed = mutate_rule_declaration_block(&model, "color", "red", CssomDeclarationPriority::Normal, CssomDeclarationContext::Style).unwrap();
+            let restored = stylo_rule_declaration_block(&changed, CssomDeclarationContext::Style).unwrap();
+            assert_eq!(retained_native_declarations(&restored), original, "{value}");
+        }
+    }
 
     #[test]
     fn math_size_accepts_only_nonnegative_lengths_and_percentages() {
