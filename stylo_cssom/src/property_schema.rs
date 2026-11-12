@@ -23,7 +23,7 @@ fn vertical_align_schema_matches_the_public_shorthand() {
     let row = property_schema("vertical-align").expect("native vertical alignment has a schema");
     assert_eq!(row.kind, stylo_cssom_model::PropertyKind::Shorthand);
     assert_eq!(row.initial.serialized, "baseline");
-    assert_eq!(row.shorthand_expansion, &["baseline-source", "alignment-baseline", "baseline-shift"]);
+    assert_eq!(row.shorthand_expansion, &["alignment-baseline", "baseline-shift", "baseline-source"]);
     assert!(property_schema("-bd-legacy-vertical-align").is_none());
 }
 

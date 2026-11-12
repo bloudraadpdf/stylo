@@ -1273,10 +1273,12 @@ impl PropertyDeclaration {
             PropertyDeclaration::CSSWideKeyword(WideKeywordDeclaration {
                 id,
                 keyword,
+                from_shorthand,
             }) => {
                 return PropertyDeclaration::CSSWideKeyword(WideKeywordDeclaration {
                     id: id.to_physical(wm),
                     keyword,
+                    from_shorthand,
                 })
             }
             PropertyDeclaration::Custom(..) => return self.clone(),

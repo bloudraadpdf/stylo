@@ -108,7 +108,15 @@ pub mod ${property.ident} {
                                 return;
                             }
                         % endif
-                        % if property.style_struct.inherited:
+                        % if property.name == "alignment-baseline" and engine == "servo":
+                            let inherited = context.builder.inherited_style.clone_alignment_baseline();
+                            let inherited = if matches!(wk.from_shorthand(), Some(crate::properties::ShorthandId::VerticalAlign | crate::properties::ShorthandId::All)) {
+                                inherited
+                            } else {
+                                inherited.without_vertical_align_origin()
+                            };
+                            context.builder.set_alignment_baseline(inherited);
+                        % elif property.style_struct.inherited:
                             declaration.debug_crash("Unexpected inherit or unset for non-zoom-dependent inherited property");
                         % else:
                             context.builder.inherit_${property.ident}();

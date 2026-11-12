@@ -26,9 +26,23 @@ pub(crate) fn is_internal_declaration(declaration: &PropertyDeclaration) -> bool
 }
 
 pub(crate) fn requires_native_backing(declaration: &PropertyDeclaration) -> bool {
-    is_internal_declaration(declaration)
-        || matches!(declaration, PropertyDeclaration::AlignmentBaseline(value)
-            if value.from_vertical_align_origin())
+    use style::properties::{LonghandId, PropertyDeclarationId, ShorthandId};
+
+    if is_internal_declaration(declaration) {
+        return true;
+    }
+    if let PropertyDeclaration::AlignmentBaseline(value) = declaration {
+        return value.from_vertical_align_origin();
+    }
+    if declaration.id() != PropertyDeclarationId::Longhand(LonghandId::AlignmentBaseline) {
+        return false;
+    }
+    let shorthand = match declaration {
+        PropertyDeclaration::CSSWideKeyword(value) => value.from_shorthand(),
+        PropertyDeclaration::WithVariables(value) => value.value.from_shorthand(),
+        _ => None,
+    };
+    matches!(shorthand, Some(ShorthandId::VerticalAlign | ShorthandId::All))
 }
 
 #[derive(Debug, PartialEq)]
@@ -47,11 +61,19 @@ impl stylo_cssom_model::NativeDeclarationBacking for NativeCompatibilityDeclarat
 pub(crate) fn retained_native_declarations(
     block: &style::properties::declaration_block::PropertyDeclarationBlock,
 ) -> Option<stylo_cssom_model::RetainedNativeDeclarations> {
-    let declarations = block
+    let mut declarations = block
         .declaration_importance_iter()
         .filter(|(declaration, _)| requires_native_backing(declaration))
         .map(|(declaration, importance)| (declaration.clone(), importance))
         .collect::<Vec<_>>();
+    declarations.sort_unstable_by_key(|(declaration, _)| match declaration.id() {
+        style::properties::PropertyDeclarationId::Longhand(id) => {
+            style::properties::NonCustomPropertyId::from(id).bit()
+        },
+        style::properties::PropertyDeclarationId::Custom(_) => {
+            unreachable!("native alignment backing contains only longhands")
+        },
+    });
     (!declarations.is_empty()).then(|| {
         stylo_cssom_model::RetainedNativeDeclarations(Arc::new(NativeCompatibilityDeclarations(
             declarations,
@@ -2245,6 +2267,35 @@ mod tests {
             let changed = mutate_rule_declaration_block(&model, "color", "red", CssomDeclarationPriority::Normal, CssomDeclarationContext::Style).unwrap();
             let restored = stylo_rule_declaration_block(&changed, CssomDeclarationContext::Style).unwrap();
             assert_eq!(retained_native_declarations(&restored), original, "{value}");
+        }
+    }
+
+    #[test]
+    fn inherited_alignment_shorthand_origin_survives_rule_projection() {
+        use style::properties::{LonghandId, PropertyDeclarationId, ShorthandId};
+
+        let source = |block: &style::properties::declaration_block::PropertyDeclarationBlock| {
+            let (declaration, _) = block.get(PropertyDeclarationId::Longhand(LonghandId::AlignmentBaseline)).unwrap();
+            match declaration {
+                PropertyDeclaration::CSSWideKeyword(value) => value.from_shorthand(),
+                PropertyDeclaration::WithVariables(value) => value.value.from_shorthand(),
+                _ => None,
+            }
+        };
+        for (property, shorthand) in [("vertical-align", ShorthandId::VerticalAlign), ("all", ShorthandId::All)] {
+            for value in ["inherit", "var(--alignment)"] {
+                let parsed = parse_cssom_declaration_block(&format!("{property}: {value}"), CssomDeclarationContext::Style);
+                assert_eq!(source(parsed.as_typed()), Some(shorthand));
+                let original = retained_native_declarations(parsed.as_typed());
+                let model = rule_declaration_block_from_cssom(&parsed, stylo_cssom_model::RuleDeclarationDomain::Style);
+                let changed = mutate_rule_declaration_block(&model, "color", "red", CssomDeclarationPriority::Normal, CssomDeclarationContext::Style).unwrap();
+                let restored = stylo_rule_declaration_block(&changed, CssomDeclarationContext::Style).unwrap();
+                assert_eq!(source(&restored), Some(shorthand));
+                assert_eq!(retained_native_declarations(&restored), original);
+                let explicit = mutate_rule_declaration_block(&changed, "alignment-baseline", "inherit", CssomDeclarationPriority::Normal, CssomDeclarationContext::Style).unwrap();
+                let restored = stylo_rule_declaration_block(&explicit, CssomDeclarationContext::Style).unwrap();
+                assert_eq!(source(&restored), None);
+            }
         }
     }
 

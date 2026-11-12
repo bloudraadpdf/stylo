@@ -1374,6 +1374,14 @@ fn with_zoom_test_prefs(test: impl FnOnce()) {
 }
 
 fn cascade_zoom_test_style(css: &str, parent: Option<&super::ComputedValues>) -> servo_arc::Arc<super::ComputedValues> {
+    cascade_test_style(css, parent, |_| true)
+}
+
+fn cascade_test_style(
+    css: &str,
+    parent: Option<&super::ComputedValues>,
+    include: impl Fn(super::LonghandId) -> bool,
+) -> servo_arc::Arc<super::ComputedValues> {
     use crate::context::QuirksMode;
     use crate::properties::{LonghandId, StyleBuilder, CASCADE_PROPERTY};
     use crate::rule_cache::RuleCacheConditions;
@@ -1386,6 +1394,9 @@ fn cascade_zoom_test_style(css: &str, parent: Option<&super::ComputedValues>) ->
     let mut context = Context::new(builder, QuirksMode::NoQuirks, &mut conditions, ContainerSizeQuery::none());
     for (declaration, _) in block(css).declaration_importance_iter() {
         let id = declaration.id().as_longhand().unwrap();
+        if !include(id) {
+            continue;
+        }
         unsafe { CASCADE_PROPERTY[id as usize](declaration, &mut context); }
         if id == LonghandId::Zoom {
             context.builder.recompute_effective_zooms();
@@ -1395,6 +1406,29 @@ fn cascade_zoom_test_style(css: &str, parent: Option<&super::ComputedValues>) ->
         }
     }
     context.builder.build()
+}
+
+#[test]
+fn inherited_alignment_baseline_origin_follows_the_authored_property() {
+    use crate::values::specified::AlignmentBaseline;
+    use super::LonghandId;
+
+    for (keyword, legacy, normal) in [
+        ("middle", AlignmentBaseline::LegacyMiddle, AlignmentBaseline::Middle),
+        ("text-top", AlignmentBaseline::LegacyTextTop, AlignmentBaseline::TextTop),
+        ("text-bottom", AlignmentBaseline::LegacyTextBottom, AlignmentBaseline::TextBottom),
+    ] {
+        let parent = cascade_zoom_test_style(&format!("vertical-align:{keyword}"), None);
+        assert_eq!(parent.get_box().alignment_baseline, legacy);
+        for (css, expected) in [
+            ("alignment-baseline:inherit", normal),
+            ("vertical-align:inherit", legacy),
+            ("all:inherit", legacy),
+        ] {
+            let child = cascade_test_style(css, Some(&parent), |id| id == LonghandId::AlignmentBaseline);
+            assert_eq!(child.get_box().alignment_baseline, expected, "{keyword}; {css}");
+        }
+    }
 }
 
 #[test]

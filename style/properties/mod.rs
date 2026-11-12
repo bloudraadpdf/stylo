@@ -163,8 +163,17 @@ impl CSSWideKeyword {
 pub struct WideKeywordDeclaration {
     #[css(skip)]
     id: LonghandId,
+    #[css(skip)]
+    from_shorthand: Option<ShorthandId>,
     /// The CSS-wide keyword.
     pub keyword: CSSWideKeyword,
+}
+
+impl WideKeywordDeclaration {
+    /// Tracked shorthand origin for inherited alignment baselines.
+    pub fn from_shorthand(&self) -> Option<ShorthandId> {
+        self.from_shorthand
+    }
 }
 
 // XXX Switch back to ToTyped derive once it can automatically handle structs
@@ -944,7 +953,23 @@ impl PropertyDeclaration {
     /// Returns a CSS-wide keyword declaration for a given property.
     #[inline]
     pub fn css_wide_keyword(id: LonghandId, keyword: CSSWideKeyword) -> Self {
-        Self::CSSWideKeyword(WideKeywordDeclaration { id, keyword })
+        Self::css_wide_keyword_with_origin(id, keyword, None)
+    }
+
+    fn css_wide_keyword_with_origin(
+        id: LonghandId,
+        keyword: CSSWideKeyword,
+        from_shorthand: Option<ShorthandId>,
+    ) -> Self {
+        let from_shorthand = from_shorthand.filter(|source| {
+            id == LonghandId::AlignmentBaseline
+                && matches!(source, ShorthandId::VerticalAlign | ShorthandId::All)
+        });
+        Self::CSSWideKeyword(WideKeywordDeclaration {
+            id,
+            keyword,
+            from_shorthand,
+        })
     }
 
     /// Returns a CSS-wide keyword if the declaration's value is one.
@@ -1088,14 +1113,22 @@ impl PropertyDeclaration {
                         } else {
                             #[cfg(feature = "servo")]
                             if shorthand_id == ShorthandId::VerticalAlign {
-                                declarations.push(PropertyDeclaration::css_wide_keyword(
-                                    LonghandId::BdLegacyVerticalAlign,
-                                    wk,
-                                ));
+                                declarations.push(
+                                    PropertyDeclaration::css_wide_keyword_with_origin(
+                                        LonghandId::BdLegacyVerticalAlign,
+                                        wk,
+                                        Some(shorthand_id),
+                                    ),
+                                );
                             }
                             for longhand in shorthand_id.longhands() {
-                                declarations
-                                    .push(PropertyDeclaration::css_wide_keyword(longhand, wk));
+                                declarations.push(
+                                    PropertyDeclaration::css_wide_keyword_with_origin(
+                                        longhand,
+                                        wk,
+                                        Some(shorthand_id),
+                                    ),
+                                );
                             }
                         }
                     },
@@ -1739,7 +1772,11 @@ impl UnparsedValue {
         let context = context.for_random_declaration(&property, &mut input);
 
         if let Ok(keyword) = input.try_parse(CSSWideKeyword::parse) {
-            return Cow::Owned(PropertyDeclaration::css_wide_keyword(longhand_id, keyword));
+            return Cow::Owned(PropertyDeclaration::css_wide_keyword_with_origin(
+                longhand_id,
+                keyword,
+                self.from_shorthand,
+            ));
         }
 
         let shorthand = match self.from_shorthand {
@@ -1860,9 +1897,13 @@ impl<'a> Iterator for AllShorthandDeclarationIterator<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         match *self.all_shorthand {
             AllShorthand::NotSet => None,
-            AllShorthand::CSSWideKeyword(ref keyword) => Some(
-                PropertyDeclaration::css_wide_keyword(self.longhands.next()?, *keyword),
-            ),
+            AllShorthand::CSSWideKeyword(ref keyword) => {
+                Some(PropertyDeclaration::css_wide_keyword_with_origin(
+                    self.longhands.next()?,
+                    *keyword,
+                    Some(ShorthandId::All),
+                ))
+            },
             AllShorthand::WithVariables(ref unparsed) => {
                 Some(PropertyDeclaration::WithVariables(VariableDeclaration {
                     id: self.longhands.next()?,

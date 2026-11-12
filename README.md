@@ -155,12 +155,14 @@ Releases are made every time this repository rebases its changes on top of the l
 
 ## Native vertical alignment
 
-The Servo build keeps `vertical-align` as the independent CSS2 longhand,
-as Chromium does. It accepts the CSS2 keywords and a length or percentage.
-The modern `alignment-baseline`, `baseline-shift` and `baseline-source`
-longhands remain independent. Native callers must express multi-part alignment
-with those longhands; the draft `vertical-align: first middle` shorthand is
-available only in the Gecko build.
+`vertical-align` expands to `alignment-baseline`, `baseline-shift` and
+`baseline-source` in both builds, including multi-part values such as
+`first middle`. Servo retains a private typed companion for CSS2 rendering
+compatibility. Authors cannot set or enumerate that companion through CSSOM.
+Standalone CSS2 baseline keywords retain their rendering origin; explicit
+alignment longhands use modern semantics. Explicit `alignment-baseline: inherit`
+removes that origin, while inheritance through `vertical-align` or `all`
+preserves it. Public serialization uses only standard property names and values.
 
 ## License
 
