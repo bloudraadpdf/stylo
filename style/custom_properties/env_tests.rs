@@ -151,3 +151,24 @@ fn environment_lookup_distinguishes_unknown_names_and_scalar_index_mismatches() 
         );
     }
 }
+
+#[test]
+fn environment_fallbacks_do_not_add_eager_custom_property_dependencies() {
+    let _guard = pref_lock().lock().unwrap();
+    for (css, expected) in [
+        ("env(safe-area-inset-top, var(--fallback))", None),
+        ("env(var(--name), var(--fallback))", Some("name")),
+    ] {
+        let value = parse(css).unwrap();
+        let dependencies = value
+            .references
+            .eager_variable_names()
+            .map(|name| name.as_ref())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            dependencies,
+            expected.into_iter().collect::<Vec<_>>(),
+            "{css}"
+        );
+    }
+}

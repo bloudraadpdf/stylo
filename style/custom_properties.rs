@@ -816,6 +816,7 @@ impl References {
             }
             let in_fallback = self.refs.iter().any(|outer| match &outer.function {
                 SubstitutionFunction::DynamicVar { arguments, .. }
+                | SubstitutionFunction::Env(arguments)
                 | SubstitutionFunction::Inherit(arguments) => {
                     arguments.get(1).is_some_and(|fallback| {
                         reference.start >= fallback.start && reference.end <= fallback.end
