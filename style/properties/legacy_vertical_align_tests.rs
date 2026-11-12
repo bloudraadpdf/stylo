@@ -172,3 +172,63 @@ fn native_baseline_interpolates_as_zero_shift() {
         );
     }
 }
+
+#[test]
+fn animation_expansion_retains_the_private_compatibility_target() {
+    use super::{LonghandId, ShorthandId};
+
+    let public = ShorthandId::VerticalAlign.longhands().collect::<Vec<_>>();
+    assert_eq!(public.len(), 3);
+    assert!(!public.contains(&LonghandId::BdLegacyVerticalAlign));
+    let internal = ShorthandId::VerticalAlign
+        .animation_longhands()
+        .collect::<Vec<_>>();
+    assert_eq!(internal.len(), 4);
+    assert!(internal.contains(&LonghandId::BdLegacyVerticalAlign));
+    assert_eq!(
+        ShorthandId::All
+            .animation_longhands()
+            .filter(|id| *id == LonghandId::BdLegacyVerticalAlign)
+            .count(),
+        1
+    );
+    assert!(!ShorthandId::All
+        .longhands()
+        .any(|id| id == LonghandId::BdLegacyVerticalAlign));
+    assert_eq!(
+        ShorthandId::Margin
+            .animation_longhands()
+            .collect::<Vec<_>>(),
+        ShorthandId::Margin.longhands().collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn standalone_legacy_baselines_keep_typed_origin_without_changing_cssom() {
+    for keyword in ["middle", "text-top", "text-bottom"] {
+        for (css, legacy) in [
+            (format!("vertical-align:{keyword}"), true),
+            (format!("vertical-align:{keyword} 0"), false),
+            (
+                format!("vertical-align:{keyword};alignment-baseline:{keyword}"),
+                false,
+            ),
+        ] {
+            let block = parse(&css);
+            let baseline = block
+                .declarations()
+                .iter()
+                .find_map(|declaration| match declaration {
+                    PropertyDeclaration::AlignmentBaseline(value) => Some(*value),
+                    _ => None,
+                })
+                .unwrap();
+            assert_eq!(baseline.from_vertical_align_origin(), legacy, "{css}");
+            assert_eq!(value(&block, "alignment-baseline"), keyword, "{css}");
+            assert!(!baseline
+                .without_vertical_align_origin()
+                .from_vertical_align_origin());
+        }
+    }
+    assert!(parse("alignment-baseline:legacy-middle").is_empty());
+}

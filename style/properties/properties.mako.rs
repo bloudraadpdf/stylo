@@ -1039,6 +1039,16 @@ impl ShorthandId {
         }
     }
 
+    /// Expand animation targets without exposing private rendering companions in CSSOM.
+    pub fn animation_longhands(self) -> crate::properties::InternalLonghandIterator {
+        #[cfg(feature = "servo")]
+        let private = matches!(self, Self::VerticalAlign | Self::All)
+            .then_some(LonghandId::BdLegacyVerticalAlign);
+        #[cfg(not(feature = "servo"))]
+        let private = None;
+        self.longhands().chain(private)
+    }
+
     /// Try to serialize the given declarations as this shorthand.
     ///
     /// Returns an error if writing to the stream fails, or if the declarations

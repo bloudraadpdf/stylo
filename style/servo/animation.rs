@@ -539,16 +539,20 @@ impl Animation {
         use crate::values::specified::box_::{change_bits_for_longhand, WillChangeBits};
         if self.state == AnimationState::Canceled
             || (self.state == AnimationState::Finished
-                && !matches!(self.fill_mode, AnimationFillMode::Forwards | AnimationFillMode::Both))
+                && !matches!(
+                    self.fill_mode,
+                    AnimationFillMode::Forwards | AnimationFillMode::Both
+                ))
         {
             return WillChangeBits::empty();
         }
-        self.properties_changed.iter().fold(WillChangeBits::empty(), |bits, property| {
-            match property {
+        self.properties_changed.iter().fold(
+            WillChangeBits::empty(),
+            |bits, property| match property {
                 PropertyDeclarationId::Longhand(id) => bits | change_bits_for_longhand(id),
                 PropertyDeclarationId::Custom(_) => bits,
-            }
-        })
+            },
+        )
     }
 
     /// Sets the external progress sample used for effect phase and iteration progress.
@@ -1158,10 +1162,32 @@ impl fmt::Debug for Animation {
 #[derive(Clone, Copy, Debug, Eq, Hash, MallocSizeOf, PartialEq)]
 pub struct TransitionId(u64);
 
+/// Transitions expanded from one winning shorthand item in the same style change.
+#[derive(Clone, Copy, Debug, Eq, Hash, MallocSizeOf, PartialEq)]
+pub struct TransitionSourceGroupId {
+    generation: u64,
+    index: usize,
+}
+
+impl TransitionSourceGroupId {
+    fn for_index(generation: &mut Option<u64>, index: usize) -> Self {
+        static NEXT_GENERATION: AtomicU64 = AtomicU64::new(0);
+        Self {
+            generation: *generation.get_or_insert_with(|| {
+                NEXT_GENERATION
+                    .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |id| id.checked_add(1))
+                    .expect("transition source groups exhausted")
+            }),
+            index,
+        }
+    }
+}
+
 /// A CSS Transition
 #[derive(Clone, Debug, MallocSizeOf)]
 pub struct Transition {
     id: TransitionId,
+    source_group: Option<TransitionSourceGroupId>,
 
     /// The start time of this transition, which is the current value of the animation
     /// timeline when this transition was created plus any animation delay.
@@ -1197,6 +1223,16 @@ impl Transition {
         self.id
     }
 
+    /// Returns the original shorthand expansion group, when this transition has one.
+    pub fn source_group(&self) -> Option<TransitionSourceGroupId> {
+        self.source_group
+    }
+
+    fn with_source_group(mut self, group: Option<TransitionSourceGroupId>) -> Self {
+        self.source_group = group;
+        self
+    }
+
     fn new(
         start_time: f64,
         delay: f64,
@@ -1224,6 +1260,7 @@ impl Transition {
             .expect("transition identifiers exhausted");
         Self {
             id: TransitionId(id),
+            source_group: None,
             start_time,
             delay,
             property_animation,
@@ -1418,7 +1455,10 @@ impl ElementAnimationSet {
                     animation.fill_mode,
                     AnimationFillMode::Forwards | AnimationFillMode::Both
                 )
-                || matches!(animation.timeline_phase, AnimationTimelinePhase::Progress { .. })
+                || matches!(
+                    animation.timeline_phase,
+                    AnimationTimelinePhase::Progress { .. }
+                )
         });
     }
 
@@ -1629,6 +1669,7 @@ impl ElementAnimationSet {
         context: &SharedStyleContext,
         property_declaration_id: &PropertyDeclarationId,
         index: usize,
+        source_group: Option<TransitionSourceGroupId>,
         old_style: &ComputedValues,
         new_style: &Arc<ComputedValues>,
     ) {
@@ -1763,17 +1804,20 @@ impl ElementAnimationSet {
             // > - end value is the value of the transitioning property in the after-change style,
             // > - reversing-adjusted start value is the same as the start value, and
             // > - reversing shortening factor is 1.
-            self.transitions.push(Transition::new(
-                now + delay, /* start_time */
-                delay,
-                duration,
-                from,
-                to,
-                &timing_function,
-                interpolate_size,
-                #[cfg(feature = "servo")]
-                shadow.clone(),
-            ));
+            self.transitions.push(
+                Transition::new(
+                    now + delay, /* start_time */
+                    delay,
+                    duration,
+                    from,
+                    to,
+                    &timing_function,
+                    interpolate_size,
+                    #[cfg(feature = "servo")]
+                    shadow.clone(),
+                )
+                .with_source_group(source_group),
+            );
             self.dirty = true;
             return;
         }
@@ -1883,7 +1927,8 @@ impl ElementAnimationSet {
                     interpolate_size,
                     #[cfg(feature = "servo")]
                     shadow.clone(),
-                );
+                )
+                .with_source_group(source_group);
 
                 // This function takes care of applying all of the modifications to the transition
                 // after "whose:" above.
@@ -1907,17 +1952,20 @@ impl ElementAnimationSet {
             // >  - reversing-adjusted start value is the same as the start value, and
             // >  - reversing shortening factor is 1.
             existing_transition.state = AnimationState::Canceled;
-            self.transitions.push(Transition::new(
-                now + delay, /* start_time */
-                delay,
-                duration,
-                current_value,
-                to,
-                &timing_function,
-                interpolate_size,
-                #[cfg(feature = "servo")]
-                shadow.clone(),
-            ));
+            self.transitions.push(
+                Transition::new(
+                    now + delay, /* start_time */
+                    delay,
+                    duration,
+                    current_value,
+                    to,
+                    &timing_function,
+                    interpolate_size,
+                    #[cfg(feature = "servo")]
+                    shadow.clone(),
+                )
+                .with_source_group(source_group),
+            );
             self.dirty = true;
         }
     }
@@ -2186,6 +2234,8 @@ pub fn start_transitions_if_applicable(
     transition_properties.reverse();
 
     let mut properties_that_transition = PropertyDeclarationIdSet::default();
+    #[cfg(feature = "servo")]
+    let mut source_generation = None;
     for transition in transition_properties {
         let physical_property = transition
             .property
@@ -2200,10 +2250,29 @@ pub fn start_transitions_if_applicable(
         {
             continue;
         }
+        #[cfg(feature = "servo")]
+        let source_group = match new_style.get_ui().transition_property_at(transition.index) {
+            crate::values::computed::TransitionProperty::NonCustom(id)
+                if matches!(
+                    id.longhand_or_shorthand(),
+                    Err(crate::properties::ShorthandId::VerticalAlign
+                        | crate::properties::ShorthandId::All)
+                ) =>
+            {
+                Some(TransitionSourceGroupId::for_index(
+                    &mut source_generation,
+                    transition.index,
+                ))
+            },
+            _ => None,
+        };
+        #[cfg(not(feature = "servo"))]
+        let source_group = None;
         animation_state.start_transition_if_applicable(
             context,
             &physical_property,
             transition.index,
+            source_group,
             old_style,
             new_style,
         );
@@ -2238,7 +2307,12 @@ pub fn maybe_start_animations<E>(
         // phase it holds.
         let duration = style.animation_duration_mod(i).seconds() as f64;
 
-        let keyframe_animation = match context.stylist.lookup_keyframes_for_style(name, element, new_style, &context.guards) {
+        let keyframe_animation = match context.stylist.lookup_keyframes_for_style(
+            name,
+            element,
+            new_style,
+            &context.guards,
+        ) {
             Some(animation) => animation,
             None => continue,
         };
@@ -2632,10 +2706,25 @@ mod tests {
                 None,
             )
         };
-        let original = create();
+        let mut generation = None;
+        let group = super::TransitionSourceGroupId::for_index(&mut generation, 2);
+        let original = create().with_source_group(Some(group));
         let mut sampled = original.clone();
         sampled.start_time = 2.;
         assert_eq!(sampled.id(), original.id());
+        assert_eq!(sampled.source_group(), original.source_group());
+        assert_eq!(
+            super::TransitionSourceGroupId::for_index(&mut generation, 2),
+            group
+        );
+        assert_ne!(
+            super::TransitionSourceGroupId::for_index(&mut generation, 3),
+            group
+        );
+        assert_ne!(
+            super::TransitionSourceGroupId::for_index(&mut None, 2),
+            group
+        );
         assert_ne!(create().id(), original.id());
     }
 
@@ -2681,11 +2770,24 @@ mod tests {
         set.remove_finished_unfilled_document_animations();
         assert_eq!(set.animations.len(), 1);
         assert_eq!(set.animations[0].name, Atom::from("progress"));
-        assert_eq!(set.animations[0].directed_progress_at(10.0).map(|value| value.0), Some(1.0));
+        assert_eq!(
+            set.animations[0]
+                .directed_progress_at(10.0)
+                .map(|value| value.0),
+            Some(1.0)
+        );
         set.animations[0].sample_progress_timeline(Some(0.0), true);
-        assert_eq!(set.animations[0].directed_progress_at(10.0).map(|value| value.0), Some(0.0));
+        assert_eq!(
+            set.animations[0]
+                .directed_progress_at(10.0)
+                .map(|value| value.0),
+            Some(0.0)
+        );
         set.update_animation_list(Vec::new(), 10.0);
-        assert!(!set.has_active_animation(), "animation:none still cancels the progress animation");
+        assert!(
+            !set.has_active_animation(),
+            "animation:none still cancels the progress animation"
+        );
     }
 
     #[test]
@@ -2934,9 +3036,14 @@ mod tests {
         let mut animation = pending_animation();
         animation.delay = 100.;
         animation.started_at = 100.;
-        animation.properties_changed.insert(PropertyDeclarationId::Longhand(LonghandId::Scale));
-        animation.properties_changed.insert(PropertyDeclarationId::Longhand(LonghandId::Opacity));
-        let expected = WillChangeBits::TRANSFORM | WillChangeBits::OPACITY | WillChangeBits::BACKDROP_ROOT;
+        animation
+            .properties_changed
+            .insert(PropertyDeclarationId::Longhand(LonghandId::Scale));
+        animation
+            .properties_changed
+            .insert(PropertyDeclarationId::Longhand(LonghandId::Opacity));
+        let expected =
+            WillChangeBits::TRANSFORM | WillChangeBits::OPACITY | WillChangeBits::BACKDROP_ROOT;
         assert_eq!(animation.anticipated_change_bits(), expected);
         animation.state = AnimationState::Finished;
         assert!(animation.anticipated_change_bits().is_empty());

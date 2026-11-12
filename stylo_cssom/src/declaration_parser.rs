@@ -25,6 +25,12 @@ pub(crate) fn is_internal_declaration(declaration: &PropertyDeclaration) -> bool
     declaration.id().name() == "-bd-legacy-vertical-align"
 }
 
+pub(crate) fn requires_native_backing(declaration: &PropertyDeclaration) -> bool {
+    is_internal_declaration(declaration)
+        || matches!(declaration, PropertyDeclaration::AlignmentBaseline(value)
+            if value.from_vertical_align_origin())
+}
+
 #[derive(Debug, PartialEq)]
 struct NativeCompatibilityDeclarations(Vec<(PropertyDeclaration, Importance)>);
 
@@ -43,7 +49,7 @@ pub(crate) fn retained_native_declarations(
 ) -> Option<stylo_cssom_model::RetainedNativeDeclarations> {
     let declarations = block
         .declaration_importance_iter()
-        .filter(|(declaration, _)| is_internal_declaration(declaration))
+        .filter(|(declaration, _)| requires_native_backing(declaration))
         .map(|(declaration, importance)| (declaration.clone(), importance))
         .collect::<Vec<_>>();
     (!declarations.is_empty()).then(|| {
@@ -61,7 +67,14 @@ pub(crate) fn restore_native_declarations(
         .and_then(|backing| backing.0.as_any().downcast_ref::<NativeCompatibilityDeclarations>())
     {
         for (declaration, importance) in &backing.0 {
-            block.push(declaration.clone(), *importance);
+            let mut source = SourcePropertyDeclaration::default();
+            source.push(declaration.clone());
+            let priority = if importance.important() {
+                CssomDeclarationPriority::Important
+            } else {
+                CssomDeclarationPriority::Normal
+            };
+            declaration_block_apply_declarations(block, source, priority);
         }
     }
 }
@@ -2180,20 +2193,43 @@ mod tests {
 
     #[test]
     fn vertical_align_rule_projection_preserves_private_native_state() {
-        let parsed = parse_cssom_declaration_block("vertical-align: middle", CssomDeclarationContext::Style);
-        let model = rule_declaration_block_from_cssom(&parsed, stylo_cssom_model::RuleDeclarationDomain::Style);
-        assert_eq!(model.declarations().len(), 3);
-        assert!(!model.serialization().contains("-bd-legacy-vertical-align"));
-        assert!(model.native_backing().is_some());
-        let original = retained_native_declarations(parsed.as_typed());
-        let mut updated = model;
-        for (property, value) in [("color", "red"), ("alignment-baseline", "alphabetic")] {
-            updated = mutate_rule_declaration_block(&updated, property, value, CssomDeclarationPriority::Normal, CssomDeclarationContext::Style).unwrap();
-            let restored = stylo_rule_declaration_block(&updated, CssomDeclarationContext::Style).unwrap();
+        for value in ["middle", "text-top", "text-bottom"] {
+            let parsed = parse_cssom_declaration_block(
+                &format!("vertical-align: {value}"),
+                CssomDeclarationContext::Style,
+            );
+            let original = retained_native_declarations(parsed.as_typed());
+            let model = rule_declaration_block_from_cssom(
+                &parsed,
+                stylo_cssom_model::RuleDeclarationDomain::Style,
+            );
+            assert_eq!(model.declarations().len(), 3);
+            assert!(!model.serialization().contains("-bd-legacy-vertical-align"));
+            let changed = mutate_rule_declaration_block(
+                &model, "color", "red", CssomDeclarationPriority::Normal,
+                CssomDeclarationContext::Style,
+            ).unwrap();
+            let restored = stylo_rule_declaration_block(&changed, CssomDeclarationContext::Style).unwrap();
             assert_eq!(retained_native_declarations(&restored), original);
+            assert!(restored.declarations().iter().any(|declaration| matches!(
+                declaration, PropertyDeclaration::AlignmentBaseline(baseline)
+                    if baseline.from_vertical_align_origin()
+            )));
+            let explicit = mutate_rule_declaration_block(
+                &changed, "alignment-baseline", value, CssomDeclarationPriority::Normal,
+                CssomDeclarationContext::Style,
+            ).unwrap();
+            let restored = stylo_rule_declaration_block(&explicit, CssomDeclarationContext::Style).unwrap();
+            assert!(restored.declarations().iter().all(|declaration| !matches!(
+                declaration, PropertyDeclaration::AlignmentBaseline(baseline)
+                    if baseline.from_vertical_align_origin()
+            )));
+            let removed = mutate_rule_declaration_block(
+                &explicit, "vertical-align", "", CssomDeclarationPriority::Normal,
+                CssomDeclarationContext::Style,
+            ).unwrap();
+            assert!(removed.native_backing().is_none());
         }
-        let removed = mutate_rule_declaration_block(&updated, "vertical-align", "", CssomDeclarationPriority::Normal, CssomDeclarationContext::Style).unwrap();
-        assert!(removed.native_backing().is_none());
         assert!(inline_style_cssom_property_schema("-bd-legacy-vertical-align").is_none());
     }
 

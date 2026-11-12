@@ -60,9 +60,7 @@ pub fn merge(
     let mut block = block(backing);
     let updates = parse_inline_style_block(css, quirks);
     for (declaration, importance) in updates.0.declaration_importance_iter() {
-        if super::is_internal_declaration(declaration) {
-            block.0.push(declaration.clone(), importance);
-        }
+        block.0.push(declaration.clone(), importance);
     }
     retained_native_declarations(&block.0)
 }
@@ -72,9 +70,14 @@ pub fn with_declaration(
     declaration: &PropertyDeclaration,
 ) -> Option<RetainedNativeDeclarations> {
     let mut block = block(backing);
-    if super::is_internal_declaration(declaration) {
-        block.0.push(declaration.clone(), style::properties::Importance::Normal);
+    let id = match declaration.id() {
+        style::properties::PropertyDeclarationId::Longhand(id) => style::properties::PropertyId::NonCustom(id.into()),
+        style::properties::PropertyDeclarationId::Custom(name) => style::properties::PropertyId::Custom(name.clone()),
+    };
+    if let Some(first) = block.0.first_declaration_to_remove(&id) {
+        block.0.remove_property(&id, first);
     }
+    block.0.push(declaration.clone(), style::properties::Importance::Normal);
     retained_native_declarations(&block.0)
 }
 
@@ -89,7 +92,12 @@ mod tests {
     fn native_value(backing: Option<&RetainedNativeDeclarations>) -> String {
         let block = block(backing);
         let mut css = String::new();
-        if let Some(declaration) = block.0.declarations().first() {
+        if let Some(declaration) = block
+            .0
+            .declarations()
+            .iter()
+            .find(|declaration| super::super::is_internal_declaration(declaration))
+        {
             if let PropertyDeclaration::WithVariables(value) = declaration {
                 return value.value.variable_value().css.clone();
             }
@@ -119,7 +127,7 @@ mod tests {
                 CssomDeclarationPriority::Normal,
                 quirks,
             );
-            assert_eq!(modern, backing);
+            assert_eq!(native_value(modern.as_ref()), value);
             assert!(remove_property(modern.as_ref(), "vertical-align").is_none());
         }
         let important = parse("vertical-align:middle!important", quirks);
@@ -132,5 +140,60 @@ mod tests {
             quirks,
         );
         assert_eq!(native_value(replaced.as_ref()), "top");
+    }
+
+    #[test]
+    fn inline_native_alignment_origin_clears_on_same_value_longhand_updates() {
+        let quirks = QuirksMode::NoQuirks;
+        let has_origin = |backing: Option<&RetainedNativeDeclarations>| {
+            block(backing).0.declarations().iter().any(|declaration| {
+                matches!(declaration, PropertyDeclaration::AlignmentBaseline(value) if value.from_vertical_align_origin())
+            })
+        };
+        for value in ["middle", "text-top", "text-bottom"] {
+            let original = parse(&format!("vertical-align:{value}!important"), quirks);
+            assert!(has_origin(original.as_ref()));
+            let unrelated = set_property(
+                original.as_ref(),
+                "color",
+                "red",
+                CssomDeclarationPriority::Normal,
+                quirks,
+            );
+            assert!(has_origin(unrelated.as_ref()));
+            let modern = parse_inline_style_block(&format!("alignment-baseline:{value}"), quirks);
+            let declaration = &modern.0.declarations()[0];
+            for updated in [
+                set_property(
+                    original.as_ref(),
+                    "alignment-baseline",
+                    value,
+                    CssomDeclarationPriority::Normal,
+                    quirks,
+                ),
+                merge(
+                    original.as_ref(),
+                    &format!("alignment-baseline:{value}!important"),
+                    quirks,
+                ),
+                with_declaration(original.as_ref(), declaration),
+                set_property(
+                    original.as_ref(),
+                    "all",
+                    "initial",
+                    CssomDeclarationPriority::Normal,
+                    quirks,
+                ),
+                merge(original.as_ref(), "all:initial!important", quirks),
+            ] {
+                assert!(!has_origin(updated.as_ref()), "{value}");
+                let mut rebuilt = parse_inline_style_block(&format!("alignment-baseline:{value}"), quirks);
+                restore(&mut rebuilt, updated.as_ref());
+                assert!(
+                    !has_origin(retained_native_declarations(&rebuilt.0).as_ref()),
+                    "round trip {value}"
+                );
+            }
+        }
     }
 }

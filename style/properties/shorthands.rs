@@ -1050,7 +1050,7 @@ pub mod vertical_align {
             parsed += 1;
 
             try_parse_one!(input, baseline_source, BaselineSource::parse_non_auto);
-            try_parse_one!(input, alignment_baseline, AlignmentBaseline::parse);
+            try_parse_one!(context, input, alignment_baseline, AlignmentBaseline::parse);
             try_parse_one!(context, input, baseline_shift, BaselineShift::parse);
 
             parsed -= 1;
@@ -1061,11 +1061,25 @@ pub mod vertical_align {
             return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
         }
 
+        let alignment_baseline = alignment_baseline.unwrap_or(AlignmentBaseline::Baseline);
+        #[cfg(feature = "servo")]
+        let alignment_baseline = match bd_legacy_vertical_align.as_ref() {
+            Some(crate::values::specified::VerticalAlign::Middle) => {
+                AlignmentBaseline::LegacyMiddle
+            },
+            Some(crate::values::specified::VerticalAlign::TextTop) => {
+                AlignmentBaseline::LegacyTextTop
+            },
+            Some(crate::values::specified::VerticalAlign::TextBottom) => {
+                AlignmentBaseline::LegacyTextBottom
+            },
+            _ => alignment_baseline,
+        };
         Ok(expanded! {
             #[cfg(feature = "servo")]
             _bd_legacy_vertical_align: bd_legacy_vertical_align.unwrap_or(crate::values::specified::VerticalAlign::Baseline),
             baseline_source: baseline_source.unwrap_or(BaselineSource::Auto),
-            alignment_baseline: alignment_baseline.unwrap_or(AlignmentBaseline::Baseline),
+            alignment_baseline: alignment_baseline,
             baseline_shift: baseline_shift.unwrap_or(BaselineShift::zero()),
         })
     }

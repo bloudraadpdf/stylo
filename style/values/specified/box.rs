@@ -1193,7 +1193,6 @@ impl Parse for BaselineShift {
     FromPrimitive,
     Hash,
     MallocSizeOf,
-    Parse,
     PartialEq,
     SpecifiedValueInfo,
     ToCss,
@@ -1227,6 +1226,70 @@ pub enum AlignmentBaseline {
     /// Used to implement the deprecated "align=middle" attribute for HTML img elements.
     #[cfg(feature = "gecko")]
     MozMiddleWithBaseline,
+    /// A standalone CSS2 vertical-align keyword with legacy inline geometry.
+    #[cfg(feature = "servo")]
+    #[css(keyword = "middle")]
+    LegacyMiddle,
+    /// A standalone CSS2 vertical-align keyword with legacy inline geometry.
+    #[cfg(feature = "servo")]
+    #[css(keyword = "text-top")]
+    LegacyTextTop,
+    /// A standalone CSS2 vertical-align keyword with legacy inline geometry.
+    #[cfg(feature = "servo")]
+    #[css(keyword = "text-bottom")]
+    LegacyTextBottom,
+}
+
+impl AlignmentBaseline {
+    /// Whether the baseline comes from a standalone CSS2 vertical-align keyword.
+    pub fn from_vertical_align_origin(self) -> bool {
+        #[cfg(feature = "servo")]
+        if matches!(
+            self,
+            Self::LegacyMiddle | Self::LegacyTextTop | Self::LegacyTextBottom
+        ) {
+            return true;
+        }
+        false
+    }
+
+    /// Return the standard baseline value without its rendering origin.
+    pub fn without_vertical_align_origin(self) -> Self {
+        match self {
+            #[cfg(feature = "servo")]
+            Self::LegacyMiddle => Self::Middle,
+            #[cfg(feature = "servo")]
+            Self::LegacyTextTop => Self::TextTop,
+            #[cfg(feature = "servo")]
+            Self::LegacyTextBottom => Self::TextBottom,
+            value => value,
+        }
+    }
+}
+
+impl Parse for AlignmentBaseline {
+    fn parse<'i, 't>(
+        _: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        let ident = input.expect_ident_cloned()?;
+        #[cfg(feature = "gecko")]
+        if ident.eq_ignore_ascii_case("-moz-middle-with-baseline") {
+            return Ok(Self::MozMiddleWithBaseline);
+        }
+        match_ignore_ascii_case! { &ident,
+            "baseline" => Ok(Self::Baseline),
+            "text-bottom" => Ok(Self::TextBottom),
+            "alphabetic" => Ok(Self::Alphabetic),
+            "ideographic" => Ok(Self::Ideographic),
+            "middle" => Ok(Self::Middle),
+            "central" => Ok(Self::Central),
+            "mathematical" => Ok(Self::Mathematical),
+            "hanging" => Ok(Self::Hanging),
+            "text-top" => Ok(Self::TextTop),
+            _ => Err(input.new_custom_error(StyleParseErrorKind::UnexpectedIdent(ident))),
+        }
+    }
 }
 
 /// A specified value for the `baseline-source` property.

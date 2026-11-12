@@ -15,7 +15,7 @@ use crate::properties::{
         self, visibility::computed_value::T as Visibility,
         content_visibility::computed_value::T as ContentVisibility,
     },
-    CSSWideKeyword, LonghandId, NonCustomPropertyIterator, ShorthandId,
+    CSSWideKeyword, InternalLonghandIterator, LonghandId, ShorthandId,
     PropertyDeclaration, PropertyDeclarationId,
 };
 #[cfg(feature = "gecko")] use crate::properties::{
@@ -787,7 +787,7 @@ impl ToAnimatedZero for AnimatedFilter {
 pub struct TransitionPropertyIterator<'a> {
     style: &'a ComputedValues,
     index_range: core::ops::Range<usize>,
-    longhand_iterator: Option<NonCustomPropertyIterator<LonghandId>>,
+    longhand_iterator: Option<InternalLonghandIterator>,
     custom_property_index: Option<usize>,
 }
 
@@ -857,7 +857,7 @@ impl<'a> Iterator for TransitionPropertyIterator<'a> {
                             // In the other cases, we set up our state so that we are ready to
                             // compute the next value of the iterator and then loop (equivalent
                             // to calling self.next()).
-                            self.longhand_iterator = Some(shorthand_id.longhands());
+                            self.longhand_iterator = Some(shorthand_id.animation_longhands());
                         },
                     }
                 }

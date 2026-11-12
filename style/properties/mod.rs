@@ -1850,8 +1850,7 @@ impl AllShorthand {
 /// An iterator over the all shorthand's shorthand declarations.
 pub struct AllShorthandDeclarationIterator<'a> {
     all_shorthand: &'a AllShorthand,
-    longhands:
-        std::iter::Chain<NonCustomPropertyIterator<LonghandId>, std::option::IntoIter<LonghandId>>,
+    longhands: InternalLonghandIterator,
 }
 
 impl<'a> Iterator for AllShorthandDeclarationIterator<'a> {
@@ -1874,8 +1873,11 @@ impl<'a> Iterator for AllShorthandDeclarationIterator<'a> {
     }
 }
 
-/// An iterator over all the property ids that are enabled for a given
-/// shorthand, if that shorthand is enabled for all content too.
+/// Internal shorthand members, including a private rendering companion.
+pub type InternalLonghandIterator =
+    std::iter::Chain<NonCustomPropertyIterator<LonghandId>, std::option::IntoIter<LonghandId>>;
+
+/// An iterator over the enabled public members of a shorthand.
 pub struct NonCustomPropertyIterator<Item: 'static> {
     filter: bool,
     iter: std::slice::Iter<'static, Item>,
