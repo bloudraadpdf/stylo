@@ -1,11 +1,11 @@
 //! Typed CSSOM entry points backed by Stylo's CSS grammars.
 
 pub use stylo_cssom_model as model;
-pub mod parser_api;
 pub mod counter_style_cssom;
+pub mod intersection_observer;
 pub mod media_list;
 pub mod numeric;
-pub mod intersection_observer;
+pub mod parser_api;
 pub mod registration;
 pub mod scroll_markers;
 pub mod selector_query;
@@ -15,6 +15,7 @@ mod style_text_boundary_tests;
 pub mod stylesheet_analysis;
 pub mod stylesheet_input;
 pub mod svg_presentation;
+pub mod value_dependencies;
 pub mod values;
 pub mod view_transition;
 pub mod view_transition_name_rewrite;
