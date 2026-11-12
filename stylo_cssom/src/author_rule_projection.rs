@@ -1,5 +1,10 @@
 use stylo_cssom_model::RuleNode;
 
+fn is_empty_projection(css: &str) -> bool {
+    let mut input = cssparser::ParserInput::new(css);
+    cssparser::Parser::new(&mut input).is_exhausted()
+}
+
 pub fn project_rule_sources(
     rules: &[RuleNode],
     rewrite: &mut impl FnMut(&str) -> String,
@@ -8,7 +13,7 @@ pub fn project_rule_sources(
     for rule in rules {
         let source = rule.projection_serialization();
         let rewritten = rewrite(&source);
-        if rewritten.trim().is_empty() {
+        if is_empty_projection(&rewritten) {
             continue;
         }
         let reparsed = if rewritten != source
@@ -139,7 +144,7 @@ pub fn map_rule_sources(
         .filter_map(|rule| {
             let projected = project(rule);
             let css = projected.projection_serialization();
-            if css.trim().is_empty() {
+            if is_empty_projection(&css) {
                 return None;
             }
             let nested = map_rule_sources(projected.payload().nested(), project);
@@ -150,6 +155,38 @@ pub fn map_rule_sources(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn rejected_selector_comments_do_not_leave_style_rule_nodes() {
+        use stylo_cssom_model::{InternalStylesheetRoot, StyleOrigin};
+
+        crate::context::initialise_required_servo_style_prefs();
+        let parsed = crate::authored_rules::ParsedStylesheet::parse(
+            "/* rejected */ a:has(> code) { width:var(--width) } \
+             @media print { /* nested */ b:has(code) { color:red } \
+             /* retained */ c { width:var(--width) } }",
+        )
+        .unwrap();
+        let root = InternalStylesheetRoot::new(StyleOrigin::Author, parsed.rule_nodes().to_vec());
+        let (projected, _) = crate::compat::translate::project_compat_root(
+            &root,
+            crate::compat::CompatMode::PdfReactor,
+        );
+        assert_eq!(projected.rules().len(), 1);
+        assert_eq!(projected.rules()[0].payload().nested().len(), 1);
+        let expanded =
+            crate::rule_declaration_lowering::expand_view_transition_rules(projected.rules())
+                .unwrap();
+        assert!(expanded[0].payload().nested()[0]
+            .payload()
+            .declaration_block()
+            .unwrap()
+            .declarations()
+            .iter()
+            .any(
+                |declaration| declaration.name() == "width" && declaration.value().contains("var(")
+            ));
+    }
+
     #[test]
     fn compatibility_projection_keeps_generated_preference_rules_during_expansion() {
         crate::context::initialise_required_servo_style_prefs();
