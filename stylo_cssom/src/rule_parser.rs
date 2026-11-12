@@ -3561,6 +3561,9 @@ mod tests {
             PropertyDeclaration::BaselineShift(value) => {
                 PropertyDeclaration::BaselineShift(value.clone())
             },
+            PropertyDeclaration::VerticalAlign(value) => {
+                PropertyDeclaration::VerticalAlign(value.clone())
+            },
             PropertyDeclaration::BdBarcodeFontFamily(value) => {
                 PropertyDeclaration::BdBarcodeFontFamily(value.clone())
             },

@@ -16,6 +16,15 @@ pub fn property_schema(name: &str) -> Option<&'static PropertySchemaRow> {
 }
 
 #[test]
+fn vertical_align_schema_matches_the_native_longhand() {
+    let row = property_schema("vertical-align").expect("native vertical alignment has a schema");
+    assert_eq!(row.kind, stylo_cssom_model::PropertyKind::Longhand);
+    assert_eq!(row.initial.serialized, "baseline");
+    assert!(row.shorthand_expansion.is_empty());
+    assert_eq!(row.numeric_grammar, stylo_cssom_model::TypedOmNumericPropertyGrammar::PropertyGrammar);
+}
+
+#[test]
 fn positions_do_not_admit_scalar_typed_om_numeric_values() {
     use stylo_cssom_model::{TypedOmNumericPropertyGrammar, TypedOmSpecifiedNumericReification};
 
