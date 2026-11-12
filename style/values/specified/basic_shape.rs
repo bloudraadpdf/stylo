@@ -331,6 +331,13 @@ impl Parse for BorderShape {
         let first = parse_border_shape_path(context, input)?;
         Ok(
             match input.try_parse(|input| parse_border_shape_path(context, input)) {
+                Ok(inner)
+                    if first.shape == inner.shape
+                        && first.reference_box.is_some()
+                        && first.reference_box == inner.reference_box =>
+                {
+                    Self::Stroke(first)
+                },
                 Ok(inner) => Self::Fill(first, inner),
                 Err(_) => Self::Stroke(first),
             },
@@ -351,7 +358,13 @@ impl ToComputedValue for BorderShape {
             Self::None => generic::BorderShape::None,
             Self::Stroke(stroke) => generic::BorderShape::Stroke(path(stroke, HalfBorderBox)),
             Self::Fill(outer, inner) => {
-                generic::BorderShape::Fill(path(outer, BorderBox), path(inner, PaddingBox))
+                let outer = path(outer, BorderBox);
+                let inner = path(inner, PaddingBox);
+                if outer == inner {
+                    generic::BorderShape::Stroke(outer)
+                } else {
+                    generic::BorderShape::Fill(outer, inner)
+                }
             },
         }
     }

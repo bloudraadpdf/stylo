@@ -17,6 +17,13 @@ styles do not scan siblings.
 Text justification applies to first-line and first-letter pseudo-elements.
 Their text-justify declarations retain the specified keyword after cascade.
 
+Equal `border-shape` paths normalise to stroke mode. Specified values require
+equal shapes and equal explicit reference boxes; computed values compare paths
+after resolving units and the outer/inner reference-box defaults. This keeps
+CSSOM round trips and painting consistent with Chromium. This is a browser
+compatibility rule: the CSS Borders 4 draft's mode prose omits this exception,
+and its computed-value entry incorrectly describes colours.
+
 Percentage line heights resolve their percentage basis and calculation lengths
 in CSS pixels before reapplying zoom, avoiding an extra floating-point rounding
 step in zoomed pixel units.

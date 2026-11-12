@@ -1013,7 +1013,63 @@ fn side_radius_shorthands_preserve_both_corner_axes() {
 }
 
 #[test]
-fn border_shape_specified_serialization_preserves_authored_reference_boxes() {
+fn border_shape_specified_normalization_requires_equal_explicit_reference_boxes() {
+    for (input, expected) in [
+        (
+            "circle() half-border-box circle() half-border-box",
+            "circle() half-border-box",
+        ),
+        ("circle() border-box circle() border-box", "circle() border-box"),
+        ("circle() circle()", "circle() circle()"),
+        ("circle() circle() border-box", "circle() circle() border-box"),
+        ("circle() padding-box circle()", "circle() padding-box circle()"),
+        (
+            "circle(50%) half-border-box circle(calc(25% + 25%)) half-border-box",
+            "circle(50%) half-border-box circle(calc(50%)) half-border-box",
+        ),
+        (
+            "circle(50%) border-box circle(50%) border-box",
+            "circle(50%) border-box",
+        ),
+        (
+            "circle() border-box circle() padding-box",
+            "circle() border-box circle() padding-box",
+        ),
+    ] {
+        assert_serialization("border-shape", input, Some(expected));
+    }
+}
+
+#[test]
+fn border_shape_computed_normalization_keeps_serialization_and_paint_mode_in_step() {
+    use style_traits::ToCss;
+
+    for (input, expected) in [
+        ("circle() half-border-box circle() half-border-box", "circle()"),
+        ("circle() border-box circle() border-box", "circle() border-box"),
+        ("circle() circle()", "circle() circle()"),
+        ("circle() circle() border-box", "circle() border-box"),
+        ("circle() padding-box circle()", "circle() padding-box"),
+        (
+            "circle(50%) half-border-box circle(calc(25% + 25%)) half-border-box",
+            "circle(50%)",
+        ),
+        (
+            "circle(50%) border-box circle(50%) border-box",
+            "circle(50%) border-box",
+        ),
+        ("circle() border-box circle() padding-box", "circle() circle()"),
+    ] {
+        let computed = cascade_zoom_test_style(&format!("border-shape:{input}"), None);
+        let shape = &computed.get_border().border_shape;
+        assert_eq!(shape.to_css_string(), expected, "{input}");
+        let reparsed = cascade_zoom_test_style(&format!("border-shape:{expected}"), None);
+        assert_eq!(shape, &reparsed.get_border().border_shape, "{input}");
+    }
+}
+
+#[test]
+fn border_shape_specified_serialization_preserves_distinct_paths_and_authored_reference_boxes() {
     for value in [
         "circle()",
         "circle() half-border-box",
@@ -1022,7 +1078,6 @@ fn border_shape_specified_serialization_preserves_authored_reference_boxes() {
         "circle() border-box circle() padding-box",
         "circle() border-box circle() content-box",
         "circle() content-box circle() border-box",
-        "circle() half-border-box circle() half-border-box",
     ] {
         assert_serialization("border-shape", value, Some(value));
     }
