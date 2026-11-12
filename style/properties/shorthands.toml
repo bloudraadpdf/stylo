@@ -258,7 +258,7 @@ spec = "https://drafts.csswg.org/css-contain-3/#container-shorthand"
 
 [vertical-align]
 sub_properties = ["alignment-baseline", "baseline-shift", "baseline-source"]
-engine = "gecko"
+extra_servo_sub_properties = ["-bd-legacy-vertical-align"]
 spec = "https://drafts.csswg.org/css-inline-3/#transverse-alignment"
 rule_types_allowed = ["style", "keyframe", "page", "scope"]
 

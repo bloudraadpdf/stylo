@@ -623,11 +623,14 @@ impl PropertyDeclarationBlock {
         match property.as_shorthand() {
             Ok(shorthand) => {
                 // Step 2.1 & 2.2 & 2.3
-                if self.shorthand_declarations(shorthand).is_some_and(|declarations| {
-                    declarations
-                        .iter()
-                        .all(|(_, importance)| importance.important())
-                }) {
+                if self
+                    .shorthand_declarations(shorthand)
+                    .is_some_and(|declarations| {
+                        declarations
+                            .iter()
+                            .all(|(_, importance)| importance.important())
+                    })
+                {
                     Importance::Important
                 } else {
                     Importance::Normal
@@ -1172,6 +1175,11 @@ impl PropertyDeclarationBlock {
                     continue;
                 },
             };
+
+            #[cfg(feature = "servo")]
+            if longhand_id == LonghandId::BdLegacyVerticalAlign {
+                continue;
+            }
 
             // Step 3.2
             if already_serialized.contains(longhand_id.into()) {

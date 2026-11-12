@@ -539,6 +539,7 @@ class Longhand(Property):
             "AnimationRangeStart",
             "BackgroundSize",
             "BaselineShift",
+            "VerticalAlign",
             "BlockStepSize",
             "BorderCornerRadius",
             "BorderSideOffset",
@@ -1011,7 +1012,7 @@ class PropertiesData(object):
             # A document compatibility quirk survives element style resets.
             if p.name in ['direction', 'unicode-bidi', '-bd-line-height-quirk']:
                 continue;
-            if not p.enabled_in_content() and not p.experimental(engine):
+            if not p.enabled_in_content() and not p.experimental(engine) and p.name != "-bd-legacy-vertical-align":
                 continue;
             if "style" not in p.rule_types_allowed_names():
                 continue;
@@ -1252,6 +1253,7 @@ class PropertyRestrictions:
                 "alignment-baseline",
                 "baseline-shift",
                 "baseline-source",
+                "-bd-legacy-vertical-align",
                 "line-height",
                 # Kinda like css-backgrounds?
                 "background-blend-mode",
@@ -1287,6 +1289,7 @@ class PropertyRestrictions:
                 "alignment-baseline",
                 "baseline-shift",
                 "baseline-source",
+                "-bd-legacy-vertical-align",
                 "ruby-position",
                 "line-height",
                 # Kinda like css-backgrounds?

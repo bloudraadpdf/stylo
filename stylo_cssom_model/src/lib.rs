@@ -367,7 +367,7 @@ pub fn property_schema(name: &str) -> Option<&'static PropertySchemaRow> {
         LazyLock::new(|| {
             STANDARD_PROPERTIES
                 .iter()
-                .filter(|row| row.kind != PropertyKind::PageDescriptor)
+                .filter(|row| row.kind != PropertyKind::PageDescriptor && row.name != "-bd-legacy-vertical-align")
                 .map(|row| (row.name, row))
                 .collect()
         });

@@ -11,17 +11,20 @@ pub fn property_schema_for_id(property: &PropertyId) -> Option<&'static Property
 }
 
 pub fn property_schema(name: &str) -> Option<&'static PropertySchemaRow> {
+    if name.eq_ignore_ascii_case("-bd-legacy-vertical-align") {
+        return None;
+    }
     let property = PropertyId::parse_enabled_for_all_content(name).ok()?;
     property_schema_for_id(&property)
 }
 
 #[test]
-fn vertical_align_schema_matches_the_native_longhand() {
+fn vertical_align_schema_matches_the_public_shorthand() {
     let row = property_schema("vertical-align").expect("native vertical alignment has a schema");
-    assert_eq!(row.kind, stylo_cssom_model::PropertyKind::Longhand);
+    assert_eq!(row.kind, stylo_cssom_model::PropertyKind::Shorthand);
     assert_eq!(row.initial.serialized, "baseline");
-    assert!(row.shorthand_expansion.is_empty());
-    assert_eq!(row.numeric_grammar, stylo_cssom_model::TypedOmNumericPropertyGrammar::PropertyGrammar);
+    assert_eq!(row.shorthand_expansion, &["baseline-source", "alignment-baseline", "baseline-shift"]);
+    assert!(property_schema("-bd-legacy-vertical-align").is_none());
 }
 
 #[test]
@@ -148,7 +151,7 @@ fn schema_rows_follow_the_native_property_order() {
 #[test]
 fn all_schema_retains_native_expansion_order() {
     let native: Vec<_> = style::properties::ShorthandId::All.longhands()
-        .map(|id| id.name()).collect();
+        .map(|id| id.name()).filter(|name| *name != "-bd-legacy-vertical-align").collect();
     let schema = stylo_cssom_model::property_schema("all").unwrap();
     let enabled: Vec<_> = schema.shorthand_expansion.iter().copied()
         .filter(|name| native.contains(name)).collect();

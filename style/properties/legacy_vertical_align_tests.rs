@@ -28,25 +28,55 @@ fn value(block: &PropertyDeclarationBlock, name: &str) -> String {
 }
 
 #[test]
-fn native_vertical_align_is_independent_from_modern_baseline_properties() {
-    for css in [
-        "vertical-align:middle;alignment-baseline:text-top",
-        "alignment-baseline:text-top;vertical-align:middle",
-        "vertical-align:middle!important;alignment-baseline:text-top!important",
+fn modern_vertical_align_grammar_and_resets_remain_available() {
+    for (css, expected) in [
+        ("vertical-align:first", "first"),
+        ("vertical-align:baseline 0", "baseline"),
+        ("vertical-align:super middle first", "first middle super"),
+    ] {
+        assert_eq!(value(&parse(css), "vertical-align"), expected, "{css}");
+    }
+    assert_eq!(
+        value(
+            &parse("baseline-source:first;vertical-align:baseline"),
+            "baseline-source"
+        ),
+        "auto"
+    );
+}
+
+#[test]
+fn vertical_align_expands_modern_properties_and_retains_private_compatibility() {
+    for (css, expected) in [
+        (
+            "vertical-align:middle;alignment-baseline:text-top",
+            "text-top",
+        ),
+        (
+            "alignment-baseline:text-top;vertical-align:middle",
+            "middle",
+        ),
+        (
+            "vertical-align:middle!important;alignment-baseline:text-top!important",
+            "text-top",
+        ),
     ] {
         let block = parse(css);
-        assert_eq!(value(&block, "vertical-align"), "middle", "{css}");
-        assert_eq!(value(&block, "alignment-baseline"), "text-top", "{css}");
-        assert!(block
-            .declarations()
-            .iter()
-            .any(|declaration| matches!(declaration, PropertyDeclaration::VerticalAlign(_))));
+        assert_eq!(value(&block, "vertical-align"), expected, "{css}");
+        assert_eq!(value(&block, "alignment-baseline"), expected, "{css}");
+        assert!(block.declarations().iter().any(|declaration| matches!(
+            declaration,
+            PropertyDeclaration::BdLegacyVerticalAlign(
+                crate::values::specified::VerticalAlign::Middle
+            )
+        )));
     }
     assert_eq!(
         value(&parse("alignment-baseline:middle"), "vertical-align"),
         ""
     );
-    assert!(parse("vertical-align:first middle").is_empty());
+    assert!(!parse("vertical-align:first middle").is_empty());
+    assert!(parse("-bd-legacy-vertical-align:middle").is_empty());
     assert!(!parse("baseline-source:first;alignment-baseline:middle").is_empty());
 }
 
@@ -88,13 +118,17 @@ fn native_vertical_align_css_text_round_trips() {
 }
 
 #[test]
-fn native_vertical_align_removal_preserves_modern_properties() {
+fn vertical_align_removal_removes_all_components() {
     let mut block = parse("vertical-align:middle;alignment-baseline:text-top");
     let property = super::PropertyId::parse_enabled_for_all_content("vertical-align").unwrap();
     let first = block.first_declaration_to_remove(&property).unwrap();
     block.remove_property(&property, first);
     assert_eq!(value(&block, "vertical-align"), "");
-    assert_eq!(value(&block, "alignment-baseline"), "text-top");
+    assert_eq!(value(&block, "alignment-baseline"), "");
+    assert!(!block
+        .declarations()
+        .iter()
+        .any(|declaration| matches!(declaration, PropertyDeclaration::BdLegacyVerticalAlign(_))));
     let update = parse("vertical-align:text-bottom");
     for declaration in update.declarations() {
         block.push(
@@ -103,5 +137,22 @@ fn native_vertical_align_removal_preserves_modern_properties() {
         );
     }
     assert_eq!(value(&block, "vertical-align"), "text-bottom");
-    assert_eq!(value(&block, "alignment-baseline"), "text-top");
+    assert_eq!(value(&block, "alignment-baseline"), "text-bottom");
+}
+
+#[test]
+fn css_wide_resets_include_the_private_compatibility_component() {
+    for property in ["all", "vertical-align"] {
+        for keyword in ["initial", "inherit", "unset"] {
+            let block = parse(&format!("vertical-align:middle;{property}:{keyword}"));
+            assert!(
+                block.declarations().iter().any(|declaration| matches!(
+                    declaration,
+                    PropertyDeclaration::CSSWideKeyword(value)
+                        if value.id == super::LonghandId::BdLegacyVerticalAlign
+                )),
+                "{property}:{keyword}"
+            );
+        }
+    }
 }

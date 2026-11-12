@@ -51,7 +51,7 @@ use crate::stylesheets::Origin;
 use crate::stylist::Stylist;
 use crate::values::{computed, serialize_atom_name};
 use arrayvec::{ArrayVec, Drain as ArrayVecDrain};
-use cssparser::{Parser, ParserInput, match_ignore_ascii_case};
+use cssparser::{match_ignore_ascii_case, Parser, ParserInput};
 use rustc_hash::FxHashMap;
 use servo_arc::Arc;
 use std::{
@@ -809,7 +809,15 @@ fn parse_non_custom_property_declaration_value_into<'i>(
     input.reset(&start);
     input.look_for_arbitrary_substitution_functions(
         if static_prefs::pref!("layout.css.attr.enabled") {
-            &["var", "env", "attr", "inherit", "if", "ident", "random-item"]
+            &[
+                "var",
+                "env",
+                "attr",
+                "inherit",
+                "if",
+                "ident",
+                "random-item",
+            ]
         } else {
             &["var", "env", "inherit", "if", "ident", "random-item"]
         },
@@ -1076,8 +1084,20 @@ impl PropertyDeclaration {
                     |declarations, input| shorthand_id.parse_into(declarations, context, input),
                     |declarations, wk| {
                         if shorthand_id == ShorthandId::All {
+                            #[cfg(feature = "servo")]
+                            declarations.push(PropertyDeclaration::css_wide_keyword(
+                                LonghandId::BdLegacyVerticalAlign,
+                                wk,
+                            ));
                             declarations.all_shorthand = AllShorthand::CSSWideKeyword(wk)
                         } else {
+                            #[cfg(feature = "servo")]
+                            if shorthand_id == ShorthandId::VerticalAlign {
+                                declarations.push(PropertyDeclaration::css_wide_keyword(
+                                    LonghandId::BdLegacyVerticalAlign,
+                                    wk,
+                                ));
+                            }
                             for longhand in shorthand_id.longhands() {
                                 declarations
                                     .push(PropertyDeclaration::css_wide_keyword(longhand, wk));
@@ -1090,8 +1110,24 @@ impl PropertyDeclaration {
                             from_shorthand: Some(shorthand_id),
                         });
                         if shorthand_id == ShorthandId::All {
+                            #[cfg(feature = "servo")]
+                            declarations.push(PropertyDeclaration::WithVariables(
+                                VariableDeclaration {
+                                    id: LonghandId::BdLegacyVerticalAlign,
+                                    value: unparsed.clone(),
+                                },
+                            ));
                             declarations.all_shorthand = AllShorthand::WithVariables(unparsed)
                         } else {
+                            #[cfg(feature = "servo")]
+                            if shorthand_id == ShorthandId::VerticalAlign {
+                                declarations.push(PropertyDeclaration::WithVariables(
+                                    VariableDeclaration {
+                                        id: LonghandId::BdLegacyVerticalAlign,
+                                        value: unparsed.clone(),
+                                    },
+                                ));
+                            }
                             for id in shorthand_id.longhands() {
                                 declarations.push(PropertyDeclaration::WithVariables(
                                     VariableDeclaration {

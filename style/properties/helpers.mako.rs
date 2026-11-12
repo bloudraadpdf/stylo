@@ -592,11 +592,11 @@ pub mod ${property.ident} {
         pub struct LonghandsToSerialize<'a> {
             % for sub_property in shorthand.sub_properties:
                 pub ${sub_property.ident}:
-                % if sub_property.may_be_disabled_in(shorthand, engine):
+                % if sub_property.may_be_disabled_in(shorthand, engine) or not sub_property.enabled_in_content():
                     Option<
                 % endif
                     &'a longhands::${sub_property.ident}::SpecifiedValue,
-                % if sub_property.may_be_disabled_in(shorthand, engine):
+                % if sub_property.may_be_disabled_in(shorthand, engine) or not sub_property.enabled_in_content():
                     >,
                 % endif
             % endfor
@@ -633,7 +633,7 @@ pub mod ${property.ident} {
 
                     (
                     % for sub_property in shorthand.sub_properties:
-                        % if sub_property.may_be_disabled_in(shorthand, engine):
+                        % if sub_property.may_be_disabled_in(shorthand, engine) or not sub_property.enabled_in_content():
                         ${sub_property.ident},
                         % else:
                         Some(${sub_property.ident}),
