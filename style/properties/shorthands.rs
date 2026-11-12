@@ -1021,6 +1021,7 @@ pub mod container {
     }
 }
 
+#[cfg(feature = "gecko")]
 pub mod vertical_align {
     use super::*;
     pub use crate::properties::shorthands_generated::vertical_align::*;

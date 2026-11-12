@@ -76,6 +76,51 @@ pub enum GenericBaselineShift<LengthPercentage> {
 
 pub use self::GenericBaselineShift as BaselineShift;
 
+/// CSS2 vertical alignment, independent of the Inline Layout 3 baseline properties.
+#[derive(
+    Animate,
+    Clone,
+    ComputeSquaredDistance,
+    Copy,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToAnimatedValue,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(C, u8)]
+pub enum GenericVerticalAlign<LengthPercentage> {
+    /// Align alphabetic or central baselines.
+    Baseline,
+    /// Lower to the subscript position.
+    Sub,
+    /// Raise to the superscript position.
+    Super,
+    /// Align the line-over edge.
+    Top,
+    /// Align the parent's text-over edge.
+    TextTop,
+    /// Align the box midpoint above the parent's baseline by half its x-height.
+    Middle,
+    /// Align the line-under edge.
+    Bottom,
+    /// Align the parent's text-under edge.
+    TextBottom,
+    /// Shift by a length or a percentage of the line height.
+    Length(LengthPercentage),
+}
+
+impl<L> ToAnimatedZero for GenericVerticalAlign<L> {
+    fn to_animated_zero(&self) -> Result<Self, ()> {
+        Err(())
+    }
+}
+
 impl<L: Zero> BaselineShift<L> {
     /// Returns the initial `0` value.
     #[inline]

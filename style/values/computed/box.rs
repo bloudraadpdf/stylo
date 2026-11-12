@@ -226,6 +226,9 @@ pub type SnapInline = GenericSnapInline<FiniteLength>;
 /// A computed value for the `baseline-shift` property.
 pub type BaselineShift = GenericBaselineShift<LengthPercentage>;
 
+/// Native CSS2 `vertical-align`.
+pub type VerticalAlign = crate::values::generics::box_::GenericVerticalAlign<LengthPercentage>;
+
 /// A computed value for the `overflow-clip-margin` property.
 pub type OverflowClipMargin = GenericOverflowClipMargin<Length>;
 

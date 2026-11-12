@@ -218,6 +218,18 @@ spec = "https://drafts.csswg.org/css-inline-3/#alignment-baseline"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
+[vertical-align]
+type = "VerticalAlign"
+initial = "computed::VerticalAlign::Baseline"
+initial_specified_value = "specified::VerticalAlign::Baseline"
+struct = "box"
+engine = "servo"
+animation_type = "normal"
+rule_types_allowed = ["style", "keyframe", "page", "scope"]
+spec = "https://www.w3.org/TR/CSS2/visudet.html#propdef-vertical-align"
+servo_restyle_damage = "rebuild_box"
+affects = "layout"
+
 [anchor-name]
 type = "AnchorName"
 initial = "computed::AnchorName::none()"

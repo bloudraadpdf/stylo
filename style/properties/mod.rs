@@ -1872,6 +1872,9 @@ where
 mod native_common_property_tests;
 
 #[cfg(all(test, feature = "servo"))]
+mod legacy_vertical_align_tests;
+
+#[cfg(all(test, feature = "servo"))]
 mod page_rule_tests;
 
 #[cfg(all(test, feature = "servo"))]

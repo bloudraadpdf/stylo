@@ -1140,6 +1140,34 @@ pub type ContainIntrinsicSize = GenericContainIntrinsicSize<NonNegativeLength>;
 /// A specified value for the `baseline-shift` property.
 pub type BaselineShift = GenericBaselineShift<LengthPercentage>;
 
+/// Native CSS2 `vertical-align`.
+pub type VerticalAlign = crate::values::generics::box_::GenericVerticalAlign<LengthPercentage>;
+
+impl Parse for VerticalAlign {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if let Ok(length) = input
+            .try_parse(|input| LengthPercentage::parse_quirky(context, input, AllowQuirks::Yes))
+        {
+            return Ok(Self::Length(length));
+        }
+        let ident = input.expect_ident_cloned()?;
+        match_ignore_ascii_case! { &ident,
+            "baseline" => Ok(Self::Baseline),
+            "sub" => Ok(Self::Sub),
+            "super" => Ok(Self::Super),
+            "top" => Ok(Self::Top),
+            "text-top" => Ok(Self::TextTop),
+            "middle" => Ok(Self::Middle),
+            "bottom" => Ok(Self::Bottom),
+            "text-bottom" => Ok(Self::TextBottom),
+            _ => Err(input.new_custom_error(StyleParseErrorKind::UnexpectedIdent(ident))),
+        }
+    }
+}
+
 impl Parse for BaselineShift {
     fn parse<'i, 't>(
         context: &ParserContext,

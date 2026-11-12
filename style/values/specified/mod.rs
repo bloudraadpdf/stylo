@@ -184,7 +184,7 @@ pub use self::box_::{
     OverflowClipMargin, OverscrollBehavior, Perspective, PositionProperty, Resize,
     ScrollMarkerGroup, ScrollMarkerGroupMode, ScrollMarkerGroupPosition, ScrollSnapAlign,
     ScrollSnapAxis, ScrollSnapStop, ScrollSnapStrictness, ScrollSnapType, ScrollbarGutter,
-    TouchAction, WillChange, WillChangeBits, WritingModeProperty, Zoom,
+    TouchAction, VerticalAlign, WillChange, WillChangeBits, WritingModeProperty, Zoom,
 };
 pub use self::color::{
     Color, ColorOrAuto, ColorPropertyValue, ColorScheme, ForcedColorAdjust, PrintColorAdjust,

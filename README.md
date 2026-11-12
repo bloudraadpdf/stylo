@@ -153,6 +153,15 @@ Releases are made every time this repository rebases its changes on top of the l
 - stylo_traits
 - stylo
 
+## Native vertical alignment
+
+The Servo build keeps `vertical-align` as the independent CSS2 longhand,
+as Chromium does. It accepts the CSS2 keywords and a length or percentage.
+The modern `alignment-baseline`, `baseline-shift` and `baseline-source`
+longhands remain independent. Native callers must express multi-part alignment
+with those longhands; the draft `vertical-align: first middle` shorthand is
+available only in the Gecko build.
+
 ## License
 
 Stylo is licensed under MPL 2.0
