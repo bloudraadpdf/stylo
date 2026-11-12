@@ -59,7 +59,7 @@ impl CssUrlRequestModifiers {
 /// A resolved CSS resource URL whose request modifiers cannot be dropped.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CssResourceUrl {
-    url: String,
+    url: std::sync::Arc<str>,
     modifiers: CssUrlRequestModifiers,
     referrer_source: Option<String>,
 }
@@ -67,7 +67,7 @@ pub struct CssResourceUrl {
 impl CssResourceUrl {
     pub fn new(url: impl Into<String>, modifiers: CssUrlRequestModifiers) -> Self {
         Self {
-            url: url.into(),
+            url: url.into().into(),
             modifiers,
             referrer_source: None,
         }
@@ -92,12 +92,38 @@ impl CssResourceUrl {
 
     pub fn with_url(&self, url: impl Into<String>) -> Self {
         Self {
-            url: url.into(),
+            url: url.into().into(),
             ..self.clone()
         }
     }
 
     pub fn modifiers(&self) -> &CssUrlRequestModifiers {
         &self.modifiers
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn clones_share_url_text_and_replacements_preserve_request_context() {
+        let source = CssResourceUrl::new(
+            "https://example.test/image.svg",
+            CssUrlRequestModifiers::new(
+                Some(CssUrlCorsMode::UseCredentials),
+                Some("sha256-example".into()),
+                Some(CssUrlReferrerPolicy::SameOrigin),
+            ),
+        )
+        .with_referrer_source(Some("https://example.test/document".into()));
+        let cloned = source.clone();
+        assert_eq!(source, cloned);
+        assert_eq!(source.as_str().as_ptr(), cloned.as_str().as_ptr());
+        let replaced = cloned.with_url("https://example.test/replacement.svg");
+        assert_eq!(source.as_str(), "https://example.test/image.svg");
+        assert_eq!(replaced.as_str(), "https://example.test/replacement.svg");
+        assert_eq!(source.modifiers(), replaced.modifiers());
+        assert_eq!(source.referrer_source(), replaced.referrer_source());
     }
 }
