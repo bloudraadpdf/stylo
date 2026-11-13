@@ -1324,6 +1324,13 @@ mod tests {
             computed.to_css_string(),
             "circle(96px at calc(100% - 96px) calc(100% - 192px))"
         );
+        let specified = parse("ellipse(0px)").unwrap();
+        assert_eq!(specified.to_css_string(), "ellipse(0px)");
+        let computed: crate::values::computed::basic_shape::BasicShape =
+            Context::for_media_query_evaluation(&device, QuirksMode::NoQuirks, |context| {
+                specified.to_computed_value(context)
+            });
+        assert_eq!(computed.to_css_string(), "ellipse(0px 0px)");
         let style = ComputedValues::initial_values_with_font_override(Font::initial_values());
         let context = crate::values::resolved::Context {
             style: &style,

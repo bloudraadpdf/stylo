@@ -811,9 +811,24 @@ where
     }
 }
 
+/// Whether ellipse radii use the authored shorthand form or the established
+/// computed-value form with both axes.
+pub trait EllipseRadiusSerialization: ToCss + PartialEq {
+    /// Equal authored radii can share one token; computed radii retain both axes.
+    const OMIT_EQUAL_RADII: bool;
+}
+
+impl EllipseRadiusSerialization for crate::values::specified::LengthPercentage {
+    const OMIT_EQUAL_RADII: bool = true;
+}
+
+impl EllipseRadiusSerialization for crate::values::computed::LengthPercentage {
+    const OMIT_EQUAL_RADII: bool = false;
+}
+
 impl<Position, LengthPercentage> ToCss for Ellipse<Position, LengthPercentage>
 where
-    LengthPercentage: ToCss + PartialEq,
+    LengthPercentage: EllipseRadiusSerialization,
     Position: ToCss,
 {
     fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
@@ -826,7 +841,7 @@ where
         dest.write_str("ellipse(")?;
         if has_radii {
             self.semiaxis_x.to_css(dest)?;
-            if self.semiaxis_y != self.semiaxis_x {
+            if !LengthPercentage::OMIT_EQUAL_RADII || self.semiaxis_y != self.semiaxis_x {
                 dest.write_char(' ')?;
                 self.semiaxis_y.to_css(dest)?;
             }
