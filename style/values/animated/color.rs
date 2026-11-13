@@ -80,10 +80,15 @@ impl Animate for Color {
             Self::Absolute(color) => color.is_legacy_syntax(),
             _ => false,
         };
-        let interpolation = if legacy(self) && legacy(other) {
-            ColorInterpolationMethod::srgb()
+        let (interpolation, flags) = if legacy(self) && legacy(other) {
+            (ColorInterpolationMethod::srgb(), ColorMixFlags::empty())
         } else {
-            ColorInterpolationMethod::default()
+            // Deferred inputs can resolve to legacy colours. The result must
+            // retain the interpolation space selected from their syntax.
+            (
+                ColorInterpolationMethod::default(),
+                ColorMixFlags::RESULT_IN_MODERN_SYNTAX,
+            )
         };
 
         Ok(Self::from_color_mix(
@@ -104,7 +109,7 @@ impl Animate for Color {
                     },
                 ]),
                 // See https://github.com/w3c/csswg-drafts/issues/7324
-                ColorMixFlags::empty(),
+                flags,
             )
             .expect("an animated mix has two endpoints"),
         ))
@@ -158,40 +163,59 @@ mod tests {
 
     #[test]
     fn deferred_color_mix_uses_oklab_for_the_complete_animation_interval() {
-        let gray = Color::from_color_mix(
-            ColorMix::new(
-                ColorInterpolationMethod::srgb(),
-                OwnedSlice::from_slice(&[
-                    GenericColorMixItem {
-                        color: Color::WHITE,
-                        percentage: GenericColorMixPercentage::Explicit(Percentage(0.5)),
-                    },
-                    GenericColorMixItem {
-                        color: Color::CurrentColor,
-                        percentage: GenericColorMixPercentage::Explicit(Percentage(0.5)),
-                    },
-                ]),
-                ColorMixFlags::empty(),
+        let gray = |flags| {
+            Color::from_color_mix(
+                ColorMix::new(
+                    ColorInterpolationMethod::srgb(),
+                    OwnedSlice::from_slice(&[
+                        GenericColorMixItem {
+                            color: Color::WHITE,
+                            percentage: GenericColorMixPercentage::Explicit(Percentage(0.5)),
+                        },
+                        GenericColorMixItem {
+                            color: Color::CurrentColor,
+                            percentage: GenericColorMixPercentage::Explicit(Percentage(0.5)),
+                        },
+                    ]),
+                    flags,
+                )
+                .unwrap(),
             )
-            .unwrap(),
-        );
+        };
         let green = Color::Absolute(AbsoluteColor::srgb_legacy(0, 255, 0, 1.0));
+        for flags in [
+            ColorMixFlags::empty(),
+            ColorMixFlags::RESULT_IN_MODERN_SYNTAX,
+        ] {
+            let gray = gray(flags);
+            for progress in [0.0, 0.5, 1.0] {
+                for (from, to) in [(&gray, &green), (&green, &gray)] {
+                    let mixed = from
+                        .animate(to, Procedure::Interpolate { progress })
+                        .unwrap();
+                    assert_eq!(
+                        mixed.resolve_to_absolute(&AbsoluteColor::BLACK).color_space,
+                        ColorSpace::Oklab
+                    );
+                }
+            }
+        }
         for progress in [0.0, 0.5, 1.0] {
-            for (from, to) in [(&gray, &green), (&green, &gray)] {
-                let mixed = from.animate(to, Procedure::Interpolate { progress }).unwrap();
+            for (from, to) in [
+                (&Color::CurrentColor, &green),
+                (&green, &Color::CurrentColor),
+            ] {
+                let legacy = from
+                    .animate(to, Procedure::Interpolate { progress })
+                    .unwrap();
                 assert_eq!(
-                    mixed.resolve_to_absolute(&AbsoluteColor::BLACK).color_space,
-                    ColorSpace::Oklab
+                    legacy
+                        .resolve_to_absolute(&AbsoluteColor::BLACK)
+                        .color_space,
+                    ColorSpace::Srgb
                 );
             }
         }
-        let legacy = Color::CurrentColor
-            .animate(&green, Procedure::Interpolate { progress: 0.5 })
-            .unwrap();
-        assert_eq!(
-            legacy.resolve_to_absolute(&AbsoluteColor::BLACK).color_space,
-            ColorSpace::Srgb
-        );
     }
 
     #[test]
