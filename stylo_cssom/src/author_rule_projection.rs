@@ -84,13 +84,17 @@ pub(crate) fn map_pending_declarations(
             }
         })
         .collect::<Vec<_>>();
-    let projected = stylo_cssom_model::RuleDeclarationBlock::new(
-        block.domain(),
-        block.shared_serialization(),
-        declarations,
-    )
-    .with_namespaces(block.namespaces().clone())
-    .with_shorthand_values(block.shorthand_values());
+    let projected = if declarations.as_slice() == block.declarations() {
+        block.clone().with_native_backing(None)
+    } else {
+        stylo_cssom_model::RuleDeclarationBlock::new(
+            block.domain(),
+            block.shared_serialization(),
+            declarations,
+        )
+        .with_namespaces(block.namespaces().clone())
+        .with_shorthand_values(block.shorthand_values())
+    };
     rule.with_declaration_block(projected)
 }
 
@@ -156,6 +160,61 @@ pub fn map_rule_sources(
 #[cfg(test)]
 mod tests {
     #[test]
+    fn source_projection_shares_only_unchanged_pending_declarations() {
+        use stylo_cssom_model::{
+            RuleDeclaration, RuleDeclarationBlock, RuleDeclarationDomain, RuleNode,
+        };
+        crate::context::initialise_required_servo_style_prefs();
+        let shorthand = stylo_cssom_model::property_schema("margin").unwrap().id;
+        let declaration = RuleDeclaration::from_pending_substitution(
+            "margin-top",
+            shorthand,
+            "var(--before)",
+            "https://styles.test/",
+        )
+        .unwrap()
+        .with_importance(true)
+        .with_source_referrer("https://response.test/style.css");
+        let block = RuleDeclarationBlock::new(
+            RuleDeclarationDomain::Style,
+            "margin:var(--before)!important",
+            [declaration],
+        );
+        let original =
+            RuleNode::style("p", block.serialization()).with_declaration_block(block.clone());
+        let unchanged =
+            super::map_pending_declarations(original.clone(), str::to_owned, None, None);
+        assert_eq!(
+            unchanged
+                .payload()
+                .declaration_block()
+                .unwrap()
+                .declarations()
+                .as_ptr(),
+            block.declarations().as_ptr()
+        );
+        let changed = super::map_pending_declarations(
+            original,
+            |tokens| tokens.replace("--before", "--after"),
+            None,
+            None,
+        );
+        let after = changed.payload().declaration_block().unwrap();
+        assert_ne!(after.declarations().as_ptr(), block.declarations().as_ptr());
+        let declaration = &after.declarations()[0];
+        let pending = declaration.pending_substitution().unwrap();
+        assert_eq!(pending.tokens(), "var(--after)");
+        assert_eq!(pending.shorthand(), shorthand);
+        assert_eq!(pending.base_url(), "https://styles.test/");
+        assert!(declaration.important());
+        assert_eq!(
+            declaration.source_referrer(),
+            Some("https://response.test/style.css")
+        );
+        assert!(after.native_backing().is_none());
+    }
+
+    #[test]
     fn source_context_projection_reuses_block_text_and_resets_native_backing() {
         use std::sync::Arc;
         use stylo_cssom_model::{
@@ -190,6 +249,32 @@ mod tests {
         .with_native_backing(Some(RetainedNativeDeclarations(Arc::new(Backing))));
         let original = stylo_cssom_model::RuleNode::style("p", block.serialization())
             .with_declaration_block(block.clone());
+        for (base, referrer) in [
+            (None, None),
+            (
+                Some("https://before.test/"),
+                Some("https://before.test/source.css"),
+            ),
+        ] {
+            let unchanged =
+                super::map_pending_declarations(original.clone(), str::to_owned, base, referrer);
+            let after = unchanged.payload().declaration_block().unwrap();
+            assert_eq!(after.declarations(), block.declarations());
+            assert_eq!(after.declarations().as_ptr(), block.declarations().as_ptr());
+            assert_eq!(
+                after.shorthand_values().as_ptr(),
+                block.shorthand_values().as_ptr()
+            );
+            assert!(after.native_backing().is_none());
+            assert!(
+                original
+                    .payload()
+                    .declaration_block()
+                    .unwrap()
+                    .native_backing()
+                    .is_some()
+            );
+        }
         let projected = super::map_pending_declarations(
             original.clone(),
             str::to_owned,
@@ -201,6 +286,7 @@ mod tests {
         assert_eq!(after.domain(), block.domain());
         assert_eq!(after.namespaces(), block.namespaces());
         assert_eq!(after.shorthand_values(), block.shorthand_values());
+        assert_ne!(after.declarations().as_ptr(), block.declarations().as_ptr());
         assert!(after.native_backing().is_none());
         assert!(
             original
