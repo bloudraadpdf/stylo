@@ -94,9 +94,14 @@ fn serialize_direct_rgb_channel<W: Write>(
 ) -> fmt::Result {
     if let Some(value) = value {
         if value.is_finite() {
-            let decimal = format!("{value:.6}");
-            let number = decimal.trim_end_matches('0').trim_end_matches('.');
-            return dest.write_str(if number == "-0" { "0" } else { number });
+            if value == 0.0 {
+                return dest.write_str("0");
+            }
+            let channel = value as f32;
+            if channel.is_finite() && channel != 0.0 {
+                return cssparser::ToCss::to_css(&channel, dest);
+            }
+            return cssparser::ToCss::to_css(&value, dest);
         }
     }
     ModernComponent(&value).to_css(dest)
@@ -304,6 +309,56 @@ mod tests {
                 .unwrap();
             assert_eq!((serialized * 1023.0).round() as u32, channel);
         }
+    }
+
+    #[test]
+    fn modern_srgb_channels_use_six_significant_digits_across_magnitudes() {
+        for (value, expected) in [
+            (10.0 / 255.0, "0.0392157"),
+            (-10.0 / 255.0, "-0.0392157"),
+            (1.23456789, "1.23457"),
+            (12.3456789, "12.3457"),
+            (1234567.89, "1234570"),
+            (1.23456789e-7, "1.23457e-7"),
+            (1.23456789e-30, "1.23457e-30"),
+            (123456.5, "123457"),
+            (-123456.5, "-123457"),
+        ] {
+            let color = AbsoluteColor::new(ColorSpace::Srgb, value, 0.0, 0.0, 1.0);
+            assert_eq!(color.to_css_string(), format!("color(srgb {expected} 0 0)"));
+        }
+    }
+
+    #[test]
+    fn modern_srgb_serialization_retains_finite_channels_outside_the_f32_range() {
+        for value in [1e-100, 1e100, -1e-100, -1e100] {
+            let css = AbsoluteColor::new(ColorSpace::Srgb, value, None::<f32>, None::<f32>, 1.0)
+                .to_css_string();
+            let serialized: f64 = css
+                .strip_prefix("color(srgb ")
+                .unwrap()
+                .strip_suffix(" none none)")
+                .unwrap()
+                .parse()
+                .unwrap();
+            assert_eq!(serialized, value);
+        }
+        let css = AbsoluteColor::new(
+            ColorSpace::Srgb,
+            1.23456789e20,
+            None::<f32>,
+            None::<f32>,
+            1.0,
+        )
+        .to_css_string();
+        let serialized: f64 = css
+            .strip_prefix("color(srgb ")
+            .unwrap()
+            .strip_suffix(" none none)")
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert_eq!(serialized, 1.23457e20);
     }
 
     #[test]
