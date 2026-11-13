@@ -726,6 +726,9 @@ impl ColorSpaceConversion for ProphotoRgb {
 pub struct Rec2020;
 
 impl Rec2020 {
+    const ALPHA: ColorFloat = 1.09929682680944;
+    const BETA: ColorFloat = 0.018053968510807;
+
     #[rustfmt::skip]
     const TO_XYZ: Transform = Transform::new(
         0.6369580483012913,  0.26270021201126703,  0.0,                  0.0,
@@ -747,8 +750,15 @@ impl ColorSpaceConversion for Rec2020 {
     const WHITE_POINT: WhitePoint = WhitePoint::D65;
 
     fn to_linear_light(from: &ColorComponents) -> ColorComponents {
-        from.clone()
-            .map(|value| value.signum() * value.abs().powf(2.4))
+        from.clone().map(|value| {
+            let magnitude = value.abs();
+            value.signum()
+                * if magnitude < Self::BETA * 4.5 {
+                    magnitude / 4.5
+                } else {
+                    ((magnitude + Self::ALPHA - 1.0) / Self::ALPHA).powf(1.0 / 0.45)
+                }
+        })
     }
 
     fn to_xyz(from: &ColorComponents) -> ColorComponents {
@@ -760,23 +770,40 @@ impl ColorSpaceConversion for Rec2020 {
     }
 
     fn to_gamma_encoded(from: &ColorComponents) -> ColorComponents {
-        from.clone()
-            .map(|value| value.signum() * value.abs().powf(1.0 / 2.4))
+        from.clone().map(|value| {
+            let magnitude = value.abs();
+            value.signum()
+                * if magnitude < Self::BETA {
+                    magnitude * 4.5
+                } else {
+                    Self::ALPHA * magnitude.powf(0.45) - (Self::ALPHA - 1.0)
+                }
+        })
     }
 }
 
 #[cfg(test)]
 mod rec2020_tests {
-    use super::{ColorComponents, ColorFloat, ColorSpaceConversion, Rec2020};
+    use super::{ColorComponents, ColorSpaceConversion, Rec2020};
 
     #[test]
-    fn display_referred_transfer_uses_gamma_two_point_four() {
+    fn browser_transfer_uses_the_bt2020_piecewise_curve() {
         let encoded = ColorComponents(0.25, 0.5, 0.75);
         let linear = Rec2020::to_linear_light(&encoded);
-        for (actual, source) in [(linear.0, 0.25), (linear.1, 0.5), (linear.2, 0.75)] {
-            let source: ColorFloat = source;
-            assert!((actual - source.powf(2.4)).abs() < 0.000001);
+        for (actual, expected) in [
+            (linear.0, 0.0782546888146924),
+            (linear.1, 0.2597194371011775),
+            (linear.2, 0.5636218719150451),
+        ] {
+            assert!((actual - expected).abs() < 0.000001);
         }
+        let extended = ColorComponents(-0.01, 1.2, 0.01);
+        let linear_extended = Rec2020::to_linear_light(&extended);
+        assert!((linear_extended.0 + 0.01 / 4.5).abs() < 0.000001);
+        assert!((linear_extended.2 - 0.01 / 4.5).abs() < 0.000001);
+        let restored = Rec2020::to_gamma_encoded(&linear_extended);
+        assert!((restored.0 - extended.0).abs() < 0.000001);
+        assert!((restored.1 - extended.1).abs() < 0.000001);
         let round_trip = Rec2020::to_gamma_encoded(&linear);
         for (actual, source) in [
             (round_trip.0, encoded.0),
