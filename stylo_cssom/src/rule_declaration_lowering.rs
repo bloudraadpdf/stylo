@@ -308,6 +308,19 @@ fn native_children(
     })
 }
 
+fn parser_for_input<'a, 'i>(
+    parser: style::stylesheets::TopLevelRuleParser<'a, '_>,
+) -> Result<style::stylesheets::TopLevelRuleParser<'a, 'i>, DeclarationLoweringError> {
+    if parser.declaration_parser_state.has_parsed_declarations() {
+        return Err(DeclarationLoweringError::DeclarationContext);
+    }
+    // Drop transient declaration errors before the next rule input.
+    Ok(style::stylesheets::TopLevelRuleParser {
+        declaration_parser_state: Default::default(),
+        ..parser
+    })
+}
+
 fn lower_rule_list(
     source: &[RuleNode],
     contents: &style::stylesheets::StylesheetContents,
@@ -319,10 +332,6 @@ fn lower_rule_list(
         parser::ParserContext,
         stylesheets::{AllowImportRules, State, TopLevelRuleParser},
     };
-    let serialized = source
-        .iter()
-        .map(RuleNode::projection_serialization)
-        .collect::<Vec<_>>();
     let mut context = ParserContext::new(
         contents.origin,
         &contents.url_data,
@@ -334,7 +343,7 @@ fn lower_rule_list(
         None,
     );
     context.nesting_context = nesting;
-    let mut parser = TopLevelRuleParser {
+    let mut parser_state = TopLevelRuleParser {
         shared_lock: lock,
         loader: None,
         context,
@@ -353,105 +362,112 @@ fn lower_rule_list(
         error_reporting_state: Default::default(),
         rules: Vec::new(),
     };
-    for (source, css) in source.iter().zip(&serialized) {
-        if source.grammar() == RuleGrammar::FunctionDeclarations {
-            use style::stylesheets::function_rule::{FunctionDescriptor, FunctionDescriptors};
-            let block = source
-                .payload()
-                .declaration_block()
-                .ok_or(DeclarationLoweringError::DeclarationContext)?;
-            let mut descriptors = FunctionDescriptors::default();
-            for declaration in block.declarations() {
-                let retained_url = declaration
-                    .source_base_url()
-                    .and_then(|url| url::Url::parse(url).ok())
-                    .map(|url| {
-                        style::stylesheets::UrlExtraData::from(url).with_referrer_source(
-                            declaration
-                                .source_referrer()
-                                .and_then(|url| url::Url::parse(url).ok()),
-                        )
-                    });
-                let mut context = parser.context.clone();
-                if let Some(url) = &retained_url {
-                    context.url_data = url;
+    for source in source {
+        let css = source.projection_serialization();
+        let mut parser = parser_for_input(parser_state)?;
+        'source_rule: {
+            if source.grammar() == RuleGrammar::FunctionDeclarations {
+                use style::stylesheets::function_rule::{FunctionDescriptor, FunctionDescriptors};
+                let block = source
+                    .payload()
+                    .declaration_block()
+                    .ok_or(DeclarationLoweringError::DeclarationContext)?;
+                let mut descriptors = FunctionDescriptors::default();
+                for declaration in block.declarations() {
+                    let retained_url = declaration
+                        .source_base_url()
+                        .and_then(|url| url::Url::parse(url).ok())
+                        .map(|url| {
+                            style::stylesheets::UrlExtraData::from(url).with_referrer_source(
+                                declaration
+                                    .source_referrer()
+                                    .and_then(|url| url::Url::parse(url).ok()),
+                            )
+                        });
+                    let mut context = parser.context.clone();
+                    if let Some(url) = &retained_url {
+                        context.url_data = url;
+                    }
+                    let mut input =
+                        crate::rule_parser::stylesheet_parser_input(declaration.value());
+                    let descriptor = FunctionDescriptor::parse(
+                        &context,
+                        declaration.name().into(),
+                        &mut cssparser::Parser::new(&mut input),
+                    )
+                    .map_err(|_| DeclarationLoweringError::DeclarationValue)?;
+                    descriptors.push(descriptor);
                 }
-                let mut input = crate::rule_parser::stylesheet_parser_input(declaration.value());
-                let descriptor = FunctionDescriptor::parse(
-                    &context,
-                    declaration.name().into(),
-                    &mut cssparser::Parser::new(&mut input),
-                )
-                .map_err(|_| DeclarationLoweringError::DeclarationValue)?;
-                descriptors.push(descriptor);
-            }
-            parser.rules.push(CssRule::FunctionDeclarations(Arc::new(
-                style::stylesheets::FunctionDeclarationsRule {
-                    descriptors,
-                    source_location: cssparser::SourceLocation { line: 0, column: 1 },
-                },
-            )));
-            continue;
-        }
-        if source.grammar() == RuleGrammar::NestedDeclarations {
-            let source = source
-                .payload()
-                .declaration_block()
-                .ok_or(DeclarationLoweringError::DeclarationContext)?;
-            let mut input = cssparser::ParserInput::new(css);
-            let mut input = cssparser::Parser::new(&mut input);
-            let projected = style::properties::declaration_block::parse_property_declaration_list(
-                &parser.context,
-                &mut input,
-                &[],
-            );
-            let block = Arc::new(lock.wrap(merge_native_declarations(source, &projected)?));
-            parser
-                .rules
-                .push(CssRule::NestedDeclarations(Arc::new(lock.wrap(
-                    style::stylesheets::NestedDeclarationsRule {
-                        block,
+                parser.rules.push(CssRule::FunctionDeclarations(Arc::new(
+                    style::stylesheets::FunctionDeclarationsRule {
+                        descriptors,
                         source_location: cssparser::SourceLocation { line: 0, column: 1 },
                     },
-                ))));
-            continue;
-        }
-        let first = parser.rules.len();
-        let mut input = crate::rule_parser::stylesheet_parser_input(css);
-        let mut input = cssparser::Parser::new(&mut input);
-        for result in cssparser::StyleSheetParser::new(&mut input, &mut parser) {
-            if result.is_err() {
-                continue;
+                )));
+                break 'source_rule;
+            }
+            if source.grammar() == RuleGrammar::NestedDeclarations {
+                let source = source
+                    .payload()
+                    .declaration_block()
+                    .ok_or(DeclarationLoweringError::DeclarationContext)?;
+                let mut input = cssparser::ParserInput::new(&css);
+                let mut input = cssparser::Parser::new(&mut input);
+                let projected =
+                    style::properties::declaration_block::parse_property_declaration_list(
+                        &parser.context,
+                        &mut input,
+                        &[],
+                    );
+                let block = Arc::new(lock.wrap(merge_native_declarations(source, &projected)?));
+                parser
+                    .rules
+                    .push(CssRule::NestedDeclarations(Arc::new(lock.wrap(
+                        style::stylesheets::NestedDeclarationsRule {
+                            block,
+                            source_location: cssparser::SourceLocation { line: 0, column: 1 },
+                        },
+                    ))));
+                break 'source_rule;
+            }
+            let first = parser.rules.len();
+            let mut input = crate::rule_parser::stylesheet_parser_input(&css);
+            let mut input = cssparser::Parser::new(&mut input);
+            for result in cssparser::StyleSheetParser::new(&mut input, &mut parser) {
+                if result.is_err() {
+                    continue;
+                }
+            }
+            let emitted = &parser.rules[first..];
+            if !requires_source_lowering(std::slice::from_ref(source)) || emitted.is_empty() {
+                break 'source_rule;
+            }
+            let [native] = emitted else {
+                return Err(DeclarationLoweringError::RuleTopology);
+            };
+            lower_rule(
+                source,
+                native,
+                contents,
+                lock,
+                nesting,
+                position_try_sources,
+            )?;
+            if source.payload().imported_scope() {
+                let CssRule::Scope(scope) = &parser.rules[first] else {
+                    return Err(DeclarationLoweringError::RuleGrammar);
+                };
+                parser.rules[first] = CssRule::Scope(Arc::new(style::stylesheets::ScopeRule {
+                    bounds: scope.bounds.clone(),
+                    rules: scope.rules.clone(),
+                    source_location: scope.source_location.clone(),
+                    imported: true,
+                }));
             }
         }
-        let emitted = &parser.rules[first..];
-        if !requires_source_lowering(std::slice::from_ref(source)) || emitted.is_empty() {
-            continue;
-        }
-        let [native] = emitted else {
-            return Err(DeclarationLoweringError::RuleTopology);
-        };
-        lower_rule(
-            source,
-            native,
-            contents,
-            lock,
-            nesting,
-            position_try_sources,
-        )?;
-        if source.payload().imported_scope() {
-            let CssRule::Scope(scope) = &parser.rules[first] else {
-                return Err(DeclarationLoweringError::RuleGrammar);
-            };
-            parser.rules[first] = CssRule::Scope(Arc::new(style::stylesheets::ScopeRule {
-                bounds: scope.bounds.clone(),
-                rules: scope.rules.clone(),
-                source_location: scope.source_location.clone(),
-                imported: true,
-            }));
-        }
+        parser_state = parser_for_input(parser)?;
     }
-    Ok(parser.rules)
+    Ok(parser_state.rules)
 }
 
 fn lower_rule(
@@ -547,6 +563,32 @@ fn lower_rule(
     Ok(())
 }
 
+fn replacement_rule_context(
+    stylesheet: &DocumentStyleSheet,
+    lock: &SharedRwLock,
+    private_lock: &SharedRwLock,
+) -> Arc<style::stylesheets::StylesheetContents> {
+    let guard = lock.read();
+    let original = stylesheet.contents(&guard);
+    let mut contents = style::stylesheets::StylesheetContents::from_str(
+        "",
+        original.url_data.clone(),
+        original.origin,
+        private_lock,
+        None,
+        None,
+        original.quirks_mode,
+        style::stylesheets::AllowImportRules::Yes,
+        None,
+    );
+    let target = Arc::get_mut(&mut contents).expect("new lowering context is unique");
+    target.namespaces = original.namespaces.clone();
+    target.source_map_url = original.source_map_url.clone();
+    target.source_url = original.source_url.clone();
+    target.use_counters = original.use_counters.clone();
+    contents
+}
+
 pub fn lower_pending_declarations(
     rules: &[RuleNode],
     stylesheet: DocumentStyleSheet,
@@ -559,12 +601,7 @@ pub fn lower_pending_declarations(
         });
     }
     let private_lock = SharedRwLock::new();
-    let contents = {
-        let guard = lock.read();
-        stylesheet
-            .contents(&guard)
-            .deep_clone(&private_lock, None, &guard)
-    };
+    let contents = replacement_rule_context(&stylesheet, lock, &private_lock);
     let mut source_stamps = Vec::new();
     let rules = lower_rule_list(
         rules,
@@ -624,6 +661,160 @@ pub fn lower_pending_declarations(
 mod tests {
     use style::shared_lock::{DeepCloneWithLock, ToCssWithGuard};
     use style::stylesheets::StylesheetInDocument;
+
+    #[test]
+    fn replacement_context_omits_rules_and_preserves_metadata_and_aliases() {
+        use servo_arc::Arc;
+        use style::{
+            shared_lock::{SharedRwLock, ToCssWithGuard},
+            stylesheets::{
+                AllowImportRules, CssRule, DocumentStyleSheet, Origin, Stylesheet,
+                StylesheetContents, StylesheetInDocument, UrlExtraData,
+                scope_rule::ImplicitScopeRoot,
+            },
+            use_counters::CustomUseCounter,
+        };
+
+        fn assert_metadata(actual: &StylesheetContents, expected: &StylesheetContents) {
+            assert_eq!(actual.origin, expected.origin);
+            assert_eq!(actual.url_data, expected.url_data);
+            assert_eq!(actual.quirks_mode, expected.quirks_mode);
+            assert_eq!(actual.namespaces.default, expected.namespaces.default);
+            assert_eq!(actual.namespaces.prefixes, expected.namespaces.prefixes);
+            assert_eq!(actual.source_map_url, expected.source_map_url);
+            assert_eq!(actual.source_url, expected.source_url);
+            assert!(
+                actual
+                    .use_counters
+                    .custom
+                    .recorded(CustomUseCounter::MaybeHasFullBaseUriDependency,)
+            );
+        }
+
+        crate::context::initialise_required_servo_style_prefs();
+        let css = concat!(
+            "@namespace url(urn:default);",
+            "@namespace s url(urn:svg);",
+            "s|a{background-image:url(icon.png);color:red}",
+            "@position-try --fallback{left:3px}",
+        );
+        let parsed = crate::authored_rules::ParsedStylesheet::parse(css).unwrap();
+        let base = crate::CssStylesheetBaseUrl::from_absolute(
+            url::Url::parse("https://styles.test/directory/style.css").unwrap(),
+        );
+        let source = crate::authored_rules::project_stylesheet_pending_contexts(
+            parsed.rule_nodes(),
+            &base,
+            None,
+        );
+        let source = stylo_cssom_model::InternalStylesheetRoot::new(
+            stylo_cssom_model::StyleOrigin::Author,
+            source,
+        );
+        assert!(super::requires_source_lowering(source.rules()));
+        let lock = SharedRwLock::new();
+        let private_lock = SharedRwLock::new();
+        let native = Stylesheet::from_str(
+            css,
+            UrlExtraData::from(url::Url::parse(base.as_str()).unwrap()).with_referrer_source(Some(
+                url::Url::parse("https://response.test/style.css").unwrap(),
+            )),
+            Origin::Author,
+            Arc::new(lock.wrap(style::media_queries::MediaList::empty())),
+            lock.clone(),
+            None,
+            None,
+            selectors::matching::QuirksMode::Quirks,
+            AllowImportRules::Yes,
+        );
+        {
+            let mut guard = lock.write();
+            let contents = Arc::get_mut(native.contents.write_with(&mut guard)).unwrap();
+            contents.source_map_url = Some("source.css.map".into());
+            contents.source_url = Some("authored.css".into());
+            contents
+                .use_counters
+                .custom
+                .record(CustomUseCounter::MaybeHasFullBaseUriDependency);
+        }
+        native.set_disabled(true);
+        let original =
+            DocumentStyleSheet(Arc::new(native), Some(ImplicitScopeRoot::DocumentElement));
+        let alias = original.clone();
+        let (original_rules, original_style, original_css) = {
+            let guard = lock.read();
+            let contents = original.contents(&guard);
+            assert_eq!(
+                contents.namespaces.default.as_ref().unwrap().to_string(),
+                "urn:default"
+            );
+            assert!(
+                contents
+                    .namespaces
+                    .prefixes
+                    .iter()
+                    .any(|(prefix, namespace)| {
+                        prefix.to_string() == "s" && namespace.to_string() == "urn:svg"
+                    })
+            );
+            let CssRule::Style(rule) = &contents.rules(&guard)[2] else {
+                panic!("the third original rule is the namespaced style");
+            };
+            (
+                contents.rules.clone(),
+                rule.clone(),
+                contents
+                    .rules(&guard)
+                    .iter()
+                    .map(|rule| rule.to_css_string(&guard))
+                    .collect::<Vec<_>>(),
+            )
+        };
+        let scratch = super::replacement_rule_context(&original, &lock, &private_lock);
+        {
+            let private_guard = private_lock.read();
+            let original_guard = lock.read();
+            assert!(
+                scratch.rules(&private_guard).is_empty(),
+                "lowering must not clone the rule tree it replaces"
+            );
+            assert_metadata(&scratch, original.contents(&original_guard));
+        }
+        drop(scratch);
+        let lowered = super::lower_pending_declarations(source.rules(), original, &lock).unwrap();
+        let guard = lock.read();
+        let before = alias.contents(&guard);
+        let after = lowered.stylesheet.contents(&guard);
+        assert_metadata(after, before);
+        assert!(Arc::ptr_eq(&before.rules, &original_rules));
+        let CssRule::Style(rule) = &before.rules(&guard)[2] else {
+            panic!("the original style alias remains unchanged");
+        };
+        assert!(Arc::ptr_eq(rule, &original_style));
+        assert_eq!(
+            before
+                .rules(&guard)
+                .iter()
+                .map(|rule| rule.to_css_string(&guard))
+                .collect::<Vec<_>>(),
+            original_css
+        );
+        assert!(Arc::ptr_eq(&lowered.stylesheet.0.media, &alias.0.media));
+        assert_eq!(lowered.stylesheet.0.disabled(), alias.0.disabled());
+        assert_eq!(lowered.stylesheet.1, alias.1);
+        let CssRule::Style(rule) = &after.rules(&guard)[2] else {
+            panic!("the lowered namespaced style uses the caller lock");
+        };
+        assert_eq!(
+            rule.read_with(&guard).selectors,
+            original_style.read_with(&guard).selectors
+        );
+        assert_eq!(
+            rule.read_with(&guard).to_css_string(&guard),
+            original_style.read_with(&guard).to_css_string(&guard)
+        );
+        assert_eq!(lowered.position_try_sources.len(), 1);
+    }
 
     fn lower_contextual_stylesheet(
         css: &str,
