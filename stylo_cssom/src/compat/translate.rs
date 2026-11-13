@@ -2259,32 +2259,15 @@ pub fn project_compat_root(
                 .rule_nodes(),
         );
     }
-    let projected = stylo_cssom_model::InternalStylesheetRoot::new(root.origin(), rules);
-    let projected = if projected == *root {
-        root.clone()
-    } else {
-        projected
-    };
-    (projected, translation.warnings)
+    (
+        stylo_cssom_model::InternalStylesheetRoot::new(root.origin(), rules),
+        translation.warnings,
+    )
 }
 
 #[cfg(test)]
 mod prince_rewrite_tests {
     use super::{CompatMode, translate_compat, translate_compat_declarations};
-
-    #[test]
-    fn projection_identity_keeps_the_complete_unchanged_compat_root() {
-        use stylo_cssom_model::{InternalStylesheetRoot, StyleOrigin};
-        crate::context::initialise_required_servo_style_prefs();
-        let parsed =
-            crate::authored_rules::ParsedStylesheet::parse("@media print{p{color:red}}").unwrap();
-        let original =
-            InternalStylesheetRoot::new(StyleOrigin::Author, parsed.rule_nodes().to_vec());
-        let (projected, warnings) = super::project_compat_root(&original, CompatMode::PdfReactor);
-        assert!(warnings.is_empty());
-        assert_eq!(projected, original);
-        assert_eq!(projected.rules().as_ptr(), original.rules().as_ptr());
-    }
 
     #[test]
     fn pdfreactor_rejects_unsupported_selector_rules() {

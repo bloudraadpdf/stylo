@@ -91,9 +91,6 @@ pub(crate) fn map_pending_declarations(
     )
     .with_namespaces(block.namespaces().clone())
     .with_shorthand_values(block.shorthand_values());
-    if projected == *block {
-        return rule;
-    }
     rule.with_declaration_block(projected)
 }
 
@@ -158,61 +155,6 @@ pub fn map_rule_sources(
 
 #[cfg(test)]
 mod tests {
-    #[test]
-    fn projection_identity_keeps_unchanged_typed_declarations() {
-        use stylo_cssom_model::{RuleDeclaration, RuleDeclarationBlock, RuleDeclarationDomain};
-        crate::context::initialise_required_servo_style_prefs();
-        let block = RuleDeclarationBlock::new(
-            RuleDeclarationDomain::Style,
-            "background-image:url(icon.png)",
-            [RuleDeclaration::new("background-image", "url(icon.png)")
-                .with_source_base_url("https://styles.test/")
-                .with_source_referrer("https://response.test/style.css")],
-        );
-        let rule = stylo_cssom_model::RuleNode::style("p", block.serialization())
-            .with_declaration_block(block.clone());
-        let projected = super::map_pending_declarations(rule, str::to_owned, None, None);
-        let after = projected.payload().declaration_block().unwrap();
-        assert_eq!(after, &block);
-        assert_eq!(after.declarations().as_ptr(), block.declarations().as_ptr());
-    }
-
-    #[test]
-    fn projection_identity_does_not_hide_changed_typed_context() {
-        use stylo_cssom_model::{RuleDeclaration, RuleDeclarationBlock, RuleDeclarationDomain};
-        crate::context::initialise_required_servo_style_prefs();
-        let block = RuleDeclarationBlock::new(
-            RuleDeclarationDomain::Style,
-            "background-image:url(icon.png)",
-            [RuleDeclaration::new("background-image", "url(icon.png)")
-                .with_source_base_url("https://before.test/")],
-        );
-        let rule = stylo_cssom_model::RuleNode::style("p", block.serialization())
-            .with_declaration_block(block.clone());
-        let projected = super::map_pending_declarations(
-            rule,
-            str::to_owned,
-            Some("https://after.test/"),
-            Some("https://response.test/style.css"),
-        );
-        let after = projected.payload().declaration_block().unwrap();
-        assert_eq!(after.serialization(), block.serialization());
-        assert_ne!(after, &block);
-        assert_ne!(after.declarations().as_ptr(), block.declarations().as_ptr());
-        assert_eq!(
-            after.declarations()[0].source_base_url(),
-            Some("https://after.test/")
-        );
-        assert_eq!(
-            after.declarations()[0].source_referrer(),
-            Some("https://response.test/style.css")
-        );
-        assert_eq!(
-            block.declarations()[0].source_base_url(),
-            Some("https://before.test/")
-        );
-    }
-
     #[test]
     fn source_context_projection_reuses_block_text_and_resets_native_backing() {
         use std::sync::Arc;
