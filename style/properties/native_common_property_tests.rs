@@ -1736,3 +1736,26 @@ fn field_sizing_uses_native_discrete_keywords() {
         super::longhands::field_sizing::computed_value::T::Fixed,
     );
 }
+
+#[test]
+fn omitted_flex_basis_remains_a_percentage_through_the_cascade() {
+    use style_traits::ToCss;
+    for (value, expected) in [
+        ("1", "0%"),
+        ("1 1", "0%"),
+        ("2 0", "0%"),
+        ("1 1 0%", "0%"),
+        ("1 1 0px", "0px"),
+        ("1 1 0", "0px"),
+        ("none", "auto"),
+    ] {
+        let declaration = block(&format!("flex:{value}"));
+        assert_eq!(serialized_value(&declaration, "flex-basis"), expected, "{value}");
+        let computed = cascade_zoom_test_style(&format!("flex:{value}"), None);
+        assert_eq!(
+            computed.get_position().flex_basis.to_css_string(),
+            expected,
+            "{value}"
+        );
+    }
+}

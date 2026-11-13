@@ -2877,7 +2877,7 @@ pub mod flex {
         Ok(expanded! {
             flex_grow: grow.unwrap_or(NonNegativeNumber::new(1.0)),
             flex_shrink: shrink.unwrap_or(NonNegativeNumber::new(1.0)),
-            flex_basis: basis.unwrap_or(FlexBasis::zero_length()),
+            flex_basis: basis.unwrap_or(FlexBasis::zero_percent()),
         })
     }
 }

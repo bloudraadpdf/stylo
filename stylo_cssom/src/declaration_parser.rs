@@ -3009,10 +3009,10 @@ mod tests {
     }
 
     #[test]
-    fn omitted_flex_basis_is_a_definite_zero_length() {
+    fn omitted_flex_basis_remains_a_zero_percentage() {
         for (value, basis) in [
-            ("0", "0px"),
-            ("2 3", "0px"),
+            ("0", "0%"),
+            ("2 3", "0%"),
             ("0%", "0%"),
             ("0 1 0%", "0%"),
             ("0 1 0px", "0px"),

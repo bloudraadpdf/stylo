@@ -86,10 +86,12 @@ impl FlexBasis {
         GenericFlexBasis::Size(Size::auto())
     }
 
-    /// `0px`
+    /// `0%`
     #[inline]
-    pub fn zero_length() -> Self {
-        GenericFlexBasis::Size(Size::LengthPercentage(NonNegativeLengthPercentage::zero()))
+    pub fn zero_percent() -> Self {
+        GenericFlexBasis::Size(Size::LengthPercentage(
+            NonNegativeLengthPercentage::zero_percent(),
+        ))
     }
 }
 
