@@ -86,7 +86,7 @@ pub(crate) fn map_pending_declarations(
         .collect::<Vec<_>>();
     let projected = stylo_cssom_model::RuleDeclarationBlock::new(
         block.domain(),
-        block.serialization(),
+        block.shared_serialization(),
         declarations,
     )
     .with_namespaces(block.namespaces().clone())
@@ -155,6 +155,80 @@ pub fn map_rule_sources(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn source_context_projection_reuses_block_text_and_resets_native_backing() {
+        use std::sync::Arc;
+        use stylo_cssom_model::{
+            NativeDeclarationBacking, RetainedNativeDeclarations, RuleDeclaration,
+            RuleDeclarationBlock, RuleDeclarationDomain, RuleNamespaceContext,
+        };
+        #[derive(Debug)]
+        struct Backing;
+        impl NativeDeclarationBacking for Backing {
+            fn as_any(&self) -> &dyn std::any::Any {
+                self
+            }
+            fn equivalent(&self, other: &dyn NativeDeclarationBacking) -> bool {
+                other.as_any().is::<Self>()
+            }
+        }
+        crate::context::initialise_required_servo_style_prefs();
+        let declaration = RuleDeclaration::new("background-image", "url(image.png)")
+            .with_importance(true)
+            .with_source_base_url("https://before.test/")
+            .with_source_referrer("https://before.test/source.css");
+        let block = RuleDeclarationBlock::new(
+            RuleDeclarationDomain::Style,
+            "background-image: url(image.png) !important;",
+            [declaration],
+        )
+        .with_namespaces(RuleNamespaceContext::new(
+            Some("urn:default".into()),
+            [("p".into(), "urn:prefix".into())],
+        ))
+        .with_shorthand_values([RuleDeclaration::new("background", "url(image.png)")])
+        .with_native_backing(Some(RetainedNativeDeclarations(Arc::new(Backing))));
+        let original = stylo_cssom_model::RuleNode::style("p", block.serialization())
+            .with_declaration_block(block.clone());
+        let projected = super::map_pending_declarations(
+            original.clone(),
+            str::to_owned,
+            Some("https://after.test/"),
+            Some("https://after.test/changed.css"),
+        );
+        let after = projected.payload().declaration_block().unwrap();
+        assert_eq!(after.serialization(), block.serialization());
+        assert_eq!(after.domain(), block.domain());
+        assert_eq!(after.namespaces(), block.namespaces());
+        assert_eq!(after.shorthand_values(), block.shorthand_values());
+        assert!(after.native_backing().is_none());
+        assert!(
+            original
+                .payload()
+                .declaration_block()
+                .unwrap()
+                .native_backing()
+                .is_some()
+        );
+        let changed = &after.declarations()[0];
+        assert_eq!(changed.name(), "background-image");
+        assert_eq!(changed.value(), "url(image.png)");
+        assert!(changed.important());
+        assert_eq!(changed.source_base_url(), Some("https://after.test/"));
+        assert_eq!(
+            changed.source_referrer(),
+            Some("https://after.test/changed.css")
+        );
+        assert_eq!(
+            block.declarations()[0].source_base_url(),
+            Some("https://before.test/")
+        );
+        assert_eq!(
+            after.serialization().as_ptr(),
+            block.serialization().as_ptr()
+        );
+    }
+
     #[test]
     fn rejected_selector_comments_do_not_leave_style_rule_nodes() {
         use stylo_cssom_model::{InternalStylesheetRoot, StyleOrigin};

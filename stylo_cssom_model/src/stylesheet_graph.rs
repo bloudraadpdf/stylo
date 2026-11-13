@@ -1169,6 +1169,11 @@ impl RuleDeclarationBlock {
     pub fn serialization(&self) -> &str {
         &self.serialization
     }
+
+    #[must_use]
+    pub fn shared_serialization(&self) -> Arc<str> {
+        Arc::clone(&self.serialization)
+    }
 }
 
 fn serialise_declarations(declarations: &[RuleDeclaration]) -> String {
@@ -1623,6 +1628,10 @@ impl RuleNode {
             .projection_serialization
             .take()
             .filter(|existing| existing.as_ref() == serialization.as_ref())
+            .or_else(|| {
+                (payload.authored && payload.prelude.as_ref() == serialization.as_ref())
+                    .then(|| Arc::clone(&payload.prelude))
+            })
             .unwrap_or(serialization);
         payload.projection_serialization = Some(shared);
         self
@@ -3049,6 +3058,13 @@ impl RuleLease {
                 current.serialization()
             },
         };
+        let serialization = if source.payload().authored
+            && source.payload().prelude.as_ref() == serialization.as_str()
+        {
+            Arc::clone(&source.payload().prelude)
+        } else {
+            Arc::from(serialization)
+        };
         let projection_serialization =
             source
                 .payload()
@@ -3064,7 +3080,7 @@ impl RuleLease {
                         return projection.clone();
                     }
                     let Some(header) = header.as_ref() else {
-                        return Arc::from(serialization.as_str());
+                        return Arc::clone(&serialization);
                     };
                     let children = nested_nodes
                         .iter()
@@ -4623,6 +4639,109 @@ fn attachment_import_environment_changed(
 #[cfg(test)]
 mod projection_storage_tests {
     use super::*;
+
+    #[test]
+    fn authored_projection_reuses_equal_source_text_without_losing_some_state() {
+        let original = RuleNode::authored(RuleGrammar::Style, "p { color: red; }", []);
+        let projected = original
+            .clone()
+            .with_projection_serialization(original.serialization());
+        assert!(original.payload().projection_serialization.is_none());
+        assert!(projected.payload().projection_serialization.is_some());
+        assert_eq!(projected.serialization(), original.serialization());
+        assert_eq!(
+            projected.projection_serialization(),
+            original.serialization()
+        );
+        let changed = projected
+            .clone()
+            .with_projection_serialization("p { color: blue; }");
+        assert_eq!(changed.projection_serialization(), "p { color: blue; }");
+        assert_eq!(
+            projected.projection_serialization(),
+            original.serialization()
+        );
+        assert!(Arc::ptr_eq(
+            &projected.payload().prelude,
+            projected
+                .payload()
+                .projection_serialization
+                .as_ref()
+                .unwrap()
+        ));
+    }
+
+    #[test]
+    fn rule_snapshot_reuses_equal_text_and_keeps_current_metadata() {
+        let declaration = RuleDeclaration::new("color", "red")
+            .with_importance(true)
+            .with_source_base_url("https://example.test/base/")
+            .with_source_referrer("https://example.test/source.css");
+        let block = RuleDeclarationBlock::new(
+            RuleDeclarationDomain::Style,
+            "color: red !important;",
+            [declaration],
+        );
+        let text = RuleNode::style("p", block.serialization()).serialization();
+        let original = RuleNode::authored_with_group_header(
+            RuleGrammar::Style,
+            text,
+            [],
+            RuleGroupHeader::new("p"),
+        )
+        .with_declaration_block(block.clone())
+        .with_cssom_data(RuleCssomData::Style {
+            selector: "p".into(),
+        })
+        .unwrap();
+        let lease = RuleLease::allocate(
+            StyleSheetHandle::allocate(),
+            RuleListHandle::allocate(),
+            None,
+            &original,
+            RuleBindingContext::SourceBound,
+            true,
+        );
+        let snapshot = lease.snapshot_node();
+        assert_eq!(snapshot.serialization(), original.serialization());
+        assert_eq!(snapshot.payload().declaration_block(), Some(&block));
+        assert_eq!(
+            snapshot.payload().cssom_data(),
+            original.payload().cssom_data()
+        );
+        assert_eq!(
+            snapshot.payload().source_stamp(),
+            Some(RuleSourceStamp::initial(lease.handle()))
+        );
+        assert!(original.payload().source_stamp().is_none());
+        let changed_block = RuleDeclarationBlock::new(
+            RuleDeclarationDomain::Style,
+            "color: blue;",
+            [RuleDeclaration::new("color", "blue")],
+        );
+        lease
+            .detached()
+            .unwrap()
+            .mutate(
+                original
+                    .clone()
+                    .with_cssom_declaration_block(changed_block.clone()),
+            )
+            .unwrap();
+        let changed = lease.snapshot_node();
+        assert_eq!(changed.payload().declaration_block(), Some(&changed_block));
+        assert_eq!(changed.serialization(), "p { color: blue; }");
+        assert_eq!(snapshot.serialization(), original.serialization());
+        assert_ne!(
+            changed.payload().source_stamp(),
+            snapshot.payload().source_stamp()
+        );
+        assert_eq!(snapshot.payload().declaration_block(), Some(&block));
+        assert!(Arc::ptr_eq(
+            &snapshot.payload().prelude,
+            &original.payload().prelude
+        ));
+    }
 
     #[test]
     fn equal_projection_setters_share_text_and_preserve_option_and_clone_state() {
