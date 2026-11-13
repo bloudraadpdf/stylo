@@ -1262,6 +1262,7 @@ class PropertyRestrictions:
             + PropertyRestrictions.shorthand(data, "margin")
             + PropertyRestrictions.spec(data, "css-fonts")
             + PropertyRestrictions.spec(data, "css-backgrounds")
+            + PropertyRestrictions.spec(data, "css-borders")
             + PropertyRestrictions.spec(data, "css-text")
             + PropertyRestrictions.spec(data, "css-shapes")
             + PropertyRestrictions.spec(data, "css-text-decor")
