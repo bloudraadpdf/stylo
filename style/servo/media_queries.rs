@@ -109,6 +109,15 @@ pub struct UserPreferences {
     pub inverted_colors: bool,
 }
 
+/// The grid used for computed border line widths in print media.
+#[derive(Clone, Copy, Debug, Eq, MallocSizeOf, PartialEq)]
+pub enum PrintBorderWidthGrid {
+    /// Preserve vector lengths without pixel snapping.
+    Vector,
+    /// Snap to CSS pixels independently of raster resolution.
+    CssPixel,
+}
+
 /// A device is a structure that represents the current media a given document
 /// is displayed in.
 ///
@@ -233,6 +242,8 @@ pub struct Device {
     line_width_keywords: LineWidthKeywords,
     /// Whether MathML uses Prince's display and minimum font-size semantics.
     pub prince_math_compat: bool,
+    /// The line-width grid for print; screen media always use device pixels.
+    pub print_border_width_grid: PrintBorderWidthGrid,
     /// Whether background image layers use their authored blend modes.
     pub background_blending_enabled: bool,
     /// Whether substituted values support CSS comparison functions.
@@ -294,12 +305,24 @@ impl Device {
             default_computed_values,
             line_width_keywords: LineWidthKeywords::css(),
             prince_math_compat: false,
+            print_border_width_grid: PrintBorderWidthGrid::Vector,
             background_blending_enabled: true,
             comparison_functions_enabled: true,
             subgrid_enabled: true,
             intrinsic_grid_repetition_enabled: true,
             link_state_cascade_priority: false,
             link_after_rules_enabled: true,
+        }
+    }
+
+    /// The pixel size used when snapping border and gap rule widths.
+    pub fn app_units_per_border_width_pixel(&self) -> i32 {
+        if self.media_type == MediaType::print()
+            && self.print_border_width_grid == PrintBorderWidthGrid::CssPixel
+        {
+            AU_PER_PX
+        } else {
+            self.app_units_per_device_pixel()
         }
     }
 
@@ -1557,5 +1580,82 @@ mod page_color_scheme_support_tests {
         assert!(!device.set_page_color_scheme_support(ColorSchemeFlags::DARK));
         assert!(device.set_page_color_scheme_support(ColorSchemeFlags::LIGHT | ColorSchemeFlags::DARK));
         assert_eq!(device.color_scheme(), PrefersColorScheme::Dark);
+    }
+}
+
+#[cfg(test)]
+mod print_border_width_grid_tests {
+    use super::*;
+    use crate::values::computed::ToComputedValue;
+    use crate::values::specified::bd_gaps::GapRuleWidth;
+    use crate::values::specified::border::BorderSideWidth as SpecifiedBorderSideWidth;
+
+    #[test]
+    fn print_css_grid_is_independent_of_dpr_and_vector_lengths_stay_exact() {
+        for dpr in [1.0, 1.5, 2.0, 4.0] {
+            for grid in [PrintBorderWidthGrid::Vector, PrintBorderWidthGrid::CssPixel] {
+                let mut device = crate::test_support::test_device();
+                assert_eq!(device.print_border_width_grid, PrintBorderWidthGrid::Vector);
+                device.print_border_width_grid = grid;
+                device.set_device_pixel_ratio(Scale::new(dpr));
+                Context::for_media_query_evaluation(&device, QuirksMode::NoQuirks, |context| {
+                    for px in [0.0, 1.0 / 3.0, 1.0, 1.75, 2.999] {
+                        let specified = SpecifiedBorderSideWidth::from_px(px);
+                        let raw = crate::values::computed::border::line_width_app_units(px);
+                        let expected = match grid {
+                            PrintBorderWidthGrid::Vector => raw,
+                            PrintBorderWidthGrid::CssPixel => {
+                                crate::values::computed::border::snap_as_border_width(
+                                    raw, AU_PER_PX,
+                                )
+                            },
+                        };
+                        assert_eq!(
+                            specified.to_computed_value(context).0,
+                            expected,
+                            "print {grid:?} dpr={dpr} px={px}"
+                        );
+                        let gap = GapRuleWidth::from_border_side_width(specified)
+                            .to_computed_value(context);
+                        let gap_expected = match grid {
+                            PrintBorderWidthGrid::Vector => {
+                                crate::values::computed::border::snap_as_border_width(
+                                    raw,
+                                    device.app_units_per_device_pixel(),
+                                )
+                            },
+                            PrintBorderWidthGrid::CssPixel => expected,
+                        };
+                        assert_eq!(gap.length(), gap_expected, "gap {grid:?} dpr={dpr} px={px}");
+                    }
+                });
+            }
+        }
+    }
+
+    #[test]
+    fn screen_widths_keep_device_grid_for_both_print_policies() {
+        for dpr in [1.0, 1.5, 2.0, 4.0] {
+            for grid in [PrintBorderWidthGrid::Vector, PrintBorderWidthGrid::CssPixel] {
+                let mut device = crate::test_support::test_device();
+                device.media_type = MediaType::screen();
+                device.print_border_width_grid = grid;
+                device.set_device_pixel_ratio(Scale::new(dpr));
+                Context::for_media_query_evaluation(&device, QuirksMode::NoQuirks, |context| {
+                    for px in [0.0, 1.0 / 3.0, 1.0, 1.75, 2.999] {
+                        let specified = SpecifiedBorderSideWidth::from_px(px);
+                        let expected = crate::values::computed::border::snap_as_border_width(
+                            crate::values::computed::border::line_width_app_units(px),
+                            device.app_units_per_device_pixel(),
+                        );
+                        assert_eq!(
+                            specified.to_computed_value(context).0,
+                            expected,
+                            "screen {grid:?} dpr={dpr} px={px}"
+                        );
+                    }
+                });
+            }
+        }
     }
 }

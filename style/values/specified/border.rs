@@ -249,14 +249,21 @@ impl ToComputedValue for BorderSideWidth {
     #[inline]
     fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
         let width = self.0.to_computed_value(context);
-        // Vector print output has no device-pixel grid.
-        ComputedBorderSideWidth(
-            if context.device().media_type() == crate::media_queries::MediaType::print() {
-                width
-            } else {
-                snap_as_border_width(width, context)
-            },
-        )
+        if context.device().media_type() == crate::media_queries::MediaType::print() {
+            #[cfg(feature = "servo")]
+            if context.device().print_border_width_grid
+                == crate::servo::media_queries::PrintBorderWidthGrid::CssPixel
+            {
+                return ComputedBorderSideWidth(
+                    crate::values::computed::border::snap_as_border_width(
+                        width,
+                        context.device().app_units_per_border_width_pixel(),
+                    ),
+                );
+            }
+            return ComputedBorderSideWidth(width);
+        }
+        ComputedBorderSideWidth(snap_as_border_width(width, context))
     }
 
     #[inline]
