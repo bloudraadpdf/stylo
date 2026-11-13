@@ -826,8 +826,10 @@ where
         dest.write_str("ellipse(")?;
         if has_radii {
             self.semiaxis_x.to_css(dest)?;
-            dest.write_char(' ')?;
-            self.semiaxis_y.to_css(dest)?;
+            if self.semiaxis_y != self.semiaxis_x {
+                dest.write_char(' ')?;
+                self.semiaxis_y.to_css(dest)?;
+            }
         }
 
         // Preserve the `at <position>` even if it specified the default value.

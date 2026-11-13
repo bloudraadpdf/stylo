@@ -566,10 +566,9 @@ impl Ellipse {
     ) -> Result<Self, ParseError<'i>> {
         let (semiaxis_x, semiaxis_y) = input
             .try_parse(|i| -> Result<_, ParseError> {
-                Ok((
-                    ShapeRadius::parse(context, i)?,
-                    ShapeRadius::parse(context, i)?,
-                ))
+                let x = ShapeRadius::parse(context, i)?;
+                let y = i.try_parse(|i| ShapeRadius::parse(context, i)).unwrap_or_else(|_| x.clone());
+                Ok((x, y))
             })
             .unwrap_or_default();
         let position = parse_at_position(context, input)?;
@@ -1275,6 +1274,26 @@ mod tests {
         );
         assert!(parse("polygon(round -1px, 0 0)").is_none());
         assert!(parse("polygon(round 1%, 0 0)").is_none());
+    }
+
+    #[test]
+    fn ellipse_accepts_one_or_two_radii_and_uses_the_shortest_serialisation() {
+        for (css, expected) in [
+            ("ellipse(3%)", "ellipse(3%)"),
+            ("ellipse(3% at 100% 0%)", "ellipse(3% at 100% 0%)"),
+            ("ellipse(closest-side)", "ellipse()"),
+            ("ellipse(farthest-side at 100% 0%)", "ellipse(farthest-side at 100% 0%)"),
+            ("ellipse(3% 3%)", "ellipse(3%)"),
+            ("ellipse(3% 4%)", "ellipse(3% 4%)"),
+            ("ellipse(1px closest-side)", "ellipse(1px closest-side)"),
+        ] {
+            let shape = parse(css).expect("CSS Shapes radial-size accepts one or two radii");
+            assert_eq!(shape.to_css_string(), expected, "{css}");
+            assert_eq!(parse(expected), Some(shape), "{css} must round-trip");
+        }
+        for css in ["ellipse(-1%)", "ellipse(1% 2% 3%)", "ellipse(closest-side -1px)"] {
+            assert!(parse(css).is_none(), "{css}");
+        }
     }
 
     #[test]
