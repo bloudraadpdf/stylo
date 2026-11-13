@@ -602,6 +602,10 @@ pub fn lower_pending_declarations(
     }
     let private_lock = SharedRwLock::new();
     let contents = replacement_rule_context(&stylesheet, lock, &private_lock);
+    let media = stylesheet.0.media.clone();
+    let disabled = stylesheet.0.disabled();
+    let scope = stylesheet.1;
+    drop(stylesheet);
     let mut source_stamps = Vec::new();
     let rules = lower_rule_list(
         rules,
@@ -646,10 +650,10 @@ pub fn lower_pending_declarations(
         Arc::new(Stylesheet {
             contents: lock.wrap(contents),
             shared_lock: lock.clone(),
-            media: stylesheet.0.media.clone(),
-            disabled: std::sync::atomic::AtomicBool::new(stylesheet.0.disabled()),
+            media,
+            disabled: std::sync::atomic::AtomicBool::new(disabled),
         }),
-        stylesheet.1,
+        scope,
     );
     Ok(LoweredStylesheet {
         stylesheet,
@@ -814,6 +818,90 @@ mod tests {
             original_style.read_with(&guard).to_css_string(&guard)
         );
         assert_eq!(lowered.position_try_sources.len(), 1);
+    }
+
+    #[test]
+    fn initial_stylesheet_owner_is_released_before_contextual_lowering() {
+        use std::sync::{
+            Arc as StdArc,
+            atomic::{AtomicBool, Ordering},
+        };
+        use stylo_cssom_model::{NativeDeclarationBacking, RetainedNativeDeclarations};
+
+        #[derive(Debug)]
+        struct InitialOwner {
+            stylesheet: servo_arc::Arc<style::stylesheets::Stylesheet>,
+            checked: StdArc<AtomicBool>,
+        }
+        impl NativeDeclarationBacking for InitialOwner {
+            fn as_any(&self) -> &dyn std::any::Any {
+                assert!(
+                    self.stylesheet.is_unique(),
+                    "the initial stylesheet owner must drop before declaration lowering"
+                );
+                self.checked.store(true, Ordering::Relaxed);
+                self
+            }
+            fn equivalent(&self, other: &dyn NativeDeclarationBacking) -> bool {
+                other.as_any().downcast_ref::<Self>().is_some_and(|other| {
+                    servo_arc::Arc::ptr_eq(&self.stylesheet, &other.stylesheet)
+                })
+            }
+        }
+        crate::context::initialise_required_servo_style_prefs();
+        let css = "p{background-image:url(icon.png);color:red}";
+        let parsed = crate::authored_rules::ParsedStylesheet::parse(css).unwrap();
+        let base = crate::CssStylesheetBaseUrl::from_absolute(
+            url::Url::parse("https://styles.test/style.css").unwrap(),
+        );
+        let mut source = crate::authored_rules::project_stylesheet_pending_contexts(
+            parsed.rule_nodes(),
+            &base,
+            None,
+        );
+        let lock = style::shared_lock::SharedRwLock::new();
+        let native = servo_arc::Arc::new(style::stylesheets::Stylesheet::from_str(
+            css,
+            style::stylesheets::UrlExtraData::from(url::Url::parse(base.as_str()).unwrap()),
+            style::stylesheets::Origin::Author,
+            servo_arc::Arc::new(lock.wrap(style::media_queries::MediaList::empty())),
+            lock.clone(),
+            None,
+            None,
+            selectors::matching::QuirksMode::NoQuirks,
+            style::stylesheets::AllowImportRules::Yes,
+        ));
+        let checked = StdArc::new(AtomicBool::new(false));
+        let block = source[0]
+            .payload()
+            .declaration_block()
+            .unwrap()
+            .clone()
+            .with_native_backing(Some(RetainedNativeDeclarations(StdArc::new(
+                InitialOwner {
+                    stylesheet: native.clone(),
+                    checked: checked.clone(),
+                },
+            ))));
+        source[0] = source[0].clone().with_declaration_block(block);
+        let lowered = super::lower_pending_declarations(
+            &source,
+            style::stylesheets::DocumentStyleSheet(native, None),
+            &lock,
+        )
+        .unwrap();
+        assert!(checked.load(Ordering::Relaxed));
+        let guard = lock.read();
+        let [style::stylesheets::CssRule::Style(rule)] =
+            lowered.stylesheet.contents(&guard).rules(&guard)
+        else {
+            panic!("the contextual style is preserved");
+        };
+        assert!(
+            rule.read_with(&guard)
+                .to_css_string(&guard)
+                .contains("color: red")
+        );
     }
 
     fn lower_contextual_stylesheet(
