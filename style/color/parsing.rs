@@ -1409,7 +1409,7 @@ mod specified_color_tests {
     }
 
     #[test]
-    fn relative_lch_infinite_lightness_clamps_without_clamping_finite_values() {
+    fn relative_lch_clamps_finite_and_infinite_lightness_to_browser_ranges() {
         let url_data = UrlExtraData::from(
             url::Url::parse("https://example.invalid/").expect("test URL parses"),
         );
@@ -1426,7 +1426,7 @@ mod specified_color_tests {
         for (source, expected) in [
             ("lch(from red calc((49.44 - l) * infinity) 0 0)", 0.0),
             ("lch(from blue calc((49.44 - l) * infinity) 0 0)", 100.0),
-            ("lch(from red 200 0 0)", 200.0),
+            ("lch(from red 200 0 0)", 100.0),
             ("lab(from red calc(infinity) 0 0)", 100.0),
             ("oklab(from red calc(infinity) 0 0)", 1.0),
             ("oklch(from red calc(-infinity) 0 0)", 0.0),

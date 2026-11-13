@@ -427,7 +427,7 @@ impl ColorFunction<AbsoluteColor> {
                     .as_ref()
                     .map(|o| o.to_color_space_for_relative(ColorSpace::Lab));
 
-                AbsoluteColor::new_impl(
+                AbsoluteColor::new(
                     ColorSpace::Lab,
                     l.resolve(origin_color.as_ref())?
                         .map(|l| lightness(l.to_number(LIGHTNESS_RANGE), LIGHTNESS_RANGE)),
@@ -436,7 +436,6 @@ impl ColorFunction<AbsoluteColor> {
                     b.resolve(origin_color.as_ref())?
                         .map(|b| b.to_number(A_B_RANGE)),
                     alpha!(alpha, origin_color.as_ref()),
-                    origin_color.is_none(),
                 )
             }
             ColorFunction::Lch(origin_color, l, c, h, alpha) => {
@@ -449,7 +448,7 @@ impl ColorFunction<AbsoluteColor> {
                     .as_ref()
                     .map(|o| o.to_color_space_for_relative(ColorSpace::Lch));
 
-                AbsoluteColor::new_impl(
+                AbsoluteColor::new(
                     ColorSpace::Lch,
                     l.resolve(origin_color.as_ref())?
                         .map(|l| lightness(l.to_number(LIGHTNESS_RANGE), LIGHTNESS_RANGE)),
@@ -458,7 +457,6 @@ impl ColorFunction<AbsoluteColor> {
                     h.resolve(origin_color.as_ref())?
                         .map(|angle| normalize_hue(normalize_color(angle.degrees()))),
                     alpha!(alpha, origin_color.as_ref()),
-                    origin_color.is_none(),
                 )
             }
             ColorFunction::Oklab(origin_color, l, a, b, alpha) => {
@@ -471,7 +469,7 @@ impl ColorFunction<AbsoluteColor> {
                     .as_ref()
                     .map(|o| o.to_color_space_for_relative(ColorSpace::Oklab));
 
-                AbsoluteColor::new_impl(
+                AbsoluteColor::new(
                     ColorSpace::Oklab,
                     l.resolve(origin_color.as_ref())?
                         .map(|l| lightness(l.to_number(LIGHTNESS_RANGE), LIGHTNESS_RANGE)),
@@ -480,7 +478,6 @@ impl ColorFunction<AbsoluteColor> {
                     b.resolve(origin_color.as_ref())?
                         .map(|b| b.to_number(A_B_RANGE)),
                     alpha!(alpha, origin_color.as_ref()),
-                    origin_color.is_none(),
                 )
             }
             ColorFunction::Oklch(origin_color, l, c, h, alpha) => {
@@ -493,7 +490,7 @@ impl ColorFunction<AbsoluteColor> {
                     .as_ref()
                     .map(|o| o.to_color_space_for_relative(ColorSpace::Oklch));
 
-                AbsoluteColor::new_impl(
+                AbsoluteColor::new(
                     ColorSpace::Oklch,
                     l.resolve(origin_color.as_ref())?
                         .map(|l| lightness(l.to_number(LIGHTNESS_RANGE), LIGHTNESS_RANGE)),
@@ -502,7 +499,6 @@ impl ColorFunction<AbsoluteColor> {
                     h.resolve(origin_color.as_ref())?
                         .map(|angle| normalize_hue(normalize_color(angle.degrees()))),
                     alpha!(alpha, origin_color.as_ref()),
-                    origin_color.is_none(),
                 )
             }
             ColorFunction::Color(origin_color, r, g, b, alpha, color_space) => {
@@ -1504,7 +1500,7 @@ mod tests {
     }
 
     #[test]
-    fn relative_oklch_keeps_converted_negative_lightness() {
+    fn relative_oklch_clamps_converted_lightness_to_browser_range() {
         let origin = AbsoluteColor::new(ColorSpace::Lch, 0.0, 20.0, 180.0, 1.0);
         let function = ColorFunction::Oklch(
             Optional::Some(origin),
@@ -1516,7 +1512,7 @@ mod tests {
         let color = function
             .resolve_to_absolute()
             .expect("relative oklch resolves");
-        assert!(color.c0().expect("lightness") < 0.0);
+        assert_eq!(color.c0(), Some(0.0));
     }
 
     #[test]

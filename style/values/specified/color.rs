@@ -1391,15 +1391,15 @@ mod color_tests {
     }
 
     #[test]
-    fn computed_lab_channels_retain_relative_and_converted_ranges() {
+    fn computed_lab_channels_distinguish_relative_and_converted_ranges() {
         use crate::color::ColorSpace;
         use crate::values::computed::Color as ComputedColor;
 
         for (css, lightness, chroma) in [
-            ("lab(from lab(0.7 45 30) 200 300 400)", 200.0, 300.0),
-            ("oklab(from oklab(0.7 0.45 0.3) -2 3 4)", -2.0, 3.0),
-            ("lch(from lch(50 20 180) 200 -30 h)", 200.0, -30.0),
-            ("oklch(from lch(0 20 180) l c h)", -0.05666103, 0.2641255),
+            ("lab(from lab(0.7 45 30) 200 300 400)", 100.0, 300.0),
+            ("oklab(from oklab(0.7 0.45 0.3) -2 3 4)", 0.0, 3.0),
+            ("lch(from lch(50 20 180) 200 -30 h)", 100.0, 0.0),
+            ("oklch(from lch(0 20 180) l c h)", 0.0, 0.2641255),
             ("color-mix(in oklch, lch(0 20 180))", -0.05666103, 0.2641255),
         ] {
             let ComputedColor::Absolute(color) =
