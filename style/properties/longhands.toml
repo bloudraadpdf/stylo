@@ -900,11 +900,11 @@ affects = "paint"
 # tone-mapping cap applied to descendant content.
 [dynamic-range-limit]
 type = "DynamicRangeLimit"
-initial = "computed::DynamicRangeLimit::Standard"
-struct = "box"
-initial_specified_value = "specified::DynamicRangeLimit::Standard"
+initial = "computed::DynamicRangeLimit::NO_LIMIT"
+struct = "inherited_box"
+initial_specified_value = "specified::DynamicRangeLimit::NoLimit"
 spec = "https://drafts.csswg.org/css-color-hdr-1/#dynamic-range-limit"
-animation_type = "discrete"
+animation_type = "normal"
 ignored_when_colors_disabled = true
 affects = "paint"
 

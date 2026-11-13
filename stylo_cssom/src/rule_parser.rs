@@ -3119,7 +3119,7 @@ mod tests {
                 PropertyDeclaration::DominantBaseline(*value)
             },
             PropertyDeclaration::DynamicRangeLimit(value) => {
-                PropertyDeclaration::DynamicRangeLimit(*value)
+                PropertyDeclaration::DynamicRangeLimit(value.clone())
             },
             PropertyDeclaration::EmptyCells(value) => PropertyDeclaration::EmptyCells(*value),
             PropertyDeclaration::FlexDirection(value) => PropertyDeclaration::FlexDirection(*value),

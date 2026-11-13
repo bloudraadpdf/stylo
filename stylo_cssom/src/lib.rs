@@ -29,7 +29,6 @@ pub mod compat;
 pub mod context;
 pub mod css_color_calibrated_rewrite;
 pub mod css_color_hdr_fn_rewrite;
-pub mod dynamic_range_limit_mix_rewrite;
 pub mod hdr_color_rewrite;
 pub mod highlight_projection;
 pub mod math_display_rewrite;
@@ -71,3 +70,6 @@ pub mod value_serialization;
 pub mod webkit_box_orient_rewrite;
 
 pub use symbols_function_rewrite::value_contains_valid_symbols_function;
+
+#[cfg(test)]
+mod dynamic_range_limit_tests;

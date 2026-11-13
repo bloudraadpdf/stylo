@@ -649,7 +649,6 @@ class Longhand(Property):
                 "BlockStepInsert",
                 "BlockStepRound",
                 "BoxSnap",
-                "DynamicRangeLimit",
                 "FlowIntoMode",
                 "ReadingFlow",
                 "AlignmentBaseline",
