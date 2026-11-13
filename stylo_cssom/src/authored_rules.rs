@@ -1,4 +1,4 @@
-use std::{ops::Range, sync::Arc as StdArc};
+use std::{borrow::Cow, ops::Range, sync::Arc as StdArc};
 
 use cssparser::{
     Parser, ParserInput, SourceLocation, SourcePosition, ToCss as CssParserToCss, Token,
@@ -116,7 +116,7 @@ impl ParsedStylesheetGraph {
             encoding: Some(encoding),
         };
         let candidate =
-            stylo_cssom_model::StyleSheetCandidate::new(source, stylesheet.rule_nodes().to_vec());
+            stylo_cssom_model::StyleSheetCandidate::new(source, stylesheet.into_rule_nodes());
         let imports = imports
             .into_vec()
             .into_iter()
@@ -281,23 +281,7 @@ impl ParsedStylesheet {
     pub fn parse(css: &str) -> Result<Self, stylo_cssom_model::CssomStylesheetError> {
         let sources = crate::rule_parser::forgiving_rule_sources(css);
         let validated = crate::rule_parser::ParsedCssRule::parse_stylesheet(css);
-        let mut validated = validated.iter().peekable();
-        let rules = sources
-            .into_iter()
-            .filter_map(|source| {
-                if validated
-                    .peek()
-                    .is_some_and(|rule| rule.source_location() == Some(source.location))
-                {
-                    let rule = validated
-                        .next()
-                        .expect("the exact native source location matched");
-                    Some(authored_rule_node(rule, &source.text))
-                } else {
-                    parse_authored_compatibility_rule(&source.text)
-                }
-            })
-            .collect();
+        let rules = authored_rule_nodes(sources, validated).collect();
         Ok(Self {
             rules,
             linked_source: None,
@@ -356,6 +340,10 @@ impl ParsedStylesheet {
 
     pub fn rule_nodes(&self) -> &[stylo_cssom_model::RuleNode] {
         &self.rules
+    }
+
+    pub fn into_rule_nodes(self) -> Vec<stylo_cssom_model::RuleNode> {
+        self.rules
     }
 
     pub fn insert_rule(
@@ -523,6 +511,26 @@ pub fn parse_rule_node(source: &str) -> Option<stylo_cssom_model::RuleNode> {
         .or_else(|| crate::rule_parser::ParsedCssRule::parse_page_child(source))
         .map(|rule| authored_rule_node(&rule, source))
         .or_else(|| parse_authored_compatibility_rule(source))
+}
+
+fn authored_rule_nodes(
+    sources: Vec<crate::rule_parser::ScannedRuleSource>,
+    validated: Vec<crate::rule_parser::ParsedCssRule>,
+) -> impl Iterator<Item = stylo_cssom_model::RuleNode> {
+    let mut validated = validated.into_iter().peekable();
+    sources.into_iter().filter_map(move |source| {
+        if validated
+            .peek()
+            .is_some_and(|rule| rule.source_location() == Some(source.location))
+        {
+            let rule = validated
+                .next()
+                .expect("the exact native source location matched");
+            Some(authored_rule_node(&rule, &source.text))
+        } else {
+            parse_authored_compatibility_rule(&source.text)
+        }
+    })
 }
 
 fn authored_rule_node(
@@ -1406,15 +1414,18 @@ pub fn project_stylesheet_rule_urls(
     })
 }
 
-pub fn rewrite_css_url_tokens(css: &str, base_url: &str) -> String {
+pub fn rewrite_css_url_tokens<'a>(css: &'a str, base_url: &str) -> Cow<'a, str> {
     let Ok(base) = Url::parse(base_url) else {
-        return css.to_owned();
+        return Cow::Borrowed(css);
     };
     rewrite_css_urls(css, &|raw| resolve_if_relative(raw, &base))
 }
 
-pub fn rewrite_css_urls(css: &str, resolve: &impl Fn(&str) -> Option<String>) -> String {
-    let mut out = String::with_capacity(css.len());
+pub fn rewrite_css_urls<'a>(
+    css: &'a str,
+    resolve: &impl Fn(&str) -> Option<String>,
+) -> Cow<'a, str> {
+    let mut out = String::new();
     let mut input = ParserInput::new(css);
     let mut parser = Parser::new(&mut input);
     let mut last_flushed: usize = 0;
@@ -1426,8 +1437,12 @@ pub fn rewrite_css_urls(css: &str, resolve: &impl Fn(&str) -> Option<String>) ->
         &mut last_flushed,
         UrlRewriteContext::RuleStart,
     );
-    out.push_str(&css[last_flushed..]);
-    out
+    if last_flushed == 0 {
+        Cow::Borrowed(css)
+    } else {
+        out.push_str(&css[last_flushed..]);
+        Cow::Owned(out)
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -1473,6 +1488,9 @@ fn rewrite_tokens_recursive(
             Token::UnquotedUrl(raw) => {
                 let token_end = parser.position();
                 if let Some(resolved) = resolve(raw.as_ref()) {
+                    if *last_flushed == 0 {
+                        out.reserve(css.len());
+                    }
                     out.push_str(&css[*last_flushed..token_start.byte_index()]);
                     write_url_token(out, &resolved);
                     *last_flushed = token_end.byte_index();
@@ -1488,6 +1506,9 @@ fn rewrite_tokens_recursive(
                 if let Ok(Some((raw, string_start, string_end))) = quoted
                     && let Some(resolved) = resolve(&raw)
                 {
+                    if *last_flushed == 0 {
+                        out.reserve(css.len());
+                    }
                     out.push_str(&css[*last_flushed..string_start.byte_index()]);
                     write_css_string(out, &resolved);
                     *last_flushed = string_end.byte_index();
@@ -1585,6 +1606,174 @@ fn should_skip_css_url_rewrite(raw_url: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn consuming_stylesheet_transfers_the_existing_rule_allocation() {
+        let mut stylesheet = ParsedStylesheet::parse("p { color:red } span { margin:1px 2px }")
+            .expect("both stylesheet rules must parse");
+        stylesheet.rules.reserve(64);
+        let pointer = stylesheet.rules.as_ptr();
+        let capacity = stylesheet.rules.capacity();
+        let expected = stylesheet.rule_nodes().to_vec();
+        let nodes = stylesheet.into_rule_nodes();
+        assert_eq!(
+            nodes.as_ptr(),
+            pointer,
+            "consumption transfers the original allocation"
+        );
+        assert_eq!(nodes.capacity(), capacity);
+        assert_eq!(nodes, expected);
+    }
+
+    #[test]
+    fn unchanged_url_rewrite_borrows_the_source() {
+        for css in [
+            "a { color: red }",
+            "a { background: url(data:image/png;base64,AAAA) }",
+            "a { background: url('data:image/png;base64,AAAA') }",
+            "a { background: url(https://example.test/image.png) }",
+            "a { background: url(#paint) }",
+            "@namespace x url(relative-namespace); x|a { color: red }",
+            "a { content: 'url(image.png)'; /* url(other.png) */ }",
+            "a { background: url(foo\"bar) }",
+        ] {
+            let rewritten = rewrite_css_url_tokens(css, "https://example.test/style.css");
+            assert!(matches!(rewritten, Cow::Borrowed(_)), "{css}");
+            assert_eq!(rewritten.as_ptr(), css.as_ptr());
+            assert_eq!(rewritten, css);
+        }
+        assert!(matches!(
+            rewrite_css_url_tokens("url(image.png)", "invalid base"),
+            Cow::Borrowed(_)
+        ));
+        assert!(matches!(
+            rewrite_css_urls("url(image.png)", &|_| None),
+            Cow::Borrowed(_)
+        ));
+    }
+
+    #[test]
+    fn changed_url_rewrite_owns_only_the_rewritten_source() {
+        for (css, expected) in [
+            ("url(image.png)", "url(\"https://example.test/image.png\")"),
+            (
+                "url('image.png')",
+                "url(\"https://example.test/image.png\")",
+            ),
+            (
+                "@import 'child.css'; a { background: url(image.png) }",
+                "@import 'child.css'; a { background: url(\"https://example.test/image.png\") }",
+            ),
+            (
+                "a { background: image-set(url(image.png), url('other.png')) }",
+                "a { background: image-set(url(\"https://example.test/image.png\"), url(\"https://example.test/other.png\")) }",
+            ),
+        ] {
+            let rewritten = rewrite_css_url_tokens(css, "https://example.test/style.css");
+            assert!(matches!(rewritten, Cow::Owned(_)), "{css}");
+            assert_eq!(rewritten, expected);
+        }
+    }
+
+    #[test]
+    fn consuming_authored_rules_match_the_borrowed_location_join() {
+        for css in [
+            "/* leading */ p { color:red } span { background:url(image.svg) }",
+            "<!-- p { color:red } --> span { color:blue }",
+            "@layer first, second",
+            "@namespace url(urn:default); @namespace x url(urn:prefix); x|item { color:green }",
+            "@namespace x url(urn:other); x|item { vertical-align:super }",
+            "@import url(child.css) layer(theme) supports(display:block) print; p { color:green }",
+            "p { color:red } @import url(late.css); span { color:blue }",
+            "@unknown { @import url(hidden.css) } @import url(early.css);",
+            "@media print { p { color:red; .child { margin:var(--space) } } }",
+            "@scope (.parent) { :scope > .child { color:green } }",
+            "@page :first { size:A4; @top-center { content:counter(page) } }",
+            "@keyframes pulse { from { opacity:0 } 50% { opacity:.5 } to { opacity:1 } }",
+            "@position-try --below { top:anchor(bottom); margin:2px; color:red }",
+            "@font-face { font-family:Example; src:url(font.woff2) format('woff2') }",
+            "p::highlight(note) { color:green } @media print { p::selection { color:blue } }",
+            "p { --image:url(image.svg); background:var(--image); all:initial !important }",
+            "p { vertical-align:super; margin:1px 2px; color:blue !important }",
+            "/* α */\n.é { color:red }\n@media print { .β { margin:0 } }",
+            "p { color:green; --a:red; color:var(--a, \"\n",
+            "p { color:green; --a:red; color:var(--a, url(\"\n",
+            "p { color:green } @foo {}; p { color:red }",
+            "test; @charset \"UTF-8\"; .target { color:red }",
+            "@namespace x url(urn:prefix); @media invalid; x|item { color:green }",
+        ] {
+            let native = crate::rule_parser::ParsedCssRule::parse_stylesheet(css);
+            let mut validated = native.iter().peekable();
+            let mut expected = Vec::new();
+            for source in crate::rule_parser::forgiving_rule_sources(css) {
+                let matches = validated
+                    .peek()
+                    .is_some_and(|rule| rule.source_location() == Some(source.location));
+                let node = if matches {
+                    Some(authored_rule_node(
+                        validated.next().expect("the source location matched"),
+                        &source.text,
+                    ))
+                } else {
+                    parse_authored_compatibility_rule(&source.text)
+                };
+                expected.extend(node);
+            }
+            let parsed =
+                ParsedStylesheet::parse(css).expect("the native parser recovers a stylesheet");
+            assert_eq!(parsed.rule_nodes(), expected.as_slice(), "{css}");
+            for (actual, prior) in parsed.rule_nodes().iter().zip(&expected) {
+                assert_eq!(actual.serialization(), prior.serialization(), "{css}");
+                assert_eq!(
+                    actual.projection_serialization(),
+                    prior.projection_serialization(),
+                    "{css}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn matched_parsed_rules_release_before_the_next_authored_node() {
+        let css = ".first { vertical-align: super; color: red } .future { vertical-align: sub; color: blue }";
+        let parsed = crate::rule_parser::ParsedCssRule::parse_stylesheet(css);
+        let backing = |rule: &crate::rule_parser::ParsedCssRule| {
+            let node = rule.to_rule_node();
+            let native = node
+                .payload()
+                .declaration_block()
+                .expect("a style rule retains its declaration block")
+                .native_backing()
+                .expect("native style declarations retain their backing");
+            StdArc::downgrade(&native.0)
+        };
+        let first = backing(&parsed[0]);
+        let future = backing(&parsed[1]);
+        let mut nodes =
+            authored_rule_nodes(crate::rule_parser::forgiving_rule_sources(css), parsed);
+        let node = nodes.next().expect("the first style rule must remain");
+        assert!(
+            future.upgrade().is_some(),
+            "future native declarations remain available"
+        );
+        let alias = node.clone();
+        drop(node);
+        assert!(
+            first.upgrade().is_some(),
+            "an escaped model alias keeps its declarations"
+        );
+        drop(alias);
+        assert!(
+            first.upgrade().is_none(),
+            "completed parsed declarations must retire before the next node"
+        );
+        assert!(nodes.next().is_some());
+        assert!(
+            future.upgrade().is_none(),
+            "the final parsed rule also retires"
+        );
+        assert!(nodes.next().is_none());
+    }
 
     #[test]
     fn url_rewrite_preserves_namespace_identifiers() {

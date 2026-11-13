@@ -94,7 +94,7 @@ pub(super) fn canonical_keyframe(
     let selector = model_selector(&frame.selector);
     let declarations = canonical_declaration_block(frame.block.read_with(guard));
     ParsedCssRule {
-        serialization: serialize_keyframe(&selector, &declarations.serialization),
+        serialization: serialize_keyframe(&selector, &declarations.serialization).into_boxed_str(),
         source_location: Some(frame.source_location),
         projection: source
             .span(frame.source_location)
