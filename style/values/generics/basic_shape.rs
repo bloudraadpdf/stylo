@@ -248,9 +248,7 @@ impl<BasicShape: ToCss, ReferenceBox: BorderShapePathBox>
 /// Representing stroke and fill separately prevents an invalid zero-, three-,
 /// or partially-specified path list from crossing the style boundary.
 #[derive(
-    Animate,
     Clone,
-    ComputeSquaredDistance,
     Debug,
     MallocSizeOf,
     PartialEq,
@@ -263,7 +261,6 @@ impl<BasicShape: ToCss, ReferenceBox: BorderShapePathBox>
 #[repr(C, u8)]
 pub enum GenericBorderShape<BasicShape, ReferenceBox> {
     /// Preserve the ordinary box-derived border shape.
-    #[animation(error)]
     None,
     /// Stroke one path with the relevant border side.
     Stroke(GenericBorderShapePath<BasicShape, ReferenceBox>),
@@ -272,6 +269,45 @@ pub enum GenericBorderShape<BasicShape, ReferenceBox> {
         GenericBorderShapePath<BasicShape, ReferenceBox>,
         GenericBorderShapePath<BasicShape, ReferenceBox>,
     ),
+}
+
+impl<BasicShape, ReferenceBox> GenericBorderShape<BasicShape, ReferenceBox> {
+    fn animation_paths(&self) -> Option<[&GenericBorderShapePath<BasicShape, ReferenceBox>; 2]> {
+        match self {
+            Self::None => None,
+            Self::Stroke(path) => Some([path, path]),
+            Self::Fill(outer, inner) => Some([outer, inner]),
+        }
+    }
+}
+
+impl<BasicShape: Animate + PartialEq, ReferenceBox: Animate + PartialEq> Animate
+    for GenericBorderShape<BasicShape, ReferenceBox>
+{
+    fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
+        let [from_outer, from_inner] = self.animation_paths().ok_or(())?;
+        let [to_outer, to_inner] = other.animation_paths().ok_or(())?;
+        let outer = from_outer.animate(to_outer, procedure)?;
+        let inner = from_inner.animate(to_inner, procedure)?;
+        Ok(if outer == inner {
+            Self::Stroke(outer)
+        } else {
+            Self::Fill(outer, inner)
+        })
+    }
+}
+
+impl<BasicShape: ComputeSquaredDistance, ReferenceBox: ComputeSquaredDistance> ComputeSquaredDistance
+    for GenericBorderShape<BasicShape, ReferenceBox>
+{
+    fn compute_squared_distance(&self, other: &Self) -> Result<SquaredDistance, ()> {
+        if let (Self::Stroke(from), Self::Stroke(to)) = (self, other) {
+            return from.compute_squared_distance(to);
+        }
+        let [from_outer, from_inner] = self.animation_paths().ok_or(())?;
+        let [to_outer, to_inner] = other.animation_paths().ok_or(())?;
+        Ok(from_outer.compute_squared_distance(to_outer)? + from_inner.compute_squared_distance(to_inner)?)
+    }
 }
 
 impl<BasicShape: ToCss, ReferenceBox: BorderShapePathBox> ToCss

@@ -1759,3 +1759,33 @@ fn omitted_flex_basis_remains_a_percentage_through_the_cascade() {
         );
     }
 }
+
+#[test]
+fn border_shape_interpolation_repeats_a_single_path_for_a_distinct_pair() {
+    use crate::properties::{animated_properties::AnimationValue, LonghandId, PropertyDeclarationId};
+    use crate::values::animated::{Animate, Procedure};
+    use style_traits::ToCss;
+    let stroke = cascade_zoom_test_style("border-shape:circle(20px at 10px 20px)", None);
+    let fill = cascade_zoom_test_style(
+        "border-shape:circle(40px at 30px 40px) half-border-box circle(30px at 30px 40px) half-border-box",
+        None,
+    );
+    let property = PropertyDeclarationId::Longhand(LonghandId::BorderShape);
+    let stroke = AnimationValue::from_computed_values(property, &stroke).unwrap();
+    let fill = AnimationValue::from_computed_values(property, &fill).unwrap();
+    let serialize = |value: AnimationValue| {
+        let PropertyDeclaration::BorderShape(shape) = value.uncompute() else {
+            panic!("animation must retain border-shape");
+        };
+        shape.to_css_string()
+    };
+    for (progress, expected) in [
+        (0.25, "circle(25px at 15px 25px) half-border-box circle(22.5px at 15px 25px) half-border-box"),
+        (0.75, "circle(35px at 25px 35px) half-border-box circle(27.5px at 25px 35px) half-border-box"),
+    ] {
+        let value = stroke.animate(&fill, Procedure::Interpolate { progress }).unwrap();
+        assert_eq!(serialize(value), expected);
+        let reverse = fill.animate(&stroke, Procedure::Interpolate { progress: 1.0 - progress }).unwrap();
+        assert_eq!(serialize(reverse), expected);
+    }
+}
