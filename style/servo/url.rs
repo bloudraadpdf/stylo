@@ -31,15 +31,11 @@ pub struct CssUrl(#[ignore_malloc_size_of = "Arc"] pub Arc<CssUrlData>);
 
 /// Data shared between CssUrls.
 ///
-#[derive(Debug, Deserialize, MallocSizeOf, Serialize, SpecifiedValueInfo)]
+#[derive(Deserialize, MallocSizeOf, SpecifiedValueInfo)]
 #[repr(C)]
 pub struct CssUrlData {
-    /// The original URI. This might be optional since we may insert computed
-    /// values of images into the cascade directly, and we don't bother to
-    /// convert their serialization.
-    ///
-    /// Refcounted since cloning this should be cheap and data: uris can be
-    /// really large.
+    /// Authored URI text when the resolved serialization cannot be used.
+    /// Refcounted so cloning a non-canonical URI stays cheap.
     #[ignore_malloc_size_of = "Arc"]
     original: Option<Arc<String>>,
 
@@ -54,9 +50,55 @@ pub struct CssUrlData {
     #[css(skip)]
     cors_mode: CorsMode,
 
+    /// The authored URI has the resolved URL's exact serialization.
+    #[css(skip)]
+    #[serde(skip)]
+    original_from_resolved: bool,
+
     /// Request modifiers authored as part of the quoted `url()` value.
     #[css(skip)]
     modifiers: UrlRequestModifiers,
+}
+
+impl CssUrlData {
+    fn original(&self) -> Option<&str> {
+        self.original
+            .as_deref()
+            .map(|value| value.as_str())
+            .or_else(|| {
+                if self.original_from_resolved {
+                    self.resolved.as_ref().map(|url| url.as_str())
+                } else {
+                    None
+                }
+            })
+    }
+}
+
+impl fmt::Debug for CssUrlData {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("CssUrlData")
+            .field("original", &self.original())
+            .field("referrer_source", &self.referrer_source)
+            .field("resolved", &self.resolved)
+            .field("cors_mode", &self.cors_mode)
+            .field("modifiers", &self.modifiers)
+            .finish()
+    }
+}
+
+impl serde::Serialize for CssUrlData {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        let mut data = serializer.serialize_struct("CssUrlData", 5)?;
+        data.serialize_field("original", &self.original())?;
+        data.serialize_field("referrer_source", &self.referrer_source)?;
+        data.serialize_field("resolved", &self.resolved)?;
+        data.serialize_field("cors_mode", &self.cors_mode)?;
+        data.serialize_field("modifiers", &self.modifiers)?;
+        data.end()
+    }
 }
 
 /// The CORS credentials mode selected by a CSS Values 5 `cross-origin()` URL
@@ -222,17 +264,25 @@ impl CssUrl {
     /// URL.
     ///
     pub fn parse_from_string(url: String, context: &ParserContext, cors_mode: CorsMode) -> Self {
-        let serialization = Arc::new(url);
-        let resolved = if serialization.is_empty() {
+        let resolved = if url.is_empty() {
             None
         } else {
-            context.url_data.0.join(&serialization).ok().map(Arc::new)
+            context.url_data.0.join(&url).ok().map(Arc::new)
+        };
+        let original_from_resolved = resolved
+            .as_ref()
+            .is_some_and(|resolved| resolved.as_str() == url.as_str());
+        let original = if original_from_resolved {
+            None
+        } else {
+            Some(Arc::new(url))
         };
         CssUrl(Arc::new(CssUrlData {
-            original: Some(serialization),
+            original,
             referrer_source: context.url_data.referrer_source().cloned(),
             resolved: resolved,
             cors_mode,
+            original_from_resolved,
             modifiers: UrlRequestModifiers::default(),
         }))
     }
@@ -268,7 +318,7 @@ impl CssUrl {
 
     /// Return the authored URL text before base-URL resolution, when present.
     pub fn original(&self) -> Option<&str> {
-        self.original.as_deref().map(|value| value.as_str())
+        self.0.original()
     }
 
     /// The external stylesheet response URL that supplied this URL value.
@@ -297,6 +347,7 @@ impl CssUrl {
             referrer_source: None,
             resolved: Some(url),
             cors_mode: CorsMode::None,
+            original_from_resolved: false,
             modifiers: UrlRequestModifiers::default(),
         }))
     }
@@ -308,6 +359,7 @@ impl CssUrl {
             referrer_source: None,
             resolved: ::url::Url::parse(url).ok().map(Arc::new),
             cors_mode: CorsMode::None,
+            original_from_resolved: false,
             modifiers: UrlRequestModifiers::default(),
         }))
     }
@@ -433,6 +485,7 @@ impl ToComputedValue for SpecifiedUrl {
                 referrer_source: computed.referrer_source.clone(),
                 resolved: Some(computed.url.clone()),
                 cors_mode: computed.cors_mode,
+                original_from_resolved: false,
                 modifiers: computed.modifiers.clone(),
             },
             ComputedUrl::Invalid(computed) => CssUrlData {
@@ -440,6 +493,7 @@ impl ToComputedValue for SpecifiedUrl {
                 referrer_source: computed.referrer_source.clone(),
                 resolved: None,
                 cors_mode: computed.cors_mode,
+                original_from_resolved: false,
                 modifiers: computed.modifiers.clone(),
             },
         };
@@ -553,6 +607,124 @@ mod tests {
     use crate::values::specified::Image;
     use cssparser::{Parser, ParserInput};
     use style_traits::ToCss;
+
+    #[test]
+    fn canonical_data_url_reuses_resolved_string_storage() {
+        let url_data = test_url_data();
+        let context = author_parser_context(&url_data);
+        let text = format!("data:text/plain,{}", "a".repeat(128 * 1024));
+        let specified =
+            CssUrl::parse_from_string(text.clone(), &context, crate::stylesheets::CorsMode::None);
+        assert_eq!(std::mem::size_of::<CssUrl>(), std::mem::size_of::<usize>());
+        #[cfg(target_pointer_width = "64")]
+        assert_eq!(std::mem::size_of::<super::CssUrlData>(), 64);
+        assert!(specified.0.original.is_none());
+        assert_eq!(specified.original(), Some(text.as_str()));
+        assert_eq!(specified.as_str(), text);
+        assert_eq!(
+            specified.original().unwrap().as_ptr(),
+            specified.url().unwrap().as_str().as_ptr()
+        );
+    }
+
+    #[test]
+    fn canonical_storage_keeps_authored_spelling_and_constructor_presence() {
+        let url_data = test_url_data();
+        let context = author_parser_context(&url_data);
+        for text in [
+            "image.png",
+            "../image.png",
+            "#local",
+            "",
+            "http://[",
+            "https://EXAMPLE.test:443/a/../b",
+            "https://example.test/%7e",
+        ] {
+            let specified = CssUrl::parse_from_string(
+                text.into(),
+                &context,
+                crate::stylesheets::CorsMode::None,
+            );
+            assert_eq!(specified.original(), Some(text));
+            let mut expected = String::from("url(");
+            cssparser::serialize_string(text, &mut expected).unwrap();
+            expected.push(')');
+            assert_eq!(specified.to_css_string(), expected);
+            if !specified.is_invalid() && text != specified.as_str() {
+                assert_ne!(
+                    specified.original().unwrap().as_ptr(),
+                    specified.as_str().as_ptr()
+                );
+            }
+        }
+        let testing = CssUrl::new_for_testing("https://example.test/");
+        assert_eq!(testing.original(), Some("https://example.test/"));
+        let cascade = CssUrl::for_cascade(testing.url().unwrap().clone());
+        assert_eq!(cascade.original(), None);
+        assert_eq!(cascade.to_css_string(), testing.to_css_string());
+    }
+
+    #[test]
+    fn canonical_storage_preserves_computed_roundtrips() {
+        let url_data = test_url_data();
+        let context = author_parser_context(&url_data);
+        for text in [
+            "data:text/plain,canonical",
+            "https://example.test/image.png",
+            "image.png",
+            "#local",
+            "",
+            "http://[",
+        ] {
+            let specified = CssUrl::parse_from_string(
+                text.into(),
+                &context,
+                crate::stylesheets::CorsMode::None,
+            );
+            with_computed_context(|context| {
+                let computed = specified.to_computed_value(context);
+                let restored = CssUrl::from_computed_value(&computed);
+                assert_eq!(restored, specified);
+                assert_eq!(restored.is_invalid(), specified.is_invalid());
+                assert_eq!(restored.is_fragment(), specified.is_fragment());
+                assert_eq!(restored.to_css_string(), computed.to_css_string());
+                let original = (specified.is_invalid() || specified.is_fragment()).then_some(text);
+                assert_eq!(restored.original(), original);
+            });
+        }
+    }
+
+    #[test]
+    fn canonical_storage_preserves_cors_modifiers_referrers_and_clones() {
+        use crate::stylesheets::CorsMode;
+        let url_data = test_url_data()
+            .with_referrer_source(Some(url::Url::parse("https://cdn.test/style.css").unwrap()));
+        let context = author_parser_context(&url_data);
+        let css = "url(\"data:text/plain,canonical\" cross-origin(anonymous) integrity(\"sha256-proof\") referrer-policy(no-referrer))";
+        let mut input = ParserInput::new(css);
+        let specified = Parser::new(&mut input)
+            .parse_entirely(|input| {
+                CssUrl::parse_with_cors_mode(&context, input, CorsMode::Anonymous)
+            })
+            .unwrap();
+        assert_eq!(specified.original(), Some("data:text/plain,canonical"));
+        assert_eq!(specified.cors_mode(), CorsMode::Anonymous);
+        assert_eq!(
+            specified.referrer_source(),
+            Some("https://cdn.test/style.css")
+        );
+        assert_eq!(specified.to_css_string(), css);
+        assert!(servo_arc::Arc::ptr_eq(&specified.0, &specified.clone().0));
+        with_computed_context(|context| {
+            let computed = specified.to_computed_value(context);
+            let restored = CssUrl::from_computed_value(&computed);
+            assert_eq!(restored, specified);
+            assert_eq!(restored.to_css_string(), css);
+            assert_eq!(restored.cors_mode(), CorsMode::Anonymous);
+            assert_eq!(restored.request_modifiers(), specified.request_modifiers());
+            assert_eq!(restored.referrer_source(), specified.referrer_source());
+        });
+    }
 
     #[test]
     fn computed_urls_preserve_empty_and_fragment_only_references() {
