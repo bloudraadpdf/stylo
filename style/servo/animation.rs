@@ -1410,7 +1410,7 @@ impl Transition {
     /// not take into account canceling i.e. when an animation or transition is
     /// canceled due to changes in the style.
     pub fn has_ended(&self, time: f64) -> bool {
-        time >= self.start_time + (self.property_animation.duration)
+        time - self.start_time >= self.property_animation.duration
     }
 
     /// Update the given animation at a given point of progress.
@@ -2454,6 +2454,19 @@ mod tests {
             // A backward seek changes the active interval without replacing the native transition.
             set.transitions[0].start_time = 5.;
             assert_eq!(active(&set, 6.), Some(AnimationValue::Opacity(0.5)));
+            for time in [0.05, 0.083333333] {
+                set.transitions[0].start_time =
+                    time - set.transitions[0].property_animation.duration;
+                assert_eq!(
+                    active(&set, time - 0.25),
+                    Some(AnimationValue::Opacity(0.875))
+                );
+                assert_eq!(active(&set, time), None, "seek endpoint at {time}");
+                assert_eq!(
+                    sample(&set, time, IgnoreTransitions::Canceled),
+                    Some(AnimationValue::Opacity(1.))
+                );
+            }
             set.transitions[0].state = AnimationState::Canceled;
             assert_eq!(active(&set, 6.), None);
         }
