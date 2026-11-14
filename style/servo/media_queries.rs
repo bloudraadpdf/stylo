@@ -135,6 +135,9 @@ pub struct Device {
     random_state: std::sync::Arc<crate::values::random::DocumentRandomState>,
     /// The current media type used by de device.
     media_type: MediaType,
+    /// The current document's scripting support.
+    #[ignore_malloc_size_of = "Pure stack type"]
+    scripting: Scripting,
     /// The current viewport size, in CSS pixels.
     viewport_size: Size2D<f32, CSSPixel>,
     device_size: Size2D<f32, CSSPixel>,
@@ -272,9 +275,15 @@ impl Device {
         let default_values =
             ComputedValues::initial_values_with_font_override(Font::initial_values());
         let root_style = RwLock::new(Arc::clone(&default_values));
+        let scripting = if media_type == MediaType::print() {
+            Scripting::InitialOnly
+        } else {
+            Scripting::Enabled
+        };
         Device {
             random_state: std::sync::Arc::new(crate::values::random::DocumentRandomState::default()),
             media_type,
+            scripting,
             viewport_size,
             device_size: viewport_size,
             bleed_box_size: viewport_size,
@@ -780,6 +789,20 @@ impl Device {
         self.media_type.clone()
     }
 
+    /// The current document's scripting support.
+    pub fn scripting(&self) -> Scripting {
+        self.scripting
+    }
+
+    /// Replaces scripting support, reporting whether the embedder must invalidate media styles.
+    pub fn set_scripting(&mut self, scripting: Scripting) -> bool {
+        if self.scripting == scripting {
+            return false;
+        }
+        self.scripting = scripting;
+        true
+    }
+
     /// Returns whether document colors are enabled.
     pub fn forced_colors(&self) -> ForcedColors {
         if self.user_preferences.forced_colors { ForcedColors::Active } else { ForcedColors::None }
@@ -1135,20 +1158,22 @@ discrete_feature!(
     },
     context.device().media_type() != MediaType::print()
 );
-discrete_feature!(
-    Scripting {
-        None,
-        InitialOnly,
-        Enabled
-    },
-    eval_scripting(context),
-    if context.device().media_type() == MediaType::print() {
-        Scripting::InitialOnly
-    } else {
-        Scripting::Enabled
-    },
-    true
-);
+/// The current document's scripting support for media queries.
+#[derive(Clone, Copy, Debug, FromPrimitive, Parse, PartialEq, Eq, ToCss)]
+#[repr(u8)]
+pub enum Scripting {
+    /// Scripting is not active for this document.
+    None,
+    /// Scripting is supported during the initial page load only.
+    InitialOnly,
+    /// Scripting is supported for the document's lifetime.
+    Enabled,
+}
+
+fn eval_scripting(context: &Context, query: Option<Scripting>) -> bool {
+    let scripting = context.device().scripting();
+    query.map_or(scripting != Scripting::None, |value| value == scripting)
+}
 discrete_feature!(
     Pointer { None, Coarse, Fine },
     eval_pointer(context),
@@ -1657,5 +1682,132 @@ mod print_border_width_grid_tests {
                 });
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod scripting_tests {
+    use super::*;
+    use crate::stylesheets::{CssRule, CustomMediaEvaluator};
+
+    fn device(media_type: MediaType) -> Device {
+        let seed = crate::test_support::test_device();
+        Device::new(
+            media_type,
+            seed.quirks_mode,
+            seed.viewport_size,
+            seed.device_pixel_ratio,
+            seed.font_metrics_provider,
+            seed.default_computed_values,
+            seed.prefers_color_scheme,
+        )
+    }
+
+    fn matches(device: &Device, query: &str) -> bool {
+        let sheet = crate::test_support::parse_stylesheet(&format!(
+            "@media {query} {{ body {{ display: block; }} }}"
+        ));
+        let guard = sheet.shared_lock.read();
+        let contents = sheet.contents.read_with(&guard);
+        let rules = contents.rules.read_with(&guard);
+        let CssRule::Media(rule) = &rules.0[0] else {
+            panic!("a real parsed media rule");
+        };
+        rule.media_queries.read_with(&guard).evaluate(
+            device,
+            QuirksMode::NoQuirks,
+            &mut CustomMediaEvaluator::none(),
+        )
+    }
+
+    #[test]
+    fn new_devices_preserve_print_and_screen_scripting_conventions() {
+        assert_eq!(
+            device(MediaType::print()).scripting(),
+            Scripting::InitialOnly
+        );
+        assert_eq!(device(MediaType::screen()).scripting(), Scripting::Enabled);
+    }
+
+    #[test]
+    fn explicit_document_scripting_controls_real_parsed_keywords_and_boolean_queries() {
+        for media in [MediaType::print(), MediaType::screen()] {
+            let mut device = device(media);
+            for scripting in [Scripting::None, Scripting::InitialOnly, Scripting::Enabled] {
+                device.set_scripting(scripting);
+                assert_eq!(
+                    matches(&device, "(scripting)"),
+                    scripting != Scripting::None
+                );
+                assert_eq!(
+                    matches(&device, "not (scripting)"),
+                    scripting == Scripting::None
+                );
+                assert_eq!(
+                    matches(&device, "(scripting: none)"),
+                    scripting == Scripting::None
+                );
+                assert_eq!(
+                    matches(&device, "(scripting: initial-only)"),
+                    scripting == Scripting::InitialOnly
+                );
+                assert_eq!(
+                    matches(&device, "(scripting: enabled)"),
+                    scripting == Scripting::Enabled
+                );
+                assert!(!matches(&device, "(scripting: unsupported)"));
+            }
+        }
+    }
+
+    #[test]
+    fn scripting_changes_report_media_invalidation_and_leave_other_devices_independent() {
+        let mut source = device(MediaType::print());
+        assert!(source.set_scripting(Scripting::None));
+        assert!(!source.set_scripting(Scripting::None));
+        let mut replacement = device(MediaType::screen());
+        assert!(replacement.set_scripting(source.scripting()));
+        assert!(replacement.set_scripting(Scripting::Enabled));
+        assert_eq!(source.scripting(), Scripting::None);
+        assert!(!source.set_user_preferences(UserPreferences::default()));
+        source.set_viewport_size(Size2D::new(640.0, 480.0));
+        source.set_page_box_size(Size2D::new(600.0, 400.0));
+        source.set_root_font_size(24.0);
+        assert_eq!(source.scripting(), Scripting::None);
+        assert!(source.set_scripting(Scripting::InitialOnly));
+        assert!(!source.set_scripting(Scripting::InitialOnly));
+        assert!(source.set_scripting(Scripting::Enabled));
+        assert!(!source.set_scripting(Scripting::Enabled));
+    }
+
+    #[test]
+    fn already_parsed_media_conditions_follow_document_policy_changes() {
+        let sheet =
+            crate::test_support::parse_stylesheet("@media (scripting) { body { display: none; } }");
+        let guard = sheet.shared_lock.read();
+        let contents = sheet.contents.read_with(&guard);
+        let rules = contents.rules.read_with(&guard);
+        let CssRule::Media(rule) = &rules.0[0] else {
+            panic!("a real parsed media rule");
+        };
+        let query = rule.media_queries.read_with(&guard);
+        let mut device = device(MediaType::print());
+        assert!(query.evaluate(
+            &device,
+            QuirksMode::NoQuirks,
+            &mut CustomMediaEvaluator::none()
+        ));
+        assert!(device.set_scripting(Scripting::None));
+        assert!(!query.evaluate(
+            &device,
+            QuirksMode::NoQuirks,
+            &mut CustomMediaEvaluator::none()
+        ));
+        assert!(device.set_scripting(Scripting::Enabled));
+        assert!(query.evaluate(
+            &device,
+            QuirksMode::NoQuirks,
+            &mut CustomMediaEvaluator::none()
+        ));
     }
 }
