@@ -10,6 +10,7 @@ pub mod registration;
 pub mod scroll_markers;
 pub mod selector_query;
 pub mod source;
+pub mod source_size_list;
 #[cfg(test)]
 mod style_text_boundary_tests;
 pub mod stylesheet_analysis;
