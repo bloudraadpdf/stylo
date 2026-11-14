@@ -4572,6 +4572,7 @@ fn scan_block<'i>(parser: &mut Parser<'i, '_>, state: &mut TranslateState, full_
                             "margin-outside",
                             "-prince-margin-outside",
                             "prince-margin-outside",
+                            "-prince-margin-inside",
                         ]
                         .iter()
                         .any(|property| name.eq_ignore_ascii_case(property))
@@ -4579,7 +4580,11 @@ fn scan_block<'i>(parser: &mut Parser<'i, '_>, state: &mut TranslateState, full_
                         state.value_replacements.push(ValueReplacement {
                             start_byte: decl_start_byte,
                             end_byte: name_end_byte,
-                            replacement: "-bd-margin-outside".to_string(),
+                            replacement: if name.eq_ignore_ascii_case("-prince-margin-inside") {
+                                "-bd-margin-inside"
+                            } else {
+                                "-bd-margin-outside"
+                            }.to_string(),
                         });
                         continue;
                     }
@@ -8352,6 +8357,20 @@ fn line_column_to_byte(css: &str, line: u32, column: u32) -> Option<usize> {
 #[cfg(test)]
 mod prince_bookmark_tests {
     use super::{CompatMode, translate_compat};
+
+    #[test]
+    fn binding_margin_translation_preserves_declaration_order() {
+        for css in [
+            "@page{-prince-margin-inside:30pt;margin:10pt}",
+            "@page{margin:10pt;-prince-margin-inside:30pt}",
+            "@page{-prince-margin-inside:var(--binding)!important;margin:10pt}",
+        ] {
+            assert_eq!(
+                translate_compat(css, CompatMode::Prince).rewritten,
+                css.replace("-prince-margin-inside", "-bd-margin-inside")
+            );
+        }
+    }
 
     /// Prince 16.2 takes the bookmark properties also without the leading hyphen (`prince-bookmark-level`, as in
     /// style sheets written for Prince 5): the vendored Prince bookmarks `div.x { prince-bookmark-level: 2 }`.
