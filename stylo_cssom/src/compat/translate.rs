@@ -2463,6 +2463,27 @@ mod prince_rewrite_tests {
     }
 
     #[test]
+    fn prince_inside_margin_alias_preserves_its_length() {
+        for property in ["margin-inside", "-prince-margin-inside", "MaRgIn-InSiDe"] {
+            let declarations = format!("{property}:19mm!important");
+            let expected = "-bd-margin-inside:19mm!important";
+            assert_eq!(
+                translate_compat_declarations(&declarations, CompatMode::Prince).rewritten,
+                expected
+            );
+            let css = format!("@page{{{declarations}}}");
+            assert_eq!(
+                translate_compat(&css, CompatMode::Prince).rewritten,
+                format!("@page{{{expected}}}")
+            );
+            for mode in [CompatMode::None, CompatMode::PdfReactor] {
+                assert_eq!(translate_compat(&css, mode).rewritten, css);
+                assert_eq!(translate_compat_declarations(&declarations, mode).rewritten, declarations);
+            }
+        }
+    }
+
+    #[test]
     fn prince_outside_margin_reaches_a_style_declaration() {
         let css = "h1 { margin-outside: -60mm }";
         let translated = translate_compat(css, CompatMode::Prince);
@@ -4572,6 +4593,7 @@ fn scan_block<'i>(parser: &mut Parser<'i, '_>, state: &mut TranslateState, full_
                             "margin-outside",
                             "-prince-margin-outside",
                             "prince-margin-outside",
+                            "margin-inside",
                             "-prince-margin-inside",
                         ]
                         .iter()
@@ -4580,7 +4602,9 @@ fn scan_block<'i>(parser: &mut Parser<'i, '_>, state: &mut TranslateState, full_
                         state.value_replacements.push(ValueReplacement {
                             start_byte: decl_start_byte,
                             end_byte: name_end_byte,
-                            replacement: if name.eq_ignore_ascii_case("-prince-margin-inside") {
+                            replacement: if name.eq_ignore_ascii_case("margin-inside")
+                                || name.eq_ignore_ascii_case("-prince-margin-inside")
+                            {
                                 "-bd-margin-inside"
                             } else {
                                 "-bd-margin-outside"
@@ -7339,7 +7363,7 @@ fn translate_property(lower_property: &str, raw_value: &str) -> Translated {
             native_value: raw_value.trim().to_ascii_lowercase(),
         },
 
-        "-prince-margin-inside" => Translated::Native {
+        "margin-inside" | "-prince-margin-inside" => Translated::Native {
             native_property: "-bd-margin-inside",
             native_value: raw_value.trim().to_string(),
         },
@@ -8091,6 +8115,7 @@ pub(crate) fn required_compat_for(lower_property: &str) -> Option<CompatMode> {
         | "-prince-keep-with-previous"
         | "-prince-orphans-fragments"
         | "-prince-margin-inside"
+        | "margin-inside"
         | "-prince-margin-outside"
         | "margin-outside"
         | "-prince-margin-alt"
