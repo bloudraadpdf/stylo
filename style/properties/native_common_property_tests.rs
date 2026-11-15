@@ -1481,8 +1481,8 @@ fn keyword_line_widths_scale_once_before_border_snapping() {
     use style_traits::ToCss;
     for (keyword, css_px) in [("thin", 1.0), ("medium", 3.0), ("thick", 5.0)] {
         let computed = cascade_zoom_test_style(&format!("zoom:2;border-top-width:{keyword};outline-width:{keyword};column-rule-width:{keyword}"), None);
-        assert_eq!(computed.get_border().border_top_width.0.to_f32_px(), css_px * 2.0);
-        assert_eq!(computed.get_outline().outline_width.0.to_f32_px(), css_px * 2.0);
+        assert_eq!(computed.get_border().border_top_width.0.px(), css_px * 2.0);
+        assert_eq!(computed.get_outline().outline_width.0.px(), css_px * 2.0);
         assert_eq!(computed.get_column().column_rule_width.to_css_string(), format!("{}px", css_px * 2.0));
     }
     });
@@ -1495,7 +1495,7 @@ fn inherited_length_wrappers_scale_relative_to_parent_zoom() {
     let parent = cascade_zoom_test_style("zoom:2;border-top-width:4px;border-top-left-radius:5px;outline-offset:3px;margin-top:6px;flex-basis:7px;column-gap:8px;row-gap:25%;column-width:auto", None);
     let child = cascade_zoom_test_style("zoom:3;border-top-width:inherit;border-top-left-radius:inherit;outline-offset:inherit;margin-top:inherit;flex-basis:inherit;column-gap:inherit;row-gap:inherit;column-width:inherit", Some(&parent));
     assert_eq!(child.effective_zoom.value(), 6.0);
-    assert_eq!(child.get_border().border_top_width.0.to_f32_px(), 24.0);
+    assert_eq!(child.get_border().border_top_width.0.px(), 24.0);
     assert_eq!(child.get_border().border_top_left_radius.to_css_string(), "30px");
     assert_eq!(child.get_outline().outline_offset.to_f32_px(), 18.0);
     assert_eq!(child.get_margin().margin_top.to_css_string(), "36px");

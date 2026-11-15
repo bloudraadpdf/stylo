@@ -248,6 +248,15 @@ impl ToComputedValue for BorderSideWidth {
 
     #[inline]
     fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
+        #[cfg(feature = "servo")]
+        if context.device().media_type() == crate::media_queries::MediaType::print()
+            && context.device().print_border_width_grid
+                == crate::servo::media_queries::PrintBorderWidthGrid::Vector
+        {
+            if let LineWidth::Length(ref length) = self.0 {
+                return ComputedBorderSideWidth(length.to_computed_value(context).0);
+            }
+        }
         let width = self.0.to_computed_value(context);
         if context.device().media_type() == crate::media_queries::MediaType::print() {
             #[cfg(feature = "servo")]
@@ -258,17 +267,20 @@ impl ToComputedValue for BorderSideWidth {
                     crate::values::computed::border::snap_as_border_width(
                         width,
                         context.device().app_units_per_border_width_pixel(),
-                    ),
+                    )
+                    .into(),
                 );
             }
-            return ComputedBorderSideWidth(width);
+            return ComputedBorderSideWidth(width.into());
         }
-        ComputedBorderSideWidth(snap_as_border_width(width, context))
+        ComputedBorderSideWidth(snap_as_border_width(width, context).into())
     }
 
     #[inline]
     fn from_computed_value(computed: &Self::ComputedValue) -> Self {
-        Self(LineWidth::from_computed_value(&computed.0))
+        Self(LineWidth::Length(NonNegativeLength::from_px(
+            crate::values::computed::length::CSSPixelLength::from(computed.0).px(),
+        )))
     }
 }
 

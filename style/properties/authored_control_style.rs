@@ -102,7 +102,7 @@ impl AuthoredControlStyle {
                 if authored.contains(*style_id) {
                     !matches!(value, BorderStyle::None | BorderStyle::Hidden)
                 } else {
-                    authored.contains(*width_id) && width.0 != app_units::Au(0)
+                    authored.contains(*width_id) && width.0 != app_units::Au(0).into()
                 }
             }) || (authored.contains(LonghandId::BorderImageSource)
                 && !matches!(border.border_image_source, Image::None)),

@@ -27,6 +27,9 @@ and its computed-value entry incorrectly describes colours.
 Resolved pixel lengths use the CSS number formatter. The computed length
 remains unchanged for layout; declared length precision is retained.
 
+Vector print borders retain fractional CSS pixel lengths through computation
+and value round trips. Screen and CSS pixel print grids retain their snapping.
+
 Percentage line heights resolve their percentage basis and calculation lengths
 in CSS pixels before reapplying zoom, avoiding an extra floating-point rounding
 step in zoomed pixel units.

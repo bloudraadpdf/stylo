@@ -357,7 +357,7 @@ impl Device {
     /// Sets the lengths of the line width keywords, and `medium` as the initial width of borders, outlines and gap
     /// rules.
     pub fn set_line_width_keywords(&mut self, keywords: LineWidthKeywords) {
-        let medium = BorderSideWidth(keywords.medium);
+        let medium = BorderSideWidth(keywords.medium.into());
         let gap_rule = GapRuleList::single(GapRuleWidth::new(keywords.medium, Au::from_px(1)));
         let mut values = (*self.default_computed_values).clone();
         let border = values.mutate_border();
@@ -1619,6 +1619,25 @@ mod print_border_width_grid_tests {
     use crate::values::specified::border::BorderSideWidth as SpecifiedBorderSideWidth;
 
     #[test]
+    fn vector_print_preserves_sub_app_unit_border_widths() {
+        let device = crate::test_support::test_device();
+        Context::for_media_query_evaluation(&device, QuirksMode::NoQuirks, |context| {
+            for px in [0.01, 1.3828125, 2.999] {
+                let computed = SpecifiedBorderSideWidth::from_px(px).to_computed_value(context);
+                assert!(
+                    (computed.0.px() - px).abs() < 0.000001,
+                    "vector print retains {px}px: {computed:?}"
+                );
+                assert_eq!(
+                    SpecifiedBorderSideWidth::from_computed_value(&computed).to_computed_value(context),
+                    computed,
+                    "vector print round trip retains {px}px"
+                );
+            }
+        });
+    }
+
+    #[test]
     fn print_css_grid_is_independent_of_dpr_and_vector_lengths_stay_exact() {
         for dpr in [1.0, 1.5, 2.0, 4.0] {
             for grid in [PrintBorderWidthGrid::Vector, PrintBorderWidthGrid::CssPixel] {
@@ -1631,15 +1650,16 @@ mod print_border_width_grid_tests {
                         let specified = SpecifiedBorderSideWidth::from_px(px);
                         let raw = crate::values::computed::border::line_width_app_units(px);
                         let expected = match grid {
-                            PrintBorderWidthGrid::Vector => raw,
+                            PrintBorderWidthGrid::Vector => px,
                             PrintBorderWidthGrid::CssPixel => {
                                 crate::values::computed::border::snap_as_border_width(
                                     raw, AU_PER_PX,
                                 )
+                                .to_f32_px()
                             },
                         };
                         assert_eq!(
-                            specified.to_computed_value(context).0,
+                            specified.to_computed_value(context).0.px(),
                             expected,
                             "print {grid:?} dpr={dpr} px={px}"
                         );
@@ -1652,7 +1672,7 @@ mod print_border_width_grid_tests {
                                     device.app_units_per_device_pixel(),
                                 )
                             },
-                            PrintBorderWidthGrid::CssPixel => expected,
+                            PrintBorderWidthGrid::CssPixel => Au::from_f32_px(expected),
                         };
                         assert_eq!(gap.length(), gap_expected, "gap {grid:?} dpr={dpr} px={px}");
                     }
@@ -1677,8 +1697,8 @@ mod print_border_width_grid_tests {
                             device.app_units_per_device_pixel(),
                         );
                         assert_eq!(
-                            specified.to_computed_value(context).0,
-                            expected,
+                            specified.to_computed_value(context).0.px(),
+                            expected.to_f32_px(),
                             "screen {grid:?} dpr={dpr} px={px}"
                         );
                     }

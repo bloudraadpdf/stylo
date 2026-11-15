@@ -1455,8 +1455,8 @@ mod tests {
                         let computed = crate::values::specified::BorderSideWidth::from_px(authored)
                             .to_computed_value(context);
                         assert_eq!(
-                            computed.0,
-                            app_units::Au::from_f32_px(expected),
+                            computed.0.px(),
+                            expected,
                             "{media:?} at {dppx}dppx: {authored}px"
                         );
                     }

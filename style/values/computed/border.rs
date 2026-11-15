@@ -27,11 +27,16 @@ pub use crate::values::specified::border::BorderImageRepeat;
 /// A computed value for -webkit-text-stroke-width.
 pub type LineWidth = Au;
 
+#[cfg(feature = "servo")]
+type BorderSideLength = CSSPixelLength;
+#[cfg(not(feature = "servo"))]
+type BorderSideLength = Au;
+
 /// A computed value for border-width (and the like).
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, ToCss, ToTyped, From)]
 #[repr(transparent)]
 #[typed_value(derive_fields)]
-pub struct BorderSideWidth(pub Au);
+pub struct BorderSideWidth(pub BorderSideLength);
 
 /// Truncate a line width to app units. The px value carries f32 rounding error, so a width of exactly
 /// N app units (25pt is 2000) can arrive just below N and must not lose an app unit.
@@ -56,7 +61,7 @@ pub(crate) fn snap_as_border_width(len: Au, app_units_per_device_pixel: i32) -> 
 impl BorderSideWidth {
     /// The `medium` value.
     pub fn medium() -> Self {
-        Self(LineWidthKeywords::css().medium)
+        Self(LineWidthKeywords::css().medium.into())
     }
 }
 
@@ -92,7 +97,7 @@ impl ToAnimatedValue for BorderSideWidth {
 
     #[inline]
     fn from_animated_value(animated: Self::AnimatedValue) -> Self {
-        Self(Au::from_animated_value(animated))
+        Self(BorderSideLength::from_animated_value(animated))
     }
 }
 
@@ -126,7 +131,7 @@ impl ToResolvedValue for BorderSideWidth {
 
     #[inline]
     fn from_resolved_value(value: Self::ResolvedValue) -> Self {
-        Self(Au::from_f32_px(value.px()))
+        Self(value.into())
     }
 }
 

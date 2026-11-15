@@ -63,12 +63,17 @@ impl ToComputedValue for GapRuleWidth {
         let pixel = context.device().app_units_per_border_width_pixel();
         #[cfg(not(feature = "servo"))]
         let pixel = context.device().app_units_per_device_pixel();
-        computed::bd_gaps::GapRuleWidth::new(width.0, app_units::Au(pixel))
+        computed::bd_gaps::GapRuleWidth::new(
+            computed::border::line_width_app_units(
+                computed::length::CSSPixelLength::from(width.0).px(),
+            ),
+            app_units::Au(pixel),
+        )
     }
 
     fn from_computed_value(computed: &Self::ComputedValue) -> Self {
         Self(BorderSideWidth::from_computed_value(
-            &computed::BorderSideWidth(computed.length()),
+            &computed::BorderSideWidth(computed.length().into()),
         ))
     }
 }
