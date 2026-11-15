@@ -72,9 +72,17 @@ pub(crate) fn map_pending_declarations(
                 )
                 .expect("source projection retains the shorthand member identity")
                 .with_importance(declaration.important()),
-                None => declaration.clone(),
+                None => {
+                    let value = rewrite_tokens(declaration.value());
+                    if value == declaration.value() {
+                        declaration.clone()
+                    } else {
+                        stylo_cssom_model::RuleDeclaration::new(declaration.name(), value)
+                            .with_importance(declaration.important())
+                    }
+                },
             };
-            let projected = match base_url {
+            let projected = match base_url.or_else(|| declaration.source_base_url()) {
                 Some(base) => projected.with_source_base_url(base),
                 None => projected,
             };
@@ -159,6 +167,61 @@ pub fn map_rule_sources(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn compatibility_projection_rewrites_contextual_content_values() {
+        use stylo_cssom_model::{InternalStylesheetRoot, StyleOrigin};
+        crate::context::initialise_required_servo_style_prefs();
+        let parsed = crate::authored_rules::ParsedStylesheet::parse(
+            "a::after { content: leader(dotted) target-counter(attr(href), page) !important }",
+        )
+        .unwrap();
+        let base = crate::CssStylesheetBaseUrl::from_absolute(
+            url::Url::parse("https://styles.test/style.css").unwrap(),
+        );
+        let rules = crate::authored_rules::project_stylesheet_pending_contexts(
+            parsed.rule_nodes(),
+            &base,
+            Some("https://styles.test/source.css"),
+        );
+        let root = InternalStylesheetRoot::new(StyleOrigin::Author, rules);
+        let (projected, _) =
+            crate::compat::translate::project_compat_root(&root, crate::compat::CompatMode::Prince);
+        let declaration = &projected.rules()[0]
+            .payload()
+            .declaration_block()
+            .unwrap()
+            .declarations()[0];
+        assert!(
+            declaration.value().contains("leader('. ')")
+                || declaration.value().contains("leader(\". \")"),
+            "{}",
+            declaration.value()
+        );
+        assert!(declaration.important());
+        assert_eq!(
+            declaration.source_base_url(),
+            Some("https://styles.test/style.css")
+        );
+        assert_eq!(
+            declaration.source_referrer(),
+            Some("https://styles.test/source.css")
+        );
+        let (standard, _) =
+            crate::compat::translate::project_compat_root(&root, crate::compat::CompatMode::None);
+        assert_eq!(
+            standard.rules()[0]
+                .payload()
+                .declaration_block()
+                .unwrap()
+                .declarations(),
+            root.rules()[0]
+                .payload()
+                .declaration_block()
+                .unwrap()
+                .declarations()
+        );
+    }
+
     #[test]
     fn source_projection_shares_only_unchanged_pending_declarations() {
         use stylo_cssom_model::{
