@@ -251,6 +251,8 @@ pub struct Device {
     pub background_blending_enabled: bool,
     /// Whether substituted values support CSS comparison functions.
     pub comparison_functions_enabled: bool,
+    /// Whether substituted display values can establish a block flow root.
+    pub block_flow_root_enabled: bool,
     /// Whether substituted grid-template values support subgrid tracks.
     pub subgrid_enabled: bool,
     /// Whether substituted automatic grid repetitions support non-fixed tracks.
@@ -317,6 +319,7 @@ impl Device {
             print_border_width_grid: PrintBorderWidthGrid::Vector,
             background_blending_enabled: true,
             comparison_functions_enabled: true,
+            block_flow_root_enabled: true,
             subgrid_enabled: true,
             intrinsic_grid_repetition_enabled: true,
             link_state_cascade_priority: false,

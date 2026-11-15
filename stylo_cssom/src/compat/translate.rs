@@ -3149,6 +3149,40 @@ mod prince_rewrite_tests {
     }
 
     #[test]
+    fn print_profiles_reject_block_flow_root_before_the_cascade() {
+        for value in [
+            "flow-root",
+            "block flow-root",
+            "flow-root list-item",
+            r"fl\6f w-root",
+        ] {
+            let css = format!("p {{ display:inline-block; display:{value}; }}");
+            for compat in [CompatMode::PdfReactor, CompatMode::Prince] {
+                assert_eq!(
+                    translate_compat(&css, compat).rewritten,
+                    "p { display:inline-block; }"
+                );
+                let supports = format!("@supports (display:{value}) {{ p {{ color:red }} }}");
+                assert_eq!(
+                    translate_compat(&supports, compat).rewritten,
+                    "@supports (not (--bd-compat-satisfied: 1)) { p { color:red } }"
+                );
+            }
+            for compat in [
+                CompatMode::None,
+                CompatMode::Chromium,
+                CompatMode::WeasyPrint,
+            ] {
+                assert_eq!(translate_compat(&css, compat).rewritten, css);
+            }
+        }
+        let css = "p { display:inline-block; --display:flow-root; display:var(--display) }";
+        for compat in [CompatMode::PdfReactor, CompatMode::Prince] {
+            assert_eq!(translate_compat(css, compat).rewritten, css);
+        }
+    }
+
+    #[test]
     fn pdfreactor_rejects_subgrid_before_the_cascade() {
         for property in [
             "grid-template-rows",
@@ -4118,6 +4152,16 @@ fn engine_ignores_declaration(compat: CompatMode, name: &str, value: &str) -> bo
             selectors::matching::QuirksMode::NoQuirks,
         )
     };
+    if compat == CompatMode::Prince
+        && name.eq_ignore_ascii_case("display")
+        && declarations()
+            .as_typed()
+            .declarations()
+            .iter()
+            .any(PropertyDeclaration::uses_block_flow_root)
+    {
+        return true;
+    }
     match compat {
         CompatMode::None | CompatMode::WeasyPrint => false,
         CompatMode::Chromium => {
@@ -4154,7 +4198,9 @@ fn engine_ignores_declaration(compat: CompatMode, name: &str, value: &str) -> bo
                         .declarations()
                         .iter()
                         .any(|declaration| match declaration {
-                            PropertyDeclaration::Display(display) => display.is_ruby_type(),
+                            PropertyDeclaration::Display(display) => {
+                                display.is_ruby_type() || declaration.uses_block_flow_root()
+                            },
                             PropertyDeclaration::TextDecorationStyle(DecorationStyle::Wavy) => true,
                             PropertyDeclaration::FontVariantCaps(
                                 style::computed_values::font_variant_caps::T::AllSmallCaps,

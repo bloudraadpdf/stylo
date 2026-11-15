@@ -924,6 +924,13 @@ impl PropertyDeclaration {
         }
     }
 
+    /// Whether display explicitly establishes a block flow root.
+    pub fn uses_block_flow_root(&self) -> bool {
+        use crate::values::specified::box_::{DisplayInside, DisplayOutside};
+        matches!(self, Self::Display(display)
+            if display.outside() == DisplayOutside::Block && display.inside() == DisplayInside::FlowRoot)
+    }
+
     /// Whether a grid-template axis uses subgrid tracks.
     pub fn uses_subgrid(&self) -> bool {
         match self {
@@ -1785,7 +1792,10 @@ impl UnparsedValue {
                 {
                     Ok(decl) => {
                         #[cfg(feature = "servo")]
-                        if (!computed_context.builder.device.subgrid_enabled && decl.uses_subgrid())
+                        if (!computed_context.builder.device.block_flow_root_enabled
+                            && decl.uses_block_flow_root())
+                            || (!computed_context.builder.device.subgrid_enabled
+                                && decl.uses_subgrid())
                             || (!computed_context
                                 .builder
                                 .device
@@ -1813,7 +1823,9 @@ impl UnparsedValue {
 
         #[cfg(feature = "servo")]
         if decls.declarations.iter().any(|declaration| {
-            (!computed_context.builder.device.subgrid_enabled && declaration.uses_subgrid())
+            (!computed_context.builder.device.block_flow_root_enabled
+                && declaration.uses_block_flow_root())
+                || (!computed_context.builder.device.subgrid_enabled && declaration.uses_subgrid())
                 || (!computed_context
                     .builder
                     .device
