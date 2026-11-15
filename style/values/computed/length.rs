@@ -350,9 +350,6 @@ impl ToCss for CSSPixelLength {
     where
         W: Write,
     {
-        if self.0.is_finite() {
-            return specified::NoCalcLength::Absolute(AbsoluteLength::Px(self.0)).to_css(dest);
-        }
         self.0.to_css(dest)?;
         dest.write_str("px")
     }
@@ -363,16 +360,18 @@ mod serialization_precision_tests {
     use super::*;
 
     #[test]
-    fn computed_pixel_lengths_share_declared_length_precision() {
-        for (value, expected) in [
-            (33.333_332, "33.333332px"),
-            (115.200_005, "115.200005px"),
-            (146.307_3, "146.3073px"),
-            (99.9, "99.9px"),
-            (-0.0, "0px"),
+    fn computed_pixel_lengths_use_number_precision() {
+        for (value, computed, declared) in [
+            (33.333_332, "33.3333px", "33.333332px"),
+            (115.200_005, "115.2px", "115.200005px"),
+            (146.307_3, "146.307px", "146.3073px"),
+            (26.666_656, "26.6667px", "26.666656px"),
+            (26.666_666, "26.6667px", "26.666666px"),
+            (99.9, "99.9px", "99.9px"),
+            (-0.0, "0px", "0px"),
         ] {
-            assert_eq!(CSSPixelLength::new(value).to_css_string(), expected);
-            assert_eq!(specified::NoCalcLength::Absolute(AbsoluteLength::Px(value)).to_css_string(), expected);
+            assert_eq!(CSSPixelLength::new(value).to_css_string(), computed);
+            assert_eq!(specified::NoCalcLength::Absolute(AbsoluteLength::Px(value)).to_css_string(), declared);
         }
     }
 }

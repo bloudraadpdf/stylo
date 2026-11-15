@@ -24,6 +24,9 @@ CSSOM round trips and painting consistent with Chromium. This is a browser
 compatibility rule: the CSS Borders 4 draft's mode prose omits this exception,
 and its computed-value entry incorrectly describes colours.
 
+Resolved pixel lengths use the CSS number formatter. The computed length
+remains unchanged for layout; declared length precision is retained.
+
 Percentage line heights resolve their percentage basis and calculation lengths
 in CSS pixels before reapplying zoom, avoiding an extra floating-point rounding
 step in zoomed pixel units.
