@@ -1965,6 +1965,19 @@ fn collect_print_function_aliases<'i>(
         };
         let token = token.clone();
         if let Token::Function(name) = &token {
+            if compat == CompatMode::Prince && name.eq_ignore_ascii_case("leader") {
+                let dotted = parser
+                    .parse_nested_block(|inner| -> Result<(), ParseError<'i, ()>> {
+                        inner.expect_ident_matching("dotted")?;
+                        inner.expect_exhausted()?;
+                        Ok(())
+                    })
+                    .is_ok();
+                if dotted {
+                    ranges.push((start, parser.position().byte_index(), "leader('. ')"));
+                }
+                continue;
+            }
             let replacement = if name.eq_ignore_ascii_case("cmyk") {
                 Some("device-cmyk(")
             } else if compat == CompatMode::Prince && name.eq_ignore_ascii_case("prince-script") {
@@ -2411,6 +2424,44 @@ mod prince_rewrite_tests {
         let css = "@supports(prince-hyphens:auto){p{prince-hyphens:auto;color:cmyk(0,0,0,1);-ro-line-height:2}}";
         assert_eq!(translate_compat(css, CompatMode::Chromium).rewritten, css);
         assert!(super::compat_builtin_counter_stylesheet_root(CompatMode::Chromium).is_none());
+    }
+
+    #[test]
+    fn prince_dotted_leaders_use_a_spaced_dot_pattern() {
+        for function in [
+            "leader(dotted)",
+            "LEADER(DoTtEd)",
+            r"leader(\64 otted)",
+            "leader(/*a*/ dotted /*b*/)",
+        ] {
+            let declarations = format!("content: {function} '9'");
+            let expected = "content: leader('. ') '9'";
+            assert_eq!(
+                translate_compat_declarations(&declarations, CompatMode::Prince).rewritten,
+                expected
+            );
+            let css =
+                format!("@page{{@bottom-left{{{declarations}}}}}p{{--fill:var(--x,{function});content:var(--fill)}}");
+            assert_eq!(
+                translate_compat(&css, CompatMode::Prince).rewritten,
+                css.replace(function, "leader('. ')")
+            );
+            for mode in [
+                CompatMode::None,
+                CompatMode::Chromium,
+                CompatMode::PdfReactor,
+                CompatMode::WeasyPrint,
+            ] {
+                assert_eq!(translate_compat(&css, mode).rewritten, css);
+                assert_eq!(
+                    translate_compat_declarations(&declarations, mode).rewritten,
+                    declarations
+                );
+            }
+        }
+        let css =
+            r#"p{content: "leader(dotted)" leader('.') leader(solid) leader(space);--invalid:leader(dotted extra)}"#;
+        assert_eq!(translate_compat(css, CompatMode::Prince).rewritten, css);
     }
 
     #[test]
