@@ -3069,6 +3069,50 @@ mod prince_rewrite_tests {
     }
 
     #[test]
+    fn prince_hyphenation_minimums_have_independent_native_properties() {
+        let source = "-prince-hyphenate-before:3;-prince-hyphenate-after:4;";
+        let translated = translate_compat_declarations(source, CompatMode::Prince);
+        assert_eq!(
+            translated.rewritten.split_whitespace().collect::<String>(),
+            format!("{source}hyphenate-before:3;hyphenate-after:4;")
+        );
+        for property in [
+            "hyphenate-before",
+            "hyphenate-after",
+            "-prince-hyphenate-before",
+            "-prince-hyphenate-after",
+        ] {
+            for minimum in [0, 1] {
+                let source = format!("color:red;{property}:{minimum};");
+                assert_eq!(
+                    translate_compat_declarations(&source, CompatMode::Prince).rewritten,
+                    "color:red;"
+                );
+                let query = format!("@supports ({property}:{minimum}) {{ p {{ color:red }} }}");
+                assert_eq!(
+                    translate_compat(&query, CompatMode::Prince).rewritten,
+                    "@supports (not (--bd-compat-satisfied: 1)) { p { color:red } }"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn prince_rejects_unsupported_hyphenate_limit_chars() {
+        for value in ["4", "20", "auto", "4 3 3", "var(--minimum)"] {
+            let source = format!("p {{ color:red; hyphenate-limit-chars:{value}; }}");
+            assert_eq!(
+                translate_compat(&source, CompatMode::Prince).rewritten,
+                "p { color:red; }"
+            );
+            assert_eq!(
+                translate_compat(&source, CompatMode::None).rewritten,
+                source
+            );
+        }
+    }
+
+    #[test]
     fn unsupported_hanging_punctuation_is_rejected_before_the_cascade() {
         for (compat, value) in [CompatMode::PdfReactor, CompatMode::Prince]
             .into_iter()
@@ -4227,6 +4271,7 @@ fn skip_at_rule<'i>(parser: &mut Parser<'i, '_>) {
 fn engine_ignores_declaration(compat: CompatMode, name: &str, value: &str) -> bool {
     use style::properties::PropertyDeclaration;
     use style::properties::longhands::text_decoration_style::SpecifiedValue as DecorationStyle;
+    use style::values::generics::text::NumberOrAuto;
 
     let declarations = || {
         crate::declaration_parser::parse_inline_style_block(
@@ -4312,6 +4357,24 @@ fn engine_ignores_declaration(compat: CompatMode, name: &str, value: &str) -> bo
                 || name.eq_ignore_ascii_case("text-wrap")
                 || name.eq_ignore_ascii_case("text-wrap-mode")
                 || name.eq_ignore_ascii_case("text-wrap-style")
+                || name.eq_ignore_ascii_case("hyphenate-limit-chars")
+                || (matches!(
+                    prince_canonical_property(name).as_ref(),
+                    "-prince-hyphenate-before" | "-prince-hyphenate-after"
+                ) && value.trim().parse::<i32>().is_ok_and(|minimum| minimum < 2))
+                || ((name.eq_ignore_ascii_case("hyphenate-before")
+                    || name.eq_ignore_ascii_case("hyphenate-after"))
+                    && declarations()
+                        .as_typed()
+                        .declarations()
+                        .iter()
+                        .any(|declaration| {
+                            matches!(declaration,
+                                PropertyDeclaration::HyphenateBefore(NumberOrAuto::Number(minimum))
+                                | PropertyDeclaration::HyphenateAfter(NumberOrAuto::Number(minimum))
+                                if minimum.value() < 2
+                            )
+                        }))
                 || name.eq_ignore_ascii_case("-webkit-background-size")
                 || ((name.eq_ignore_ascii_case("list-style-type")
                     || name.eq_ignore_ascii_case("list-style"))
@@ -7135,24 +7198,18 @@ fn translate_property(lower_property: &str, raw_value: &str) -> Translated {
             native_value: raw_value.trim().to_string(),
         },
 
-        "-prince-hyphenate-before" => {
+        "-prince-hyphenate-before" | "-prince-hyphenate-after" => {
             let trimmed = raw_value.trim();
-            if trimmed.is_empty() || trimmed.parse::<i32>().is_err() {
+            if trimmed.parse::<i32>().ok().is_none_or(|minimum| minimum < 2) {
                 return Translated::ValueDropped;
             }
             Translated::Native {
-                native_property: "hyphenate-limit-chars",
-                native_value: format!("auto {trimmed} auto"),
-            }
-        },
-        "-prince-hyphenate-after" => {
-            let trimmed = raw_value.trim();
-            if trimmed.is_empty() || trimmed.parse::<i32>().is_err() {
-                return Translated::ValueDropped;
-            }
-            Translated::Native {
-                native_property: "hyphenate-limit-chars",
-                native_value: format!("auto auto {trimmed}"),
+                native_property: if lower_property.ends_with("before") {
+                    "hyphenate-before"
+                } else {
+                    "hyphenate-after"
+                },
+                native_value: trimmed.to_string(),
             }
         },
 
