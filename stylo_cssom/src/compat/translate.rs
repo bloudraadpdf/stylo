@@ -3038,6 +3038,37 @@ mod prince_rewrite_tests {
     }
 
     #[test]
+    fn prince_rejects_unprefixed_text_wrap_before_the_cascade() {
+        for property in ["text-wrap", "text-wrap-mode", "text-wrap-style"] {
+            for value in [
+                "wrap",
+                "nowrap",
+                "balance",
+                "auto",
+                "var(--wrap)",
+                "inherit",
+            ] {
+                let declarations = format!("color:red; {property}:{value};");
+                assert_eq!(
+                    translate_compat_declarations(&declarations, CompatMode::Prince).rewritten,
+                    "color:red; "
+                );
+                let css = format!("p {{ {declarations} }}");
+                assert_eq!(
+                    translate_compat(&css, CompatMode::Prince).rewritten,
+                    "p { color:red; }"
+                );
+                assert_eq!(translate_compat(&css, CompatMode::None).rewritten, css);
+            }
+            let css = format!("@supports ({property}:balance) {{ p {{ color:red }} }}");
+            assert_eq!(
+                translate_compat(&css, CompatMode::Prince).rewritten,
+                "@supports (not (--bd-compat-satisfied: 1)) { p { color:red } }"
+            );
+        }
+    }
+
+    #[test]
     fn unsupported_hanging_punctuation_is_rejected_before_the_cascade() {
         for (compat, value) in [CompatMode::PdfReactor, CompatMode::Prince]
             .into_iter()
@@ -4278,6 +4309,9 @@ fn engine_ignores_declaration(compat: CompatMode, name: &str, value: &str) -> bo
             name.eq_ignore_ascii_case("footnote-policy")
                 || name.eq_ignore_ascii_case("hanging-punctuation")
                 || name.eq_ignore_ascii_case("margin-break")
+                || name.eq_ignore_ascii_case("text-wrap")
+                || name.eq_ignore_ascii_case("text-wrap-mode")
+                || name.eq_ignore_ascii_case("text-wrap-style")
                 || name.eq_ignore_ascii_case("-webkit-background-size")
                 || ((name.eq_ignore_ascii_case("list-style-type")
                     || name.eq_ignore_ascii_case("list-style"))
