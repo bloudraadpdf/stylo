@@ -16,18 +16,13 @@ pub fn project_rule_sources(
         if is_empty_projection(&rewritten) {
             continue;
         }
-        let reparsed = if rewritten != source
+        let projected = if rewritten != source
             && (rule.grammar() == stylo_cssom_model::RuleGrammar::Unknown
                 || rule.grammar() == stylo_cssom_model::RuleGrammar::Style
                     && crate::rule_parser::starts_at_rule(&source))
         {
-            crate::authored_rules::ParsedStylesheet::parse(&rewritten)
-                .ok()
-                .map(|parsed| parsed.rule_nodes().to_vec())
+            crate::authored_rules::ParsedStylesheet::parse(&rewritten).into_rule_nodes()
         } else {
-            None
-        };
-        let projected = reparsed.unwrap_or_else(|| {
             let projected = rule.clone().with_projection_serialization(rewritten);
             vec![map_pending_declarations(
                 projected,
@@ -35,7 +30,7 @@ pub fn project_rule_sources(
                 None,
                 None,
             )]
-        });
+        };
         for rule in projected {
             let css = rule.projection_serialization();
             let nested = project_rule_sources(rule.payload().nested(), rewrite);
@@ -173,8 +168,7 @@ mod tests {
         crate::context::initialise_required_servo_style_prefs();
         let parsed = crate::authored_rules::ParsedStylesheet::parse(
             "a::after { content: leader(dotted) target-counter(attr(href), page) !important }",
-        )
-        .unwrap();
+        );
         let base = crate::CssStylesheetBaseUrl::from_absolute(
             url::Url::parse("https://styles.test/style.css").unwrap(),
         );
@@ -387,8 +381,7 @@ mod tests {
             "/* rejected */ a:has(> code) { width:var(--width) } \
              @media print { /* nested */ b:has(code) { color:red } \
              /* retained */ c { width:var(--width) } }",
-        )
-        .unwrap();
+        );
         let root = InternalStylesheetRoot::new(StyleOrigin::Author, parsed.rule_nodes().to_vec());
         let (projected, _) = crate::compat::translate::project_compat_root(
             &root,
@@ -399,15 +392,16 @@ mod tests {
         let expanded =
             crate::rule_declaration_lowering::expand_view_transition_rules(projected.rules())
                 .unwrap();
-        assert!(expanded[0].payload().nested()[0]
-            .payload()
-            .declaration_block()
-            .unwrap()
-            .declarations()
-            .iter()
-            .any(
-                |declaration| declaration.name() == "width" && declaration.value().contains("var(")
-            ));
+        assert!(
+            expanded[0].payload().nested()[0]
+                .payload()
+                .declaration_block()
+                .unwrap()
+                .declarations()
+                .iter()
+                .any(|declaration| declaration.name() == "width"
+                    && declaration.value().contains("var("))
+        );
     }
 
     #[test]
@@ -415,8 +409,7 @@ mod tests {
         crate::context::initialise_required_servo_style_prefs();
         let parsed = crate::authored_rules::ParsedStylesheet::parse(
             ":root{--ink:red}p{color:var(--ink)}@-ro-preferences{first-page-side:verso}",
-        )
-        .unwrap();
+        );
         let root = stylo_cssom_model::InternalStylesheetRoot::new(
             stylo_cssom_model::StyleOrigin::Author,
             parsed.rule_nodes().to_vec(),
@@ -428,8 +421,9 @@ mod tests {
         let expanded =
             crate::rule_declaration_lowering::expand_view_transition_rules(projected.rules())
                 .unwrap();
-        assert!(expanded.iter().any(|rule| rule
-            .projection_serialization()
-            .contains("-bd-first-page-side: verso")));
+        assert!(expanded.iter().any(|rule| {
+            rule.projection_serialization()
+                .contains("-bd-first-page-side: verso")
+        }));
     }
 }

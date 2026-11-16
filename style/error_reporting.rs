@@ -124,6 +124,9 @@ impl<'a> fmt::Display for ContextualParseError<'a> {
                 ParseErrorKind::Basic(BasicParseErrorKind::QualifiedRuleInvalid) => {
                     write!(f, "qualified rule invalid")
                 },
+                ParseErrorKind::Basic(ref kind @ BasicParseErrorKind::NestingTooDeep) => {
+                    write!(f, "{}", kind)
+                },
                 ParseErrorKind::Custom(ref err) => write!(f, "{:?}", err),
             }
         }

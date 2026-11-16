@@ -12,6 +12,7 @@ use crate::stylesheet_set::AuthorStylesheetSet;
 use crate::stylesheets::StylesheetInDocument;
 use crate::stylist::CascadeData;
 use crate::stylist::Stylist;
+use crate::AllocErr;
 use servo_arc::Arc;
 use std::sync::LazyLock;
 
@@ -54,19 +55,19 @@ where
         stylist: &mut Stylist,
         guard: &SharedRwLockReadGuard,
         parents: &[Arc<CascadeData>],
-    ) -> StylesheetInvalidationSet {
+    ) -> Result<StylesheetInvalidationSet, AllocErr> {
         let (flusher, mut invalidations) = self.stylesheets.flush();
         let parents: Vec<_> = parents.iter().map(|data| &**data).collect();
-        if let Ok(Some(data)) = stylist.rebuild_author_data_with_parent_mixins(
+        if let Some(data) = stylist.rebuild_author_data_with_parent_mixins(
             &self.data,
             flusher.sheets,
             guard,
             &mut invalidations.cascade_data_difference,
             &parents,
-        ) {
+        )? {
             self.data = data;
         }
-        invalidations
+        Ok(invalidations)
     }
 
     /// Flush the pending sheet changes, updating `data` as appropriate.
@@ -75,17 +76,16 @@ where
         &mut self,
         stylist: &mut Stylist,
         guard: &SharedRwLockReadGuard,
-    ) -> StylesheetInvalidationSet {
+    ) -> Result<StylesheetInvalidationSet, AllocErr> {
         let (flusher, mut invalidations) = self.stylesheets.flush();
-        let result = stylist.rebuild_author_data(
+        if let Some(data) = stylist.rebuild_author_data(
             &self.data,
             flusher.sheets,
             guard,
             &mut invalidations.cascade_data_difference,
-        );
-        if let Ok(Some(new_data)) = result {
-            self.data = new_data;
+        )? {
+            self.data = data;
         }
-        invalidations
+        Ok(invalidations)
     }
 }

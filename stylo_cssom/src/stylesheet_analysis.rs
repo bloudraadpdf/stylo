@@ -99,11 +99,11 @@ pub fn extract_selectors_from_css(css: &str) -> Vec<String> {
             collect(node.payload().nested(), output);
         }
     }
-    let Ok(stylesheet) = crate::ParsedStylesheet::parse(css) else {
-        return Vec::new();
-    };
     let mut output = Vec::new();
-    collect(stylesheet.rule_nodes(), &mut output);
+    collect(
+        crate::ParsedStylesheet::parse(css).rule_nodes(),
+        &mut output,
+    );
     output
 }
 

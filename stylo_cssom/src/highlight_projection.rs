@@ -134,8 +134,11 @@ fn push_projected_highlight(output: &mut String, selector_start: usize, filter: 
         output.push_str(CUSTOM_HIGHLIGHT_ELEMENT);
     } else {
         let element = CUSTOM_HIGHLIGHT_ELEMENT;
-        let separator =
-            if trimmed.len() != origin.len() || trimmed.ends_with(['>', '+', '~']) { " " } else { "" };
+        let separator = if trimmed.len() != origin.len() || trimmed.ends_with(['>', '+', '~']) {
+            " "
+        } else {
+            ""
+        };
         let origin = format!("{trimmed}{separator}:where(:not({element}))");
         output.push_str(&format!(
             ":is({origin} > {element}, {origin} > {element} {element})"
@@ -267,7 +270,9 @@ mod tests {
     #[test]
     fn highlight_selectors_reach_only_the_text_of_the_originating_element() {
         assert_eq!(
-            project_highlight_selectors("main .M::selection, div ::selection, div > ::selection {}"),
+            project_highlight_selectors(
+                "main .M::selection, div ::selection, div > ::selection {}"
+            ),
             concat!(
                 ":is(main .M:where(:not(moegoe-highlight)) > moegoe-highlight, main .M:where(:not(moegoe-highlight)) > moegoe-highlight moegoe-highlight):where([data-moegoe-selection]), main .M::selection, ",
                 ":is(div :where(:not(moegoe-highlight)) > moegoe-highlight, div :where(:not(moegoe-highlight)) > moegoe-highlight moegoe-highlight):where([data-moegoe-selection]), div ::selection, ",
@@ -288,8 +293,7 @@ mod tests {
             "::highlight(hi) { color: green }",
             "}",
         );
-        let parsed =
-            crate::ParsedStylesheet::parse(css).expect("the grouped highlight fixture must parse");
+        let parsed = crate::ParsedStylesheet::parse(css);
         let root = stylo_cssom_model::InternalStylesheetRoot::new(
             stylo_cssom_model::StyleOrigin::Author,
             parsed.rule_nodes().to_vec(),
@@ -315,7 +319,7 @@ mod tests {
             "::highlight(hi) { color: green }\n",
             "}",
         );
-        let parsed = crate::ParsedStylesheet::parse(css).expect("highlight fixture must parse");
+        let parsed = crate::ParsedStylesheet::parse(css);
         let root = stylo_cssom_model::InternalStylesheetRoot::new(
             stylo_cssom_model::StyleOrigin::Author,
             parsed.rule_nodes().to_vec(),
@@ -335,8 +339,7 @@ mod tests {
             "@position-try --outer { left: 1px }",
             "@media all { @position-try --inner { top: 2px } ::selection { color: red } }",
             "::highlight(hi) { color: green }",
-        ))
-        .unwrap();
+        ));
         let root = stylo_cssom_model::InternalStylesheetRoot::new(
             stylo_cssom_model::StyleOrigin::Author,
             parsed.rule_nodes().to_vec(),

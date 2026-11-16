@@ -150,10 +150,10 @@ pub fn expand_view_transition_rules(
                     .push(projected.with_projection_serialization(format!("{selector}{{{body}}}")));
             }
             if !expansion.generated.is_empty() {
-                let generated =
+                output.extend(
                     crate::authored_rules::ParsedStylesheet::parse(&expansion.generated)
-                        .map_err(|_| DeclarationLoweringError::RuleGrammar)?;
-                output.extend_from_slice(generated.rule_nodes());
+                        .into_rule_nodes(),
+                );
             }
         } else if rule.payload().nested().is_empty() || rule.grammar() == RuleGrammar::Keyframes {
             output.push(rule.clone());
@@ -881,7 +881,7 @@ mod tests {
         ];
         for origin in [Origin::UserAgent, Origin::User, Origin::Author] {
             for css in cases {
-                let parsed = crate::authored_rules::ParsedStylesheet::parse(css).unwrap();
+                let parsed = crate::authored_rules::ParsedStylesheet::parse(css);
                 let base = crate::CssStylesheetBaseUrl::from_absolute(
                     url::Url::parse("https://source.test/path/style.css").unwrap(),
                 );
@@ -978,8 +978,7 @@ mod tests {
     #[test]
     fn noncontextual_source_keeps_existing_fast_return_and_locations() {
         let parsed =
-            crate::authored_rules::ParsedStylesheet::parse("p{color:red}\nspan{color:blue}")
-                .unwrap();
+            crate::authored_rules::ParsedStylesheet::parse("p{color:red}\nspan{color:blue}");
         assert!(!super::requires_source_lowering(parsed.rule_nodes()));
         let lock = style::shared_lock::SharedRwLock::new();
         let original = source_metadata(
@@ -1050,7 +1049,7 @@ mod tests {
             "s|a{background-image:url(icon.png);color:red}",
             "@position-try --fallback{left:3px}",
         );
-        let parsed = crate::authored_rules::ParsedStylesheet::parse(css).unwrap();
+        let parsed = crate::authored_rules::ParsedStylesheet::parse(css);
         let base = crate::CssStylesheetBaseUrl::from_absolute(
             url::Url::parse("https://styles.test/directory/style.css").unwrap(),
         );
@@ -1198,7 +1197,7 @@ mod tests {
         }
         crate::context::initialise_required_servo_style_prefs();
         let css = "p{background-image:url(icon.png);color:red}";
-        let parsed = crate::authored_rules::ParsedStylesheet::parse(css).unwrap();
+        let parsed = crate::authored_rules::ParsedStylesheet::parse(css);
         let base = crate::CssStylesheetBaseUrl::from_absolute(
             url::Url::parse("https://styles.test/style.css").unwrap(),
         );
@@ -1259,7 +1258,7 @@ mod tests {
         super::DeclarationLoweringError,
     > {
         crate::context::initialise_required_servo_style_prefs();
-        let parsed = crate::authored_rules::ParsedStylesheet::parse(css).unwrap();
+        let parsed = crate::authored_rules::ParsedStylesheet::parse(css);
         let base = crate::CssStylesheetBaseUrl::from_absolute(
             url::Url::parse("https://styles.test/style.css").unwrap(),
         );
@@ -1340,12 +1339,11 @@ mod tests {
             "p{background:url(green.png",
             "::view-transition-group(card){transform:translateX(var(--x",
         ] {
-            let parsed = crate::authored_rules::ParsedStylesheet::parse(css).unwrap();
+            let parsed = crate::authored_rules::ParsedStylesheet::parse(css);
             let expanded = super::expand_view_transition_rules(parsed.rule_nodes()).expect(css);
             let reparsed = crate::authored_rules::ParsedStylesheet::parse(
                 &expanded[0].projection_serialization(),
-            )
-            .unwrap();
+            );
             let original = parsed.rule_nodes()[0]
                 .payload()
                 .declaration_block()
@@ -1399,7 +1397,7 @@ mod tests {
             (r"p{--x:url(foo\", "url(foo�)"),
             (r#"p{--x:"foo\"#, "\"foo\""),
         ] {
-            let parsed = crate::authored_rules::ParsedStylesheet::parse(css).unwrap();
+            let parsed = crate::authored_rules::ParsedStylesheet::parse(css);
             assert_eq!(
                 parsed.rule_nodes()[0]
                     .payload()
@@ -1413,8 +1411,7 @@ mod tests {
             let expanded = super::expand_view_transition_rules(parsed.rule_nodes()).expect(css);
             let reparsed = crate::authored_rules::ParsedStylesheet::parse(
                 &expanded[0].projection_serialization(),
-            )
-            .unwrap();
+            );
             assert_eq!(
                 reparsed.rule_nodes()[0]
                     .payload()
@@ -1475,7 +1472,7 @@ mod tests {
     fn contextual_page_background_lowering_keeps_page_shorthand_components() {
         crate::context::initialise_required_servo_style_prefs();
         let css = "@page{size:600px 300px;margin:20px;border:20px solid blue;padding:20px;background-image:url(cat.png);background-repeat:no-repeat}";
-        let parsed = crate::authored_rules::ParsedStylesheet::parse(css).unwrap();
+        let parsed = crate::authored_rules::ParsedStylesheet::parse(css);
         let block = parsed.rule_nodes()[0]
             .payload()
             .declaration_block()
@@ -1526,8 +1523,7 @@ mod tests {
         crate::context::initialise_required_servo_style_prefs();
         let authored = crate::authored_rules::ParsedStylesheet::parse(
             "a::after{content:target-counter(attr(href),attr(data-counter -ro-ident))}",
-        )
-        .unwrap();
+        );
         let base = crate::CssStylesheetBaseUrl::from_absolute(
             url::Url::parse("https://styles.test/style.css").unwrap(),
         );
@@ -1538,8 +1534,7 @@ mod tests {
         );
         let projected = crate::authored_rules::ParsedStylesheet::parse(
             "a::after{content:target-counter(attr(href),attr(data-counter -bd-ident))}",
-        )
-        .unwrap();
+        );
         let native = super::native_declarations(
             projected.rule_nodes()[0]
                 .payload()
@@ -1609,8 +1604,7 @@ mod tests {
     fn view_transition_expansion_keeps_functional_pseudo_class_arguments() {
         let source = crate::authored_rules::ParsedStylesheet::parse(
             ".e:nth-child(3){color:red} .f:not(.g){color:red}",
-        )
-        .expect("the sheet parses");
+        );
         let expanded = super::expand_view_transition_rules(source.rule_nodes())
             .expect("the style rules expand");
         let selectors: Vec<_> = expanded

@@ -90,23 +90,17 @@ fn tokenize(source: &str) -> Result<Vec<Component>, SyntaxParseError> {
         .replace(['\r', '\x0c'], "\n")
         .replace('\0', "�");
     let mut input = ParserInput::new(&source);
-    consume_components(&mut Parser::new(&mut input), 0)
+    consume_components(&mut Parser::new(&mut input))
 }
 
-fn consume_components(
-    parser: &mut Parser<'_, '_>,
-    depth: usize,
-) -> Result<Vec<Component>, SyntaxParseError> {
-    if depth > 128 {
-        return Err(SyntaxParseError::NestingLimit);
-    }
+fn consume_components(parser: &mut Parser<'_, '_>) -> Result<Vec<Component>, SyntaxParseError> {
     let mut components = Vec::new();
     while let Ok(token) = parser.next_including_whitespace() {
         let token = token.clone();
         let component = match token {
             Token::Function(ref name) => Component::Function {
                 name: Arc::from(name.as_ref()),
-                body: nested_components(parser, depth)?,
+                body: nested_components(parser)?,
             },
             Token::ParenthesisBlock | Token::SquareBracketBlock | Token::CurlyBracketBlock => {
                 let kind = match token {
@@ -114,7 +108,7 @@ fn consume_components(
                     Token::SquareBracketBlock => SyntaxBlockKind::Brackets,
                     _ => SyntaxBlockKind::Braces,
                 };
-                let body = nested_components(parser, depth)?;
+                let body = nested_components(parser)?;
                 Component::Block { kind, body }
             },
             _ => {
@@ -140,16 +134,16 @@ fn consume_components(
     Ok(components)
 }
 
-fn nested_components(
-    parser: &mut Parser<'_, '_>,
-    depth: usize,
-) -> Result<Vec<Component>, SyntaxParseError> {
+fn nested_components(parser: &mut Parser<'_, '_>) -> Result<Vec<Component>, SyntaxParseError> {
     parser
         .parse_nested_block(|nested| {
-            consume_components(nested, depth + 1).map_err(|error| nested.new_custom_error(error))
+            consume_components(nested).map_err(|error| nested.new_custom_error(error))
         })
         .map_err(|error| match error.kind {
             cssparser::ParseErrorKind::Custom(error) => error,
+            cssparser::ParseErrorKind::Basic(cssparser::BasicParseErrorKind::NestingTooDeep) => {
+                SyntaxParseError::NestingLimit
+            },
             _ => SyntaxParseError::InvalidValue,
         })
 }

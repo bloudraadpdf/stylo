@@ -278,14 +278,14 @@ fn close_component_block(depth: &mut u32) -> Result<(), stylo_cssom_model::Cssom
 }
 
 impl ParsedStylesheet {
-    pub fn parse(css: &str) -> Result<Self, stylo_cssom_model::CssomStylesheetError> {
+    pub fn parse(css: &str) -> Self {
         let sources = crate::rule_parser::forgiving_rule_sources(css);
         let validated = crate::rule_parser::ParsedCssRule::parse_stylesheet(css);
         let rules = authored_rule_nodes(sources, validated).collect();
-        Ok(Self {
+        Self {
             rules,
             linked_source: None,
-        })
+        }
     }
 
     pub fn with_linked_source(
@@ -474,26 +474,23 @@ impl ValidatedStylesheetRuleList {
             .collect::<Vec<_>>();
         let mut next_validated = 0;
         let mut serialised = Vec::with_capacity(validated.len());
-        if let Ok(authored) = ParsedStylesheet::parse(&css) {
-            for source in authored.rules() {
-                let Some(candidate) = serialise_single_valid_rule(&source) else {
-                    continue;
-                };
-                if validated.get(next_validated) != Some(&candidate) {
-                    continue;
-                }
-                serialised.push(if contains_page_rule(&source) {
-                    source
-                } else {
-                    candidate
-                });
-                next_validated += 1;
+        for source in ParsedStylesheet::parse(&css).rules() {
+            let Some(candidate) = serialise_single_valid_rule(&source) else {
+                continue;
+            };
+            if validated.get(next_validated) != Some(&candidate) {
+                continue;
             }
+            serialised.push(if contains_page_rule(&source) {
+                source
+            } else {
+                candidate
+            });
+            next_validated += 1;
         }
         serialised.extend(validated.into_iter().skip(next_validated));
         let serialised = serialised.join("\n");
-        let stylesheet = ParsedStylesheet::parse(&serialised)
-            .expect("serialised parsed rules must remain complete CSS rules");
+        let stylesheet = ParsedStylesheet::parse(&serialised);
         Self { stylesheet }
     }
 
@@ -776,7 +773,10 @@ impl ValidatedCssRule {
             },
             Err(_) => None,
         };
-        if let Some(node) = authored.as_deref().and_then(parse_view_transition_compatibility_rule) {
+        if let Some(node) = authored
+            .as_deref()
+            .and_then(parse_view_transition_compatibility_rule)
+        {
             return Some(Self { node });
         }
         let validated = ValidatedStylesheetRuleList::parse(css).into_stylesheet();
@@ -997,9 +997,7 @@ impl ParsedImportReplacement {
             .map(|rule| rule.to_css_string(&guard))
             .collect::<Vec<_>>()
             .join("\n");
-        let mut rules = ParsedStylesheet::parse(&serialised)
-            .expect("serialised parsed import rules must remain valid")
-            .rules;
+        let mut rules = ParsedStylesheet::parse(&serialised).rules;
         if let Some(scope) = &import.scope {
             rules = vec![stylo_cssom_model::RuleNode::imported_scope(scope, rules)];
         }
@@ -1609,8 +1607,7 @@ mod tests {
 
     #[test]
     fn consuming_stylesheet_transfers_the_existing_rule_allocation() {
-        let mut stylesheet = ParsedStylesheet::parse("p { color:red } span { margin:1px 2px }")
-            .expect("both stylesheet rules must parse");
+        let mut stylesheet = ParsedStylesheet::parse("p { color:red } span { margin:1px 2px }");
         stylesheet.rules.reserve(64);
         let pointer = stylesheet.rules.as_ptr();
         let capacity = stylesheet.rules.capacity();
@@ -1719,8 +1716,7 @@ mod tests {
                 };
                 expected.extend(node);
             }
-            let parsed =
-                ParsedStylesheet::parse(css).expect("the native parser recovers a stylesheet");
+            let parsed = ParsedStylesheet::parse(css);
             assert_eq!(parsed.rule_nodes(), expected.as_slice(), "{css}");
             for (actual, prior) in parsed.rule_nodes().iter().zip(&expected) {
                 assert_eq!(actual.serialization(), prior.serialization(), "{css}");
@@ -1813,8 +1809,7 @@ mod tests {
     fn parsed_stylesheets_preserve_nested_blocks_and_import_statements() {
         let sheet = ParsedStylesheet::parse(
             "@import url('a;b.css'); @media all { a { color: red } } b { color: green }",
-        )
-        .expect("valid stylesheet must parse into rules");
+        );
         assert_eq!(
             sheet
                 .rule_nodes()
@@ -1831,8 +1826,7 @@ mod tests {
 
     #[test]
     fn parsed_stylesheets_recover_an_unterminated_import_string_at_eof() {
-        let sheet = ParsedStylesheet::parse("@import \"support/eof-green.css")
-            .expect("stylesheet parsing must close open constructs at EOF");
+        let sheet = ParsedStylesheet::parse("@import \"support/eof-green.css");
 
         assert_eq!(sheet.rule_nodes().len(), 1);
         assert_eq!(
@@ -1848,8 +1842,7 @@ mod tests {
 
     #[test]
     fn parsed_stylesheets_keep_authored_projection_separate_from_cssom_text() {
-        let stylesheet =
-            ParsedStylesheet::parse("a{color:red}").expect("the authored rule must parse");
+        let stylesheet = ParsedStylesheet::parse("a{color:red}");
         let rule = &stylesheet.rule_nodes()[0];
 
         assert_eq!(rule.serialization(), "a { color: red; }");
@@ -2035,7 +2028,6 @@ mod tests {
 
     fn splice_child(parent: &str, child: &str) -> String {
         ParsedStylesheet::parse(parent)
-            .expect("the parent stylesheet must parse")
             .materialise_imports(|import| Some(ParsedImportReplacement::parse(child, import)))
             .serialise()
     }
@@ -2064,7 +2056,6 @@ mod tests {
         let import = unqualified_import("child.css");
 
         let materialised = ParsedStylesheet::parse(parent)
-            .expect("the parent stylesheet must parse")
             .materialise_imports(|_| {
                 Some(ParsedImportReplacement::parse(
                     ".child { color: red } /*",
@@ -2084,7 +2075,6 @@ mod tests {
         let child = "# { color: red } .child { color: green }";
 
         let materialised = ParsedStylesheet::parse(parent)
-            .expect("the parent stylesheet must parse")
             .materialise_imports(|_| Some(ParsedImportReplacement::parse(child, &import)))
             .serialise();
 
@@ -2216,7 +2206,7 @@ mod tests {
         );
         let native = crate::rule_parser::ParsedCssRule::parse_stylesheet(css);
         assert_eq!(sources.len(), native.len());
-        let parsed = ParsedStylesheet::parse(css).expect("the stylesheet must recover");
+        let parsed = ParsedStylesheet::parse(css);
         assert_eq!(parsed.rule_nodes().len(), native.len());
         assert_eq!(
             parsed
@@ -2232,11 +2222,77 @@ mod tests {
         assert_eq!(materialised.rule_nodes(), parsed.rule_nodes());
     }
 
+    fn nested(function: &str, inner: &str) -> String {
+        const DEPTH: usize = 100_000;
+        format!("{}{inner}{}", function.repeat(DEPTH), ")".repeat(DEPTH))
+    }
+
+    /// Debug frames of `cssparser::MAX_NESTING_DEPTH` nested selector or `calc()` parsers need more than the 2 MiB
+    /// default test thread stack.
+    fn parse_on_deep_stack(css: String) -> ParsedStylesheet {
+        std::thread::Builder::new()
+            .stack_size(8 << 20)
+            .spawn(move || ParsedStylesheet::parse(&css))
+            .expect("the parse thread starts")
+            .join()
+            .expect("the parse thread finishes")
+    }
+
+    #[test]
+    fn over_deep_calc_drops_only_its_declaration() {
+        let css = format!(
+            "a {{ width: {}; color: green }} c {{ color: blue }}",
+            nested("calc(", "1px")
+        );
+
+        let parsed = parse_on_deep_stack(css);
+
+        let [a, c] = parsed.rule_nodes() else {
+            panic!("both style rules must survive");
+        };
+        let names = a
+            .payload()
+            .declaration_block()
+            .expect("a style rule has declarations")
+            .declarations()
+            .iter()
+            .map(|declaration| declaration.name())
+            .collect::<Vec<_>>();
+        assert_eq!(names, ["color"]);
+        assert_eq!(c.serialization(), "c { color: blue; }");
+    }
+
+    #[test]
+    fn over_deep_selectors_parse_without_overflow() {
+        let not = format!(
+            "{} {{ color: red }} c {{ color: blue }}",
+            nested(":not(", "b")
+        );
+        let parsed = parse_on_deep_stack(not);
+        let [c] = parsed.rule_nodes() else {
+            panic!("the over-deep :not() rule must drop");
+        };
+        assert_eq!(c.serialization(), "c { color: blue; }");
+
+        let is = format!(
+            "{} {{ color: red }} c {{ color: blue }}",
+            nested(":is(", "b")
+        );
+        let parsed = parse_on_deep_stack(is);
+        assert_eq!(
+            parsed
+                .rule_nodes()
+                .last()
+                .map(stylo_cssom_model::RuleNode::serialization),
+            Some("c { color: blue; }".to_owned())
+        );
+    }
+
     #[test]
     fn recovered_stylesheet_projection_preserves_string_token_boundaries() {
         for value in ["var(--a, \"\n", "var(--a, url(\"\n", "var(--a, \"\r\n"] {
             let source = format!("p {{ color: green; --a: red; color: {value}");
-            let sheet = ParsedStylesheet::parse(&source).expect("stylesheet must recover");
+            let sheet = ParsedStylesheet::parse(&source);
             let [rule] = sheet.rule_nodes() else {
                 panic!("recovery must retain the style rule");
             };
@@ -2248,7 +2304,7 @@ mod tests {
     fn stylesheet_namespace_context_reaches_qualified_selectors() {
         let css = "@namespace x url(https://example.test/ns); x|item { color: green }";
 
-        let parsed = ParsedStylesheet::parse(css).expect("the namespace fixture must parse");
+        let parsed = ParsedStylesheet::parse(css);
 
         assert_eq!(parsed.rule_nodes().len(), 2);
         assert_eq!(
@@ -2269,7 +2325,7 @@ mod tests {
             "@layer A.A target { color: red; } }",
         );
 
-        let parsed = ParsedStylesheet::parse(css).expect("the layer fixture must parse");
+        let parsed = ParsedStylesheet::parse(css);
 
         assert_eq!(parsed.rule_nodes().len(), 2);
         assert!(
@@ -2285,7 +2341,7 @@ mod tests {
         let css = "#test { --test: green; --test: (}); background-color: var(--test); }";
 
         let sources = scan_stylesheet_rule_sources(css).expect("the complete style rule must scan");
-        let parsed = ParsedStylesheet::parse(css).expect("the stylesheet must parse");
+        let parsed = ParsedStylesheet::parse(css);
 
         assert_eq!(sources, [css]);
         assert_eq!(parsed.rule_nodes().len(), 1);
@@ -2305,8 +2361,7 @@ mod tests {
     #[test]
     fn linked_stylesheet_projects_font_urls_without_changing_cssom_sources() {
         let parsed =
-            ParsedStylesheet::parse("@font-face { font-family: Fixture; src: url(font.otf) }")
-                .unwrap();
+            ParsedStylesheet::parse("@font-face { font-family: Fixture; src: url(font.otf) }");
         let specified = parsed.serialise();
         let linked = parsed.with_linked_source(
             "https://example.test/support/font.css".into(),
@@ -2323,8 +2378,7 @@ mod tests {
     #[test]
     fn pending_context_projection_preserves_unresolved_custom_property_urls() {
         let parsed =
-            ParsedStylesheet::parse("p { --image:url(image.svg); background:var(--image) }")
-                .unwrap();
+            ParsedStylesheet::parse("p { --image:url(image.svg); background:var(--image) }");
         let base = crate::CssStylesheetBaseUrl::from_absolute(
             Url::parse("https://consumer.test/b/style.css").unwrap(),
         );
@@ -2367,7 +2421,9 @@ mod tests {
 
     #[test]
     fn stylesheet_url_projection_preserves_pending_sources_and_namespace_context() {
-        let parsed = ParsedStylesheet::parse("@namespace x 'urn:source'; x|target { all:initial; background:var(--colour) url(image.svg) !important; background-size:1px }").unwrap();
+        let parsed = ParsedStylesheet::parse(
+            "@namespace x 'urn:source'; x|target { all:initial; background:var(--colour) url(image.svg) !important; background-size:1px }",
+        );
         let root = stylo_cssom_model::InternalStylesheetRoot::new(
             stylo_cssom_model::StyleOrigin::Author,
             parsed.rule_nodes().to_vec(),
@@ -2430,17 +2486,8 @@ mod tests {
 
         assert_eq!(scan_stylesheet_rule_sources(supports).unwrap(), [supports]);
         assert_eq!(scan_stylesheet_rule_sources(mixin).unwrap(), [mixin]);
-        assert_eq!(
-            ParsedStylesheet::parse(supports)
-                .unwrap()
-                .rule_nodes()
-                .len(),
-            1
-        );
-        assert_eq!(
-            ParsedStylesheet::parse(mixin).unwrap().rule_nodes().len(),
-            1
-        );
+        assert_eq!(ParsedStylesheet::parse(supports).rule_nodes().len(), 1);
+        assert_eq!(ParsedStylesheet::parse(mixin).rule_nodes().len(), 1);
     }
 
     #[test]
@@ -2463,7 +2510,7 @@ mod tests {
             ".b { #child { @scope (&) { --x: 1; color: red; } } }",
         );
 
-        let parsed = ParsedStylesheet::parse(css).expect("the nested scope fixture must parse");
+        let parsed = ParsedStylesheet::parse(css);
 
         assert_eq!(parsed.rule_nodes().len(), 2);
         let nested = parsed.rule_nodes()[1].payload().nested()[0]
@@ -2531,10 +2578,7 @@ mod tests {
             "1badselector { color: red }",
         ] {
             assert!(
-                ParsedStylesheet::parse(source)
-                    .unwrap()
-                    .rule_nodes()
-                    .is_empty(),
+                ParsedStylesheet::parse(source).rule_nodes().is_empty(),
                 "invalid rule survived: {source}",
             );
         }
@@ -2544,7 +2588,7 @@ mod tests {
         use crate::compat::{CompatMode, translate::project_compat_root};
         use stylo_cssom_model::{InternalStylesheetRoot, StyleOrigin};
 
-        let parsed = ParsedStylesheet::parse(source).unwrap();
+        let parsed = ParsedStylesheet::parse(source);
         assert_eq!(parsed.rule_nodes().len(), 1, "{source}");
         if let Some(
             stylo_cssom_model::RuleCssomData::Style { selector }
@@ -2569,7 +2613,7 @@ mod tests {
     fn stylesheet_keeps_custom_highlight_selectors_for_projection() {
         let css = "::highlight(note) { color: blue }";
 
-        let parsed = ParsedStylesheet::parse(css).expect("the highlight fixture must parse");
+        let parsed = ParsedStylesheet::parse(css);
 
         assert_eq!(parsed.rule_nodes().len(), 1);
         assert_eq!(
@@ -2583,8 +2627,7 @@ mod tests {
     fn stylesheet_keeps_grouped_highlight_selectors_for_projection() {
         let css = "@container (width >= 400px) { ::selection { color: green } ::highlight(note) { color: green } }";
 
-        let parsed =
-            ParsedStylesheet::parse(css).expect("the grouped highlight fixture must parse");
+        let parsed = ParsedStylesheet::parse(css);
 
         assert_eq!(parsed.rule_nodes().len(), 1);
         assert_eq!(
@@ -2604,18 +2647,23 @@ mod tests {
             let rule = ValidatedCssRule::parse(crate::rule_parser::RuleInput::new(&source))
                 .expect("a part can use a view-transition state pseudo-class")
                 .into_rule_node();
-            assert!(matches!(rule.cssom_data(), Some(stylo_cssom_model::RuleCssomData::Style { selector: actual }) if actual.as_ref() == selector));
+            assert!(
+                matches!(rule.cssom_data(), Some(stylo_cssom_model::RuleCssomData::Style { selector: actual }) if actual.as_ref() == selector)
+            );
         }
-        assert!(ValidatedCssRule::parse(crate::rule_parser::RuleInput::new(
-            "::part(button):active-view-transition-type() { color: green; }",
-        )).is_none());
+        assert!(
+            ValidatedCssRule::parse(crate::rule_parser::RuleInput::new(
+                "::part(button):active-view-transition-type() { color: green; }",
+            ))
+            .is_none()
+        );
     }
 
     #[test]
     fn stylesheet_keeps_view_transition_selectors_for_later_projection() {
         let css = "html:active-view-transition #target { color: green } html::view-transition-old(root) { opacity: 1 }";
 
-        let parsed = ParsedStylesheet::parse(css).expect("the view-transition fixture must parse");
+        let parsed = ParsedStylesheet::parse(css);
 
         assert_eq!(parsed.rule_nodes().len(), 2);
         assert!(
@@ -2638,7 +2686,7 @@ mod tests {
     fn stylesheet_drops_a_view_transition_rule_with_an_invalid_selector_list() {
         let css = "::view-transition-group(*) ::view-transition-image-pair(*), ::view-transition-old(*) { display: none }";
 
-        let parsed = ParsedStylesheet::parse(css).expect("the view-transition fixture must parse");
+        let parsed = ParsedStylesheet::parse(css);
 
         assert!(parsed.rule_nodes().is_empty());
     }
@@ -2653,7 +2701,6 @@ mod tests {
         let mut urls = Vec::new();
 
         let materialised = ParsedStylesheet::parse(css)
-            .expect("the stylesheet must parse")
             .materialise_imports(|import| {
                 urls.push(import.url.as_str().to_owned());
                 Some(ParsedImportReplacement::parse(
@@ -2682,7 +2729,6 @@ mod tests {
         let css = "@import ; @import 'valid.css'; .body {}";
 
         let materialised = ParsedStylesheet::parse(css)
-            .expect("the stylesheet must parse")
             .materialise_imports(|import| {
                 assert_eq!(import.url.as_str(), "valid.css");
                 Some(ParsedImportReplacement::parse(".imported {}", import))
@@ -2704,7 +2750,6 @@ mod tests {
         let garbage_import = ParsedStylesheet::parse(
             "# :unknownpseudo @import 'import-red.css'; .import { color: red; } p { color: green; }",
         )
-        .expect("the invalid stylesheet remains structurally complete")
         .serialise();
         assert!(
             !garbage_import.contains("import-red.css"),
@@ -2714,15 +2759,12 @@ mod tests {
         assert!(garbage_import.contains("color: green"), "{garbage_import}");
 
         let unknown_suffix =
-            ParsedStylesheet::parse("p { color: green; } @foo {}; p { color: red; }")
-                .expect("the unknown at-rule fixture remains structurally complete")
-                .serialise();
+            ParsedStylesheet::parse("p { color: green; } @foo {}; p { color: red; }").serialise();
         assert!(unknown_suffix.contains("color: green"), "{unknown_suffix}");
         assert!(!unknown_suffix.contains("color: red"), "{unknown_suffix}");
 
         let charset_suffix =
             ParsedStylesheet::parse("test; @charset \"UTF-8\"; .target { color: red; }")
-                .expect("the charset fixture remains structurally complete")
                 .serialise();
         assert!(!charset_suffix.contains("color: red"), "{charset_suffix}");
     }
@@ -2730,8 +2772,7 @@ mod tests {
     #[test]
     fn wholly_invalid_unclosed_rules_do_not_become_unknown_cssom_rules() {
         for css in ["@scope (", "@starting-style ( {}", "[foo["] {
-            let parsed = ParsedStylesheet::parse(css)
-                .expect("invalid stylesheet recovery must be deterministic");
+            let parsed = ParsedStylesheet::parse(css);
             assert!(parsed.rule_nodes().is_empty(), "{css:?}");
         }
     }
@@ -2845,7 +2886,6 @@ mod origin_clean_tests {
     fn linked_source_taint_survives_rule_edits_and_cloning() {
         let encoding = stylo_cssom_model::CssEncoding::new("UTF-8").expect("UTF-8 encoding");
         let mut sheet = super::ParsedStylesheet::parse("a { color:red }")
-            .expect("valid CSS")
             .with_linked_source("https://other.test/style.css".to_owned(), encoding)
             .with_origin_clean(false);
         sheet.insert_rule(1, "b {}").expect("insert rule");

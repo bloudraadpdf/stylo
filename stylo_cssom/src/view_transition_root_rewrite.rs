@@ -31,7 +31,8 @@ pub const INTERNAL_GROUP_CHILDREN_OVERFLOW_MARKER: &str =
     "--moegoe-view-transition-group-children-overflow";
 pub const GROUP_ANIMATION_CARRIER_ELEMENT: &str = "moegoe-internal-view-transition-group";
 pub const IMAGE_PAIR_ANIMATION_CARRIER_ELEMENT: &str = "moegoe-internal-view-transition-image-pair";
-pub const GROUP_CHILDREN_ANIMATION_CARRIER_ELEMENT: &str = "moegoe-internal-view-transition-group-children";
+pub const GROUP_CHILDREN_ANIMATION_CARRIER_ELEMENT: &str =
+    "moegoe-internal-view-transition-group-children";
 pub const OLD_ANIMATION_CARRIER_ELEMENT: &str = "moegoe-internal-view-transition-old";
 pub const NEW_ANIMATION_CARRIER_ELEMENT: &str = "moegoe-internal-view-transition-new";
 pub const TRANSITION_STYLE_ELEMENT: &str = "moegoe-internal-view-transition-style";
@@ -296,7 +297,14 @@ fn append_projected_style_tree_rules(rule: &mut String, prelude: &str, body: &st
         group_selectors.clone(),
         project_declarations(
             body,
-            &["background", "background-color", "visibility", "overflow", "overflow-x", "overflow-y"],
+            &[
+                "background",
+                "background-color",
+                "visibility",
+                "overflow",
+                "overflow-x",
+                "overflow-y",
+            ],
             None,
         ),
     );
@@ -468,10 +476,10 @@ pub fn project_standalone_root_view_transition_root(
             if rule.grammar() == stylo_cssom_model::RuleGrammar::Keyframes {
                 return Some(vec![rule.clone()]);
             }
-            let projection = project_standalone_root_view_transition_rule(&rule.projection_serialization());
+            let projection =
+                project_standalone_root_view_transition_rule(&rule.projection_serialization());
             (!projection.is_empty()).then(|| {
                 crate::authored_rules::ParsedStylesheet::parse(&projection)
-                    .expect("a standalone root view-transition projection must remain a valid stylesheet")
                     .rule_nodes()
                     .to_vec()
             })
@@ -938,7 +946,10 @@ pub fn ancestor_placement_registrations() -> stylo_cssom_model::InternalStyleshe
 
 fn project_ancestor_placement_declarations(body: &str, prefix: &str) -> Option<String> {
     let mut output = String::new();
-    for property in ANCESTOR_PLACEMENT_INSETS.into_iter().chain(["transform", "clip-path"]) {
+    for property in ANCESTOR_PLACEMENT_INSETS
+        .into_iter()
+        .chain(["transform", "clip-path"])
+    {
         let replacement = format!("{prefix}{property}");
         if let Some(declaration) = project_declarations(body, &[property], Some(&replacement)) {
             output.push_str(&declaration);
@@ -1072,10 +1083,10 @@ fn project_declarations(
 #[cfg(test)]
 mod tests {
     use super::{
-        parse_view_transition_group_pseudo_selector, project_named_capture_selector,
-        project_standalone_root_view_transition_root, rewrite_view_transition_root,
         GROUP_CHILDREN_STYLE_ELEMENT, GROUP_STYLE_ELEMENT, INTERNAL_BACKGROUND_PROPERTY,
         INTERNAL_IMAGE_PAIR_OPACITY_PROPERTY, SPECIFICITY_WITNESS, TRANSITION_STYLE_ELEMENT,
+        parse_view_transition_group_pseudo_selector, project_named_capture_selector,
+        project_standalone_root_view_transition_root, rewrite_view_transition_root,
     };
     use crate::selector_query::selector_specificity;
 
@@ -1146,8 +1157,7 @@ mod tests {
             "@media screen{html::view-transition{animation:hold 300s;background:blue}}",
             "html::view-transition-old(root){animation:none}",
         );
-        let parsed = crate::ParsedStylesheet::parse(css)
-            .expect("the standalone projection fixture must parse");
+        let parsed = crate::ParsedStylesheet::parse(css);
         let root = stylo_cssom_model::InternalStylesheetRoot::new(
             stylo_cssom_model::StyleOrigin::Author,
             parsed.rule_nodes().to_vec(),
@@ -1313,7 +1323,9 @@ mod tests {
         );
 
         assert!(rewritten.contains(&format!("{TRANSITION_STYLE_ELEMENT}{{position:absolute;}}")));
-        assert!(rewritten.contains(&format!("{TRANSITION_STYLE_ELEMENT}{{left:20px;top:40px;}}")));
+        assert!(rewritten.contains(&format!(
+            "{TRANSITION_STYLE_ELEMENT}{{left:20px;top:40px;}}"
+        )));
     }
 
     #[test]
@@ -1324,10 +1336,12 @@ mod tests {
         ));
 
         assert!(rewritten.contains("--moegoe-view-transition-group-clip-path:inset(1px 2px)"));
-        assert!(rewrite_view_transition_root(
-            "html::view-transition-group(card){/* a comment */clip-path:inset(1px)}"
-        )
-        .contains("--moegoe-view-transition-group-clip-path:inset(1px)"));
+        assert!(
+            rewrite_view_transition_root(
+                "html::view-transition-group(card){/* a comment */clip-path:inset(1px)}"
+            )
+            .contains("--moegoe-view-transition-group-clip-path:inset(1px)")
+        );
         assert!(rewritten.contains("--moegoe-view-transition-image-pair-clip-path:inset(3px)"));
     }
 
@@ -1410,7 +1424,9 @@ mod tests {
 
     #[test]
     fn projects_group_overflow_to_its_generated_style() {
-        let rewritten = rewrite_view_transition_root("::view-transition-group(parent){overflow:clip;overflow-x:hidden}");
+        let rewritten = rewrite_view_transition_root(
+            "::view-transition-group(parent){overflow:clip;overflow-x:hidden}",
+        );
         assert!(rewritten.contains(&format!(
             "{GROUP_STYLE_ELEMENT}:where([data-moegoe-view-transition-name=\"706172656e74\"]){SPECIFICITY_WITNESS}{{overflow:clip;overflow-x:hidden;}}",
         )));
@@ -1659,5 +1675,4 @@ mod tests {
         assert!(generated.contains(super::GROUP_ANIMATION_CARRIER_ELEMENT));
         assert!(!generated.contains(&format!(">{}", super::GROUP_ANIMATION_CARRIER_ELEMENT)));
     }
-
 }

@@ -2267,9 +2267,7 @@ pub fn project_compat_root(
         let css = registration.serialization();
         let generated = translate_compat(&css, compat);
         rules.extend_from_slice(
-            crate::authored_rules::ParsedStylesheet::parse(&generated.rewritten)
-                .expect("a generated colour registration must remain a valid stylesheet")
-                .rule_nodes(),
+            crate::authored_rules::ParsedStylesheet::parse(&generated.rewritten).rule_nodes(),
         );
     }
     (
@@ -2323,8 +2321,7 @@ mod prince_rewrite_tests {
         use stylo_cssom_model::{InternalStylesheetRoot, StyleOrigin};
         let parsed = crate::authored_rules::ParsedStylesheet::parse(
             ".a:has(h2) { width:var(--width) } @media print { .b:dir(rtl) { width:var(--width) } .c { width:10px } }",
-        )
-        .unwrap();
+        );
         let root = InternalStylesheetRoot::new(StyleOrigin::Author, parsed.rule_nodes().to_vec());
         let (projected, _) = super::project_compat_root(&root, CompatMode::PdfReactor);
         assert_eq!(projected.rules().len(), 1);
@@ -2440,8 +2437,9 @@ mod prince_rewrite_tests {
                 translate_compat_declarations(&declarations, CompatMode::Prince).rewritten,
                 expected
             );
-            let css =
-                format!("@page{{@bottom-left{{{declarations}}}}}p{{--fill:var(--x,{function});content:var(--fill)}}");
+            let css = format!(
+                "@page{{@bottom-left{{{declarations}}}}}p{{--fill:var(--x,{function});content:var(--fill)}}"
+            );
             assert_eq!(
                 translate_compat(&css, CompatMode::Prince).rewritten,
                 css.replace(function, "leader('. ')")
@@ -2459,8 +2457,7 @@ mod prince_rewrite_tests {
                 );
             }
         }
-        let css =
-            r#"p{content: "leader(dotted)" leader('.') leader(solid) leader(space);--invalid:leader(dotted extra)}"#;
+        let css = r#"p{content: "leader(dotted)" leader('.') leader(solid) leader(space);--invalid:leader(dotted extra)}"#;
         assert_eq!(translate_compat(css, CompatMode::Prince).rewritten, css);
     }
 
@@ -2529,7 +2526,10 @@ mod prince_rewrite_tests {
             );
             for mode in [CompatMode::None, CompatMode::PdfReactor] {
                 assert_eq!(translate_compat(&css, mode).rewritten, css);
-                assert_eq!(translate_compat_declarations(&declarations, mode).rewritten, declarations);
+                assert_eq!(
+                    translate_compat_declarations(&declarations, mode).rewritten,
+                    declarations
+                );
             }
         }
     }
@@ -2539,7 +2539,7 @@ mod prince_rewrite_tests {
         let css = "h1 { margin-outside: -60mm }";
         let translated = translate_compat(css, CompatMode::Prince);
         assert_eq!(translated.rewritten, "h1 { -bd-margin-outside: -60mm }");
-        let parsed = crate::authored_rules::ParsedStylesheet::parse(&translated.rewritten).unwrap();
+        let parsed = crate::authored_rules::ParsedStylesheet::parse(&translated.rewritten);
         assert_eq!(
             parsed.rule_nodes()[0]
                 .payload()
@@ -2603,7 +2603,7 @@ mod prince_rewrite_tests {
     #[test]
     fn prince_line_height_quirk_is_explicit_and_mode_scoped() {
         let css = "@prince-quirks line-height-12; p { line-height: normal }";
-        let parsed = crate::authored_rules::ParsedStylesheet::parse(css).unwrap();
+        let parsed = crate::authored_rules::ParsedStylesheet::parse(css);
         let root = stylo_cssom_model::InternalStylesheetRoot::new(
             stylo_cssom_model::StyleOrigin::Author,
             parsed.rule_nodes(),
@@ -3398,7 +3398,6 @@ mod prince_rewrite_tests {
     fn prince_rewrites_the_rules_of_a_sheet_with_a_media_list() {
         let rules =
             crate::authored_rules::ParsedStylesheet::parse(".fn { display: prince-footnote }")
-                .expect("the rule must parse")
                 .rule_nodes()
                 .to_vec();
         let root = stylo_cssom_model::InternalStylesheetRoot::new(
@@ -3424,7 +3423,7 @@ mod internal_stylesheet_root_tests {
     #[test]
     fn compatibility_projection_rewrites_retained_shorthand_tokens() {
         let css = "@page:right{background-position:calc(var(--x) - 100-ro-pw)}";
-        let parsed = crate::authored_rules::ParsedStylesheet::parse(css).unwrap();
+        let parsed = crate::authored_rules::ParsedStylesheet::parse(css);
         let authored = InternalStylesheetRoot::new(StyleOrigin::Author, parsed.rule_nodes());
         let (projected, warnings) = project_compat_root(&authored, CompatMode::PdfReactor);
         assert!(warnings.is_empty());
@@ -3483,8 +3482,7 @@ mod internal_stylesheet_root_tests {
     fn compatibility_projection_retains_namespace_context_across_rules() {
         let parsed = crate::authored_rules::ParsedStylesheet::parse(
             "@namespace Foo 'y'; @namespace foo 'x'; Foo|test { background: lime }",
-        )
-        .expect("the namespaced fixture must parse");
+        );
         let authored =
             InternalStylesheetRoot::new(StyleOrigin::Author, parsed.rule_nodes().to_vec());
 
@@ -3510,8 +3508,7 @@ mod internal_stylesheet_root_tests {
     fn compatibility_projection_preserves_named_rule_source_identity() {
         let parsed = crate::authored_rules::ParsedStylesheet::parse(
             "@media all { @position-try --side { left:1px } .other { float:-ro-top } }",
-        )
-        .unwrap();
+        );
         let source = InternalStylesheetRoot::new(StyleOrigin::Author, parsed.rule_nodes());
         let original = source.rules()[0].payload().nested()[0]
             .payload()
@@ -3546,8 +3543,7 @@ mod internal_stylesheet_root_tests {
             "@position-try --side { left:1px }",
             "ink|p { margin:var(--space); color:-ro-spot('Ink',50%,rgb(1,2,3)); -prince-pdf-profile:PDF/A-1b }",
             "ink|div { color:-ro-spot('Ink',75%,rgb(4,5,6)) } }",
-        ))
-        .expect("the contextual compatibility fixture must parse");
+        ));
         let source = InternalStylesheetRoot::new(StyleOrigin::Author, parsed.rule_nodes());
         let original = source.rules()[1].payload().nested();
         let original_block = original[1]
@@ -4802,7 +4798,8 @@ fn scan_block<'i>(parser: &mut Parser<'i, '_>, state: &mut TranslateState, full_
                                 "-bd-margin-inside"
                             } else {
                                 "-bd-margin-outside"
-                            }.to_string(),
+                            }
+                            .to_string(),
                         });
                         continue;
                     }
@@ -7200,7 +7197,11 @@ fn translate_property(lower_property: &str, raw_value: &str) -> Translated {
 
         "-prince-hyphenate-before" | "-prince-hyphenate-after" => {
             let trimmed = raw_value.trim();
-            if trimmed.parse::<i32>().ok().is_none_or(|minimum| minimum < 2) {
+            if trimmed
+                .parse::<i32>()
+                .ok()
+                .is_none_or(|minimum| minimum < 2)
+            {
                 return Translated::ValueDropped;
             }
             Translated::Native {
