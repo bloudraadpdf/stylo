@@ -535,6 +535,14 @@ pub struct ValidComputedUrl {
 }
 
 impl ComputedUrl {
+    /// The authored fragment-only URL text (`#…`), see <https://drafts.csswg.org/css-values/#local-urls>.
+    pub fn local(&self) -> Option<&str> {
+        match self {
+            Self::Valid(computed) => computed.local.as_deref().map(String::as_str),
+            Self::Invalid(_) => None,
+        }
+    }
+
     /// The external stylesheet response URL that supplied this URL value.
     pub fn referrer_source(&self) -> Option<&str> {
         match self {
