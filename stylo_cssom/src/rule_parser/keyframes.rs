@@ -94,11 +94,9 @@ pub(super) fn canonical_keyframe(
     let selector = model_selector(&frame.selector);
     let declarations = canonical_declaration_block(frame.block.read_with(guard));
     ParsedCssRule {
-        serialization: serialize_keyframe(&selector, &declarations.serialization).into_boxed_str(),
+        serialization: serialize_keyframe(&selector, &declarations.serialization).into(),
         source_location: Some(frame.source_location),
-        projection: source
-            .span(frame.source_location)
-            .map(|span| span.text(source.text()).to_owned()),
+        projection: source.projection(frame.source_location),
         namespaces: namespaces.clone(),
         kind: ParsedCssRuleKind::Keyframe(CanonicalKeyframeRule {
             selector,
@@ -121,7 +119,7 @@ pub fn parse_keyframe_rule(input: RuleInput<'_>) -> Option<RuleNode> {
             &guard,
             &super::model_namespaces(&contents.namespaces),
             &super::source::AuthoredSource::new(
-                input.text(),
+                &input.text().into(),
                 cssparser::UrlErrorRecovery::CssSyntax3,
             ),
         )

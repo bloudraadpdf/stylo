@@ -324,7 +324,7 @@ mod tests {
             stylo_cssom_model::StyleOrigin::Author,
             parsed.rule_nodes().to_vec(),
         );
-        let projection = project_custom_highlight_root(&root).projection_serialization();
+        let projection = project_custom_highlight_root(&root).projection_serialization().into_owned();
 
         assert_eq!(projection.matches("data-moegoe-selection").count(), 2);
         assert_eq!(

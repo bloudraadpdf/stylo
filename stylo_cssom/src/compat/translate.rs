@@ -2249,7 +2249,11 @@ pub fn project_compat_root(
         ColourRegistrationOutput::Collect(&mut registrations),
         TranslationScope::Stylesheet,
     );
-    let mut rules = if translation.rewritten == serialization {
+    let unchanged = translation.rewritten == serialization;
+    if unchanged && registrations.is_empty() {
+        return (root.clone(), translation.warnings);
+    }
+    let mut rules = if unchanged {
         root.rules().to_vec()
     } else {
         crate::author_rule_projection::project_rule_sources(root.rules(), &mut |css| {
@@ -2314,6 +2318,19 @@ mod prince_rewrite_tests {
         let translated = translate_compat(css, CompatMode::PdfReactor);
         assert!(!translated.rewritten.contains("200px"));
         assert!(translated.rewritten.contains("100px"));
+    }
+
+    #[test]
+    fn unchanged_compat_projection_shares_the_rule_array() {
+        use stylo_cssom_model::{InternalStylesheetRoot, StyleOrigin};
+        let parsed = crate::authored_rules::ParsedStylesheet::parse(
+            ".a { color: red } @media print { .b { width: 10px } }",
+        );
+        let root = InternalStylesheetRoot::new(StyleOrigin::Author, parsed.into_rule_nodes());
+        for compat in [CompatMode::None, CompatMode::Prince, CompatMode::PdfReactor] {
+            let (projected, _) = super::project_compat_root(&root, compat);
+            assert!(std::ptr::eq(projected.rules(), root.rules()), "{compat:?}");
+        }
     }
 
     #[test]

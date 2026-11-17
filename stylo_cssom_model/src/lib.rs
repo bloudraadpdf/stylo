@@ -8,7 +8,9 @@ mod error;
 mod parser_api;
 pub use parser_api::{SyntaxBlockKind, SyntaxBodyKind, SyntaxOptions, SyntaxParseError, SyntaxRule, SyntaxValue};
 mod resource_url;
+mod shared_str;
 pub use error::CssomStylesheetError;
+pub use shared_str::SharedStr;
 pub use resource_url::{CssResourceUrl, CssUrlCorsMode, CssUrlReferrerPolicy, CssUrlRequestModifiers};
 
 mod font_feature_values;

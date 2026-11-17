@@ -19,6 +19,7 @@ use style::{
     values::CssUrl,
 };
 use style_traits::{CssWriter, ToCss};
+use stylo_cssom_model::SharedStr;
 use url::Url;
 
 use crate::context::ABOUT_BLANK;
@@ -278,9 +279,10 @@ fn close_component_block(depth: &mut u32) -> Result<(), stylo_cssom_model::Cssom
 }
 
 impl ParsedStylesheet {
-    pub fn parse(css: &str) -> Self {
-        let sources = crate::rule_parser::forgiving_rule_sources(css);
-        let validated = crate::rule_parser::ParsedCssRule::parse_stylesheet(css);
+    pub fn parse(css: impl Into<SharedStr>) -> Self {
+        let css = css.into();
+        let sources = crate::rule_parser::forgiving_rule_sources(&css);
+        let validated = crate::rule_parser::ParsedCssRule::parse_stylesheet(&css);
         let rules = authored_rule_nodes(sources, validated).collect();
         Self {
             rules,
@@ -504,10 +506,11 @@ pub fn typed_rule_nodes(stylesheet: &ParsedStylesheet) -> Vec<stylo_cssom_model:
 }
 
 pub fn parse_rule_node(source: &str) -> Option<stylo_cssom_model::RuleNode> {
-    crate::rule_parser::ParsedCssRule::parse(source)
-        .or_else(|| crate::rule_parser::ParsedCssRule::parse_page_child(source))
-        .map(|rule| authored_rule_node(&rule, source))
-        .or_else(|| parse_authored_compatibility_rule(source))
+    let source = SharedStr::from(source);
+    crate::rule_parser::ParsedCssRule::parse(&source)
+        .or_else(|| crate::rule_parser::ParsedCssRule::parse_page_child(&source))
+        .map(|rule| authored_rule_node(&rule, &source))
+        .or_else(|| parse_authored_compatibility_rule(&source))
 }
 
 fn authored_rule_nodes(
@@ -532,7 +535,7 @@ fn authored_rule_nodes(
 
 fn authored_rule_node(
     rule: &crate::rule_parser::ParsedCssRule,
-    source: &str,
+    source: &SharedStr,
 ) -> stylo_cssom_model::RuleNode {
     let terminates_statement = matches!(
         rule.grammar(),
@@ -546,10 +549,10 @@ fn authored_rule_node(
             .with_authored_serialization(terminated.clone())
             .with_projection_serialization(terminated)
     } else {
-        rule.to_rule_node().with_projection_serialization(source)
+        rule.to_rule_node().with_projection_serialization(source.clone())
     };
     if parsed_rule_contains_page(rule) {
-        node.with_authored_serialization(source)
+        node.with_authored_serialization(source.clone())
     } else {
         node
     }
@@ -581,7 +584,7 @@ pub fn parse_nested_declarations_input(
     parse_nested_declarations_rule_node(input.text())
 }
 
-fn parse_authored_compatibility_rule(source: &str) -> Option<stylo_cssom_model::RuleNode> {
+fn parse_authored_compatibility_rule(source: &SharedStr) -> Option<stylo_cssom_model::RuleNode> {
     parse_highlight_compatibility_rule(source)
         .or_else(|| parse_view_transition_compatibility_rule(source))
         .or_else(|| parse_vendor_compatibility_rule(source))
@@ -591,14 +594,14 @@ fn parse_authored_compatibility_rule(source: &str) -> Option<stylo_cssom_model::
             .then(|| {
                 stylo_cssom_model::RuleNode::authored(
                     stylo_cssom_model::RuleGrammar::Unknown,
-                    source,
+                    source.clone(),
                     Vec::<stylo_cssom_model::RuleNode>::new(),
                 )
             })
         })
 }
 
-fn parse_vendor_compatibility_rule(source: &str) -> Option<stylo_cssom_model::RuleNode> {
+fn parse_vendor_compatibility_rule(source: &SharedStr) -> Option<stylo_cssom_model::RuleNode> {
     use crate::compat::{CompatMode, translate::translate_compat};
     use stylo_cssom_model::{RuleCssomData, RuleGrammar};
 
@@ -606,7 +609,7 @@ fn parse_vendor_compatibility_rule(source: &str) -> Option<stylo_cssom_model::Ru
         .into_iter()
         .find_map(|compat| {
             let translated = translate_compat(source, compat);
-            if translated.rewritten == source {
+            if translated.rewritten == source.as_str() {
                 return None;
             }
             let rule = crate::rule_parser::ParsedCssRule::parse(&translated.rewritten)?;
@@ -635,12 +638,14 @@ fn parse_vendor_compatibility_rule(source: &str) -> Option<stylo_cssom_model::Ru
                 _ => return None,
             };
             authored_rule_node(&rule, source)
-                .with_authored_serialization(source)
+                .with_authored_serialization(source.clone())
                 .with_cssom_data(data)
         })
 }
 
-fn parse_view_transition_compatibility_rule(source: &str) -> Option<stylo_cssom_model::RuleNode> {
+fn parse_view_transition_compatibility_rule(
+    source: &SharedStr,
+) -> Option<stylo_cssom_model::RuleNode> {
     let open = source.find('{')?;
     let selector = source[..open].trim();
     let selector_bytes = selector.as_bytes();
@@ -661,22 +666,22 @@ fn parse_view_transition_compatibility_rule(source: &str) -> Option<stylo_cssom_
 
     let active = crate::active_view_transition_selector::rewrite_stylesheet(source);
     let projected = crate::view_transition_root_rewrite::rewrite_view_transition_root(&active);
-    if crate::rule_parser::ParsedCssRule::parse_stylesheet(&projected).is_empty() {
+    if crate::rule_parser::ParsedCssRule::parse_stylesheet(projected).is_empty() {
         return None;
     }
 
     let placeholder = format!(":where(*) {}", &source[open..]);
     let rule = crate::rule_parser::ParsedCssRule::parse(&placeholder)?;
     rule.to_rule_node()
-        .with_projection_serialization(source)
+        .with_projection_serialization(source.clone())
         .with_cssom_data(stylo_cssom_model::RuleCssomData::Style {
             selector: selector.into(),
         })
 }
 
-fn parse_highlight_compatibility_rule(source: &str) -> Option<stylo_cssom_model::RuleNode> {
+fn parse_highlight_compatibility_rule(source: &SharedStr) -> Option<stylo_cssom_model::RuleNode> {
     let translated = crate::highlight_projection::project_highlight_selectors(source);
-    if translated == source {
+    if translated == source.as_str() {
         return None;
     }
     let rule = crate::rule_parser::ParsedCssRule::parse(&translated)?;
@@ -685,7 +690,7 @@ fn parse_highlight_compatibility_rule(source: &str) -> Option<stylo_cssom_model:
     }
     let selector = source.get(..source.find('{')?)?.trim();
     rule.to_rule_node()
-        .with_projection_serialization(source)
+        .with_projection_serialization(source.clone())
         .with_cssom_data(stylo_cssom_model::RuleCssomData::Style {
             selector: selector.into(),
         })
@@ -775,6 +780,8 @@ impl ValidatedCssRule {
         };
         if let Some(node) = authored
             .as_deref()
+            .map(SharedStr::from)
+            .as_ref()
             .and_then(parse_view_transition_compatibility_rule)
         {
             return Some(Self { node });
@@ -1400,12 +1407,10 @@ pub fn project_stylesheet_rule_urls(
 ) -> Vec<stylo_cssom_model::RuleNode> {
     let shared_base: StdArc<str> = StdArc::from(base_url.as_str());
     crate::author_rule_projection::map_rule_sources(rules, &mut |rule| {
-        let projected = rule
-            .clone()
-            .with_projection_serialization(rewrite_css_url_tokens(
-                &rule.projection_serialization(),
-                base_url.as_url(),
-            ));
+        let projected = match rewrite_css_url_tokens(&rule.projection_serialization(), base_url.as_url()) {
+            Cow::Borrowed(_) => rule.clone(),
+            Cow::Owned(css) => rule.clone().with_projection_serialization(css),
+        };
         crate::author_rule_projection::map_pending_declarations(
             projected,
             str::to_owned,
@@ -1704,7 +1709,7 @@ mod tests {
             let native = crate::rule_parser::ParsedCssRule::parse_stylesheet(css);
             let mut validated = native.iter().peekable();
             let mut expected = Vec::new();
-            for source in crate::rule_parser::forgiving_rule_sources(css) {
+            for source in crate::rule_parser::forgiving_rule_sources(&css.into()) {
                 let matches = validated
                     .peek()
                     .is_some_and(|rule| rule.source_location() == Some(source.location));
@@ -1748,7 +1753,7 @@ mod tests {
         let first = backing(&parsed[0]);
         let future = backing(&parsed[1]);
         let mut nodes =
-            authored_rule_nodes(crate::rule_parser::forgiving_rule_sources(css), parsed);
+            authored_rule_nodes(crate::rule_parser::forgiving_rule_sources(&css.into()), parsed);
         let node = nodes.next().expect("the first style rule must remain");
         assert!(
             future.upgrade().is_some(),
@@ -2196,7 +2201,7 @@ mod tests {
             "#three { background-color: red; }\n",
         );
 
-        let sources = crate::rule_parser::forgiving_rule_sources(css);
+        let sources = crate::rule_parser::forgiving_rule_sources(&css.into());
         assert!(sources[0].text.starts_with("/* lead */"));
         assert_eq!(
             sources
@@ -2922,5 +2927,69 @@ mod origin_clean_tests {
         let cloned = sheet.clone();
         assert!(!cloned.origin_clean());
         assert!(super::ParsedStylesheet::default().origin_clean());
+    }
+}
+
+#[cfg(test)]
+mod shared_text_tests {
+    use std::borrow::Cow;
+
+    use stylo_cssom_model::{InternalStylesheetRoot, SharedStr, StyleOrigin};
+
+    use super::ParsedStylesheet;
+
+    const PAYLOAD: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+    fn within(part: &str, whole: &str) -> bool {
+        let whole = whole.as_bytes().as_ptr_range();
+        let part = part.as_bytes().as_ptr_range();
+        whole.start <= part.start && part.end <= whole.end
+    }
+
+    #[test]
+    fn parsed_rule_parts_share_the_canonical_buffer() {
+        let parsed = ParsedStylesheet::parse(format!(r#".a {{ background-image: url("{PAYLOAD}") }}"#));
+        let rule = &parsed.rule_nodes()[0];
+        let canonical = rule.payload().prelude();
+        let block = rule.payload().declaration_block().expect("a style rule has a block");
+        let value = block.declarations()[0].value();
+        assert!(value.contains(PAYLOAD));
+        assert!(within(block.serialization(), canonical));
+        assert!(within(value, canonical));
+    }
+
+    #[test]
+    fn nested_rules_share_the_canonical_buffer_of_their_parent() {
+        let parsed = ParsedStylesheet::parse(format!(
+            r#"@media print {{ .a {{ background-image: url("{PAYLOAD}") }} .b {{ color: red }} }}"#
+        ));
+        let media = &parsed.rule_nodes()[0];
+        let canonical = media.payload().prelude();
+        for nested in media.payload().nested() {
+            let block = nested.payload().declaration_block().expect("a style rule has a block");
+            assert!(within(nested.payload().prelude(), canonical));
+            assert!(within(block.serialization(), canonical));
+            assert!(block.declarations().iter().all(|declaration| within(declaration.value(), canonical)));
+        }
+    }
+
+    #[test]
+    fn parsed_projections_share_the_source_buffer() {
+        let source = SharedStr::from(format!(
+            r#".a {{ background-image: url("{PAYLOAD}") }} /* gap */ @media print {{ .b {{ color: red }} }}"#
+        ));
+        let parsed = ParsedStylesheet::parse(source.clone());
+        for rule in parsed.rule_nodes() {
+            let Cow::Borrowed(projection) = rule.projection_serialization() else {
+                panic!("a parsed rule keeps its source projection");
+            };
+            assert!(within(projection, &source));
+        }
+        let root = InternalStylesheetRoot::new(StyleOrigin::Author, parsed.into_rule_nodes());
+        let Cow::Borrowed(projection) = root.projection_serialization() else {
+            panic!("adjacent source projections give a borrowed style sheet projection");
+        };
+        assert_eq!(projection, &*source);
+        assert!(within(projection, &source));
     }
 }

@@ -1163,7 +1163,7 @@ mod tests {
             parsed.rule_nodes().to_vec(),
         );
         let projected =
-            project_standalone_root_view_transition_root(&root).projection_serialization();
+            project_standalone_root_view_transition_root(&root).projection_serialization().into_owned();
 
         assert!(!projected.contains("unrelated"));
         assert!(projected.contains("@keyframes hold{from{opacity:1}to{opacity:1}}"));
@@ -1587,7 +1587,7 @@ mod tests {
 
     #[test]
     fn registers_the_projected_ancestor_insets() {
-        let registrations = super::ancestor_placement_registrations().projection_serialization();
+        let registrations = super::ancestor_placement_registrations().projection_serialization().into_owned();
 
         for name in [
             "--moegoe-view-transition-group-top",

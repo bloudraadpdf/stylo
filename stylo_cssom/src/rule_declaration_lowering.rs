@@ -161,7 +161,7 @@ pub fn expand_view_transition_rules(
             let nested = expand_view_transition_rules(rule.payload().nested())?;
             let css = crate::view_transition_root_rewrite::rewrite_view_transition_root(&css)
                 .into_owned();
-            output.push(rule.clone().with_projected_nested(nested, css));
+            output.push(rule.clone().with_projection_serialization(css).with_projected_nested(nested));
         }
     }
     Ok(output)

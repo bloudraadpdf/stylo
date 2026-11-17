@@ -9,6 +9,7 @@ use style::{
     },
 };
 use style_traits::{CssWriter, ToCss};
+use stylo_cssom_model::SharedStr;
 
 pub mod declaration_list;
 mod font_feature_values;
@@ -65,8 +66,8 @@ pub fn serialize_rule_node(node: &stylo_cssom_model::RuleNode) -> RuleSerializat
 /// The standards-defined serialization of one successfully parsed CSS rule.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ParsedCssRule {
-    serialization: Box<str>,
-    projection: Option<String>,
+    serialization: SharedStr,
+    projection: Option<SharedStr>,
     source_location: Option<cssparser::SourceLocation>,
     namespaces: stylo_cssom_model::RuleNamespaceContext,
     kind: ParsedCssRuleKind,
@@ -354,7 +355,7 @@ pub const fn cssom_rule_interface_name_for_grammar(
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct CanonicalCssDeclarationBlock {
     native_backing: Option<stylo_cssom_model::RetainedNativeDeclarations>,
-    serialization: Box<str>,
+    serialization: SharedStr,
     declarations: Box<[stylo_cssom_model::RuleDeclaration]>,
     shorthand_values: Box<[stylo_cssom_model::RuleDeclaration]>,
 }
@@ -380,10 +381,21 @@ impl CanonicalCssDeclarationBlock {
             .collect::<Vec<_>>()
             .into_boxed_slice();
         Self {
-            serialization: serialization.into_boxed_str(),
+            serialization: serialization.into(),
             declarations,
             shorthand_values: Box::new([]),
             native_backing: None,
+        }
+    }
+
+    /// Makes the text of this block and of its values views of `parent` where `parent` has them.
+    fn share_in(&mut self, parent: &SharedStr, from: &mut usize) {
+        self.serialization = parent.share(&self.serialization, from);
+        for declaration in self.declarations.iter_mut().chain(self.shorthand_values.iter_mut()) {
+            if declaration.pending_substitution().is_none() {
+                let value = self.serialization.share(declaration.value(), &mut 0);
+                *declaration = declaration.clone().with_value(value);
+            }
         }
     }
 
@@ -394,7 +406,7 @@ impl CanonicalCssDeclarationBlock {
     ) -> stylo_cssom_model::RuleDeclarationBlock {
         stylo_cssom_model::RuleDeclarationBlock::new(
             domain,
-            self.serialization.as_ref(),
+            self.serialization.clone(),
             self.declarations.to_vec(),
         )
         .with_namespaces(namespaces.clone())
@@ -516,7 +528,7 @@ fn canonical_position_try_declarations(
         .map(|declaration| format!("{}: {};", declaration.name(), declaration.value()))
         .collect::<Vec<_>>()
         .join(" ")
-        .into_boxed_str();
+        .into();
     declarations
 }
 
@@ -945,11 +957,11 @@ cssom_legacy_rule_types! {
 }
 
 impl ParsedCssRule {
-    pub fn parse_stylesheet(css: &str) -> Vec<Self> {
-        Self::parse_rules(css, None)
+    pub fn parse_stylesheet(css: impl Into<SharedStr>) -> Vec<Self> {
+        Self::parse_rules(&css.into(), None)
     }
 
-    fn parse_rules(css: &str, authored: Option<&str>) -> Vec<Self> {
+    fn parse_rules(css: &SharedStr, authored: Option<&str>) -> Vec<Self> {
         crate::context::initialise_required_servo_style_prefs();
         let (stylesheet, lock) = crate::context::parse_stylesheet_fragment(css, Origin::Author);
         let guard = lock.read();
@@ -971,12 +983,31 @@ impl ParsedCssRule {
                     },
                 )
             })
+            .map(Self::with_shared_parts)
             .collect()
+    }
+
+    /// Makes the text of each part of this rule a view of the rule text where the rule text has it.
+    fn with_shared_parts(mut self) -> Self {
+        self.share_parts();
+        self
+    }
+
+    fn share_parts(&mut self) {
+        let serialization = self.serialization.clone();
+        let mut from = 0;
+        if let Some(block) = self.declarations_mut() {
+            block.share_in(&serialization, &mut from);
+        }
+        for rule in self.nested_rules_mut().into_iter().flatten() {
+            rule.serialization = serialization.share(&rule.serialization, &mut from);
+            rule.share_parts();
+        }
     }
 
     /// Parse exactly one rule and serialize its typed representation.
     pub fn parse(css: &str) -> Option<Self> {
-        let mut rules = Self::parse_rules(css, Some(css));
+        let mut rules = Self::parse_rules(&css.into(), Some(css));
         if rules.len() != 1 {
             return None;
         }
@@ -1003,19 +1034,20 @@ impl ParsedCssRule {
                 .source
                 .position(location)
                 .zip(authored.end)
-                .map(|(start, end)| &text[start..end])
+                .map(|(start, end)| start..end)
         } else {
-            span.as_ref().map(|span| span.text(text))
+            span.as_ref().map(source::RuleSourceSpan::range)
         };
         let authored = RuleSource {
-            rule: projection.or(authored.rule),
+            rule: projection.clone().map(|range| &text[range]).or(authored.rule),
             end: span
                 .as_ref()
                 .and_then(|span| span.block_end)
                 .or(authored.end),
             ..authored
         };
-        let serialization = rule.to_css_string(guard).into_boxed_str();
+        let projection = projection.map(|range| authored.source.slice(range));
+        let serialization = SharedStr::from(rule.to_css_string(guard));
         let declaration_block_from_serialization = || {
             let open = serialization
                 .find('{')
@@ -1215,7 +1247,7 @@ impl ParsedCssRule {
                 declarations: (rule.prelude.kind
                     == style::stylesheets::mixin_rule::MixinRuleKind::Private)
                     .then(|| CanonicalCssDeclarationBlock {
-                        serialization: rule.prelude.private_declarations_css().into_boxed_str(),
+                        serialization: rule.prelude.private_declarations_css().into(),
                         declarations: rule
                             .prelude
                             .parameters
@@ -1318,13 +1350,13 @@ impl ParsedCssRule {
                 page.nested_rules,
                 authored.namespaces.clone(),
             );
-            parsed.projection = projection.map(str::to_owned);
+            parsed.projection = projection;
             parsed.source_location = Some(location);
             return Some(parsed);
         }
         Some(Self {
             serialization,
-            projection: projection.map(str::to_owned),
+            projection,
             source_location: Some(location),
             namespaces: authored.namespaces.clone(),
             kind,
@@ -1355,13 +1387,13 @@ impl ParsedCssRule {
         let node = match self.group_header() {
             Some(header) => stylo_cssom_model::RuleNode::authored_with_group_header(
                 self.grammar,
-                self.serialization.as_ref(),
+                self.serialization.clone(),
                 nested,
                 header,
             ),
             None => stylo_cssom_model::RuleNode::authored(
                 self.grammar,
-                self.serialization.as_ref(),
+                self.serialization.clone(),
                 nested,
             ),
         };
@@ -1370,7 +1402,7 @@ impl ParsedCssRule {
             None => node,
         };
         let node = match &self.projection {
-            Some(projection) => node.with_projection_serialization(projection.as_str()),
+            Some(projection) => node.with_projection_serialization(projection.clone()),
             None => node,
         };
         match self.rule_cssom_data() {
@@ -1604,6 +1636,21 @@ impl ParsedCssRule {
         }
     }
 
+    fn declarations_mut(&mut self) -> Option<&mut CanonicalCssDeclarationBlock> {
+        match &mut self.kind {
+            ParsedCssRuleKind::Mixin(rule) => rule.declarations.as_mut(),
+            ParsedCssRuleKind::Keyframe(rule) => Some(&mut rule.declarations),
+            ParsedCssRuleKind::Style(rule) => Some(&mut rule.declarations),
+            ParsedCssRuleKind::FontFace(block)
+            | ParsedCssRuleKind::NestedDeclarations(block)
+            | ParsedCssRuleKind::FunctionDeclarations(block) => Some(block),
+            ParsedCssRuleKind::Page(rule) => Some(&mut rule.declarations),
+            ParsedCssRuleKind::Margin(rule) => Some(&mut rule.declarations),
+            ParsedCssRuleKind::PositionTry(rule) => Some(&mut rule.declarations),
+            _ => None,
+        }
+    }
+
     pub fn page_selector_text(&self) -> Option<&str> {
         let ParsedCssRuleKind::Page(rule) = &self.kind else {
             return None;
@@ -1641,6 +1688,22 @@ impl ParsedCssRule {
             ParsedCssRuleKind::Page(rule) => &rule.nested_rules,
             ParsedCssRuleKind::Mixin(rule) => &rule.grouping.nested_rules,
             ParsedCssRuleKind::Function(rule) => &rule.grouping.nested_rules,
+            _ => return None,
+        })
+    }
+
+    fn nested_rules_mut(&mut self) -> Option<&mut [Self]> {
+        Some(match &mut self.kind {
+            ParsedCssRuleKind::Keyframes(rule) => &mut rule.frames,
+            ParsedCssRuleKind::Style(rule) => &mut rule.grouping.nested_rules,
+            ParsedCssRuleKind::ConditionalGrouping { grouping, .. }
+            | ParsedCssRuleKind::Grouping { grouping, .. } => &mut grouping.nested_rules,
+            ParsedCssRuleKind::Container(rule) => &mut rule.grouping.nested_rules,
+            ParsedCssRuleKind::LayerBlock(rule) => &mut rule.grouping.nested_rules,
+            ParsedCssRuleKind::Scope(rule) => &mut rule.grouping.nested_rules,
+            ParsedCssRuleKind::Page(rule) => &mut rule.nested_rules,
+            ParsedCssRuleKind::Mixin(rule) => &mut rule.grouping.nested_rules,
+            ParsedCssRuleKind::Function(rule) => &mut rule.grouping.nested_rules,
             _ => return None,
         })
     }
@@ -1717,11 +1780,9 @@ impl ParsedCssRule {
         source: &source::AuthoredSource<'_>,
     ) -> Self {
         Self {
-            serialization: rule.to_css_string(guard).into_boxed_str(),
+            serialization: rule.to_css_string(guard).into(),
             source_location: Some(rule.source_location),
-            projection: source
-                .span(rule.source_location)
-                .map(|span| span.text(source.text()).to_owned()),
+            projection: source.projection(rule.source_location),
             namespaces: namespaces.clone(),
             kind: ParsedCssRuleKind::Margin(canonical_margin_rule(rule, guard)),
             interface_name: CssomRuleInterfaceName::Margin,
@@ -1748,11 +1809,10 @@ impl ParsedCssRule {
             css[open + 1..close].trim(),
             crate::declaration_parser::CssomDeclarationContext::Margin,
         );
-        let serialization =
-            format!("@{name} {{ {} }}", declarations.serialization).into_boxed_str();
+        let serialization = format!("@{name} {{ {} }}", declarations.serialization).into();
         Some(Self {
             serialization,
-            projection: Some(css.to_owned()),
+            projection: Some(css.into()),
             source_location: None,
             namespaces: namespaces.clone(),
             kind: ParsedCssRuleKind::Margin(CanonicalMarginRule { name, declarations }),
@@ -1777,7 +1837,7 @@ impl ParsedCssRule {
             .filter(|part| !part.is_empty())
             .collect::<Vec<_>>()
             .join(" ");
-        let serialization = selector.serialise_rule(&body).into_boxed_str();
+        let serialization = selector.serialise_rule(&body).into();
         Self {
             serialization,
             projection: None,
@@ -1970,7 +2030,7 @@ fn canonical_function_declarations(
     use style::stylesheets::function_rule::FunctionDescriptorName;
 
     CanonicalCssDeclarationBlock {
-        serialization: descriptors.to_css_string().into_boxed_str(),
+        serialization: descriptors.to_css_string().into(),
         declarations: descriptors
             .iter()
             .map(|descriptor| {
@@ -2000,7 +2060,7 @@ fn canonical_declaration_block(block: &PropertyDeclarationBlock) -> CanonicalCss
     let shorthand_values =
         crate::declaration_parser::declaration_block_shorthand_values(block).into_boxed_slice();
     CanonicalCssDeclarationBlock {
-        serialization: serialization.into_boxed_str(),
+        serialization: serialization.into(),
         declarations,
         shorthand_values,
         native_backing: crate::declaration_parser::retained_native_declarations(block),
@@ -2909,28 +2969,21 @@ mod tests {
     }
 
     #[test]
-    fn immutable_rule_text_has_no_spare_capacity() {
+    fn large_image_rule_text_is_held_once() {
         let parsed = a_large_image_rule();
-        let text = String::from(parsed.serialization);
-        assert_eq!(
-            text.capacity(),
-            text.len(),
-            "finished canonical rule text is immutable"
-        );
-    }
-
-    #[test]
-    fn immutable_declaration_text_has_no_spare_capacity() {
-        let parsed = a_large_image_rule();
-        let super::ParsedCssRuleKind::Style(style) = parsed.kind else {
+        let super::ParsedCssRuleKind::Style(style) = &parsed.kind else {
             panic!("the image fixture must parse as a style rule");
         };
-        let text = String::from(style.declarations.serialization);
-        assert_eq!(
-            text.capacity(),
-            text.len(),
-            "finished canonical declaration text is immutable"
-        );
+        let block = &style.declarations;
+        assert!(block.serialization.same_buffer(&parsed.serialization));
+        let image = block.declarations.iter().find(|declaration| declaration.name() == "background-image");
+        assert!(image.is_some_and(|image| within(image.value(), &parsed.serialization)));
+    }
+
+    fn within(part: &str, whole: &str) -> bool {
+        let whole = whole.as_bytes().as_ptr_range();
+        let part = part.as_bytes().as_ptr_range();
+        whole.start <= part.start && part.end <= whole.end
     }
 
     #[test]

@@ -1,11 +1,12 @@
 use std::{
+    borrow::Cow,
     collections::{BTreeMap, HashMap, HashSet},
     fmt,
     sync::atomic::{AtomicU64, Ordering},
     sync::{Arc, Mutex, MutexGuard, Weak},
 };
 
-use crate::{CssEncoding, StyleDocumentHandle, StyleState};
+use crate::{CssEncoding, SharedStr, StyleDocumentHandle, StyleState};
 
 #[cfg(test)]
 thread_local! {
@@ -780,7 +781,7 @@ impl RuleDeclarationName {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum RuleDeclarationValue {
-    Serialized(Arc<str>),
+    Serialized(SharedStr),
     PendingSubstitution(PendingSubstitutionValue),
 }
 
@@ -810,7 +811,7 @@ impl PendingSubstitutionValue {
 
 impl RuleDeclaration {
     #[must_use]
-    pub fn new(name: impl Into<Arc<str>>, value: impl Into<Arc<str>>) -> Self {
+    pub fn new(name: impl Into<Arc<str>>, value: impl Into<SharedStr>) -> Self {
         Self {
             name: RuleDeclarationName::new(name.into()),
             value: RuleDeclarationValue::Serialized(value.into()),
@@ -848,7 +849,7 @@ impl RuleDeclaration {
     }
 
     #[must_use]
-    pub fn with_value(mut self, value: impl Into<Arc<str>>) -> Self {
+    pub fn with_value(mut self, value: impl Into<SharedStr>) -> Self {
         self.value = RuleDeclarationValue::Serialized(value.into());
         self
     }
@@ -912,7 +913,7 @@ impl RuleDeclaration {
     #[must_use]
     pub fn value(&self) -> &str {
         match &self.value {
-            RuleDeclarationValue::Serialized(value) => value,
+            RuleDeclarationValue::Serialized(value) => value.as_str(),
             RuleDeclarationValue::PendingSubstitution(_) => "",
         }
     }
@@ -986,7 +987,7 @@ impl Eq for RetainedNativeDeclarations {}
 pub struct RuleDeclarationBlock {
     domain: RuleDeclarationDomain,
     namespaces: RuleNamespaceContext,
-    serialization: Arc<str>,
+    serialization: SharedStr,
     declarations: Arc<[RuleDeclaration]>,
     shorthand_values: Arc<[RuleDeclaration]>,
     native_backing: Option<RetainedNativeDeclarations>,
@@ -1093,7 +1094,7 @@ impl RuleBlock {
     }
 
     #[must_use]
-    pub fn serialization(&self) -> Arc<str> {
+    pub fn serialization(&self) -> SharedStr {
         self.0
             .lock()
             .expect("rule-block cell mutex poisoned")
@@ -1116,7 +1117,7 @@ impl RuleDeclarationBlock {
     #[must_use]
     pub fn new(
         domain: RuleDeclarationDomain,
-        serialization: impl Into<Arc<str>>,
+        serialization: impl Into<SharedStr>,
         declarations: impl Into<Arc<[RuleDeclaration]>>,
     ) -> Self {
         Self {
@@ -1198,8 +1199,8 @@ impl RuleDeclarationBlock {
     }
 
     #[must_use]
-    pub fn shared_serialization(&self) -> Arc<str> {
-        Arc::clone(&self.serialization)
+    pub fn shared_serialization(&self) -> SharedStr {
+        self.serialization.clone()
     }
 }
 
@@ -1229,11 +1230,11 @@ impl RuleGroupHeader {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TypedRulePayload {
     grammar: RuleGrammar,
-    prelude: Arc<str>,
-    block: Option<Arc<str>>,
+    prelude: SharedStr,
+    block: Option<SharedStr>,
     nested: Arc<[RuleNode]>,
     authored: bool,
-    projection_serialization: Option<Arc<str>>,
+    projection_serialization: Option<SharedStr>,
     group_header: Option<RuleGroupHeader>,
     declaration_block: Option<RuleDeclarationBlock>,
     cssom_data: Option<RuleCssomData>,
@@ -1244,8 +1245,8 @@ pub struct TypedRulePayload {
 impl TypedRulePayload {
     fn new(
         grammar: RuleGrammar,
-        prelude: impl Into<Arc<str>>,
-        block: Option<impl Into<Arc<str>>>,
+        prelude: impl Into<SharedStr>,
+        block: Option<impl Into<SharedStr>>,
         nested: impl Into<Arc<[RuleNode]>>,
     ) -> Self {
         Self {
@@ -1263,7 +1264,7 @@ impl TypedRulePayload {
         }
     }
 
-    fn authored(grammar: RuleGrammar, serialization: Arc<str>, nested: Arc<[RuleNode]>) -> Self {
+    fn authored(grammar: RuleGrammar, serialization: SharedStr, nested: Arc<[RuleNode]>) -> Self {
         Self {
             grammar,
             prelude: serialization,
@@ -1281,7 +1282,7 @@ impl TypedRulePayload {
 
     fn authored_with_group_header(
         grammar: RuleGrammar,
-        serialization: Arc<str>,
+        serialization: SharedStr,
         nested: Arc<[RuleNode]>,
         group_header: RuleGroupHeader,
     ) -> Self {
@@ -1464,14 +1465,12 @@ impl RuleNode {
         self
     }
 
+    /// Replaces the nested rules and keeps the current projection text.
     #[must_use]
-    pub fn with_projected_nested(
-        mut self,
-        nested: impl Into<Arc<[Self]>>,
-        serialization: impl Into<Arc<str>>,
-    ) -> Self {
-        self.payload_mut().nested = nested.into();
-        self.with_projection_serialization(serialization)
+    pub fn with_projected_nested(self, nested: impl Into<Arc<[Self]>>) -> Self {
+        let mut rule = self.with_resolved_projection();
+        rule.payload_mut().nested = nested.into();
+        rule
     }
 
     #[must_use]
@@ -1488,7 +1487,7 @@ impl RuleNode {
             _ => return None,
         };
         let payload = self.payload_mut();
-        payload.prelude = selector;
+        payload.prelude = selector.into();
         payload.authored = false;
         payload.projection_serialization = None;
         payload.group_header = None;
@@ -1536,7 +1535,7 @@ impl RuleNode {
             _ => return None,
         };
         let payload = self.payload_mut();
-        payload.prelude = prelude;
+        payload.prelude = prelude.into();
         payload.authored = false;
         payload.projection_serialization = None;
         payload.group_header = None;
@@ -1568,7 +1567,7 @@ impl RuleNode {
             };
         let payload = self.payload_mut();
         if let Some(prelude) = prelude {
-            payload.prelude = prelude;
+            payload.prelude = prelude.into();
         }
         payload.block = Some(declaration_block.serialization.clone());
         payload.declaration_block = Some(declaration_block);
@@ -1630,7 +1629,7 @@ impl RuleNode {
             }
         }
         let payload = self.payload_mut();
-        payload.prelude = name.clone();
+        payload.prelude = name.clone().into();
         payload.block = Some(descriptors.join(" ").into());
         payload.authored = false;
         payload.projection_serialization = None;
@@ -1640,7 +1639,7 @@ impl RuleNode {
     }
 
     #[must_use]
-    pub fn with_authored_serialization(mut self, serialization: impl Into<Arc<str>>) -> Self {
+    pub fn with_authored_serialization(mut self, serialization: impl Into<SharedStr>) -> Self {
         let payload = self.payload_mut();
         payload.prelude = serialization.into();
         payload.authored = true;
@@ -1648,37 +1647,39 @@ impl RuleNode {
     }
 
     #[must_use]
-    pub fn with_projection_serialization(mut self, serialization: impl Into<Arc<str>>) -> Self {
+    pub fn with_projection_serialization(mut self, serialization: impl Into<SharedStr>) -> Self {
         let serialization = serialization.into();
         let payload = self.payload_mut();
         let shared = payload
             .projection_serialization
             .take()
-            .filter(|existing| existing.as_ref() == serialization.as_ref())
-            .or_else(|| {
-                (payload.authored && payload.prelude.as_ref() == serialization.as_ref())
-                    .then(|| Arc::clone(&payload.prelude))
-            })
+            .filter(|existing| *existing == serialization)
+            .or_else(|| (payload.authored && payload.prelude == serialization).then(|| payload.prelude.clone()))
             .unwrap_or(serialization);
         payload.projection_serialization = Some(shared);
         self
     }
 
+    fn with_resolved_projection(self) -> Self {
+        if self.payload().projection_serialization.is_some() {
+            return self;
+        }
+        let projection = self.projection_serialization().into_owned();
+        self.with_projection_serialization(projection)
+    }
+
     #[must_use]
-    pub fn projection_serialization(&self) -> String {
-        self.payload()
-            .projection_serialization
-            .as_deref()
-            .map_or_else(
-                || self.serialization_with(Self::projection_serialization),
-                str::to_owned,
-            )
+    pub fn projection_serialization(&self) -> Cow<'_, str> {
+        self.payload().projection_serialization.as_deref().map_or_else(
+            || Cow::Owned(self.serialization_with(|rule| rule.projection_serialization().into_owned())),
+            Cow::Borrowed,
+        )
     }
 
     #[must_use]
     pub fn authored(
         grammar: RuleGrammar,
-        serialization: impl Into<Arc<str>>,
+        serialization: impl Into<SharedStr>,
         nested: impl Into<Arc<[Self]>>,
     ) -> Self {
         Self::from_payload(
@@ -1690,7 +1691,7 @@ impl RuleNode {
     #[must_use]
     pub fn authored_with_group_header(
         grammar: RuleGrammar,
-        serialization: impl Into<Arc<str>>,
+        serialization: impl Into<SharedStr>,
         nested: impl Into<Arc<[Self]>>,
         group_header: RuleGroupHeader,
     ) -> Self {
@@ -1706,7 +1707,7 @@ impl RuleNode {
     }
 
     #[must_use]
-    pub fn style(selector: impl Into<Arc<str>>, declarations: impl Into<Arc<str>>) -> Self {
+    pub fn style(selector: impl Into<SharedStr>, declarations: impl Into<SharedStr>) -> Self {
         Self::Style(TypedRulePayload::new(
             RuleGrammar::Style,
             selector,
@@ -1716,7 +1717,7 @@ impl RuleNode {
     }
 
     #[must_use]
-    pub fn media(condition: impl Into<Arc<str>>, rules: impl Into<Arc<[Self]>>) -> Self {
+    pub fn media(condition: impl Into<SharedStr>, rules: impl Into<Arc<[Self]>>) -> Self {
         Self::Media(TypedRulePayload::new(
             RuleGrammar::Media,
             condition,
@@ -1726,7 +1727,7 @@ impl RuleNode {
     }
 
     #[must_use]
-    pub fn supports(condition: impl Into<Arc<str>>, rules: impl Into<Arc<[Self]>>) -> Self {
+    pub fn supports(condition: impl Into<SharedStr>, rules: impl Into<Arc<[Self]>>) -> Self {
         Self::Supports(TypedRulePayload::new(
             RuleGrammar::Supports,
             condition,
@@ -1736,10 +1737,10 @@ impl RuleNode {
     }
 
     #[must_use]
-    pub fn layer(name: Option<impl Into<Arc<str>>>, rules: impl Into<Arc<[Self]>>) -> Self {
+    pub fn layer(name: Option<impl Into<SharedStr>>, rules: impl Into<Arc<[Self]>>) -> Self {
         Self::LayerBlock(TypedRulePayload::new(
             RuleGrammar::LayerBlock,
-            name.map_or_else(|| Arc::from(""), Into::into),
+            name.map_or_else(SharedStr::default, Into::into),
             None::<Arc<str>>,
             rules,
         ))
@@ -1761,7 +1762,7 @@ impl RuleNode {
         );
         let projection = format!(
             "{header} {{ {} }}",
-            serialise_rules(&rules, RuleNode::projection_serialization)
+            serialise_rules(&rules, |rule| rule.projection_serialization().into_owned())
         );
         let mut payload = TypedRulePayload::authored_with_group_header(
             RuleGrammar::Scope,
@@ -1776,7 +1777,7 @@ impl RuleNode {
 
     #[must_use]
     pub fn internal_style(
-        selector: impl Into<Arc<str>>,
+        selector: impl Into<SharedStr>,
         declarations: impl Into<Arc<[RuleDeclaration]>>,
     ) -> Self {
         Self::internal_declaration_rule(
@@ -1789,7 +1790,7 @@ impl RuleNode {
 
     #[must_use]
     pub fn keyframe(
-        selector: impl Into<Arc<str>>,
+        selector: impl Into<SharedStr>,
         declarations: impl Into<Arc<[RuleDeclaration]>>,
     ) -> Self {
         Self::internal_declaration_rule(
@@ -1801,7 +1802,7 @@ impl RuleNode {
     }
 
     #[must_use]
-    pub fn keyframes(name: impl Into<Arc<str>>, frames: impl Into<Arc<[Self]>>) -> Option<Self> {
+    pub fn keyframes(name: impl Into<SharedStr>, frames: impl Into<Arc<[Self]>>) -> Option<Self> {
         let frames = frames.into();
         frames
             .iter()
@@ -1886,7 +1887,7 @@ impl RuleNode {
 
     fn internal_declaration_rule(
         grammar: RuleGrammar,
-        prelude: impl Into<Arc<str>>,
+        prelude: impl Into<SharedStr>,
         domain: RuleDeclarationDomain,
         declarations: impl Into<Arc<[RuleDeclaration]>>,
     ) -> Self {
@@ -1905,7 +1906,7 @@ impl RuleNode {
 
     #[must_use]
     pub fn counter_style(
-        name: impl Into<Arc<str>>,
+        name: impl Into<SharedStr>,
         declarations: impl Into<Arc<[RuleDeclaration]>>,
     ) -> Self {
         let declarations = declarations.into();
@@ -2042,13 +2043,49 @@ impl InternalStylesheetRoot {
         &self.rules
     }
 
+    /// Borrows the source buffer when the rule projections are adjacent views of it.
     #[must_use]
-    pub fn projection_serialization(&self) -> String {
+    pub fn projection_serialization(&self) -> Cow<'_, str> {
+        if self.rules.is_empty() {
+            return Cow::Borrowed("");
+        }
         self.rules
             .iter()
-            .map(RuleNode::projection_serialization)
-            .collect::<Vec<_>>()
-            .join("\n")
+            .map(|rule| rule.payload().projection_serialization.as_ref())
+            .collect::<Option<Vec<_>>>()
+            .and_then(|views| SharedStr::adjacent_span(views, is_ignorable_between_rules))
+            .map_or_else(
+                || {
+                    Cow::Owned(
+                        self.rules
+                            .iter()
+                            .map(RuleNode::projection_serialization)
+                            .collect::<Vec<_>>()
+                            .join("\n"),
+                    )
+                },
+                Cow::Borrowed,
+            )
+    }
+}
+
+/// Text that a style sheet parser discards between 2 top-level rules: whitespace, comments, `<!--` and `-->`.
+fn is_ignorable_between_rules(mut gap: &str) -> bool {
+    loop {
+        gap = gap.trim_start_matches([' ', '\t', '\n', '\r', '\u{c}']);
+        if gap.is_empty() {
+            return true;
+        }
+        gap = if let Some(comment) = gap.strip_prefix("/*") {
+            match comment.find("*/") {
+                Some(end) => &comment[end + 2..],
+                None => return false,
+            }
+        } else if let Some(rest) = gap.strip_prefix("<!--").or_else(|| gap.strip_prefix("-->")) {
+            rest
+        } else {
+            return false;
+        };
     }
 }
 
@@ -2635,11 +2672,7 @@ impl StyleSheetLease {
             };
             let node = rule.node();
             let Some(RuleCssomData::Import { request }) = node.cssom_data() else {
-                projected.push(project(
-                    &source,
-                    rule.snapshot()
-                        .with_projection_serialization(rule.projection_serialization()),
-                ));
+                projected.push(project(&source, rule.snapshot().with_resolved_projection()));
                 continue;
             };
             let child = rule
@@ -3147,7 +3180,7 @@ impl RuleLease {
 
     #[must_use]
     pub fn projection_serialization(&self) -> String {
-        self.snapshot_node().projection_serialization()
+        self.snapshot_node().projection_serialization().into_owned()
     }
 
     fn snapshot_node(&self) -> RuleNode {
@@ -3165,31 +3198,31 @@ impl RuleLease {
             .as_ref()
             .map_or_else(|| Arc::from([]), RuleListLease::nodes);
         let serialization = match (&nested, &header) {
-            (None, _) => source.serialization(),
+            (None, _) if source.payload().authored => None,
+            (None, _) => Some(source.serialization()),
             (Some(_), Some(header)) => {
                 let children = nested_nodes
                     .iter()
                     .map(RuleNode::serialization)
                     .collect::<Vec<_>>();
-                serialise_cssom_group(
+                Some(serialise_cssom_group(
                     grammar,
                     header,
                     source.payload().declaration_block(),
                     &children,
-                )
+                ))
             },
             (Some(_), None) => {
                 let mut current = source.clone();
                 current.payload_mut().nested = nested_nodes.clone();
-                current.serialization()
+                Some(current.serialization())
             },
         };
-        let serialization = if source.payload().authored
-            && source.payload().prelude.as_ref() == serialization.as_str()
-        {
-            Arc::clone(&source.payload().prelude)
-        } else {
-            Arc::from(serialization)
+        let serialization = match serialization {
+            Some(text) if !(source.payload().authored && *source.payload().prelude == *text) => {
+                SharedStr::from(text)
+            },
+            _ => source.payload().prelude.clone(),
         };
         let projection_serialization =
             source
@@ -3206,13 +3239,13 @@ impl RuleLease {
                         return projection.clone();
                     }
                     let Some(header) = header.as_ref() else {
-                        return Arc::clone(&serialization);
+                        return serialization.clone();
                     };
                     let children = nested_nodes
                         .iter()
-                        .map(RuleNode::projection_serialization)
+                        .map(|rule| rule.projection_serialization().into_owned())
                         .collect::<Vec<_>>();
-                    Arc::from(serialise_cssom_group(
+                    SharedStr::from(serialise_cssom_group(
                         grammar,
                         header,
                         source.payload().declaration_block(),
@@ -4706,6 +4739,30 @@ fn attachment_import_environment_changed(
 mod projection_storage_tests {
     use super::*;
 
+    fn projected_rules(source: &SharedStr, ranges: [std::ops::Range<usize>; 2]) -> InternalStylesheetRoot {
+        let rules = ranges.map(|range| {
+            RuleNode::authored(RuleGrammar::Style, source.slice(range.clone()), [])
+                .with_projection_serialization(source.slice(range))
+        });
+        InternalStylesheetRoot::new(StyleOrigin::Author, rules)
+    }
+
+    #[test]
+    fn a_root_of_adjacent_source_views_borrows_its_projection() {
+        let source = SharedStr::from("a { color: red } /* gap */ <!-- --> b { color: blue }");
+        let root = projected_rules(&source, [0..16, 36..53]);
+        assert!(matches!(root.projection_serialization(), Cow::Borrowed(text) if text == &*source));
+    }
+
+    #[test]
+    fn a_root_with_a_rule_between_views_joins_its_projection() {
+        let source = SharedStr::from("a { color: red } x { } b { color: blue }");
+        let root = projected_rules(&source, [0..16, 23..40]);
+        let projection = root.projection_serialization();
+        assert!(matches!(projection, Cow::Owned(_)));
+        assert_eq!(projection, "a { color: red }\nb { color: blue }");
+    }
+
     #[test]
     fn authored_projection_reuses_equal_source_text_without_losing_some_state() {
         let original = RuleNode::authored(RuleGrammar::Style, "p { color: red; }", []);
@@ -4727,14 +4784,10 @@ mod projection_storage_tests {
             projected.projection_serialization(),
             original.serialization()
         );
-        assert!(Arc::ptr_eq(
-            &projected.payload().prelude,
-            projected
-                .payload()
-                .projection_serialization
-                .as_ref()
-                .unwrap()
-        ));
+        assert!(projected
+            .payload()
+            .prelude
+            .same_buffer(projected.payload().projection_serialization.as_ref().unwrap()));
     }
 
     #[test]
@@ -4804,10 +4857,7 @@ mod projection_storage_tests {
             snapshot.payload().source_stamp()
         );
         assert_eq!(snapshot.payload().declaration_block(), Some(&block));
-        assert!(Arc::ptr_eq(
-            &snapshot.payload().prelude,
-            &original.payload().prelude
-        ));
+        assert!(snapshot.payload().prelude.same_buffer(&original.payload().prelude));
     }
 
     #[test]
@@ -4822,18 +4872,14 @@ mod projection_storage_tests {
             .clone()
             .with_projection_serialization(original.projection_serialization());
         assert_eq!(repeated, original);
-        assert!(Arc::ptr_eq(
+        assert!(
             original
                 .payload()
                 .projection_serialization
                 .as_ref()
-                .unwrap(),
-            repeated
-                .payload()
-                .projection_serialization
-                .as_ref()
                 .unwrap()
-        ));
+                .same_buffer(repeated.payload().projection_serialization.as_ref().unwrap())
+        );
         let changed = repeated.with_projection_serialization("p { color: blue; }");
         assert_ne!(
             changed.projection_serialization(),
@@ -4867,23 +4913,17 @@ mod projection_storage_tests {
         let original = RuleNode::media("print", [child.clone()]).with_projection_serialization(
             "@media print { p { background-image: url(image.png); } }",
         );
-        let projected = original
-            .clone()
-            .with_projected_nested([updated.clone()], original.projection_serialization());
+        let projected = original.clone().with_projected_nested([updated.clone()]);
         assert_eq!(projected.payload().nested(), [updated]);
         assert_eq!(original.payload().nested(), [child]);
-        assert!(Arc::ptr_eq(
+        assert!(
             original
                 .payload()
                 .projection_serialization
                 .as_ref()
-                .unwrap(),
-            projected
-                .payload()
-                .projection_serialization
-                .as_ref()
                 .unwrap()
-        ));
+                .same_buffer(projected.payload().projection_serialization.as_ref().unwrap())
+        );
     }
 }
 

@@ -2,13 +2,14 @@ use std::{collections::BTreeMap, ops::Range};
 
 use cssparser::{Parser, ParserInput, SourceLocation, Token};
 use style::{shared_lock::SharedRwLockReadGuard, stylesheets::CssRule};
+use stylo_cssom_model::SharedStr;
 
 pub fn stylesheet_parser_input(css: &str) -> ParserInput<'_> {
     ParserInput::new_with_url_error_recovery(css, cssparser::UrlErrorRecovery::Css2)
 }
 
 pub struct ScannedRuleSource {
-    pub text: String,
+    pub text: SharedStr,
     pub location: SourceLocation,
 }
 
@@ -18,13 +19,13 @@ pub(super) struct RuleSourceSpan {
 }
 
 pub(super) struct AuthoredSource<'a> {
-    text: &'a str,
+    text: &'a SharedStr,
     recovery: cssparser::UrlErrorRecovery,
     positions: BTreeMap<(u32, u32), usize>,
 }
 
 impl<'a> AuthoredSource<'a> {
-    pub fn new(text: &'a str, recovery: cssparser::UrlErrorRecovery) -> Self {
+    pub fn new(text: &'a SharedStr, recovery: cssparser::UrlErrorRecovery) -> Self {
         let mut positions = BTreeMap::new();
         let mut input = ParserInput::new_with_url_error_recovery(text, recovery);
         index_positions(&mut Parser::new(&mut input), &mut positions);
@@ -35,8 +36,16 @@ impl<'a> AuthoredSource<'a> {
         }
     }
 
-    pub const fn text(&self) -> &'a str {
-        self.text
+    pub fn text(&self) -> &'a str {
+        self.text.as_str()
+    }
+
+    pub fn slice(&self, range: Range<usize>) -> SharedStr {
+        self.text.slice(range)
+    }
+
+    pub fn projection(&self, location: SourceLocation) -> Option<SharedStr> {
+        self.span(location).map(|span| self.slice(span.range))
     }
 
     pub fn position(&self, location: SourceLocation) -> Option<usize> {
@@ -46,13 +55,17 @@ impl<'a> AuthoredSource<'a> {
     }
 
     pub fn span(&self, location: SourceLocation) -> Option<RuleSourceSpan> {
-        Some(span_at(self.text, self.position(location)?, self.recovery))
+        Some(span_at(self.text(), self.position(location)?, self.recovery))
     }
 }
 
 impl RuleSourceSpan {
     pub fn text<'a>(&self, css: &'a str) -> &'a str {
         &css[self.range.clone()]
+    }
+
+    pub fn range(&self) -> Range<usize> {
+        self.range.clone()
     }
 }
 
@@ -198,7 +211,7 @@ pub(super) fn canonical_group_header(css: &str) -> stylo_cssom_model::RuleGroupH
     }
 }
 
-pub fn forgiving_rule_sources(css: &str) -> Vec<ScannedRuleSource> {
+pub fn forgiving_rule_sources(css: &SharedStr) -> Vec<ScannedRuleSource> {
     let mut input = stylesheet_parser_input(css);
     let mut input = Parser::new(&mut input);
     let mut rules = Vec::new();
@@ -211,11 +224,11 @@ pub fn forgiving_rule_sources(css: &str) -> Vec<ScannedRuleSource> {
             Ok(_) => input.reset(&start),
         }
         consume_rule(&mut input);
-        let rule = css[source_start.byte_index()..input.position().byte_index()]
-            .trim_start_matches([' ', '\t', '\n', '\r', '\u{c}']);
+        let end = input.position().byte_index();
+        let rule = css[source_start.byte_index()..end].trim_start_matches([' ', '\t', '\n', '\r', '\u{c}']);
         if !rule.is_empty() {
             rules.push(ScannedRuleSource {
-                text: rule.to_owned(),
+                text: css.slice(end - rule.len()..end),
                 location: start.source_location(),
             });
         }

@@ -18,12 +18,13 @@ pub fn project_rule_sources(
         if is_empty_projection(&rewritten) {
             continue;
         }
-        let projected = if rewritten != source
-            && (rule.grammar() == stylo_cssom_model::RuleGrammar::Unknown
-                || rule.grammar() == stylo_cssom_model::RuleGrammar::Style
-                    && crate::rule_parser::starts_at_rule(&source))
+        let projected = if rewritten == *source {
+            vec![map_pending_declarations(rule.clone(), &mut *rewrite, None, None)]
+        } else if rule.grammar() == stylo_cssom_model::RuleGrammar::Unknown
+            || rule.grammar() == stylo_cssom_model::RuleGrammar::Style
+                && crate::rule_parser::starts_at_rule(&source)
         {
-            crate::authored_rules::ParsedStylesheet::parse(&rewritten).into_rule_nodes()
+            crate::authored_rules::ParsedStylesheet::parse(rewritten).into_rule_nodes()
         } else {
             let projected = rule.clone().with_projection_serialization(rewritten);
             vec![map_pending_declarations(
@@ -34,9 +35,8 @@ pub fn project_rule_sources(
             )]
         };
         for rule in projected {
-            let css = rule.projection_serialization();
             let nested = project_rule_sources(rule.payload().nested(), rewrite);
-            output.push(rule.with_projected_nested(nested, css));
+            output.push(rule.with_projected_nested(nested));
         }
     }
     output
@@ -147,12 +147,11 @@ pub fn map_rule_sources(
         .iter()
         .filter_map(|rule| {
             let projected = project(rule);
-            let css = projected.projection_serialization();
-            if is_empty_projection(&css) {
+            if is_empty_projection(&projected.projection_serialization()) {
                 return None;
             }
             let nested = map_rule_sources(projected.payload().nested(), project);
-            Some(projected.with_projected_nested(nested, css))
+            Some(projected.with_projected_nested(nested))
         })
         .collect()
 }
