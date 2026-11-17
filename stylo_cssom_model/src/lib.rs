@@ -19,7 +19,7 @@ pub use stylesheet_input::{CssEncoding, StylesheetEnvironmentEncoding, Styleshee
 use std::{
     collections::{HashMap, HashSet},
     sync::{
-        Arc, LazyLock, Mutex, Weak,
+        Arc, LazyLock, Mutex, OnceLock, Weak,
         atomic::{AtomicU64, Ordering},
     },
 };
@@ -37,7 +37,7 @@ impl StyleDocumentHandle {
     pub fn allocate() -> Self {
         static NEXT: AtomicU64 = AtomicU64::new(1);
         let value = NEXT
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| value.checked_add(1))
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |value| value.checked_add(1))
             .expect("style document handle space exhausted");
         Self(value)
     }
@@ -52,7 +52,7 @@ macro_rules! non_reused_handle {
             fn allocate() -> Self {
                 static $counter: AtomicU64 = AtomicU64::new(1);
                 let value = $counter
-                    .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| value.checked_add(1))
+                    .try_update(Ordering::Relaxed, Ordering::Relaxed, |value| value.checked_add(1))
                     .expect($message);
                 Self(value)
             }
@@ -607,11 +607,54 @@ pub struct InlineStyleContext {
     pub base_url: Arc<str>,
 }
 
+pub type DeclarationSerializer = fn(&[SpecifiedDeclaration]) -> String;
+
+/// The serialisation of declarations, made at the first read.
+#[derive(Debug)]
+pub struct SerializedStyleText {
+    declarations: Arc<[SpecifiedDeclaration]>,
+    serialize: DeclarationSerializer,
+    text: OnceLock<Arc<str>>,
+}
+
+impl SerializedStyleText {
+    #[must_use]
+    pub fn text(&self) -> &Arc<str> {
+        self.text.get_or_init(|| (self.serialize)(&self.declarations).into())
+    }
+}
+
+/// The text of a `style` attribute.
+#[derive(Clone, Debug)]
+pub enum StyleText {
+    Authored(Arc<str>),
+    Serialized(Arc<SerializedStyleText>),
+}
+
+impl StyleText {
+    #[must_use]
+    pub fn text(&self) -> &Arc<str> {
+        match self {
+            Self::Authored(text) => text,
+            Self::Serialized(serialized) => serialized.text(),
+        }
+    }
+}
+
+impl PartialEq for StyleText {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Serialized(left), Self::Serialized(right)) if Arc::ptr_eq(left, right) => true,
+            _ => self.text() == other.text(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct InlineDeclarationCandidate {
     declarations: Arc<[SpecifiedDeclaration]>,
     native_backing: Option<RetainedNativeDeclarations>,
-    presentation: Option<Arc<str>>,
+    presentation: Option<StyleText>,
     provenance: StylePresentationProvenance,
     context: InlineStyleContext,
     hydrated: bool,
@@ -639,7 +682,7 @@ impl InlineDeclarationCandidate {
         Self {
             declarations: declarations.into(),
             native_backing: None,
-            presentation: presentation.map(Into::into),
+            presentation: presentation.map(|text| StyleText::Authored(text.into())),
             provenance: StylePresentationProvenance::RawIngress,
             context,
             hydrated: true,
@@ -651,7 +694,7 @@ impl InlineDeclarationCandidate {
         Self {
             declarations: Arc::from([]),
             native_backing: None,
-            presentation: presentation.map(Into::into),
+            presentation: presentation.map(|text| StyleText::Authored(text.into())),
             provenance: StylePresentationProvenance::RawIngress,
             context,
             hydrated: false,
@@ -667,7 +710,30 @@ impl InlineDeclarationCandidate {
         Self {
             declarations: declarations.into(),
             native_backing: None,
-            presentation: Some(presentation.into()),
+            presentation: Some(StyleText::Authored(presentation.into())),
+            provenance: StylePresentationProvenance::CanonicalMutation,
+            context,
+            hydrated: true,
+        }
+    }
+
+    /// A CSSOM mutation whose `style` attribute text is the serialisation of `declarations`, made at the first read.
+    #[must_use]
+    pub fn serialized(
+        context: InlineStyleContext,
+        declarations: impl Into<Arc<[SpecifiedDeclaration]>>,
+        serialize: DeclarationSerializer,
+    ) -> Self {
+        let declarations = declarations.into();
+        let presentation = StyleText::Serialized(Arc::new(SerializedStyleText {
+            declarations: declarations.clone(),
+            serialize,
+            text: OnceLock::new(),
+        }));
+        Self {
+            declarations,
+            native_backing: None,
+            presentation: Some(presentation),
             provenance: StylePresentationProvenance::CanonicalMutation,
             context,
             hydrated: true,
@@ -715,7 +781,7 @@ impl StyleDomTarget {
 #[derive(Clone, Debug, PartialEq)]
 pub struct StyleAttributeView {
     target: StyleDomTarget,
-    text: Option<Arc<str>>,
+    text: Option<StyleText>,
     provenance: StylePresentationProvenance,
 }
 
@@ -727,7 +793,12 @@ impl StyleAttributeView {
 
     #[must_use]
     pub fn text(&self) -> Option<&str> {
-        self.text.as_deref()
+        self.text.as_ref().map(|text| &**text.text())
+    }
+
+    #[must_use]
+    pub const fn style_text(&self) -> Option<&StyleText> {
+        self.text.as_ref()
     }
 
     #[must_use]
@@ -886,7 +957,7 @@ struct DeclarationRecord {
     revision: u64,
     declarations: Arc<[SpecifiedDeclaration]>,
     native_backing: Option<RetainedNativeDeclarations>,
-    presentation: Option<Arc<str>>,
+    presentation: Option<StyleText>,
     provenance: StylePresentationProvenance,
     context: InlineStyleContext,
     hydrated: bool,
@@ -941,7 +1012,7 @@ pub struct InlineStyleProjection {
     handle: DeclarationHandle,
     revision: u64,
     context: InlineStyleContext,
-    presentation: Option<Arc<str>>,
+    presentation: Option<StyleText>,
     declarations: Arc<[SpecifiedDeclaration]>,
     native_backing: Option<RetainedNativeDeclarations>,
     hydrated: bool,
@@ -956,7 +1027,7 @@ pub struct InlineStyleFingerprint {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct InlineStyleSemanticFingerprint {
-    presentation: Option<Arc<str>>,
+    presentation: Option<StyleText>,
     declarations: Arc<[SpecifiedDeclaration]>,
     native_backing: Option<RetainedNativeDeclarations>,
 }
@@ -996,7 +1067,7 @@ impl InlineStyleProjection {
     /// The text of the `style` attribute.
     #[must_use]
     pub fn presentation(&self) -> Option<&str> {
-        self.presentation.as_deref()
+        self.presentation.as_ref().map(|text| &**text.text())
     }
 
     /// The declarations of the model: empty before the hydration of a present `style` attribute.
@@ -3435,5 +3506,50 @@ mod tests {
         assert_eq!(reinstated.target().declaration(), lease.handle());
         assert!(lease.projection().is_present());
         assert_ne!(lease.fingerprint(), removed_fingerprint);
+    }
+
+    #[test]
+    fn serialized_inline_text_serializes_each_state_once_at_its_first_read() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        static SERIALIZATIONS: AtomicUsize = AtomicUsize::new(0);
+        fn serialize(declarations: &[SpecifiedDeclaration]) -> String {
+            SERIALIZATIONS.fetch_add(1, Ordering::Relaxed);
+            format!("count: {};", declarations.len())
+        }
+        let declaration = SpecifiedDeclaration {
+            property: super::SpecifiedPropertyName::Custom(Arc::from("--x")),
+            value: super::SpecifiedStyleValue::CssWide(super::CssWideKeyword::Initial),
+            importance: super::Importance::Normal,
+            shorthand_source: None,
+            shorthand_value: None,
+            typed_om_representation: None,
+        };
+        let document = StyleDocumentHandle::allocate();
+        let mut state = StyleState::new(document);
+        let (lease, _) = state.create_inline_attribute(raw(document, None)).unwrap();
+        let mut views = Vec::new();
+        for count in 1..=100 {
+            let candidate = InlineDeclarationCandidate::serialized(
+                context(document, "https://example.test/"),
+                vec![declaration.clone(); count],
+                serialize,
+            );
+            let install = state
+                .prepare_dom_update(&lease, lease.slot(), candidate)
+                .and_then(|update| state.commit_dom_update(update))
+                .unwrap();
+            views.push(install.view().clone());
+        }
+        assert_eq!(SERIALIZATIONS.load(Ordering::Relaxed), 0);
+        assert_eq!(lease.projection().presentation(), Some("count: 100;"));
+        assert_eq!(views[99].text(), Some("count: 100;"));
+        assert_eq!(SERIALIZATIONS.load(Ordering::Relaxed), 1);
+        assert_eq!(views[41].text(), Some("count: 42;"));
+        assert_eq!(SERIALIZATIONS.load(Ordering::Relaxed), 2);
+        assert_eq!(
+            views[99].provenance(),
+            StylePresentationProvenance::CanonicalMutation
+        );
     }
 }

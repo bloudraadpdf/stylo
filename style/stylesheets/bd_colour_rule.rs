@@ -57,21 +57,16 @@ use style_traits::{CssStringWriter, StyleParseErrorKind};
 ///
 /// PDF 32000-2 §8.6.6.4 requires every Separation colour space to name
 /// an alternate colour space that consumers fall back to when the named
-/// colorant is unavailable. moegoe currently always emits CMYK as the
-/// alternate (matching `@-bd-colour <name> { colour-values: device-cmyk(...) }`
-/// authoring), but the enum is kept open so future authoring can declare
-/// an sRGB-defined separation without breaking the rule shape.
+/// colorant is unavailable. The `alternate:` descriptor selects it.
 #[derive(Clone, Copy, Debug, PartialEq, ToShmem)]
 pub enum BdColourAlternateKind {
-    /// Authors did not declare an alternate; the IR boundary derives one
-    /// from `colour-values` (CMYK from `device-cmyk()`, otherwise sRGB).
+    /// `alternate: auto`, or no `alternate:` descriptor — emit a
+    /// `DeviceCMYK` alternate.
     Auto,
-    /// `alternate: cmyk` — emit a `DeviceCMYK` alternate. This is the
-    /// default when `colour-values` is a CMYK colour.
+    /// `alternate: cmyk` — emit a `DeviceCMYK` alternate.
     Cmyk,
-    /// `alternate: rgb` — emit a `DeviceRGB` alternate (currently
-    /// rejected by the IR boundary with a diagnostic; PDF/X workflows
-    /// rarely want RGB alternates).
+    /// `alternate: rgb` — emit a `DeviceRGB` alternate. PDF/X-1a output
+    /// still emits `DeviceCMYK`, as it forbids RGB colour.
     Rgb,
 }
 
@@ -82,6 +77,7 @@ impl BdColourAlternateKind {
         let location = input.current_source_location();
         let ident = input.expect_ident_cloned()?;
         match_ignore_ascii_case! { &ident,
+            "auto" => Ok(BdColourAlternateKind::Auto),
             "cmyk" => Ok(BdColourAlternateKind::Cmyk),
             "rgb" => Ok(BdColourAlternateKind::Rgb),
             _ => Err(location.new_custom_error(StyleParseErrorKind::UnspecifiedError)),
@@ -114,11 +110,9 @@ impl style_traits::ToCss for BdColourAlternateKind {
 /// preserves the sRGB fallback, and indexes the entry under `name`
 /// inside [`moegoe_ir::SpotColourRegistry`].
 ///
-/// `alternate` selects the PDF alternate colour space:
-/// `BdColourAlternateKind::Auto` (the parser default) lets the IR
-/// boundary derive the alternate from the `colour-values` colour
-/// space. `Cmyk` / `Rgb` force the declared alternate regardless of
-/// the tint colour space.
+/// `alternate` selects the PDF alternate colour space, whatever the
+/// colour space of `colour-values`. `BdColourAlternateKind::Auto` is
+/// the parser default.
 #[derive(Clone, Debug, ToShmem)]
 pub struct BdColourRule {
     /// The colorant name. Stored as an `AtomIdent` so equality
@@ -131,8 +125,7 @@ pub struct BdColourRule {
     /// can hold a partial value during descriptor accumulation).
     pub values: Option<SpecifiedColor>,
     /// The alternate colour space declared via the `alternate:`
-    /// descriptor. Defaults to [`BdColourAlternateKind::Auto`] (derived
-    /// at IR time from the `values` colour space).
+    /// descriptor. Defaults to [`BdColourAlternateKind::Auto`].
     pub alternate: BdColourAlternateKind,
     /// The source position of the at-rule for diagnostics.
     pub source_location: SourceLocation,

@@ -1241,6 +1241,23 @@ fn synthesised_independent_shorthands(
 ) -> Vec<SynthesisedShorthand> {
     let declarations = index.declarations;
     let block = LazyLock::new(|| standard_inline_style_block(declarations));
+    let mappings = LazyLock::new(|| {
+        declarations
+            .iter()
+            .map(|declaration| {
+                let CanonicalProperty::Native(property) =
+                    CanonicalProperty::from_specified(&declaration.property)?;
+                let id =
+                    style::properties::PropertyId::parse_unchecked(property.schema().name, None)
+                        .ok()?
+                        .longhand_id()?;
+                Some((
+                    id.logical_group()?,
+                    id.to_physical(style::logical_geometry::WritingMode::empty()) != id,
+                ))
+            })
+            .collect::<Vec<_>>()
+    });
     let mut shorthands = Vec::new();
 
     for schema in stylo_cssom_model::STANDARD_PROPERTIES {
@@ -1258,30 +1275,19 @@ fn synthesised_independent_shorthands(
         let mut ordered_members = members.indices.clone();
         ordered_members.sort_unstable();
         if !crate::declaration_parser::compatibility::is_all(schema) {
-            let mapping = |declaration: &stylo_cssom_model::SpecifiedDeclaration| {
-                let CanonicalProperty::Native(property) =
-                    CanonicalProperty::from_specified(&declaration.property)?;
-                let id =
-                    style::properties::PropertyId::parse_unchecked(property.schema().name, None)
-                        .ok()?
-                        .longhand_id()?;
-                Some((
-                    id.logical_group()?,
-                    id.to_physical(style::logical_geometry::WritingMode::empty()) != id,
-                ))
-            };
             // Do not move an inline-axis shorthand across block-axis members
             // of its logical group (or vice versa). They are distinct mapping
             // groups even though both have logical rather than physical names.
             let member_mappings = members
-                .declarations()
-                .filter_map(mapping)
+                .indices
+                .iter()
+                .filter_map(|&member| mappings[member])
                 .collect::<Vec<_>>();
             let first = ordered_members[0];
             let last = *ordered_members.last().unwrap();
             if (first..=last).any(|offset| {
                 !ordered_members.contains(&offset)
-                    && mapping(&declarations[offset]).is_some_and(|(group, logical)| {
+                    && mappings[offset].is_some_and(|(group, logical)| {
                         member_mappings
                             .iter()
                             .any(|(member_group, member_logical)| {

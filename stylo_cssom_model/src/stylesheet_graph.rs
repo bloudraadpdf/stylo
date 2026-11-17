@@ -69,7 +69,7 @@ impl RuleMutationRevision {
     fn next() -> Self {
         static NEXT: AtomicU64 = AtomicU64::new(1);
         Self(
-            NEXT.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
+            NEXT.try_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
                 value.checked_add(1)
             })
             .expect("rule mutation revision space exhausted"),
@@ -133,7 +133,7 @@ impl StyleShadowScopeHandle {
         use std::sync::atomic::{AtomicU64, Ordering};
         static NEXT: AtomicU64 = AtomicU64::new(1);
         Self(
-            NEXT.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
+            NEXT.try_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
                 value.checked_add(1)
             })
             .expect("style shadow-scope handle space exhausted"),
