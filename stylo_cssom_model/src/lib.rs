@@ -82,8 +82,8 @@ pub use stylesheet_graph::{
     RuleImportRequest, RuleImportScope, RuleKeyframeSelector, RuleLease, RuleListHandle, RuleListLease, RuleMixinKind,
     RuleMutationRevision, RuleNamespaceContext, RuleNode, RuleSourceStamp, StyleOrigin, StyleShadowScopeHandle,
     StyleSheetAttachmentCandidate, StyleSheetAttachmentHandle, StyleSheetAttachmentLease, StyleSheetAttachmentOwner,
-    StyleSheetCandidate, StyleSheetGraphCandidate, StyleSheetHandle, StyleSheetImportCandidate, StyleSheetLease,
-    StyleSheetSourceContext, StyleSheetSourceKind, StyleTreeScopeHandle, TypedRulePayload,
+    StyleSheetCandidate, StyleSheetGraphCandidate, StyleSheetGraphRevision, StyleSheetHandle, StyleSheetImportCandidate,
+    StyleSheetLease, StyleSheetSourceContext, StyleSheetSourceKind, StyleTreeScopeHandle, TypedRulePayload,
 };
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -1221,7 +1221,7 @@ impl StyleState {
             slots: HashMap::new(),
             imperative_registrations: Vec::new(),
             imperative_registration_revision: 0,
-            stylesheets: stylesheet_graph::StyleGraph::default(),
+            stylesheets: stylesheet_graph::StyleGraph::new(),
         }
     }
 

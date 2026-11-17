@@ -38,6 +38,11 @@ non_reused_handle!(
     NEXT_STYLE_SHEET_ATTACHMENT_HANDLE,
     "stylesheet attachment handle space exhausted"
 );
+non_reused_handle!(
+    StyleSheetGraphRevision,
+    NEXT_STYLE_SHEET_GRAPH_REVISION,
+    "stylesheet graph revision space exhausted"
+);
 
 impl StyleSheetHandle {
     #[must_use]
@@ -3408,11 +3413,27 @@ struct StyleSheetReplacementMetadata {
     disabled: bool,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(crate) struct StyleGraph {
     sheets: HashMap<StyleSheetHandle, StyleSheetLease>,
     attachments: HashMap<StyleSheetAttachmentHandle, StyleSheetAttachmentLease>,
     import_bindings: HashMap<ImportBindingHandle, Weak<Mutex<ImportBindingRecord>>>,
+    revision: StyleSheetGraphRevision,
+}
+
+impl StyleGraph {
+    pub(crate) fn new() -> Self {
+        Self {
+            sheets: HashMap::new(),
+            attachments: HashMap::new(),
+            import_bindings: HashMap::new(),
+            revision: StyleSheetGraphRevision::allocate(),
+        }
+    }
+
+    fn advance(&mut self) {
+        self.revision = StyleSheetGraphRevision::allocate();
+    }
 }
 
 impl StyleState {
@@ -3464,7 +3485,13 @@ impl StyleState {
             );
         }
 
+        destination.stylesheets.revision = self.stylesheets.revision;
         copies.into_iter().collect()
+    }
+
+    #[must_use]
+    pub fn stylesheet_revision(&self) -> StyleSheetGraphRevision {
+        self.stylesheets.revision
     }
 
     fn fork_import_bindings(
@@ -3576,6 +3603,8 @@ impl StyleState {
             .expect("stylesheet revision space exhausted");
         drop(record);
         destination.stylesheets.sheets.insert(handle, sheet.clone());
+        self.stylesheets.advance();
+        destination.stylesheets.advance();
         Ok(())
     }
 
@@ -3649,6 +3678,7 @@ impl StyleState {
             attachments: Vec::new(),
         })));
         self.stylesheets.sheets.insert(handle, lease.clone());
+        self.stylesheets.advance();
         lease
     }
 
@@ -3811,6 +3841,7 @@ impl StyleState {
         self.stylesheets
             .attachments
             .insert(handle, attachment.clone());
+        self.stylesheets.advance();
         Ok(attachment)
     }
 
@@ -3846,6 +3877,7 @@ impl StyleState {
             .checked_add(1)
             .expect("stylesheet attachment revision space exhausted");
         drop(record);
+        self.stylesheets.advance();
         if rebuild_imports {
             let top = self
                 .stylesheets
@@ -3894,6 +3926,7 @@ impl StyleState {
         record.detached = true;
         drop(record);
         self.detach_import_bindings_for_context(&top, ImportBindingContext::Attachment(handle));
+        self.stylesheets.advance();
         Ok(())
     }
     #[must_use]
@@ -4090,6 +4123,8 @@ impl StyleState {
             .revision
             .checked_add(1)
             .expect("stylesheet revision space exhausted");
+        drop(record);
+        self.stylesheets.advance();
         Ok(())
     }
 
@@ -4196,6 +4231,7 @@ impl StyleState {
             .revision
             .checked_add(1)
             .expect("stylesheet revision space exhausted");
+        self.stylesheets.advance();
         Ok(true)
     }
 
@@ -4222,6 +4258,7 @@ impl StyleState {
             .revision
             .checked_add(1)
             .expect("stylesheet revision space exhausted");
+        self.stylesheets.advance();
         Ok(true)
     }
 
@@ -4259,6 +4296,7 @@ impl StyleState {
         let top = record.top_list.clone();
         drop(record);
         self.detach_import_bindings_for_context(&top, ImportBindingContext::Source);
+        self.stylesheets.advance();
         Ok(true)
     }
 
@@ -4487,6 +4525,8 @@ impl StyleState {
             .revision
             .checked_add(1)
             .expect("stylesheet revision space exhausted");
+        drop(record);
+        self.stylesheets.advance();
         Ok(())
     }
 
@@ -4508,6 +4548,8 @@ impl StyleState {
             }
         }
         self.detach_rule_list(&record.top_list);
+        drop(record);
+        self.stylesheets.advance();
         Ok(())
     }
 
@@ -4842,5 +4884,227 @@ mod projection_storage_tests {
                 .as_ref()
                 .unwrap()
         ));
+    }
+}
+
+#[cfg(test)]
+mod graph_revision_tests {
+    use super::*;
+
+    const BASE: &str = "https://example.test/";
+
+    fn advances<T>(state: &mut StyleState, change: impl FnOnce(&mut StyleState) -> T) -> T {
+        let before = state.stylesheet_revision();
+        let result = change(state);
+        assert_ne!(state.stylesheet_revision(), before);
+        result
+    }
+
+    fn keeps<T>(state: &mut StyleState, change: impl FnOnce(&mut StyleState) -> T) -> T {
+        let before = state.stylesheet_revision();
+        let result = change(state);
+        assert_eq!(state.stylesheet_revision(), before);
+        result
+    }
+
+    fn inline_candidate(document: StyleDocumentHandle, rules: impl Into<Arc<[RuleNode]>>) -> StyleSheetCandidate {
+        StyleSheetCandidate::new(
+            StyleSheetSourceContext::inline(document, StyleOrigin::Author, Arc::from(BASE)),
+            rules,
+        )
+    }
+
+    fn inline_sheet(state: &mut StyleState, rules: impl Into<Arc<[RuleNode]>>) -> StyleSheetLease {
+        let candidate = inline_candidate(state.document(), rules);
+        advances(state, |state| state.create_stylesheet(candidate).unwrap())
+    }
+
+    fn import_rule(url: &str) -> RuleNode {
+        RuleNode::authored(RuleGrammar::Import, format!("@import url({url});"), [])
+            .with_cssom_data(RuleCssomData::Import {
+                request: RuleImportRequest::new(
+                    url,
+                    RuleImportLayer::Absent,
+                    RuleImportPrelude::new(format!("url(\"{url}\")")),
+                ),
+            })
+            .unwrap()
+    }
+
+    fn imported_candidate(document: StyleDocumentHandle, rules: impl Into<Arc<[RuleNode]>>) -> StyleSheetCandidate {
+        StyleSheetCandidate::new(
+            StyleSheetSourceContext {
+                origin_clean: true,
+                kind: StyleSheetSourceKind::Imported,
+                origin: StyleOrigin::Author,
+                document: Some(document),
+                source_url: Some(Arc::from("https://example.test/child.css")),
+                base_url: Some(Arc::from(BASE)),
+                encoding: None,
+            },
+            rules,
+        )
+    }
+
+    fn attachment_candidate(document: StyleDocumentHandle) -> StyleSheetAttachmentCandidate {
+        StyleSheetAttachmentCandidate {
+            tree_scope: StyleTreeScopeHandle::Document(document),
+            adopter: document,
+            environment_revision: 0,
+            cascade_position: 0,
+            owner: StyleSheetAttachmentOwner::ConstructedProjection,
+            active: true,
+            base_url: Some(Arc::from(BASE)),
+            encoding: None,
+        }
+    }
+
+    #[test]
+    fn a_new_state_gets_a_new_stylesheet_revision() {
+        let first = StyleState::new(StyleDocumentHandle::allocate());
+        let second = StyleState::new(StyleDocumentHandle::allocate());
+        assert_ne!(first.stylesheet_revision(), second.stylesheet_revision());
+    }
+
+    #[test]
+    fn each_rule_change_sets_a_new_stylesheet_revision() {
+        let mut state = StyleState::new(StyleDocumentHandle::allocate());
+        let sheet = inline_sheet(
+            &mut state,
+            [RuleNode::media("screen", [RuleNode::style("a", "color: red")]), RuleNode::style("b", "color: blue")],
+        );
+        let top = sheet.top_list();
+        let nested = sheet.rule_list_at_path(&[0]).unwrap();
+        let commit = |state: &mut StyleState, update: Result<PreparedRuleGraphUpdate, RuleGraphError>| {
+            state.commit_rule_graph_update(update.unwrap()).unwrap();
+        };
+
+        let update = state.prepare_insert_rule(&sheet, &top, 2, RuleNode::style("c", "color: green"));
+        advances(&mut state, |state| commit(state, update));
+        let update = state.prepare_mutate_rule(&sheet, &nested, 0, RuleNode::style("a", "color: green"));
+        advances(&mut state, |state| commit(state, update));
+        let update = state.prepare_replace_rule(&sheet, &top, 1, RuleNode::style("d", "color: green"));
+        advances(&mut state, |state| commit(state, update));
+        let update = state.prepare_delete_rule(&sheet, &top, 2);
+        advances(&mut state, |state| commit(state, update));
+        let update = state.prepare_replace_stylesheet(&sheet, [RuleNode::style("e", "color: green")]);
+        advances(&mut state, |state| commit(state, update));
+        let update = state.prepare_rebind_stylesheet(&sheet, inline_candidate(state.document(), []));
+        advances(&mut state, |state| commit(state, update));
+
+        let first = state.prepare_insert_rule(&sheet, &top, 0, RuleNode::style("f", "color: green")).unwrap();
+        let stale = state.prepare_insert_rule(&sheet, &top, 0, RuleNode::style("g", "color: green")).unwrap();
+        advances(&mut state, |state| state.commit_rule_graph_update(first).unwrap());
+        keeps(&mut state, |state| {
+            assert_eq!(state.commit_rule_graph_update(stale), Err(RuleGraphError::StaleRevision));
+        });
+    }
+
+    #[test]
+    fn each_sheet_change_sets_a_new_stylesheet_revision() {
+        let mut state = StyleState::new(StyleDocumentHandle::allocate());
+        let sheet = inline_sheet(&mut state, [RuleNode::style("a", "color: red")]);
+
+        advances(&mut state, |state| assert!(state.set_stylesheet_media(&sheet, Some("print")).unwrap()));
+        keeps(&mut state, |state| assert!(!state.set_stylesheet_media(&sheet, Some("print")).unwrap()));
+        advances(&mut state, |state| assert!(state.set_stylesheet_disabled(&sheet, true).unwrap()));
+        keeps(&mut state, |state| assert!(!state.set_stylesheet_disabled(&sheet, true).unwrap()));
+        let encoding = CssEncoding::new("utf-8").unwrap();
+        let recontextualize = |state: &mut StyleState| {
+            state
+                .recontextualize_inline_stylesheet(&sheet, Arc::from("https://other.test/"), encoding)
+                .unwrap()
+        };
+        advances(&mut state, |state| assert!(recontextualize(state)));
+        keeps(&mut state, |state| assert!(!recontextualize(state)));
+        let copy = advances(&mut state, |state| state.copy_stylesheet(&sheet));
+        advances(&mut state, |state| state.detach_stylesheet(copy.handle()).unwrap());
+        keeps(&mut state, |state| assert!(state.detach_stylesheet(copy.handle()).is_err()));
+    }
+
+    #[test]
+    fn each_attachment_change_sets_a_new_stylesheet_revision() {
+        let document = StyleDocumentHandle::allocate();
+        let mut state = StyleState::new(document);
+        let candidate = StyleSheetCandidate::new(
+            StyleSheetSourceContext::constructed(StyleOrigin::Author),
+            [RuleNode::style("a", "color: red")],
+        );
+        let sheet = advances(&mut state, |state| state.create_stylesheet(candidate).unwrap());
+
+        let attachment =
+            advances(&mut state, |state| state.attach_stylesheet(&sheet, attachment_candidate(document)).unwrap());
+        let inactive = StyleSheetAttachmentCandidate {
+            active: false,
+            ..attachment_candidate(document)
+        };
+        advances(&mut state, |state| {
+            assert!(state.update_stylesheet_attachment(&attachment, inactive.clone()).unwrap());
+        });
+        keeps(&mut state, |state| assert!(!state.update_stylesheet_attachment(&attachment, inactive).unwrap()));
+        advances(&mut state, |state| state.detach_stylesheet_attachment(&attachment).unwrap());
+    }
+
+    #[test]
+    fn each_import_change_sets_a_new_stylesheet_revision() {
+        let document = StyleDocumentHandle::allocate();
+        let mut state = StyleState::new(document);
+        let imports = [import_rule("child.css"), import_rule("other.css"), import_rule("late.css")];
+        let parent = inline_sheet(&mut state, imports);
+        let rule = |index| parent.top_list().rule(index).unwrap();
+
+        let binding = advances(&mut state, |state| {
+            state.bind_import(&rule(0), ImportBindingContext::Source, "https://example.test/child.css").unwrap()
+        });
+        advances(&mut state, |state| {
+            state.associate_pending_import(&binding, imported_candidate(document, [])).unwrap()
+        });
+        let loaded = imported_candidate(document, [RuleNode::style("a", "color: red")]);
+        let loaded = StyleSheetGraphCandidate::new(loaded, []);
+        advances(&mut state, |state| state.complete_import_graph(&binding, loaded).unwrap());
+        advances(&mut state, |state| state.fail_import(&binding).unwrap());
+
+        let other = advances(&mut state, |state| {
+            state.bind_import(&rule(1), ImportBindingContext::Source, "https://example.test/other.css").unwrap()
+        });
+        let child = advances(&mut state, |state| state.create_stylesheet(imported_candidate(document, [])).unwrap());
+        advances(&mut state, |state| state.complete_import(&other, &child).unwrap());
+
+        let imports = [StyleSheetImportCandidate::failed(2, "https://example.test/late.css")];
+        advances(&mut state, |state| state.bind_stylesheet_import_candidates(&parent, imports.into()).unwrap());
+        let graph = StyleSheetGraphCandidate::new(
+            inline_candidate(document, [import_rule("child.css")]),
+            [StyleSheetImportCandidate::failed(0, "https://example.test/child.css")],
+        );
+        advances(&mut state, |state| state.create_stylesheet_graph(graph).unwrap());
+    }
+
+    #[test]
+    fn an_adoption_sets_new_stylesheet_revisions_in_both_states() {
+        let mut source = StyleState::new(StyleDocumentHandle::allocate());
+        let mut destination = StyleState::new(StyleDocumentHandle::allocate());
+        let sheet = inline_sheet(&mut source, [RuleNode::style("a", "color: red")]);
+        let before = destination.stylesheet_revision();
+        advances(&mut source, |source| source.adopt_stylesheet_to(&sheet, &mut destination).unwrap());
+        assert_ne!(destination.stylesheet_revision(), before);
+    }
+
+    #[test]
+    fn a_fork_keeps_the_stylesheet_revision_of_its_source_until_a_change() {
+        let mut state = StyleState::new(StyleDocumentHandle::allocate());
+        let sheet = inline_sheet(&mut state, [RuleNode::style("a", "color: red")]);
+        let (mut first, _, first_copies) = state.fork(StyleDocumentHandle::allocate()).unwrap();
+        let (mut second, _, second_copies) = state.fork(StyleDocumentHandle::allocate()).unwrap();
+        let revision = state.stylesheet_revision();
+        assert_eq!(first.stylesheet_revision(), revision);
+        assert_eq!(second.stylesheet_revision(), revision);
+
+        let copy = |copies: &[(StyleSheetHandle, StyleSheetLease)]| copies[0].1.clone();
+        let (first_copy, second_copy) = (copy(&first_copies), copy(&second_copies));
+        advances(&mut first, |first| first.set_stylesheet_media(&first_copy, Some("print")).unwrap());
+        advances(&mut second, |second| second.set_stylesheet_media(&second_copy, Some("print")).unwrap());
+        assert_ne!(first.stylesheet_revision(), second.stylesheet_revision());
+        assert_eq!(state.stylesheet_revision(), revision);
+        advances(&mut state, |state| state.set_stylesheet_media(&sheet, Some("print")).unwrap());
     }
 }
