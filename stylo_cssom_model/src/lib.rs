@@ -1692,7 +1692,7 @@ mod tests {
             .commit_rule_graph_update(update)
             .expect("the current graph revision must commit");
         assert_eq!(sheet.revision(), 1);
-        assert!(state.rule(media.handle()).is_none());
+        assert!(media.detached().is_some());
         assert_eq!(media.parent_list(), None);
         assert_eq!(style.parent_list(), Some(nested.handle()));
         assert_eq!(sheet.rule_path(media.handle()), None);
@@ -2075,7 +2075,7 @@ mod tests {
             .commit_rule_graph_update(delete)
             .expect("the deletion must commit");
         assert_eq!(sheet.revision(), 2);
-        assert!(state.rule(original.handle()).is_none());
+        assert!(original.detached().is_some());
         assert_eq!(original.serialization(), "a { color: red; }");
         assert_eq!(sheet.rule_path(original.handle()), None);
         assert_eq!(sheet.rule_path(inserted.handle()), Some(vec![0]));
@@ -2931,6 +2931,134 @@ mod tests {
         );
         assert_eq!(copied_binding.revision(), source_binding.revision());
         assert!(fork.import_binding(copied_binding.handle()).is_some());
+    }
+
+    fn nested_sheet(state: &mut StyleState) -> super::StyleSheetLease {
+        let document = state.document();
+        let layer = RuleNode::authored_with_group_header(
+            RuleGrammar::LayerBlock,
+            "@layer values { #target { color: red; } }",
+            [RuleNode::internal_style("#target", [RuleDeclaration::new("color", "red")])],
+            RuleGroupHeader::new("@layer values"),
+        );
+        state
+            .create_stylesheet(StyleSheetCandidate::new(
+                StyleSheetSourceContext::inline(document, StyleOrigin::Author, Arc::from("https://example.test/")),
+                [
+                    RuleNode::media("screen", [RuleNode::style("a", "color: red")]),
+                    layer,
+                    RuleNode::style("b", "color: blue"),
+                ],
+            ))
+            .expect("the stylesheet must bind")
+    }
+
+    fn sheet_copy(copies: &[(super::StyleSheetHandle, super::StyleSheetLease)], sheet: &super::StyleSheetLease) -> super::StyleSheetLease {
+        copies
+            .iter()
+            .find_map(|(source, copy)| (*source == sheet.handle()).then(|| copy.clone()))
+            .expect("every stylesheet must fork")
+    }
+
+    #[test]
+    fn forks_share_the_rule_snapshot_of_an_unchanged_sheet() {
+        let mut state = StyleState::new(StyleDocumentHandle::allocate());
+        let sheet = nested_sheet(&mut state);
+        let (first, _, first_copies) = state.fork(StyleDocumentHandle::allocate()).unwrap();
+        let (_, _, second_copies) = state.fork(StyleDocumentHandle::allocate()).unwrap();
+        let first_copy = sheet_copy(&first_copies, &sheet);
+        let (_, _, nested_copies) = first.fork(StyleDocumentHandle::allocate()).unwrap();
+        let shared = first_copy.top_list().nodes();
+
+        assert_eq!(shared, sheet.top_list().nodes());
+        assert!(Arc::ptr_eq(&shared, &sheet_copy(&second_copies, &sheet).top_list().nodes()));
+        assert!(Arc::ptr_eq(&shared, &sheet_copy(&nested_copies, &first_copy).top_list().nodes()));
+
+        let update = state
+            .prepare_insert_rule(&sheet, &sheet.top_list(), 3, RuleNode::style("c", "color: green"))
+            .unwrap();
+        state.commit_rule_graph_update(update).unwrap();
+        let (_, _, changed_copies) = state.fork(StyleDocumentHandle::allocate()).unwrap();
+        let changed = sheet_copy(&changed_copies, &sheet).top_list().nodes();
+        assert!(!Arc::ptr_eq(&shared, &changed));
+        assert_eq!(changed, sheet.top_list().nodes());
+    }
+
+    #[test]
+    fn a_fork_and_its_source_change_independently() {
+        let mut state = StyleState::new(StyleDocumentHandle::allocate());
+        let sheet = nested_sheet(&mut state);
+        let before = sheet.top_list().nodes();
+        let (mut fork, _, copies) = state.fork(StyleDocumentHandle::allocate()).unwrap();
+        let copy = sheet_copy(&copies, &sheet);
+
+        let nested = sheet.rule_list_at_path(&[1]).unwrap();
+        let update = state
+            .prepare_mutate_rule(
+                &sheet,
+                &nested,
+                0,
+                RuleNode::internal_style("#target", [RuleDeclaration::new("color", "green")]),
+            )
+            .unwrap();
+        state.commit_rule_graph_update(update).unwrap();
+        let mutated = sheet.top_list().nodes();
+        assert_ne!(mutated, before);
+        assert_eq!(copy.top_list().nodes(), before);
+
+        let copied_nested = copy.rule_list_at_path(&[0]).unwrap();
+        let update = fork
+            .prepare_delete_rule(&copy, &copied_nested, 0)
+            .unwrap();
+        fork.commit_rule_graph_update(update).unwrap();
+        assert_eq!(copy.rule_list_at_path(&[0]).unwrap().len(), 0);
+        assert_eq!(sheet.top_list().nodes(), mutated);
+        assert_eq!(
+            state.prepare_delete_rule(&sheet, &copied_nested, 0).unwrap_err(),
+            super::RuleGraphError::WrongRuleList
+        );
+    }
+
+    #[test]
+    fn a_thaw_gives_the_snapshot_of_the_frozen_list() {
+        let mut state = StyleState::new(StyleDocumentHandle::allocate());
+        let sheet = nested_sheet(&mut state);
+        let (_, _, copies) = state.fork(StyleDocumentHandle::allocate()).unwrap();
+        let copy = sheet_copy(&copies, &sheet);
+        let frozen = copy.top_list().nodes();
+
+        let thawed = (0..frozen.len())
+            .map(|index| copy.top_list().rule(index).unwrap().snapshot())
+            .collect::<Arc<[RuleNode]>>();
+        assert_eq!(thawed, frozen);
+        assert_eq!(copy.top_list().nodes(), frozen);
+        assert_eq!(copy.rule_list_at_path(&[1]).unwrap().nodes().as_ref(), frozen[1].payload().nested());
+        assert_eq!(copy.serialise(), sheet.serialise());
+    }
+
+    #[test]
+    fn bind_import_refuses_a_nested_import_rule() {
+        let document = StyleDocumentHandle::allocate();
+        let mut state = StyleState::new(document);
+        let import = RuleNode::authored(RuleGrammar::Import, "@import url(child.css);", [])
+            .with_cssom_data(RuleCssomData::Import {
+                request: import_request("child.css"),
+            })
+            .expect("import CSSOM data must match import grammar");
+        let sheet = state
+            .create_stylesheet(StyleSheetCandidate::new(
+                StyleSheetSourceContext::inline(document, StyleOrigin::Author, Arc::from("https://example.test/")),
+                [RuleNode::media("screen", [import])],
+            ))
+            .expect("the stylesheet must bind");
+        let nested = sheet.rule_list_at_path(&[0]).unwrap().rule(0).unwrap();
+
+        assert_eq!(
+            state
+                .bind_import(&nested, ImportBindingContext::Source, "https://example.test/child.css")
+                .unwrap_err(),
+            super::RuleGraphError::InvalidRuleHierarchy
+        );
     }
 
     #[test]

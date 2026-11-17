@@ -2,7 +2,7 @@ use std::{
     collections::{BTreeMap, HashMap, HashSet},
     fmt,
     sync::atomic::{AtomicU64, Ordering},
-    sync::{Arc, Mutex, Weak},
+    sync::{Arc, Mutex, MutexGuard, Weak},
 };
 
 use crate::{CssEncoding, StyleDocumentHandle, StyleState};
@@ -2198,10 +2198,24 @@ struct StyleSheetRecord {
     source: StyleSheetSourceContext,
     top_list: RuleListLease,
     revision: u64,
+    snapshot: Option<(u64, Arc<[RuleNode]>)>,
     media: Option<Arc<str>>,
     disabled: bool,
     detached: bool,
     attachments: Vec<StyleSheetAttachmentHandle>,
+}
+
+impl StyleSheetRecord {
+    fn rules_snapshot(&mut self) -> Arc<[RuleNode]> {
+        match &self.snapshot {
+            Some((revision, nodes)) if *revision == self.revision && !self.detached => Arc::clone(nodes),
+            _ => {
+                let nodes = self.top_list.nodes();
+                self.snapshot = Some((self.revision, Arc::clone(&nodes)));
+                nodes
+            },
+        }
+    }
 }
 #[derive(Clone, Debug)]
 pub struct StyleSheetAttachmentLease(Arc<Mutex<StyleSheetAttachmentRecord>>);
@@ -2236,8 +2250,14 @@ struct RuleListRecord {
     cssom_parent_sheet: Option<StyleSheetHandle>,
     parent_rule: Option<RuleHandle>,
     binding_context: RuleBindingContext,
-    rules: Vec<RuleLease>,
+    cells: RuleCells,
     detached: bool,
+}
+
+#[derive(Debug)]
+enum RuleCells {
+    Live(Vec<RuleLease>),
+    Frozen(Arc<[RuleNode]>),
 }
 
 #[derive(Clone, Copy)]
@@ -2265,8 +2285,39 @@ impl StylesheetRuleOrder {
 }
 
 impl RuleListRecord {
-    fn validate_insertion(&self, index: usize, grammar: RuleGrammar) -> Result<(), RuleGraphError> {
-        let len = self.rules.len();
+    fn rules(&mut self) -> &mut Vec<RuleLease> {
+        if let RuleCells::Frozen(nodes) = &self.cells {
+            let rules = nodes
+                .iter()
+                .map(|node| {
+                    RuleLease::allocate(
+                        self.parent_sheet,
+                        self.handle,
+                        self.cssom_parent_sheet,
+                        node,
+                        self.binding_context,
+                        self.detached,
+                        NestedRules::Frozen,
+                    )
+                })
+                .collect();
+            self.cells = RuleCells::Live(rules);
+        }
+        let RuleCells::Live(rules) = &mut self.cells else {
+            unreachable!("a thawed rule list holds live cells");
+        };
+        rules
+    }
+
+    fn len(&self) -> usize {
+        match &self.cells {
+            RuleCells::Live(rules) => rules.len(),
+            RuleCells::Frozen(nodes) => nodes.len(),
+        }
+    }
+
+    fn validate_insertion(&mut self, index: usize, grammar: RuleGrammar) -> Result<(), RuleGraphError> {
+        let len = self.len();
         if index > len {
             return Err(RuleGraphError::InvalidInsertionIndex { index, len });
         }
@@ -2275,11 +2326,12 @@ impl RuleListRecord {
                 return Err(RuleGraphError::InvalidRuleHierarchy);
             }
         } else {
-            self.rules[..index]
+            let rules = self.rules();
+            rules[..index]
                 .iter()
                 .map(|rule| rule.node().grammar())
                 .chain(std::iter::once(grammar))
-                .chain(self.rules[index..].iter().map(|rule| rule.node().grammar()))
+                .chain(rules[index..].iter().map(|rule| rule.node().grammar()))
                 .try_fold(
                     StylesheetRuleOrder::EarlyLayers,
                     StylesheetRuleOrder::advance,
@@ -2288,20 +2340,20 @@ impl RuleListRecord {
         self.validate_namespace_mutation(grammar)
     }
 
-    fn validate_deletion(&self, index: usize) -> Result<(), RuleGraphError> {
-        let rule = self
-            .rules
+    fn validate_deletion(&mut self, index: usize) -> Result<(), RuleGraphError> {
+        let len = self.len();
+        let grammar = self
+            .rules()
             .get(index)
-            .ok_or(RuleGraphError::InvalidDeletionIndex {
-                index,
-                len: self.rules.len(),
-            })?;
-        self.validate_namespace_mutation(rule.node().grammar())
+            .ok_or(RuleGraphError::InvalidDeletionIndex { index, len })?
+            .node()
+            .grammar();
+        self.validate_namespace_mutation(grammar)
     }
 
-    fn validate_namespace_mutation(&self, grammar: RuleGrammar) -> Result<(), RuleGraphError> {
+    fn validate_namespace_mutation(&mut self, grammar: RuleGrammar) -> Result<(), RuleGraphError> {
         if grammar == RuleGrammar::Namespace
-            && self.rules.iter().any(|rule| {
+            && self.rules().iter().any(|rule| {
                 !matches!(
                     rule.node().grammar(),
                     RuleGrammar::Import | RuleGrammar::Namespace
@@ -2312,6 +2364,12 @@ impl RuleListRecord {
         }
         Ok(())
     }
+}
+
+#[derive(Clone, Copy)]
+enum NestedRules {
+    Allocated,
+    Frozen,
 }
 
 #[derive(Clone, Debug)]
@@ -2388,15 +2446,16 @@ impl DetachedRuleListLease {
             &rule,
             record.binding_context,
             true,
+            NestedRules::Allocated,
         );
-        record.rules.insert(index, rule);
+        record.rules().insert(index, rule);
         Ok(())
     }
 
     pub fn delete(&self, index: usize) -> Result<(), RuleGraphError> {
         let mut record = self.0.0.lock().expect("rule-list cell mutex poisoned");
         record.validate_deletion(index)?;
-        let removed = record.rules.remove(index);
+        let removed = record.rules().remove(index);
         removed.unlink();
         Ok(())
     }
@@ -2786,30 +2845,49 @@ impl RuleListLease {
         binding_context: RuleBindingContext,
         detached: bool,
     ) -> Self {
-        let list = Self(Arc::new(Mutex::new(RuleListRecord {
-            handle: RuleListHandle::allocate(),
-            parent_sheet: sheet,
-            cssom_parent_sheet,
-            parent_rule,
-            binding_context,
-            rules: Vec::new(),
-            detached,
-        })));
+        let handle = RuleListHandle::allocate();
         let rules = nodes
             .iter()
             .map(|node| {
                 RuleLease::allocate(
                     sheet,
-                    list.handle(),
+                    handle,
                     cssom_parent_sheet,
                     node,
                     binding_context,
                     detached,
+                    NestedRules::Allocated,
                 )
             })
             .collect();
-        list.0.lock().expect("rule-list cell mutex poisoned").rules = rules;
-        list
+        Self(Arc::new(Mutex::new(RuleListRecord {
+            handle,
+            parent_sheet: sheet,
+            cssom_parent_sheet,
+            parent_rule,
+            binding_context,
+            cells: RuleCells::Live(rules),
+            detached,
+        })))
+    }
+
+    fn frozen(
+        sheet: StyleSheetHandle,
+        parent_rule: Option<RuleHandle>,
+        cssom_parent_sheet: Option<StyleSheetHandle>,
+        nodes: Arc<[RuleNode]>,
+        binding_context: RuleBindingContext,
+        detached: bool,
+    ) -> Self {
+        Self(Arc::new(Mutex::new(RuleListRecord {
+            handle: RuleListHandle::allocate(),
+            parent_sheet: sheet,
+            cssom_parent_sheet,
+            parent_rule,
+            binding_context,
+            cells: RuleCells::Frozen(nodes),
+            detached,
+        })))
     }
 
     #[must_use]
@@ -2819,6 +2897,24 @@ impl RuleListLease {
             .expect("rule-list cell mutex poisoned")
             .detached
             .then(|| DetachedRuleListLease(self.clone()))
+    }
+
+    fn lock_live(
+        &self,
+        sheet: StyleSheetHandle,
+    ) -> Result<MutexGuard<'_, RuleListRecord>, RuleGraphError> {
+        let record = self.0.lock().expect("rule-list cell mutex poisoned");
+        if record.detached || record.parent_sheet != sheet {
+            return Err(RuleGraphError::WrongRuleList);
+        }
+        Ok(record)
+    }
+
+    fn live_rules(&self) -> Vec<RuleLease> {
+        match &self.0.lock().expect("rule-list cell mutex poisoned").cells {
+            RuleCells::Live(rules) => rules.clone(),
+            RuleCells::Frozen(_) => Vec::new(),
+        }
     }
 
     fn path_to_rule(&self, handle: RuleHandle) -> Option<Vec<usize>> {
@@ -2858,11 +2954,7 @@ impl RuleListLease {
     }
     #[must_use]
     pub fn len(&self) -> usize {
-        self.0
-            .lock()
-            .expect("rule-list cell mutex poisoned")
-            .rules
-            .len()
+        self.0.lock().expect("rule-list cell mutex poisoned").len()
     }
     #[must_use]
     pub fn is_empty(&self) -> bool {
@@ -2873,21 +2965,17 @@ impl RuleListLease {
         self.0
             .lock()
             .expect("rule-list cell mutex poisoned")
-            .rules
+            .rules()
             .get(index)
             .cloned()
     }
 
     #[must_use]
     pub fn nodes(&self) -> Arc<[RuleNode]> {
-        self.0
-            .lock()
-            .expect("rule-list cell mutex poisoned")
-            .rules
-            .iter()
-            .map(|rule| rule.snapshot_node())
-            .collect::<Vec<_>>()
-            .into()
+        match &self.0.lock().expect("rule-list cell mutex poisoned").cells {
+            RuleCells::Live(rules) => rules.iter().map(RuleLease::snapshot_node).collect(),
+            RuleCells::Frozen(nodes) => Arc::clone(nodes),
+        }
     }
 }
 
@@ -2899,17 +2987,26 @@ impl RuleLease {
         node: &RuleNode,
         binding_context: RuleBindingContext,
         detached: bool,
+        nested: NestedRules,
     ) -> Self {
         let handle = RuleHandle::allocate();
-        let nested_list = node.accepts_nested_rules().then(|| {
-            RuleListLease::allocate(
+        let nested_list = node.accepts_nested_rules().then(|| match nested {
+            NestedRules::Allocated => RuleListLease::allocate(
                 sheet,
                 Some(handle),
                 parent_stylesheet,
                 node.payload().nested(),
                 binding_context,
                 detached,
-            )
+            ),
+            NestedRules::Frozen => RuleListLease::frozen(
+                sheet,
+                Some(handle),
+                parent_stylesheet,
+                Arc::clone(&node.payload().nested),
+                binding_context,
+                detached,
+            ),
         });
         let block = node
             .payload()
@@ -2973,8 +3070,10 @@ impl RuleLease {
         if let Some(list) = nested {
             let mut record = list.0.lock().expect("rule-list cell mutex poisoned");
             record.cssom_parent_sheet = None;
-            for child in &record.rules {
-                child.unlink_stylesheet();
+            if let RuleCells::Live(rules) = &record.cells {
+                for child in rules {
+                    child.unlink_stylesheet();
+                }
             }
         }
     }
@@ -3260,21 +3359,21 @@ enum RuleGraphDelta {
         metadata: Option<StyleSheetReplacementMetadata>,
     },
     Insert {
-        list: RuleListHandle,
+        list: RuleListLease,
         index: usize,
         rule: RuleNode,
     },
     Delete {
-        list: RuleListHandle,
+        list: RuleListLease,
         index: usize,
     },
     ReplaceRule {
-        list: RuleListHandle,
+        list: RuleListLease,
         index: usize,
         rule: RuleNode,
     },
     MutateRule {
-        list: RuleListHandle,
+        list: RuleListLease,
         index: usize,
         rule: RuleNode,
     },
@@ -3290,8 +3389,6 @@ struct StyleSheetReplacementMetadata {
 #[derive(Debug, Default)]
 pub(crate) struct StyleGraph {
     sheets: HashMap<StyleSheetHandle, StyleSheetLease>,
-    lists: HashMap<RuleListHandle, Weak<Mutex<RuleListRecord>>>,
-    rules: HashMap<RuleHandle, Weak<Mutex<RuleRecord>>>,
     attachments: HashMap<StyleSheetAttachmentHandle, StyleSheetAttachmentLease>,
     import_bindings: HashMap<ImportBindingHandle, Weak<Mutex<ImportBindingRecord>>>,
 }
@@ -3301,30 +3398,12 @@ impl StyleState {
         &self,
         destination: &mut Self,
     ) -> Vec<(StyleSheetHandle, StyleSheetLease)> {
-        let sheets = self
+        let copies = self
             .stylesheets
             .sheets
-            .values()
-            .cloned()
-            .collect::<Vec<_>>();
-        let mut copies = HashMap::with_capacity(sheets.len());
-        for sheet in &sheets {
-            let record = sheet.0.lock().expect("stylesheet cell mutex poisoned");
-            let mut source = record.source.clone();
-            if source.document.is_some() {
-                source.document = Some(destination.document);
-            }
-            let candidate = StyleSheetCandidate {
-                source,
-                rules: record.top_list.nodes(),
-                media: record.media.clone(),
-                disabled: record.disabled,
-            };
-            let copy = destination
-                .create_stylesheet(candidate)
-                .expect("a validated stylesheet graph must fork");
-            copies.insert(record.handle, copy);
-        }
+            .iter()
+            .map(|(handle, sheet)| (*handle, destination.copy_stylesheet(sheet)))
+            .collect::<HashMap<_, _>>();
 
         let mut attachment_copies = HashMap::with_capacity(self.stylesheets.attachments.len());
         for attachment in self.stylesheets.attachments.values() {
@@ -3337,13 +3416,26 @@ impl StyleState {
             attachment_copies.insert(attachment.handle(), copy.handle());
         }
 
-        for sheet in &sheets {
+        let bound_sheets = self
+            .stylesheets
+            .import_bindings
+            .values()
+            .filter_map(Weak::upgrade)
+            .map(ImportBindingLease)
+            .map(|binding| binding.parent_sheet())
+            .collect::<HashSet<_>>();
+        for handle in bound_sheets {
+            let source = self
+                .stylesheets
+                .sheets
+                .get(&handle)
+                .expect("a live import binding must name a live stylesheet");
             let copy = copies
-                .get(&sheet.handle())
+                .get(&handle)
                 .expect("every stylesheet must have a fork");
-            self.fork_import_bindings_for_lists(
+            Self::fork_import_bindings(
                 destination,
-                &sheet.top_list(),
+                &source.top_list(),
                 &copy.top_list(),
                 &copies,
                 &attachment_copies,
@@ -3353,8 +3445,7 @@ impl StyleState {
         copies.into_iter().collect()
     }
 
-    fn fork_import_bindings_for_lists(
-        &self,
+    fn fork_import_bindings(
         destination: &mut Self,
         source: &RuleListLease,
         copy: &RuleListLease,
@@ -3369,8 +3460,7 @@ impl StyleState {
             let copied_rule = copy
                 .rule(index)
                 .expect("a copied rule must preserve source topology");
-            let bindings = source_rule.import_bindings();
-            for binding in bindings {
+            for binding in source_rule.import_bindings() {
                 let record = binding
                     .0
                     .lock()
@@ -3426,17 +3516,6 @@ impl StyleState {
                     .import_bindings
                     .insert(handle, Arc::downgrade(&copied_binding.0));
             }
-            match (source_rule.nested_list(), copied_rule.nested_list()) {
-                (Some(source_nested), Some(copied_nested)) => self.fork_import_bindings_for_lists(
-                    destination,
-                    &source_nested,
-                    &copied_nested,
-                    sheet_copies,
-                    attachment_copies,
-                ),
-                (None, None) => {},
-                _ => panic!("a copied stylesheet must preserve nested rule-list topology"),
-            }
         }
     }
 
@@ -3465,7 +3544,6 @@ impl StyleState {
         drop(record);
         self.detach_all_import_bindings(&top);
         let mut record = sheet.0.lock().expect("stylesheet cell mutex poisoned");
-        self.remove_rule_list_indexes(&top);
         self.stylesheets.sheets.remove(&handle);
         if record.source.document.is_some() {
             record.source.document = Some(destination.document);
@@ -3475,7 +3553,6 @@ impl StyleState {
             .checked_add(1)
             .expect("stylesheet revision space exhausted");
         drop(record);
-        destination.index_rule_list(&top);
         destination.stylesheets.sheets.insert(handle, sheet.clone());
         Ok(())
     }
@@ -3492,20 +3569,65 @@ impl StyleState {
             return Err(RuleGraphError::WrongDocument);
         }
         let handle = StyleSheetHandle::allocate();
-        let binding_context = binding_context(candidate.source.kind);
-        let top_list = self.allocate_rule_list(handle, None, &candidate.rules, binding_context);
+        let top_list = RuleListLease::allocate(
+            handle,
+            None,
+            Some(handle),
+            &candidate.rules,
+            binding_context(candidate.source.kind),
+            false,
+        );
+        Ok(self.insert_stylesheet(
+            handle,
+            candidate.source,
+            top_list,
+            candidate.media,
+            candidate.disabled,
+        ))
+    }
+
+    /// A copy of `sheet` in this state. The copy shares the rule snapshot of `sheet` and has its own cells.
+    pub fn copy_stylesheet(&mut self, sheet: &StyleSheetLease) -> StyleSheetLease {
+        let mut record = sheet.0.lock().expect("stylesheet cell mutex poisoned");
+        let mut source = record.source.clone();
+        if source.document.is_some() {
+            source.document = Some(self.document);
+        }
+        let handle = StyleSheetHandle::allocate();
+        let top_list = RuleListLease::frozen(
+            handle,
+            None,
+            Some(handle),
+            record.rules_snapshot(),
+            binding_context(source.kind),
+            false,
+        );
+        let (media, disabled) = (record.media.clone(), record.disabled);
+        drop(record);
+        self.insert_stylesheet(handle, source, top_list, media, disabled)
+    }
+
+    fn insert_stylesheet(
+        &mut self,
+        handle: StyleSheetHandle,
+        source: StyleSheetSourceContext,
+        top_list: RuleListLease,
+        media: Option<Arc<str>>,
+        disabled: bool,
+    ) -> StyleSheetLease {
         let lease = StyleSheetLease(Arc::new(Mutex::new(StyleSheetRecord {
             handle,
-            source: candidate.source,
+            source,
             top_list,
             revision: 0,
-            media: candidate.media,
-            disabled: candidate.disabled,
+            snapshot: None,
+            media,
+            disabled,
             detached: false,
             attachments: Vec::new(),
         })));
         self.stylesheets.sheets.insert(handle, lease.clone());
-        Ok(lease)
+        lease
     }
 
     pub fn create_stylesheet_graph(
@@ -3753,15 +3875,6 @@ impl StyleState {
         Ok(())
     }
     #[must_use]
-    pub fn rule(&self, handle: RuleHandle) -> Option<RuleLease> {
-        self.stylesheets
-            .rules
-            .get(&handle)
-            .and_then(Weak::upgrade)
-            .map(RuleLease)
-    }
-
-    #[must_use]
     pub fn import_binding(&self, handle: ImportBindingHandle) -> Option<ImportBindingLease> {
         self.stylesheets
             .import_bindings
@@ -3784,28 +3897,19 @@ impl StyleState {
         resolved_url: impl Into<Arc<str>>,
     ) -> Result<ImportBindingLease, RuleGraphError> {
         let mut rule_record = rule.0.lock().expect("rule cell mutex poisoned");
-        let stored = self
-            .stylesheets
-            .rules
-            .get(&rule_record.handle)
-            .and_then(Weak::upgrade)
-            .ok_or(RuleGraphError::WrongRule)?;
-        if !Arc::ptr_eq(&stored, &rule.0)
-            || rule_record.detached
-            || rule_record.node.grammar() != RuleGrammar::Import
-        {
+        if rule_record.detached || rule_record.node.grammar() != RuleGrammar::Import {
             return Err(RuleGraphError::WrongRule);
         }
-        let parent_sheet = self
-            .live_list(rule_record.parent_list.ok_or(RuleGraphError::WrongRule)?)?
-            .parent_sheet();
-        let source_kind = self
+        let parent_sheet = rule_record.sheet;
+        let sheet = self
             .stylesheets
             .sheets
             .get(&parent_sheet)
-            .ok_or(RuleGraphError::WrongRule)?
-            .source()
-            .kind;
+            .ok_or(RuleGraphError::WrongRule)?;
+        if rule_record.parent_list != Some(sheet.top_list().handle()) {
+            return Err(RuleGraphError::InvalidRuleHierarchy);
+        }
+        let source_kind = sheet.source().kind;
         match context {
             ImportBindingContext::Source if source_kind == StyleSheetSourceKind::Constructed => {
                 return Err(RuleGraphError::WrongImportBinding);
@@ -4153,7 +4257,7 @@ impl StyleState {
             sheet,
             base_revision,
             delta: RuleGraphDelta::Insert {
-                list: list.handle(),
+                list: list.clone(),
                 index,
                 rule,
             },
@@ -4176,7 +4280,7 @@ impl StyleState {
             sheet,
             base_revision,
             delta: RuleGraphDelta::Delete {
-                list: list.handle(),
+                list: list.clone(),
                 index,
             },
         })
@@ -4199,7 +4303,7 @@ impl StyleState {
             sheet,
             base_revision,
             delta: RuleGraphDelta::ReplaceRule {
-                list: list.handle(),
+                list: list.clone(),
                 index,
                 rule,
             },
@@ -4228,7 +4332,7 @@ impl StyleState {
             sheet,
             base_revision,
             delta: RuleGraphDelta::MutateRule {
-                list: list.handle(),
+                list: list.clone(),
                 index,
                 rule,
             },
@@ -4260,21 +4364,24 @@ impl StyleState {
                 rules: nodes,
                 metadata,
             } => {
-                let old_rules = {
-                    let mut top = record
+                let old_cells = std::mem::replace(
+                    &mut record
                         .top_list
                         .0
                         .lock()
-                        .expect("rule-list cell mutex poisoned");
-                    std::mem::take(&mut top.rules)
-                };
-                for rule in old_rules {
-                    rule.unlink();
-                    self.detach_rule_tree(&rule);
+                        .expect("rule-list cell mutex poisoned")
+                        .cells,
+                    RuleCells::Live(Vec::new()),
+                );
+                if let RuleCells::Live(old_rules) = old_cells {
+                    for rule in old_rules {
+                        rule.unlink();
+                        self.detach_rule_tree(&rule);
+                    }
                 }
-                let rules = self.allocate_rules(
+                let rules = Self::allocate_rules(
                     update.sheet,
-                    &record.top_list,
+                    record.top_list.handle(),
                     &nodes,
                     binding_context(record.source.kind),
                 );
@@ -4283,7 +4390,7 @@ impl StyleState {
                     .0
                     .lock()
                     .expect("rule-list cell mutex poisoned")
-                    .rules = rules;
+                    .cells = RuleCells::Live(rules);
                 if let Some(metadata) = metadata {
                     record.source = metadata.source;
                     record.media = metadata.media;
@@ -4291,81 +4398,63 @@ impl StyleState {
                 }
             },
             RuleGraphDelta::Insert { list, index, rule } => {
-                let list = self.live_list(list)?;
-                let len = list.len();
-                if list.parent_sheet() != update.sheet {
-                    return Err(RuleGraphError::WrongRuleList);
-                }
+                let mut list_record = list.lock_live(update.sheet)?;
+                let len = list_record.len();
                 if index > len {
                     return Err(RuleGraphError::InvalidInsertionIndex { index, len });
                 }
-                let inserted = self.allocate_rules(
+                let inserted = Self::allocate_rules(
                     update.sheet,
-                    &list,
+                    list_record.handle,
                     &[rule],
                     binding_context(record.source.kind),
                 );
-                list.0
-                    .lock()
-                    .expect("rule-list cell mutex poisoned")
-                    .rules
-                    .insert(
-                        index,
-                        inserted.into_iter().next().expect("one rule was allocated"),
-                    );
+                list_record.rules().insert(
+                    index,
+                    inserted.into_iter().next().expect("one rule was allocated"),
+                );
             },
             RuleGraphDelta::Delete { list, index } => {
-                let list = self.live_list(list)?;
-                let mut list_record = list.0.lock().expect("rule-list cell mutex poisoned");
-                if list_record.parent_sheet != update.sheet {
-                    return Err(RuleGraphError::WrongRuleList);
-                }
-                let len = list_record.rules.len();
+                let mut list_record = list.lock_live(update.sheet)?;
+                let len = list_record.len();
                 if index >= len {
                     return Err(RuleGraphError::InvalidDeletionIndex { index, len });
                 }
-                let removed = list_record.rules.remove(index);
+                let removed = list_record.rules().remove(index);
                 drop(list_record);
                 removed.unlink();
                 self.detach_rule_tree(&removed);
             },
             RuleGraphDelta::ReplaceRule { list, index, rule } => {
-                let list = self.live_list(list)?;
-                let len = list.len();
-                if list.parent_sheet() != update.sheet {
-                    return Err(RuleGraphError::WrongRuleList);
-                }
+                let mut list_record = list.lock_live(update.sheet)?;
+                let len = list_record.len();
                 if index >= len {
                     return Err(RuleGraphError::InvalidDeletionIndex { index, len });
                 }
-                let replacement = self.allocate_rules(
+                let replacement = Self::allocate_rules(
                     update.sheet,
-                    &list,
+                    list_record.handle,
                     &[rule],
                     binding_context(record.source.kind),
                 );
                 let removed = std::mem::replace(
-                    &mut list.0.lock().expect("rule-list cell mutex poisoned").rules[index],
+                    &mut list_record.rules()[index],
                     replacement
                         .into_iter()
                         .next()
                         .expect("one rule was allocated"),
                 );
+                drop(list_record);
                 removed.unlink();
                 self.detach_rule_tree(&removed);
             },
             RuleGraphDelta::MutateRule { list, index, rule } => {
-                let list = self.live_list(list)?;
-                let mut list_record = list.0.lock().expect("rule-list cell mutex poisoned");
-                if list_record.parent_sheet != update.sheet {
-                    return Err(RuleGraphError::WrongRuleList);
-                }
-                let len = list_record.rules.len();
-                let current = list_record
-                    .rules
-                    .get_mut(index)
-                    .ok_or(RuleGraphError::InvalidDeletionIndex { index, len })?;
-                current
+                let mut list_record = list.lock_live(update.sheet)?;
+                let len = list_record.len();
+                list_record
+                    .rules()
+                    .get(index)
+                    .ok_or(RuleGraphError::InvalidDeletionIndex { index, len })?
                     .0
                     .lock()
                     .expect("rule cell mutex poisoned")
@@ -4396,45 +4485,8 @@ impl StyleState {
                     .detached = true;
             }
         }
-        let mut top = record
-            .top_list
-            .0
-            .lock()
-            .expect("rule-list cell mutex poisoned");
-        top.detached = true;
-        self.stylesheets.lists.remove(&top.handle);
-        for rule in &top.rules {
-            self.detach_rule_tree(rule);
-        }
+        self.detach_rule_list(&record.top_list);
         Ok(())
-    }
-
-    fn allocate_rule_list(
-        &mut self,
-        sheet: StyleSheetHandle,
-        parent_rule: Option<RuleHandle>,
-        nodes: &[RuleNode],
-        binding_context: RuleBindingContext,
-    ) -> RuleListLease {
-        let list = RuleListLease::allocate(
-            sheet,
-            parent_rule,
-            Some(sheet),
-            nodes,
-            binding_context,
-            false,
-        );
-        self.index_rule_list(&list);
-        list
-    }
-
-    fn index_rule(&mut self, rule: &RuleLease) {
-        self.stylesheets
-            .rules
-            .insert(rule.handle(), Arc::downgrade(&rule.0));
-        if let Some(list) = rule.nested_list() {
-            self.index_rule_list(&list);
-        }
     }
 
     fn validate_sheet_and_list(
@@ -4451,49 +4503,28 @@ impl StyleState {
         if !Arc::ptr_eq(&stored.0, &sheet.0) || record.detached {
             return Err(RuleGraphError::WrongStylesheet);
         }
-        let stored_list = self.live_list(list.handle())?;
-        if !Arc::ptr_eq(&stored_list.0, &list.0) || list.parent_sheet() != record.handle {
-            return Err(RuleGraphError::WrongRuleList);
-        }
+        drop(list.lock_live(record.handle)?);
         Ok((record.handle, record.revision))
     }
 
-    fn live_list(&self, handle: RuleListHandle) -> Result<RuleListLease, RuleGraphError> {
-        self.stylesheets
-            .lists
-            .get(&handle)
-            .and_then(Weak::upgrade)
-            .map(RuleListLease)
-            .filter(|list| {
-                !list
-                    .0
-                    .lock()
-                    .expect("rule-list cell mutex poisoned")
-                    .detached
-            })
-            .ok_or(RuleGraphError::WrongRuleList)
-    }
-
     fn allocate_rules(
-        &mut self,
         sheet: StyleSheetHandle,
-        list: &RuleListLease,
+        list: RuleListHandle,
         nodes: &[RuleNode],
         binding_context: RuleBindingContext,
     ) -> Vec<RuleLease> {
         nodes
             .iter()
             .map(|node| {
-                let rule = RuleLease::allocate(
+                RuleLease::allocate(
                     sheet,
-                    list.handle(),
+                    list,
                     Some(sheet),
                     node,
                     binding_context,
                     false,
-                );
-                self.index_rule(&rule);
-                rule
+                    NestedRules::Allocated,
+                )
             })
             .collect()
     }
@@ -4501,7 +4532,6 @@ impl StyleState {
     fn detach_rule_tree(&mut self, rule: &RuleLease) {
         let mut record = rule.0.lock().expect("rule cell mutex poisoned");
         record.detached = true;
-        self.stylesheets.rules.remove(&record.handle);
         let nested_list = record.nested_list.clone();
         let bindings = record.import_bindings.clone();
         drop(record);
@@ -4509,12 +4539,18 @@ impl StyleState {
             self.detach_import_binding(&binding);
         }
         if let Some(list) = nested_list {
-            let mut list_record = list.0.lock().expect("rule-list cell mutex poisoned");
-            list_record.detached = true;
-            self.stylesheets.lists.remove(&list_record.handle);
-            for child in &list_record.rules {
-                self.detach_rule_tree(child);
-            }
+            self.detach_rule_list(&list);
+        }
+    }
+
+    fn detach_rule_list(&mut self, list: &RuleListLease) {
+        let mut record = list.0.lock().expect("rule-list cell mutex poisoned");
+        record.detached = true;
+        let RuleCells::Live(rules) = &record.cells else {
+            return;
+        };
+        for rule in rules {
+            self.detach_rule_tree(rule);
         }
     }
 
@@ -4540,13 +4576,7 @@ impl StyleState {
         list: &RuleListLease,
         context: ImportBindingContext,
     ) {
-        let rules = list
-            .0
-            .lock()
-            .expect("rule-list cell mutex poisoned")
-            .rules
-            .clone();
-        for rule in rules {
+        for rule in list.live_rules() {
             let (bindings, nested) = {
                 let mut record = rule.0.lock().expect("rule cell mutex poisoned");
                 let mut detached = Vec::new();
@@ -4570,13 +4600,7 @@ impl StyleState {
     }
 
     fn detach_all_import_bindings(&mut self, list: &RuleListLease) {
-        let rules = list
-            .0
-            .lock()
-            .expect("rule-list cell mutex poisoned")
-            .rules
-            .clone();
-        for rule in rules {
+        for rule in list.live_rules() {
             let (bindings, nested) = {
                 let mut record = rule.0.lock().expect("rule cell mutex poisoned");
                 (
@@ -4590,28 +4614,6 @@ impl StyleState {
             if let Some(nested) = nested {
                 self.detach_all_import_bindings(&nested);
             }
-        }
-    }
-
-    fn remove_rule_list_indexes(&mut self, list: &RuleListLease) {
-        let record = list.0.lock().expect("rule-list cell mutex poisoned");
-        self.stylesheets.lists.remove(&record.handle);
-        for rule in &record.rules {
-            let rule_record = rule.0.lock().expect("rule cell mutex poisoned");
-            self.stylesheets.rules.remove(&rule_record.handle);
-            if let Some(nested) = &rule_record.nested_list {
-                self.remove_rule_list_indexes(nested);
-            }
-        }
-    }
-
-    fn index_rule_list(&mut self, list: &RuleListLease) {
-        let record = list.0.lock().expect("rule-list cell mutex poisoned");
-        self.stylesheets
-            .lists
-            .insert(record.handle, Arc::downgrade(&list.0));
-        for rule in &record.rules {
-            self.index_rule(rule);
         }
     }
 }
@@ -4701,6 +4703,7 @@ mod projection_storage_tests {
             &original,
             RuleBindingContext::SourceBound,
             true,
+            NestedRules::Allocated,
         );
         let snapshot = lease.snapshot_node();
         assert_eq!(snapshot.serialization(), original.serialization());
