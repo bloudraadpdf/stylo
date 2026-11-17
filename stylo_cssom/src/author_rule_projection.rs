@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use stylo_cssom_model::RuleNode;
 
 fn is_empty_projection(css: &str) -> bool {
@@ -43,8 +45,8 @@ pub fn project_rule_sources(
 pub(crate) fn map_pending_declarations(
     rule: RuleNode,
     mut rewrite_tokens: impl FnMut(&str) -> String,
-    base_url: Option<&str>,
-    referrer_source: Option<&str>,
+    base_url: Option<&Arc<str>>,
+    referrer_source: Option<&Arc<str>>,
 ) -> RuleNode {
     let Some(block) = rule.payload().declaration_block() else {
         return rule;
@@ -59,30 +61,25 @@ pub(crate) fn map_pending_declarations(
                 return declaration.clone();
             }
             let projected = match declaration.pending_substitution() {
-                Some(pending) => stylo_cssom_model::RuleDeclaration::from_pending_substitution(
-                    declaration.name(),
-                    pending.shorthand(),
-                    rewrite_tokens(pending.tokens()),
-                    base_url.unwrap_or_else(|| pending.base_url()),
-                )
-                .expect("source projection retains the shorthand member identity")
-                .with_importance(declaration.important()),
+                Some(pending) => declaration
+                    .clone()
+                    .with_pending_tokens(rewrite_tokens(pending.tokens()), base_url.cloned())
+                    .expect("a pending declaration retains its pending value"),
                 None => {
                     let value = rewrite_tokens(declaration.value());
                     if value == declaration.value() {
                         declaration.clone()
                     } else {
-                        stylo_cssom_model::RuleDeclaration::new(declaration.name(), value)
-                            .with_importance(declaration.important())
+                        declaration.clone().with_value(value)
                     }
                 },
             };
-            let projected = match base_url.or_else(|| declaration.source_base_url()) {
-                Some(base) => projected.with_source_base_url(base),
+            let projected = match base_url {
+                Some(base) => projected.with_source_base_url(Arc::clone(base)),
                 None => projected,
             };
-            match referrer_source.or_else(|| declaration.source_referrer()) {
-                Some(source) => projected.with_source_referrer(source),
+            match referrer_source {
+                Some(source) => projected.with_source_referrer(Arc::clone(source)),
                 None => projected,
             }
         })
@@ -136,7 +133,7 @@ fn declaration_uses_resource_context(css: &str) -> bool {
     }
     crate::declaration_parser::specified_style_value_from_css(
         css,
-        &std::sync::Arc::from("about:blank"),
+        &Arc::from("about:blank"),
     )
     .as_ref()
     .is_some_and(value_uses_context)
@@ -306,12 +303,11 @@ mod tests {
         .with_native_backing(Some(RetainedNativeDeclarations(Arc::new(Backing))));
         let original = stylo_cssom_model::RuleNode::style("p", block.serialization())
             .with_declaration_block(block.clone());
+        let before_base: Arc<str> = Arc::from("https://before.test/");
+        let before_referrer: Arc<str> = Arc::from("https://before.test/source.css");
         for (base, referrer) in [
             (None, None),
-            (
-                Some("https://before.test/"),
-                Some("https://before.test/source.css"),
-            ),
+            (Some(&before_base), Some(&before_referrer)),
         ] {
             let unchanged =
                 super::map_pending_declarations(original.clone(), str::to_owned, base, referrer);
@@ -335,8 +331,8 @@ mod tests {
         let projected = super::map_pending_declarations(
             original.clone(),
             str::to_owned,
-            Some("https://after.test/"),
-            Some("https://after.test/changed.css"),
+            Some(&Arc::from("https://after.test/")),
+            Some(&Arc::from("https://after.test/changed.css")),
         );
         let after = projected.payload().declaration_block().unwrap();
         assert_eq!(after.serialization(), block.serialization());

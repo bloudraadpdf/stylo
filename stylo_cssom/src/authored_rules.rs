@@ -1381,12 +1381,14 @@ pub fn project_stylesheet_pending_contexts(
     base_url: &crate::CssStylesheetBaseUrl,
     referrer_source: Option<&str>,
 ) -> Vec<stylo_cssom_model::RuleNode> {
+    let base_url: StdArc<str> = StdArc::from(base_url.as_str());
+    let referrer_source = referrer_source.map(StdArc::<str>::from);
     crate::author_rule_projection::map_rule_sources(rules, &mut |rule| {
         crate::author_rule_projection::map_pending_declarations(
             rule.clone(),
             str::to_owned,
-            Some(base_url.as_str()),
-            referrer_source,
+            Some(&base_url),
+            referrer_source.as_ref(),
         )
     })
 }
@@ -1396,27 +1398,25 @@ pub fn project_stylesheet_rule_urls(
     rules: &[stylo_cssom_model::RuleNode],
     base_url: &crate::CssStylesheetBaseUrl,
 ) -> Vec<stylo_cssom_model::RuleNode> {
+    let shared_base: StdArc<str> = StdArc::from(base_url.as_str());
     crate::author_rule_projection::map_rule_sources(rules, &mut |rule| {
         let projected = rule
             .clone()
             .with_projection_serialization(rewrite_css_url_tokens(
                 &rule.projection_serialization(),
-                base_url.as_str(),
+                base_url.as_url(),
             ));
         crate::author_rule_projection::map_pending_declarations(
             projected,
             str::to_owned,
-            Some(base_url.as_str()),
+            Some(&shared_base),
             None,
         )
     })
 }
 
-pub fn rewrite_css_url_tokens<'a>(css: &'a str, base_url: &str) -> Cow<'a, str> {
-    let Ok(base) = Url::parse(base_url) else {
-        return Cow::Borrowed(css);
-    };
-    rewrite_css_urls(css, &|raw| resolve_if_relative(raw, &base))
+pub fn rewrite_css_url_tokens<'a>(css: &'a str, base_url: &Url) -> Cow<'a, str> {
+    rewrite_css_urls(css, &|raw| resolve_if_relative(raw, base_url))
 }
 
 pub fn rewrite_css_urls<'a>(
@@ -1605,6 +1605,10 @@ fn should_skip_css_url_rewrite(raw_url: &str) -> bool {
 mod tests {
     use super::*;
 
+    fn base_url(absolute: &str) -> Url {
+        Url::parse(absolute).unwrap()
+    }
+
     #[test]
     fn consuming_stylesheet_transfers_the_existing_rule_allocation() {
         let mut stylesheet = ParsedStylesheet::parse("p { color:red } span { margin:1px 2px }");
@@ -1634,15 +1638,12 @@ mod tests {
             "a { content: 'url(image.png)'; /* url(other.png) */ }",
             "a { background: url(foo\"bar) }",
         ] {
-            let rewritten = rewrite_css_url_tokens(css, "https://example.test/style.css");
+            let rewritten =
+                rewrite_css_url_tokens(css, &base_url("https://example.test/style.css"));
             assert!(matches!(rewritten, Cow::Borrowed(_)), "{css}");
             assert_eq!(rewritten.as_ptr(), css.as_ptr());
             assert_eq!(rewritten, css);
         }
-        assert!(matches!(
-            rewrite_css_url_tokens("url(image.png)", "invalid base"),
-            Cow::Borrowed(_)
-        ));
         assert!(matches!(
             rewrite_css_urls("url(image.png)", &|_| None),
             Cow::Borrowed(_)
@@ -1666,7 +1667,8 @@ mod tests {
                 "a { background: image-set(url(\"https://example.test/image.png\"), url(\"https://example.test/other.png\")) }",
             ),
         ] {
-            let rewritten = rewrite_css_url_tokens(css, "https://example.test/style.css");
+            let rewritten =
+                rewrite_css_url_tokens(css, &base_url("https://example.test/style.css"));
             assert!(matches!(rewritten, Cow::Owned(_)), "{css}");
             assert_eq!(rewritten, expected);
         }
@@ -1783,7 +1785,7 @@ mod tests {
         ] {
             let source = format!("{declaration} a {{ background: url(image.png) }}");
             assert_eq!(
-                rewrite_css_url_tokens(&source, "https://example.test/style.css"),
+                rewrite_css_url_tokens(&source, &base_url("https://example.test/style.css")),
                 format!(
                     "{declaration} a {{ background: url(\"https://example.test/image.png\") }}"
                 ),
@@ -1799,7 +1801,7 @@ mod tests {
             "a { --value: function(@namespace url(image.png)); }",
         ] {
             assert_eq!(
-                rewrite_css_url_tokens(source, "https://example.test/style.css"),
+                rewrite_css_url_tokens(source, &base_url("https://example.test/style.css")),
                 source.replace("url(image.png)", "url(\"https://example.test/image.png\")"),
             );
         }
@@ -2114,7 +2116,7 @@ mod tests {
     fn parsed_import_replacement_preserves_resolved_child_urls() {
         let child = rewrite_css_url_tokens(
             ".child { background: url('../images/marker.png') }",
-            "https://fixtures.test/styles/child.css",
+            &base_url("https://fixtures.test/styles/child.css"),
         );
         let materialised = splice_child("@import 'child.css';", &child);
 
@@ -2125,7 +2127,7 @@ mod tests {
     fn url_rewrite_preserves_request_modifiers_after_the_resolved_string() {
         let rewritten = rewrite_css_url_tokens(
             r#".child { background: url('../images/marker.svg' cross-origin(anonymous) integrity("sha256-fixture") referrer-policy(origin)) }"#,
-            "https://fixtures.test/styles/child.css",
+            &base_url("https://fixtures.test/styles/child.css"),
         );
 
         assert!(rewritten.contains(
@@ -2137,7 +2139,7 @@ mod tests {
     fn external_font_face_urls_resolve_against_the_stylesheet() {
         let rewritten = rewrite_css_url_tokens(
             "@font-face { font-family: Diagnostic; src: url('./Diagnostic.ttf') format('opentype') }",
-            "https://fixtures.test/fonts/diagnostic/style.css",
+            &base_url("https://fixtures.test/fonts/diagnostic/style.css"),
         );
 
         assert!(
@@ -2877,6 +2879,34 @@ mod tests {
         let rules = import_urls("@badat-rule { @import 'nested.css'; } @import 'green.css';");
 
         assert_eq!(rules, ["green.css"]);
+    }
+
+    #[test]
+    fn stylesheet_url_projection_shares_one_large_data_base_across_rules() {
+        let css = (0..64)
+            .map(|index| format!(".r{index} {{ background-image: url(image.png) }}"))
+            .collect::<String>();
+        let parsed = ParsedStylesheet::parse(&css);
+        let base = crate::CssStylesheetBaseUrl::from_absolute(base_url(&format!(
+            "data:text/css;base64,{}",
+            "A".repeat(1 << 18)
+        )));
+        let projected = project_stylesheet_rule_urls(parsed.rule_nodes(), &base);
+        assert_eq!(projected.len(), 64);
+        for (before, after) in parsed.rule_nodes().iter().zip(&projected) {
+            assert_eq!(
+                after.projection_serialization(),
+                before.projection_serialization()
+            );
+        }
+        let bases = projected
+            .iter()
+            .flat_map(|rule| rule.payload().declaration_block().unwrap().declarations())
+            .map(|declaration| declaration.source_base_url().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(bases.len(), 64);
+        assert_eq!(bases[0], base.as_str());
+        assert!(bases.iter().all(|shared| std::ptr::eq(*shared, bases[0])));
     }
 }
 

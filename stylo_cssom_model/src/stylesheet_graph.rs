@@ -842,6 +842,28 @@ impl RuleDeclaration {
         })
     }
 
+    #[must_use]
+    pub fn with_value(mut self, value: impl Into<Arc<str>>) -> Self {
+        self.value = RuleDeclarationValue::Serialized(value.into());
+        self
+    }
+
+    #[must_use]
+    pub fn with_pending_tokens(
+        mut self,
+        tokens: impl Into<Arc<str>>,
+        base_url: Option<Arc<str>>,
+    ) -> Option<Self> {
+        let RuleDeclarationValue::PendingSubstitution(pending) = &mut self.value else {
+            return None;
+        };
+        pending.tokens = tokens.into();
+        if let Some(base_url) = base_url {
+            pending.base_url = base_url;
+        }
+        Some(self)
+    }
+
     /// Retains the parse context of a projected declaration without changing
     /// its specified serialization (including fragment-only URL values).
     #[must_use]
